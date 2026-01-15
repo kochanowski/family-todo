@@ -31,7 +31,7 @@ struct Area: Identifiable, Codable {
             Area(householdId: householdId, name: "Living Room", icon: "sofa", sortOrder: 2),
             Area(householdId: householdId, name: "Bedroom", icon: "bed.double", sortOrder: 3),
             Area(householdId: householdId, name: "Garden", icon: "leaf", sortOrder: 4),
-            Area(householdId: householdId, name: "Repairs", icon: "wrench", sortOrder: 5)
+            Area(householdId: householdId, name: "Repairs", icon: "wrench", sortOrder: 5),
         ]
     }
 }

@@ -10,8 +10,8 @@ actor CloudKitManager {
 
     init(container: CKContainer = .default()) {
         self.container = container
-        self.privateDatabase = container.privateCloudDatabase
-        self.sharedDatabase = container.sharedCloudDatabase
+        privateDatabase = container.privateCloudDatabase
+        sharedDatabase = container.sharedCloudDatabase
     }
 
     enum CloudKitManagerError: Error {

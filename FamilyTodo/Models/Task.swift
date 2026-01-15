@@ -60,7 +60,7 @@ struct Task: Identifiable, Codable {
     }
 
     var isOverdue: Bool {
-        guard let dueDate = dueDate, status != .done else {
+        guard let dueDate, status != .done else {
             return false
         }
 
