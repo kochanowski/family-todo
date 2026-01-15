@@ -367,8 +367,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FamilyTodo.app/FamilyTodo";
-				BUNDLE_LOADER = "$(TEST_HOST)";
 			};
 			name = Debug;
 		};
@@ -390,8 +388,6 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FamilyTodo.app/FamilyTodo";
-				BUNDLE_LOADER = "$(TEST_HOST)";
 			};
 			name = Release;
 		};
