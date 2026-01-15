@@ -1,0 +1,71 @@
+# SwiftLint Configuration for Family To-Do App
+
+# Disabled rules (rules we don't want to enforce)
+disabled_rules:
+  - trailing_whitespace
+  - line_length  # We set custom below
+  - todo  # Allow TODO comments
+
+# Opt-in rules (rules that are not enabled by default)
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - explicit_init
+  - closure_spacing
+  - operator_usage_whitespace
+
+# Excluded paths (directories/files to skip)
+excluded:
+  - Pods
+  - .build
+  - .swiftpm
+  - DerivedData
+  - fastlane
+  - docs
+
+# Custom rules configuration
+
+# Line length
+line_length:
+  warning: 120
+  error: 200
+  ignores_function_declarations: true
+  ignores_comments: true
+  ignores_urls: true
+
+# File length
+file_length:
+  warning: 500
+  error: 1000
+  ignore_comment_only_lines: true
+
+# Function length
+function_body_length:
+  warning: 50
+  error: 100
+
+# Type body length
+type_body_length:
+  warning: 300
+  error: 500
+
+# Identifier naming
+identifier_name:
+  min_length:
+    warning: 2
+  max_length:
+    warning: 60
+  excluded:
+    - id
+    - x
+    - y
+    - z
+
+# Force cast (warn but don't error)
+force_cast: warning
+
+# Force try (warn but don't error)
+force_try: warning
+
+# Reporter type (github-actions-logging for CI)
+reporter: "github-actions-logging"

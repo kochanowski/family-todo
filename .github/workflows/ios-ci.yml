@@ -1,0 +1,218 @@
+# iOS CI/CD Pipeline for Family To-Do App
+# Builds, tests, and optionally deploys to TestFlight
+
+name: iOS CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  # Project settings - UPDATE THESE
+  XCODE_VERSION: '15.2'
+  IOS_SCHEME: 'FamilyTodo'
+  IOS_PROJECT: 'FamilyTodo.xcodeproj'
+  IOS_DESTINATION: 'platform=iOS Simulator,name=iPhone 15,OS=17.2'
+
+jobs:
+  # Job 1: Build and Test
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-14 # Latest macOS runner with Xcode 15.2
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Xcode version
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      # 3. Display Xcode version
+      - name: Display Xcode version
+        run: xcodebuild -version
+
+      # 4. Install dependencies (if using Swift Package Manager)
+      - name: Resolve Swift dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project ${{ env.IOS_PROJECT }} \
+            -scheme ${{ env.IOS_SCHEME }}
+
+      # 5. Build the app
+      - name: Build app
+        run: |
+          xcodebuild clean build \
+            -project ${{ env.IOS_PROJECT }} \
+            -scheme ${{ env.IOS_SCHEME }} \
+            -destination "${{ env.IOS_DESTINATION }}" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty && exit ${PIPESTATUS[0]}
+
+      # 6. Run unit tests
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project ${{ env.IOS_PROJECT }} \
+            -scheme ${{ env.IOS_SCHEME }} \
+            -destination "${{ env.IOS_DESTINATION }}" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty && exit ${PIPESTATUS[0]}
+
+      # 7. Upload test results
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            **/test-results/**
+            **/TestResults.xcresult
+
+  # Job 2: SwiftLint (Code Quality)
+  swiftlint:
+    name: SwiftLint
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        run: swiftlint lint --reporter github-actions-logging
+
+  # Job 3: Deploy to TestFlight (only on main branch)
+  deploy-testflight:
+    name: Deploy to TestFlight
+    runs-on: macos-14
+    needs: [build-and-test, swiftlint]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Xcode
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      # 3. Install Apple certificates and provisioning profiles
+      - name: Install certificates
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Import certificate from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      # 4. Install provisioning profile
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
+      # 5. Increment build number
+      - name: Increment build number
+        run: |
+          BUILD_NUMBER=$(($(date +%s)/100))
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "${{ env.IOS_PROJECT }}/Info.plist"
+          echo "Build number set to $BUILD_NUMBER"
+
+      # 6. Build and archive
+      - name: Build and archive
+        run: |
+          xcodebuild archive \
+            -project ${{ env.IOS_PROJECT }} \
+            -scheme ${{ env.IOS_SCHEME }} \
+            -archivePath $RUNNER_TEMP/FamilyTodo.xcarchive \
+            -configuration Release \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            PROVISIONING_PROFILE_SPECIFIER="${{ secrets.PROVISIONING_PROFILE_NAME }}"
+
+      # 7. Export IPA
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/FamilyTodo.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      # 8. Upload to TestFlight
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          # Create API key file
+          API_KEY_PATH=$RUNNER_TEMP/api_key.p8
+          echo -n "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode -o $API_KEY_PATH
+
+          # Upload to TestFlight using xcrun altool
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/export/FamilyTodo.ipa" \
+            --apiKey $APP_STORE_CONNECT_API_KEY_ID \
+            --apiIssuer $APP_STORE_CONNECT_API_ISSUER_ID \
+            --apiKeyPath $API_KEY_PATH
+
+      # 9. Clean up
+      - name: Clean up keychain and provisioning profile
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision || true
+
+      # 10. Upload IPA as artifact
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FamilyTodo-IPA
+          path: ${{ runner.temp }}/export/FamilyTodo.ipa
+          retention-days: 30
+
+  # Job 4: Notify on failure
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [build-and-test, swiftlint]
+    if: failure()
+
+    steps:
+      - name: Send notification
+        run: |
+          echo "Build or tests failed!"
+          echo "Check the logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Optional: Send notification to Slack, Discord, etc.

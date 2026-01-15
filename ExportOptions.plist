@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Export method: app-store, ad-hoc, enterprise, development -->
+    <key>method</key>
+    <string>app-store</string>
+
+    <!-- Upload to TestFlight automatically -->
+    <key>uploadBitcode</key>
+    <false/>
+
+    <!-- Upload symbols for crash reporting -->
+    <key>uploadSymbols</key>
+    <true/>
+
+    <!-- Compile bitcode (if needed) -->
+    <key>compileBitcode</key>
+    <false/>
+
+    <!-- Team ID - will be replaced by secrets in CI -->
+    <key>teamID</key>
+    <string>YOUR_TEAM_ID</string>
+
+    <!-- Provisioning profiles mapping -->
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.yourname.familytodo</key>
+        <string>YOUR_PROVISIONING_PROFILE_NAME</string>
+    </dict>
+
+    <!-- Code signing -->
+    <key>signingStyle</key>
+    <string>manual</string>
+
+    <!-- Strip Swift symbols -->
+    <key>stripSwiftSymbols</key>
+    <true/>
+</dict>
+</plist>

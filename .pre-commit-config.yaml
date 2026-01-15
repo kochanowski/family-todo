@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: swiftlint
+        name: swiftlint
+        entry: swiftlint lint --quiet --force-exclude
+        language: system
+        files: \.swift$
+      - id: swiftformat
+        name: swiftformat
+        entry: swiftformat
+        language: system
+        files: \.swift$
