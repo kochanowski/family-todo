@@ -166,7 +166,7 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
             return
         }
 
-        Task.detached { [weak self] in
+        Task { [weak self] in
             guard let self = self else { return }
             await self.handleAppleIDCredential(credential)
         }
@@ -176,7 +176,7 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        Task.detached { [weak self] in
+        Task { [weak self] in
             guard let self = self else { return }
 
             if let authError = error as? ASAuthorizationError,
