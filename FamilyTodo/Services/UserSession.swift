@@ -1,4 +1,5 @@
 import CloudKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -21,15 +22,13 @@ final class UserSession: ObservableObject {
 
     let authService: AuthenticationService
     private let cloudKitManager: CloudKitManager
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
-    private init(
-        authService: AuthenticationService = AuthenticationService(),
-        cloudKitManager: CloudKitManager = CloudKitManager()
-    ) {
-        self.authService = authService
-        self.cloudKitManager = cloudKitManager
+    private init() {
+        self.authService = AuthenticationService()
+        self.cloudKitManager = CloudKitManager()
 
         // Observe authentication state changes
         setupAuthObserver()
@@ -68,12 +67,14 @@ final class UserSession: ObservableObject {
     // MARK: - Private Methods
 
     private func setupAuthObserver() {
-        // Observe authentication service state changes
-        Task {
-            for await _ in NotificationCenter.default.notifications(named: .authStateChanged) {
-                await handleAuthStateChange()
+        // Observe authentication service state changes using Combine
+        authService.objectWillChange
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.handleAuthStateChange()
+                }
             }
-        }
+            .store(in: &cancellables)
     }
 
     private func handleAuthStateChange() async {
@@ -109,10 +110,4 @@ final class UserSession: ObservableObject {
             self.currentHouseholdID = householdID
         }
     }
-}
-
-// MARK: - Notification Names
-
-extension Notification.Name {
-    static let authStateChanged = Notification.Name("authStateChanged")
 }
