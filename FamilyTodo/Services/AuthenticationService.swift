@@ -162,9 +162,13 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Task { @MainActor in
-            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                await handleAppleIDCredential(credential)
+        Task {
+            await MainActor.run {
+                if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                    Task {
+                        await handleAppleIDCredential(credential)
+                    }
+                }
             }
         }
     }
@@ -173,12 +177,14 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        Task { @MainActor in
-            if let authError = error as? ASAuthorizationError,
-               authError.code == .canceled {
-                authenticationState = .error(.cancelled)
-            } else {
-                authenticationState = .error(.failed(error))
+        Task {
+            await MainActor.run {
+                if let authError = error as? ASAuthorizationError,
+                   authError.code == .canceled {
+                    authenticationState = .error(.cancelled)
+                } else {
+                    authenticationState = .error(.failed(error))
+                }
             }
         }
     }
@@ -189,11 +195,13 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
 extension AuthenticationService: ASAuthorizationControllerPresentationContextProviding {
     nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         // Return the key window
-        // This is a simplified implementation - in production, you might want to pass the window explicitly
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            fatalError("No window found for presenting Sign in with Apple")
+        // Must access UIApplication from main actor context
+        return DispatchQueue.main.sync {
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let window = scene.windows.first else {
+                fatalError("No window found for presenting Sign in with Apple")
+            }
+            return window
         }
-        return window
     }
 }
