@@ -162,14 +162,13 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Task {
-            await MainActor.run {
-                if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                    Task {
-                        await handleAppleIDCredential(credential)
-                    }
-                }
-            }
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            return
+        }
+
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            await self.handleAppleIDCredential(credential)
         }
     }
 
@@ -177,31 +176,34 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        Task {
-            await MainActor.run {
-                if let authError = error as? ASAuthorizationError,
-                   authError.code == .canceled {
-                    authenticationState = .error(.cancelled)
-                } else {
-                    authenticationState = .error(.failed(error))
-                }
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+
+            if let authError = error as? ASAuthorizationError,
+               authError.code == .canceled {
+                await self.updateAuthenticationState(.error(.cancelled))
+            } else {
+                await self.updateAuthenticationState(.error(.failed(error)))
             }
         }
+    }
+
+    // Helper to update state from nonisolated context
+    private func updateAuthenticationState(_ newState: AuthenticationState) async {
+        authenticationState = newState
     }
 }
 
 // MARK: - ASAuthorizationControllerPresentationContextProviding
 
 extension AuthenticationService: ASAuthorizationControllerPresentationContextProviding {
-    nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+    @MainActor
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         // Return the key window
-        // Must access UIApplication from main actor context
-        return DispatchQueue.main.sync {
-            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                  let window = scene.windows.first else {
-                fatalError("No window found for presenting Sign in with Apple")
-            }
-            return window
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            fatalError("No window found for presenting Sign in with Apple")
         }
+        return window
     }
 }
