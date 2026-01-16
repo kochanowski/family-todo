@@ -70,7 +70,7 @@ final class UserSession: ObservableObject {
         // Observe authentication service state changes using Combine
         authService.objectWillChange
             .sink { [weak self] _ in
-                Task { [weak self] in
+                _Concurrency.Task { [weak self] in
                     await self?.handleAuthStateChange()
                 }
             }
