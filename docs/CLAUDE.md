@@ -7,7 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #22 | 11:13 PM | ✅ | Monetization Models Documentation Started | ~758 |
 | #15 | 10:29 PM | ✅ | Documentation Index and Navigation README Created | ~713 |
 
 ### Jan 11, 2026
