@@ -1,6 +1,6 @@
+import Combine
 import Foundation
 import SwiftData
-import Combine
 
 /// Main store for task management with offline-first architecture.
 /// Follows ADR-002: optimistic UI updates with background sync.
@@ -215,7 +215,7 @@ enum TaskStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .wipLimitReached:
-            return "WIP limit reached. Complete or move existing tasks before adding more to Next."
+            "WIP limit reached. Complete or move existing tasks before adding more to Next."
         }
     }
 }

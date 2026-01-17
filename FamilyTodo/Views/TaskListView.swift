@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 /// Main Kanban-style task list view with three columns: Next, Backlog, Done
 struct TaskListView: View {
@@ -77,7 +77,7 @@ struct TaskListView: View {
                 TaskDetailView(store: store, householdId: householdId, task: task)
             }
             .overlay {
-                if store.isLoading && store.tasks.isEmpty {
+                if store.isLoading, store.tasks.isEmpty {
                     ProgressView("Loading tasks...")
                 }
             }

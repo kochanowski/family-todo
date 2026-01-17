@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 /// View for creating and editing tasks
@@ -146,7 +147,7 @@ struct TaskDetailView: View {
             updatedTask.dueDate = finalDueDate
             updatedTask.notes = finalNotes
 
-            if status == .done && existingTask.status != .done {
+            if status == .done, existingTask.status != .done {
                 updatedTask.completedAt = Date()
             }
 
