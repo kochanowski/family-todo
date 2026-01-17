@@ -10,10 +10,10 @@
 - [x] Settings view with sign out
 
 ## Next Steps (MVP Implementation)
-1. **Household onboarding** - create/join household flow
-2. **Areas/Boards** - manage task categories
-3. **Recurring chores** - weekly task templates
-4. **Basic notifications** - daily digest
+1. ~~**Household onboarding** - create/join household flow~~ ✅
+2. ~~**Areas/Boards** - manage task categories~~ ✅
+3. ~~**Recurring chores** - weekly task templates~~ ✅
+4. **Basic notifications** - daily digest (optional for MVP)
 
 ## Infrastructure
 - Add App Store Connect + TestFlight secrets in GitHub repo settings (see docs/2026-01-15_testflight-setup.md)

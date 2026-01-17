@@ -182,6 +182,22 @@ actor CloudKitManager {
         _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
     }
 
+    /// Fetch all recurring chores for a household
+    func fetchRecurringChores(householdId: UUID) async throws -> [RecurringChore] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "RecurringChore", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try recurringChore(from: record)
+        }
+    }
+
     // MARK: - Mapping
 
     private func recordID(for id: UUID) -> CKRecord.ID {

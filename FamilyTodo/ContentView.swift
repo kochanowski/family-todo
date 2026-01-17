@@ -44,7 +44,7 @@ struct AuthenticatedView: View {
     }
 }
 
-/// Main application view with tasks, areas, and settings
+/// Main application view with tasks, areas, recurring chores, and settings
 struct MainTabView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
@@ -56,6 +56,11 @@ struct MainTabView: View {
                 TaskListView(householdId: householdId, modelContext: modelContext)
                     .tabItem {
                         Label("Tasks", systemImage: "checklist")
+                    }
+
+                RecurringChoresView(householdStore: householdStore)
+                    .tabItem {
+                        Label("Recurring", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     }
 
                 AreasView(householdStore: householdStore)
