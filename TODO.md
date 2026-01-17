@@ -16,9 +16,9 @@
 4. **Basic notifications** - daily digest (optional for MVP)
 
 ## Infrastructure
-- Add App Store Connect + TestFlight secrets in GitHub repo settings (see docs/2026-01-15_testflight-setup.md)
+- [x] Migrate CI to Fastlane with API key authentication
+- Add App Store Connect API key secrets in GitHub (see docs/2026-01-17_fastlane-setup.md)
 - Verify `deploy-testflight` job succeeds on push to `main`
-- Confirm bundle identifier matches App Store Connect app and provisioning profile
 
 ## Reference
 - Full analysis: docs/2026-01-16_project-analysis.md

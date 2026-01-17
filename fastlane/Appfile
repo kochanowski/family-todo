@@ -1,0 +1,15 @@
+# App Store Connect API key (configured via environment variables)
+# Generate at: App Store Connect → Users and Access → Keys → App Store Connect API
+
+# These will be set from GitHub Secrets
+app_identifier(ENV["APP_IDENTIFIER"] || "com.example.FamilyTodo")
+apple_id(ENV["APPLE_ID"]) # Your Apple ID email
+
+# API Key authentication (recommended for CI)
+# Set these environment variables in GitHub Secrets:
+# - APP_STORE_CONNECT_API_KEY_ID
+# - APP_STORE_CONNECT_API_ISSUER_ID
+# - APP_STORE_CONNECT_API_KEY_CONTENT (base64 encoded .p8 file)
+
+team_id(ENV["TEAM_ID"])
+itc_team_id(ENV["ITC_TEAM_ID"])
