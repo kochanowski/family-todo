@@ -5,25 +5,55 @@ import SwiftUI
 struct TaskListView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var store: TaskStore
+    @StateObject private var areaStore: AreaStore
     @State private var showingAddTask = false
     @State private var selectedTask: Task?
+    @State private var selectedAreaFilter: UUID?
 
     private let householdId: UUID
 
     init(householdId: UUID, modelContext: ModelContext) {
         self.householdId = householdId
         _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
+        _areaStore = StateObject(wrappedValue: AreaStore(householdId: householdId))
+    }
+
+    private func filteredTasks(_ tasks: [Task]) -> [Task] {
+        guard let areaId = selectedAreaFilter else { return tasks }
+        return tasks.filter { $0.areaId == areaId }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Area filter
+                    if !areaStore.areas.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                FilterChip(title: "All", isSelected: selectedAreaFilter == nil) {
+                                    selectedAreaFilter = nil
+                                }
+                                ForEach(areaStore.areas) { area in
+                                    FilterChip(
+                                        title: area.name,
+                                        icon: area.icon,
+                                        isSelected: selectedAreaFilter == area.id
+                                    ) {
+                                        selectedAreaFilter = area.id
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+
                     // Next (Now) - Limited to 3 tasks (WIP)
                     TaskColumnView(
                         title: "Next",
                         subtitle: "\(store.nextTasks.count)/\(TaskStore.wipLimit)",
-                        tasks: store.nextTasks,
+                        tasks: filteredTasks(store.nextTasks),
+                        areas: areaStore.areas,
                         accentColor: .orange,
                         onTap: { selectedTask = $0 },
                         onMove: { task, status in
@@ -35,7 +65,8 @@ struct TaskListView: View {
                     TaskColumnView(
                         title: "Backlog",
                         subtitle: "\(store.backlogTasks.count) tasks",
-                        tasks: store.backlogTasks,
+                        tasks: filteredTasks(store.backlogTasks),
+                        areas: areaStore.areas,
                         accentColor: .blue,
                         onTap: { selectedTask = $0 },
                         onMove: { task, status in
@@ -47,7 +78,8 @@ struct TaskListView: View {
                     TaskColumnView(
                         title: "Done",
                         subtitle: "Recently completed",
-                        tasks: Array(store.doneTasks.prefix(10)),
+                        tasks: filteredTasks(Array(store.doneTasks.prefix(10))),
+                        areas: areaStore.areas,
                         accentColor: .green,
                         onTap: { selectedTask = $0 },
                         onMove: { task, status in
@@ -55,7 +87,7 @@ struct TaskListView: View {
                         }
                     )
                 }
-                .padding()
+                .padding(.vertical)
             }
             .navigationTitle("Tasks")
             .toolbar {
@@ -69,12 +101,13 @@ struct TaskListView: View {
             }
             .refreshable {
                 await store.loadTasks()
+                await areaStore.loadAreas()
             }
             .sheet(isPresented: $showingAddTask) {
-                TaskDetailView(store: store, householdId: householdId)
+                TaskDetailView(store: store, householdId: householdId, areas: areaStore.areas)
             }
             .sheet(item: $selectedTask) { task in
-                TaskDetailView(store: store, householdId: householdId, task: task)
+                TaskDetailView(store: store, householdId: householdId, task: task, areas: areaStore.areas)
             }
             .overlay {
                 if store.isLoading, store.tasks.isEmpty {
@@ -84,8 +117,37 @@ struct TaskListView: View {
             .task {
                 store.setHousehold(householdId)
                 await store.loadTasks()
+                await areaStore.loadAreas()
             }
         }
+    }
+}
+
+// MARK: - Filter Chip
+
+struct FilterChip: View {
+    let title: String
+    var icon: String?
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.caption)
+                }
+                Text(title)
+                    .font(.subheadline)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.blue : Color(.systemGray5))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -95,9 +157,15 @@ struct TaskColumnView: View {
     let title: String
     let subtitle: String
     let tasks: [Task]
+    let areas: [Area]
     let accentColor: Color
     let onTap: (Task) -> Void
     let onMove: (Task, Task.TaskStatus) -> Void
+
+    private func areaName(for task: Task) -> String? {
+        guard let areaId = task.areaId else { return nil }
+        return areas.first { $0.id == areaId }?.name
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -124,7 +192,7 @@ struct TaskColumnView: View {
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(tasks) { task in
-                        TaskRowView(task: task, accentColor: accentColor)
+                        TaskRowView(task: task, areaName: areaName(for: task), accentColor: accentColor)
                             .onTapGesture { onTap(task) }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 swipeActions(for: task)
@@ -172,6 +240,7 @@ struct TaskColumnView: View {
 
 struct TaskRowView: View {
     let task: Task
+    let areaName: String?
     let accentColor: Color
 
     var body: some View {
@@ -187,14 +256,25 @@ struct TaskRowView: View {
                     .strikethrough(task.status == .done)
                     .foregroundStyle(task.status == .done ? .secondary : .primary)
 
-                if let dueDate = task.dueDate {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar")
+                HStack(spacing: 8) {
+                    if let areaName {
+                        Text(areaName)
                             .font(.caption2)
-                        Text(dueDate, style: .date)
-                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(.systemGray5))
+                            .clipShape(Capsule())
                     }
-                    .foregroundStyle(task.isOverdue ? .red : .secondary)
+
+                    if let dueDate = task.dueDate {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.caption2)
+                            Text(dueDate, style: .date)
+                                .font(.caption)
+                        }
+                        .foregroundStyle(task.isOverdue ? .red : .secondary)
+                    }
                 }
             }
 

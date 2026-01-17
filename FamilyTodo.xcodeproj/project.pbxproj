@@ -32,6 +32,9 @@
 		56EBB670B95D4B0385265E2E /* AreasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */; };
 		A477D45D71774433A314377F /* RecurringChoreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */; };
 		0C8ECE6E2288433FAD9FE1AF /* RecurringChoresView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AF10EE9B8B4A09B5DCD599 /* RecurringChoresView.swift */; };
+		59136A01A544435A8CD17940 /* RecurringChoreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13328DB12D548B79F17BF42 /* RecurringChoreStore.swift */; };
+		F6C8F30DA66B4F14A783D66A /* RecurringChoresView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 290E97A0C0BF44D384FE513E /* RecurringChoresView.swift */; };
+		58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,6 +76,9 @@
 		40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreasView.swift; sourceTree = "<group>"; };
 		B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoreStore.swift; sourceTree = "<group>"; };
 		28AF10EE9B8B4A09B5DCD599 /* RecurringChoresView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoresView.swift; sourceTree = "<group>"; };
+		E13328DB12D548B79F17BF42 /* RecurringChoreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoreStore.swift; sourceTree = "<group>"; };
+		290E97A0C0BF44D384FE513E /* RecurringChoresView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoresView.swift; sourceTree = "<group>"; };
+		E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -206,6 +212,7 @@
 		036C63C7535047ED91F4794B /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */,
 				F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */,
 				36A73F3BC9DD4B4A97890EEC /* UserSession.swift */,
 			);
@@ -215,6 +222,7 @@
 		2253304769774D3792B036F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				290E97A0C0BF44D384FE513E /* RecurringChoresView.swift */,
 				28AF10EE9B8B4A09B5DCD599 /* RecurringChoresView.swift */,
 				40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
@@ -228,6 +236,7 @@
 		FA1C0439FFD449E092083889 /* Stores */ = {
 			isa = PBXGroup;
 			children = (
+				E13328DB12D548B79F17BF42 /* RecurringChoreStore.swift */,
 				B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */,
 				CC6E3A1A06B14DD7965A808D /* AreaStore.swift */,
 				14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */,
@@ -299,6 +308,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */,
+				59136A01A544435A8CD17940 /* RecurringChoreStore.swift in Sources */,
+				F6C8F30DA66B4F14A783D66A /* RecurringChoresView.swift in Sources */,
 				A477D45D71774433A314377F /* RecurringChoreStore.swift in Sources */,
 				0C8ECE6E2288433FAD9FE1AF /* RecurringChoresView.swift in Sources */,
 				8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */,

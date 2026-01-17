@@ -8,9 +8,11 @@ struct TaskDetailView: View {
 
     let householdId: UUID
     let task: Task?
+    let areas: [Area]
 
     @State private var title: String
     @State private var status: Task.TaskStatus
+    @State private var selectedAreaId: UUID?
     @State private var dueDate: Date?
     @State private var hasDueDate: Bool
     @State private var notes: String
@@ -18,13 +20,15 @@ struct TaskDetailView: View {
 
     private var isNewTask: Bool { task == nil }
 
-    init(store: TaskStore, householdId: UUID, task: Task? = nil) {
+    init(store: TaskStore, householdId: UUID, task: Task? = nil, areas: [Area] = []) {
         self.store = store
         self.householdId = householdId
         self.task = task
+        self.areas = areas
 
         _title = State(initialValue: task?.title ?? "")
         _status = State(initialValue: task?.status ?? .backlog)
+        _selectedAreaId = State(initialValue: task?.areaId)
         _dueDate = State(initialValue: task?.dueDate)
         _hasDueDate = State(initialValue: task?.dueDate != nil)
         _notes = State(initialValue: task?.notes ?? "")
@@ -63,6 +67,19 @@ struct TaskDetailView: View {
                             )
                             .foregroundStyle(.orange)
                             .font(.caption)
+                        }
+                    }
+                }
+
+                // Area
+                if !areas.isEmpty {
+                    Section("Area") {
+                        Picker("Area", selection: $selectedAreaId) {
+                            Text("None").tag(nil as UUID?)
+                            ForEach(areas) { area in
+                                Label(area.name, systemImage: area.icon ?? "folder")
+                                    .tag(area.id as UUID?)
+                            }
                         }
                     }
                 }
@@ -144,6 +161,7 @@ struct TaskDetailView: View {
             var updatedTask = existingTask
             updatedTask.title = trimmedTitle
             updatedTask.status = status
+            updatedTask.areaId = selectedAreaId
             updatedTask.dueDate = finalDueDate
             updatedTask.notes = finalNotes
 
@@ -160,6 +178,7 @@ struct TaskDetailView: View {
                 await store.createTask(
                     title: trimmedTitle,
                     status: status,
+                    areaId: selectedAreaId,
                     dueDate: finalDueDate,
                     notes: finalNotes
                 )
