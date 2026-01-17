@@ -82,6 +82,60 @@ actor CloudKitManager {
         _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
     }
 
+    /// Fetch all tasks for a household
+    func fetchTasks(householdId: UUID) async throws -> [Task] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "Task", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try task(from: record)
+        }
+    }
+
+    /// Fetch tasks filtered by status
+    func fetchTasks(householdId: UUID, status: Task.TaskStatus) async throws -> [Task] {
+        let predicate = NSPredicate(
+            format: "householdId == %@ AND status == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none),
+            status.rawValue
+        )
+        let query = CKQuery(recordType: "Task", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try task(from: record)
+        }
+    }
+
+    /// Fetch tasks assigned to a specific member in "next" status (for WIP limit check)
+    func fetchNextTasks(assigneeId: UUID) async throws -> [Task] {
+        let predicate = NSPredicate(
+            format: "assigneeId == %@ AND status == %@",
+            CKRecord.Reference(recordID: recordID(for: assigneeId), action: .none),
+            Task.TaskStatus.next.rawValue
+        )
+        let query = CKQuery(recordType: "Task", predicate: predicate)
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try task(from: record)
+        }
+    }
+
+    /// Count tasks in "next" for a member (WIP limit = 3)
+    func countNextTasks(assigneeId: UUID) async throws -> Int {
+        try await fetchNextTasks(assigneeId: assigneeId).count
+    }
+
     // MARK: - Recurring Chore
 
     func saveRecurringChore(_ chore: RecurringChore) async throws -> CKRecord {

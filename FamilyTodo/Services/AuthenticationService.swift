@@ -41,13 +41,13 @@ final class AuthenticationService: NSObject, ObservableObject {
         var errorDescription: String? {
             switch self {
             case .cancelled:
-                return "Authentication was cancelled"
-            case .failed(let error):
-                return "Authentication failed: \(error.localizedDescription)"
+                "Authentication was cancelled"
+            case let .failed(error):
+                "Authentication failed: \(error.localizedDescription)"
             case .cloudKitNotAvailable:
-                return "CloudKit is not available. Please check your iCloud settings."
+                "CloudKit is not available. Please check your iCloud settings."
             case .userNotFound:
-                return "User not found in CloudKit"
+                "User not found in CloudKit"
             }
         }
     }
@@ -135,7 +135,7 @@ final class AuthenticationService: NSObject, ObservableObject {
             try await fetchCloudKitUserIdentity()
 
             // Update user with Apple ID information
-            if let currentUser = currentUser {
+            if let currentUser {
                 let updatedUser = AuthenticatedUser(
                     id: currentUser.id,
                     appleUserID: credential.user,
@@ -159,7 +159,7 @@ final class AuthenticationService: NSObject, ObservableObject {
 
 extension AuthenticationService: ASAuthorizationControllerDelegate {
     nonisolated func authorizationController(
-        controller: ASAuthorizationController,
+        controller _: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
@@ -167,23 +167,24 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         }
 
         _Concurrency.Task { [weak self] in
-            guard let self = self else { return }
-            await self.handleAppleIDCredential(credential)
+            guard let self else { return }
+            await handleAppleIDCredential(credential)
         }
     }
 
     nonisolated func authorizationController(
-        controller: ASAuthorizationController,
+        controller _: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
         _Concurrency.Task { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
 
             if let authError = error as? ASAuthorizationError,
-               authError.code == .canceled {
-                await self.updateAuthenticationState(.error(.cancelled))
+               authError.code == .canceled
+            {
+                await updateAuthenticationState(.error(.cancelled))
             } else {
-                await self.updateAuthenticationState(.error(.failed(error)))
+                await updateAuthenticationState(.error(.failed(error)))
             }
         }
     }
@@ -198,10 +199,11 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
 
 extension AuthenticationService: ASAuthorizationControllerPresentationContextProviding {
     @MainActor
-    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+    func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
         // Return the key window
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
+              let window = scene.windows.first
+        else {
             fatalError("No window found for presenting Sign in with Apple")
         }
         return window

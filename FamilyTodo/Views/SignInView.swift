@@ -35,7 +35,7 @@ struct SignInView: View {
                     ProgressView("Signing in...")
                         .progressViewStyle(.circular)
 
-                case .error(let error):
+                case let .error(error):
                     VStack(spacing: 12) {
                         Text(error.localizedDescription)
                             .font(.callout)
@@ -76,7 +76,7 @@ struct SignInView: View {
 
 /// Custom Sign in with Apple button using ASAuthorizationAppleIDButton
 struct SignInWithAppleButtonView: UIViewRepresentable {
-    func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+    func makeUIView(context _: Context) -> ASAuthorizationAppleIDButton {
         let button = ASAuthorizationAppleIDButton(
             authorizationButtonType: .signIn,
             authorizationButtonStyle: .black
@@ -84,7 +84,7 @@ struct SignInWithAppleButtonView: UIViewRepresentable {
         return button
     }
 
-    func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {
+    func updateUIView(_: ASAuthorizationAppleIDButton, context _: Context) {
         // No updates needed
     }
 }

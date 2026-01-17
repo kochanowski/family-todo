@@ -22,6 +22,10 @@
 		F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */; };
 		FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A73F3BC9DD4B4A97890EEC /* UserSession.swift */; };
 		1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D1A7F2E84B45DFA676530A /* SignInView.swift */; };
+		4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */; };
+		6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */; };
+		6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8002B6BF847E4BEEB264BCCE /* TaskListView.swift */; };
+		02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +57,10 @@
 		F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
 		36A73F3BC9DD4B4A97890EEC /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 		C3D1A7F2E84B45DFA676530A /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedTask.swift; sourceTree = "<group>"; };
+		F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
+		8002B6BF847E4BEEB264BCCE /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+		3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +89,7 @@
 			children = (
 								036C63C7535047ED91F4794B /* Services */,
 				2253304769774D3792B036F0 /* Views */,
+				FA1C0439FFD449E092083889 /* Stores */,
 				A1B2C3D4E5F60718293A4B9D /* Managers */,
 				A1B2C3D4E5F60718293A4B9A /* Models */,
 				A1B2C3D4E5F60718293A4B71 /* FamilyTodoApp.swift */,
@@ -101,6 +110,7 @@
 		A1B2C3D4E5F60718293A4B9A /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */,
 				A1B2C3D4E5F60718293A4B95 /* Household.swift */,
 				A1B2C3D4E5F60718293A4B96 /* Member.swift */,
 				A1B2C3D4E5F60718293A4B97 /* Area.swift */,
@@ -193,9 +203,19 @@
 		2253304769774D3792B036F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				8002B6BF847E4BEEB264BCCE /* TaskListView.swift */,
+				3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		FA1C0439FFD449E092083889 /* Stores */ = {
+			isa = PBXGroup;
+			children = (
+				F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */,
+			);
+			path = Stores;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -261,6 +281,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */,
+				6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */,
+				6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */,
+				02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B90 /* Household.swift in Sources */,

@@ -27,8 +27,8 @@ final class UserSession: ObservableObject {
     // MARK: - Initialization
 
     private init() {
-        self.authService = AuthenticationService()
-        self.cloudKitManager = CloudKitManager()
+        authService = AuthenticationService()
+        cloudKitManager = CloudKitManager()
 
         // Observe authentication state changes
         setupAuthObserver()
@@ -54,13 +54,13 @@ final class UserSession: ObservableObject {
 
     /// Sets the current household for the user
     func setCurrentHousehold(_ householdID: UUID) {
-        self.currentHouseholdID = householdID
+        currentHouseholdID = householdID
         UserDefaults.standard.set(householdID.uuidString, forKey: "currentHouseholdID")
     }
 
     /// Clears the current household selection
     func clearCurrentHousehold() {
-        self.currentHouseholdID = nil
+        currentHouseholdID = nil
         UserDefaults.standard.removeObject(forKey: "currentHouseholdID")
     }
 
@@ -79,7 +79,7 @@ final class UserSession: ObservableObject {
 
     private func handleAuthStateChange() async {
         switch authService.authenticationState {
-        case .authenticated(let userID):
+        case let .authenticated(userID):
             isAuthenticated = true
             currentUserID = userID
             user = authService.currentUser
@@ -106,8 +106,9 @@ final class UserSession: ObservableObject {
 
     private func restoreHouseholdSelection() {
         if let householdIDString = UserDefaults.standard.string(forKey: "currentHouseholdID"),
-           let householdID = UUID(uuidString: householdIDString) {
-            self.currentHouseholdID = householdID
+           let householdID = UUID(uuidString: householdIDString)
+        {
+            currentHouseholdID = householdID
         }
     }
 }
