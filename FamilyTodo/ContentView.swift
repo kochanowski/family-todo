@@ -8,7 +8,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if userSession.isAuthenticated {
-                MainTabView()
+                AuthenticatedView()
             } else {
                 SignInView()
             }
@@ -16,30 +16,50 @@ struct ContentView: View {
     }
 }
 
-/// Main application view shown after authentication
+/// View shown after authentication - handles household loading
+struct AuthenticatedView: View {
+    @EnvironmentObject private var userSession: UserSession
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var householdStore = HouseholdStore()
+
+    var body: some View {
+        Group {
+            if householdStore.isLoading {
+                ProgressView("Loading...")
+            } else if householdStore.hasHousehold {
+                MainTabView(householdStore: householdStore)
+            } else {
+                OnboardingView(
+                    householdStore: householdStore,
+                    userId: userSession.user?.id ?? "",
+                    displayName: userSession.user?.displayName ?? "User"
+                )
+            }
+        }
+        .task {
+            if let userId = userSession.user?.id {
+                await householdStore.loadHousehold(userId: userId)
+            }
+        }
+    }
+}
+
+/// Main application view with tasks and settings
 struct MainTabView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
-
-    /// For MVP: use a stable household ID derived from user ID
-    /// TODO: Replace with proper household management (create/join flow)
-    private var householdId: UUID {
-        // Create deterministic UUID from user ID for consistent household
-        if let userId = userSession.user?.id {
-            let namespace = UUID(uuidString: "6ba7b810-9dad-11d1-80b4-00c04fd430c8")!
-            return UUID(uuidString: UUID5.generate(namespace: namespace, name: userId).uuidString) ?? UUID()
-        }
-        return UUID()
-    }
+    @ObservedObject var householdStore: HouseholdStore
 
     var body: some View {
         TabView {
-            TaskListView(householdId: householdId, modelContext: modelContext)
-                .tabItem {
-                    Label("Tasks", systemImage: "checklist")
-                }
+            if let householdId = householdStore.currentHousehold?.id {
+                TaskListView(householdId: householdId, modelContext: modelContext)
+                    .tabItem {
+                        Label("Tasks", systemImage: "checklist")
+                    }
+            }
 
-            SettingsView()
+            SettingsView(householdStore: householdStore)
                 .tabItem {
                     Label("Settings", systemImage: "gear")
                 }
@@ -47,13 +67,39 @@ struct MainTabView: View {
     }
 }
 
-/// Settings view with sign out option
+/// Settings view with household info and sign out
 struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
+    @ObservedObject var householdStore: HouseholdStore
 
     var body: some View {
         NavigationStack {
             List {
+                // Household section
+                if let household = householdStore.currentHousehold {
+                    Section("Household") {
+                        LabeledContent("Name", value: household.name)
+
+                        if let inviteCode = householdStore.inviteCode {
+                            HStack {
+                                Text("Invite Code")
+                                Spacer()
+                                Text(inviteCode)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Button {
+                                    UIPasteboard.general.string = inviteCode
+                                } label: {
+                                    Image(systemName: "doc.on.doc")
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
+
+                // Account section
                 if let user = userSession.user {
                     Section("Account") {
                         if let displayName = user.displayName {
@@ -73,28 +119,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-    }
-}
-
-/// UUID5 generation for deterministic UUIDs
-enum UUID5 {
-    static func generate(namespace: UUID, name: String) -> UUID {
-        var namespaceBytes = withUnsafeBytes(of: namespace.uuid) { Array($0) }
-        let nameBytes = Array(name.utf8)
-        namespaceBytes.append(contentsOf: nameBytes)
-
-        // Simple hash-based UUID (not cryptographic, but deterministic)
-        var hash: UInt64 = 5381
-        for byte in namespaceBytes {
-            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
-        }
-
-        var uuid = UUID().uuid
-        withUnsafeMutableBytes(of: &uuid) { ptr in
-            ptr.storeBytes(of: hash.bigEndian, as: UInt64.self)
-        }
-
-        return UUID(uuid: uuid)
     }
 }
 

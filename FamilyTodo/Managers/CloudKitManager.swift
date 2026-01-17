@@ -50,6 +50,20 @@ actor CloudKitManager {
         _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
     }
 
+    /// Find member by Apple user ID
+    func fetchMemberByUserId(_ userId: String) async throws -> Member? {
+        let predicate = NSPredicate(format: "userId == %@", userId)
+        let query = CKQuery(recordType: "Member", predicate: predicate)
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        guard let (_, result) = results.first,
+              case let .success(record) = result
+        else {
+            return nil
+        }
+        return try member(from: record)
+    }
+
     // MARK: - Area
 
     func saveArea(_ area: Area) async throws -> CKRecord {
