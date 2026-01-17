@@ -28,6 +28,8 @@
 		02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */; };
 		36258FC6A196428AAD4C0C22 /* HouseholdStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */; };
 		C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65D304A5384580AD9E9724 /* OnboardingView.swift */; };
+		8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6E3A1A06B14DD7965A808D /* AreaStore.swift */; };
+		56EBB670B95D4B0385265E2E /* AreasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +67,8 @@
 		3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStore.swift; sourceTree = "<group>"; };
 		EC65D304A5384580AD9E9724 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		CC6E3A1A06B14DD7965A808D /* AreaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaStore.swift; sourceTree = "<group>"; };
+		40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreasView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,6 +211,7 @@
 		2253304769774D3792B036F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
 				8002B6BF847E4BEEB264BCCE /* TaskListView.swift */,
 				3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */,
@@ -218,6 +223,7 @@
 		FA1C0439FFD449E092083889 /* Stores */ = {
 			isa = PBXGroup;
 			children = (
+				CC6E3A1A06B14DD7965A808D /* AreaStore.swift */,
 				14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */,
 				F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */,
 			);
@@ -287,6 +293,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */,
+				56EBB670B95D4B0385265E2E /* AreasView.swift in Sources */,
 				36258FC6A196428AAD4C0C22 /* HouseholdStore.swift in Sources */,
 				C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */,
 				4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */,

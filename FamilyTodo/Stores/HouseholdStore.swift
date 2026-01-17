@@ -124,9 +124,9 @@ enum HouseholdError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidInviteCode:
-            return "Invalid invite code. Please check and try again."
+            "Invalid invite code. Please check and try again."
         case .householdNotFound:
-            return "Household not found."
+            "Household not found."
         }
     }
 }

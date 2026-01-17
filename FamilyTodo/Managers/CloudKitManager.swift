@@ -80,6 +80,22 @@ actor CloudKitManager {
         _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
     }
 
+    /// Fetch all areas for a household
+    func fetchAreas(householdId: UUID) async throws -> [Area] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "Area", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try area(from: record)
+        }
+    }
+
     // MARK: - Task
 
     func saveTask(_ task: Task) async throws -> CKRecord {
