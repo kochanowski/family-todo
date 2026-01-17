@@ -151,12 +151,12 @@ struct TaskDetailView: View {
                 updatedTask.completedAt = Date()
             }
 
-            Task {
+            _Concurrency.Task {
                 await store.updateTask(updatedTask)
             }
         } else {
             // Create new task
-            Task {
+            _Concurrency.Task {
                 await store.createTask(
                     title: trimmedTitle,
                     status: status,
@@ -171,7 +171,7 @@ struct TaskDetailView: View {
 
     private func deleteTask() {
         guard let task else { return }
-        Task {
+        _Concurrency.Task {
             await store.deleteTask(task)
         }
         dismiss()

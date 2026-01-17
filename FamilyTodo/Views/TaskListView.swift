@@ -27,7 +27,7 @@ struct TaskListView: View {
                         accentColor: .orange,
                         onTap: { selectedTask = $0 },
                         onMove: { task, status in
-                            Task { await store.moveTask(task, to: status) }
+                            _Concurrency.Task { await store.moveTask(task, to: status) }
                         }
                     )
 
@@ -39,7 +39,7 @@ struct TaskListView: View {
                         accentColor: .blue,
                         onTap: { selectedTask = $0 },
                         onMove: { task, status in
-                            Task { await store.moveTask(task, to: status) }
+                            _Concurrency.Task { await store.moveTask(task, to: status) }
                         }
                     )
 
@@ -51,7 +51,7 @@ struct TaskListView: View {
                         accentColor: .green,
                         onTap: { selectedTask = $0 },
                         onMove: { task, status in
-                            Task { await store.moveTask(task, to: status) }
+                            _Concurrency.Task { await store.moveTask(task, to: status) }
                         }
                     )
                 }
