@@ -39,9 +39,10 @@ jobs:
           xcodebuild clean build \
             -project FamilyTodo.xcodeproj \
             -scheme FamilyTodo \
-            -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2,arch=arm64" \
+            -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
+            EXCLUDED_ARCHS="x86_64" \
             | bundle exec xcpretty && exit ${PIPESTATUS[0]}
 
       - name: Run tests
@@ -49,9 +50,10 @@ jobs:
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme FamilyTodo \
-            -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2,arch=arm64" \
+            -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
+            EXCLUDED_ARCHS="x86_64" \
             | bundle exec xcpretty && exit ${PIPESTATUS[0]}
 
   # ─────────────────────────────────────────────────────────────
