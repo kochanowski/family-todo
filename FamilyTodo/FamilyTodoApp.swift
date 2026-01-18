@@ -7,10 +7,17 @@ struct FamilyTodoApp: App {
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([CachedTask.self])
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false
-        )
+        #if CI
+            let modelConfiguration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true
+            )
+        #else
+            let modelConfiguration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false
+            )
+        #endif
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
@@ -24,8 +31,10 @@ struct FamilyTodoApp: App {
                 .environmentObject(userSession)
                 .modelContainer(sharedModelContainer)
                 .task {
-                    // Check authentication status on app launch
-                    await userSession.checkAuthenticationStatus()
+                    #if !CI
+                        // Check authentication status on app launch
+                        await userSession.checkAuthenticationStatus()
+                    #endif
                 }
         }
     }
