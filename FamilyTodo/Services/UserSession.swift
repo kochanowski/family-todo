@@ -21,14 +21,13 @@ final class UserSession: ObservableObject {
     // MARK: - Dependencies
 
     let authService: AuthenticationService
-    private let cloudKitManager: CloudKitManager
+    private lazy var cloudKitManager: CloudKitManager = .init()
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
     private init() {
         authService = AuthenticationService()
-        cloudKitManager = CloudKitManager()
 
         // Observe authentication state changes
         setupAuthObserver()
