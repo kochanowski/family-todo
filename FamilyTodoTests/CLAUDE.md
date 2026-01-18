@@ -5,3 +5,11 @@
 
 *No recent activity*
 </claude-mem-context>
+
+# Development Environment
+
+**IMPORTANT:** Development happens on Manjaro Linux - xcodebuild is NOT available locally.
+
+- Tests are run on GitHub Actions (macOS runner)
+- Local validation: `pre-commit run --all-files` (validates project structure)
+- To test changes: push to GitHub and check CI results

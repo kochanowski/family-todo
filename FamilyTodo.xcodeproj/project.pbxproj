@@ -12,6 +12,11 @@
 		A1B2C3D4E5F60718293A4B7D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B77 /* SwiftUI.framework */; };
 		A1B2C3D4E5F60718293A4B7E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B78 /* Foundation.framework */; };
 		A1B2C3D4E5F60718293A4B7F /* FamilyTodoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B74 /* FamilyTodoTests.swift */; };
+		9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC3E5BB230C4430890CE54E /* TaskTests.swift */; };
+		876CFC844FDA4A5A8389BE88 /* AreaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FB9690918CA44F5A9EED478 /* AreaTests.swift */; };
+		AEB5F4493DE64BFD9C3E2585 /* RecurringChoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F05BA5B21AD42F7892B3C0D /* RecurringChoreTests.swift */; };
+		138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29641B06528147179F25068D /* TaskStoreTests.swift */; };
+		58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */; };
 		A1B2C3D4E5F60718293A4B80 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B79 /* XCTest.framework */; };
 		A1B2C3D4E5F60718293A4B90 /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B95 /* Household.swift */; };
 		A1B2C3D4E5F60718293A4B91 /* Member.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B96 /* Member.swift */; };
@@ -52,6 +57,11 @@
 		A1B2C3D4E5F60718293A4B72 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B74 /* FamilyTodoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoTests.swift; sourceTree = "<group>"; };
+		7EC3E5BB230C4430890CE54E /* TaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTests.swift; sourceTree = "<group>"; };
+		6FB9690918CA44F5A9EED478 /* AreaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaTests.swift; sourceTree = "<group>"; };
+		3F05BA5B21AD42F7892B3C0D /* RecurringChoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoreTests.swift; sourceTree = "<group>"; };
+		29641B06528147179F25068D /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
+		3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdTests.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B75 /* FamilyTodo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = FamilyTodo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B77 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -161,6 +171,11 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4E5F60718293A4B74 /* FamilyTodoTests.swift */,
+				7EC3E5BB230C4430890CE54E /* TaskTests.swift */,
+				6FB9690918CA44F5A9EED478 /* AreaTests.swift */,
+				3F05BA5B21AD42F7892B3C0D /* RecurringChoreTests.swift */,
+				29641B06528147179F25068D /* TaskStoreTests.swift */,
+				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
 			);
 			path = FamilyTodoTests;
 			sourceTree = "<group>";
@@ -340,6 +355,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D4E5F60718293A4B7F /* FamilyTodoTests.swift in Sources */,
+				9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */,
+				876CFC844FDA4A5A8389BE88 /* AreaTests.swift in Sources */,
+				AEB5F4493DE64BFD9C3E2585 /* RecurringChoreTests.swift in Sources */,
+				138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */,
+				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
