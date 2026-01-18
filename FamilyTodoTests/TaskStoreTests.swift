@@ -72,6 +72,9 @@ final class WIPLimitLogicTests: XCTestCase {
     private let assigneeId = UUID()
     private let otherAssigneeId = UUID()
 
+    /// WIP limit constant for testing (matches TaskStore.wipLimit)
+    private let wipLimit = 3
+
     /// Helper to create a task for testing
     private func makeTask(
         status: Task.TaskStatus,
@@ -95,7 +98,7 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < TaskStore.wipLimit
+        let canMove = currentCount < wipLimit
 
         XCTAssertTrue(canMove, "Should be able to move when under WIP limit")
     }
@@ -108,7 +111,7 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < TaskStore.wipLimit
+        let canMove = currentCount < wipLimit
 
         XCTAssertFalse(canMove, "Should not be able to move when at WIP limit")
     }
@@ -121,7 +124,7 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < TaskStore.wipLimit
+        let canMove = currentCount < wipLimit
 
         XCTAssertTrue(canMove, "Other assignee's tasks should not count towards WIP limit")
     }
@@ -135,7 +138,7 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < TaskStore.wipLimit
+        let canMove = currentCount < wipLimit
 
         XCTAssertTrue(canMove, "Backlog tasks should not count towards WIP limit")
     }
@@ -149,7 +152,7 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < TaskStore.wipLimit
+        let canMove = currentCount < wipLimit
 
         XCTAssertTrue(canMove, "Done tasks should not count towards WIP limit")
     }
