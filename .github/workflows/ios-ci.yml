@@ -42,7 +42,8 @@ jobs:
             -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            EXCLUDED_ARCHS="x86_64" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             | bundle exec xcpretty && exit ${PIPESTATUS[0]}
 
       - name: Run tests
@@ -53,7 +54,8 @@ jobs:
             -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            EXCLUDED_ARCHS="x86_64" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             | bundle exec xcpretty && exit ${PIPESTATUS[0]}
 
   # ─────────────────────────────────────────────────────────────
