@@ -8,10 +8,15 @@ actor CloudKitManager {
     private let privateDatabase: CKDatabase
     private let sharedDatabase: CKDatabase
 
-    init(container: CKContainer = .default()) {
-        self.container = container
-        privateDatabase = container.privateCloudDatabase
-        sharedDatabase = container.sharedCloudDatabase
+    init(container: CKContainer? = nil) {
+        #if CI
+            // Use a stub container in CI to prevent crashes
+            self.container = CKContainer(identifier: "iCloud.com.example.familytodo")
+        #else
+            self.container = container ?? .default()
+        #endif
+        privateDatabase = self.container.privateCloudDatabase
+        sharedDatabase = self.container.sharedCloudDatabase
     }
 
     enum CloudKitManagerError: Error {
