@@ -1,9 +1,11 @@
 import Combine
 import Foundation
 
-#if canImport(UserNotifications) && !targetEnvironment(simulator)
+#if !targetEnvironment(simulator)
     import UserNotifications
+#endif
 
+#if !targetEnvironment(simulator)
     /// Service for managing local notifications
     @MainActor
     final class NotificationService: ObservableObject {
