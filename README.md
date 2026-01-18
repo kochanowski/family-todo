@@ -1,8 +1,8 @@
 # Family To-Do App 🏡
 
-A **shared household task management app** for iOS, designed to help couples and families coordinate tasks without micromanagement or pressure.
+A **shared household task management app** for iOS, designed to help couples and families coordinate tasks and groceries without micromanagement or pressure.
 
-**Core Philosophy:** Simple, shared-first architecture that reduces conflicts by providing a single source of truth for household tasks, with gentle reminders and clear assignments.
+**Core Philosophy:** Simple, shared-first architecture that reduces conflicts by providing a single source of truth for household tasks and a shared shopping list, with gentle reminders and clear assignments.
 
 ---
 
@@ -10,7 +10,7 @@ A **shared household task management app** for iOS, designed to help couples and
 
 - 📱 **iOS-first** - Native SwiftUI app with offline-first architecture
 - ☁️ **CloudKit sync** - Seamless synchronization across devices
-- 👥 **Multi-user households** - Share tasks with partner/family
+- 👥 **Multi-user households** - Share tasks and a global shopping list with partner/family
 - ♻️ **Recurring chores** - Auto-schedule weekly/monthly tasks
 - 🎯 **WIP limit** - Max 3 tasks per person in "Next" (focus mechanism)
 - 🔔 **Gentle notifications** - 1 daily digest max, no nagging
@@ -135,7 +135,7 @@ GitHub Actions automatically:
 ### 🚧 In Progress
 - [ ] Xcode project setup
 - [ ] CloudKit schema implementation
-- [ ] SwiftUI views (Home, Task List, Recurring Chores)
+- [ ] SwiftUI views (Home, Task List, Shopping List, Recurring Chores)
 - [ ] SwiftData local storage
 
 ### 📅 Planned
@@ -169,7 +169,7 @@ This app is **NOT**:
 - ❌ A micromanagement tool (tracking every detail)
 
 This app **IS**:
-- ✅ A shared memory for household tasks
+- ✅ A shared memory for household tasks and groceries
 - ✅ A conflict-reduction tool (neutral assignments)
 - ✅ A gentle reminder system (not nagging)
 - ✅ A focus tool (WIP limit of 3 tasks per person)
@@ -190,4 +190,4 @@ For questions, feedback, or collaboration inquiries, please open an issue.
 
 ---
 
-**Last Updated:** 2026-01-10
+**Last Updated:** 2026-01-18
