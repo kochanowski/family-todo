@@ -44,6 +44,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
+            OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
             | bundle exec xcpretty && exit ${PIPESTATUS[0]}
 
       - name: Run tests
@@ -56,6 +57,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
+            OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
             | bundle exec xcpretty && exit ${PIPESTATUS[0]}
 
   # ─────────────────────────────────────────────────────────────

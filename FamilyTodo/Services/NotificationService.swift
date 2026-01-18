@@ -1,11 +1,11 @@
 import Combine
 import Foundation
 
-#if !targetEnvironment(simulator)
+#if !targetEnvironment(simulator) && !CI
     import UserNotifications
 #endif
 
-#if !targetEnvironment(simulator)
+#if !targetEnvironment(simulator) && !CI
     /// Service for managing local notifications
     @MainActor
     final class NotificationService: ObservableObject {
