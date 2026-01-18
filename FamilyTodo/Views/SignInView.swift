@@ -1,4 +1,6 @@
-import AuthenticationServices
+#if !CI
+    import AuthenticationServices
+#endif
 import SwiftUI
 
 /// Sign in screen with Apple authentication
@@ -75,19 +77,36 @@ struct SignInView: View {
 }
 
 /// Custom Sign in with Apple button using ASAuthorizationAppleIDButton
-struct SignInWithAppleButtonView: UIViewRepresentable {
-    func makeUIView(context _: Context) -> ASAuthorizationAppleIDButton {
-        let button = ASAuthorizationAppleIDButton(
-            authorizationButtonType: .signIn,
-            authorizationButtonStyle: .black
-        )
-        return button
-    }
+#if !CI
+    struct SignInWithAppleButtonView: UIViewRepresentable {
+        func makeUIView(context _: Context) -> ASAuthorizationAppleIDButton {
+            let button = ASAuthorizationAppleIDButton(
+                authorizationButtonType: .signIn,
+                authorizationButtonStyle: .black
+            )
+            return button
+        }
 
-    func updateUIView(_: ASAuthorizationAppleIDButton, context _: Context) {
-        // No updates needed
+        func updateUIView(_: ASAuthorizationAppleIDButton, context _: Context) {
+            // No updates needed
+        }
     }
-}
+#else
+    struct SignInWithAppleButtonView: View {
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: "applelogo")
+                Text("Sign in with Apple")
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(Color.black)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+        }
+    }
+#endif
 
 // MARK: - Preview
 
