@@ -31,6 +31,7 @@
 		6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */; };
 		6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8002B6BF847E4BEEB264BCCE /* TaskListView.swift */; };
 		02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */; };
+		B7E2A1C49D3F4C1AA8B7C5D1 /* CardsPagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2D7C1E8A4B4D1A9C2E7F6B /* CardsPagerView.swift */; };
 		36258FC6A196428AAD4C0C22 /* HouseholdStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */; };
 		C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65D304A5384580AD9E9724 /* OnboardingView.swift */; };
 		8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6E3A1A06B14DD7965A808D /* AreaStore.swift */; };
@@ -78,6 +79,7 @@
 		F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		8002B6BF847E4BEEB264BCCE /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
+		4F2D7C1E8A4B4D1A9C2E7F6B /* CardsPagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardsPagerView.swift; sourceTree = "<group>"; };
 		14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStore.swift; sourceTree = "<group>"; };
 		EC65D304A5384580AD9E9724 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		CC6E3A1A06B14DD7965A808D /* AreaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaStore.swift; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
 				8002B6BF847E4BEEB264BCCE /* TaskListView.swift */,
 				3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */,
+				4F2D7C1E8A4B4D1A9C2E7F6B /* CardsPagerView.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
 			);
 			path = Views;
@@ -328,6 +331,7 @@
 				6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */,
 				6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */,
 				02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */,
+				B7E2A1C49D3F4C1AA8B7C5D1 /* CardsPagerView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B90 /* Household.swift in Sources */,

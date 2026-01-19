@@ -140,7 +140,7 @@ struct CardsPagerView: View {
         return Double(index + cards.count)
     }
 
-    private func cardDragGesture(width: CGFloat) -> some Gesture {
+    private func cardDragGesture(width _: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
                 let translation = value.translation.width
@@ -183,7 +183,7 @@ struct CardsPagerView: View {
 
         ZStack {
             HStack(spacing: 0) {
-                ForEach(0..<leftCount, id: \.self) { offset in
+                ForEach(0 ..< leftCount, id: \.self) { offset in
                     let targetIndex = currentIndex - leftCount + offset
                     Rectangle()
                         .fill(Color.clear)
@@ -198,7 +198,7 @@ struct CardsPagerView: View {
 
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                ForEach(0..<rightCount, id: \.self) { offset in
+                ForEach(0 ..< rightCount, id: \.self) { offset in
                     let targetIndex = currentIndex + offset + 1
                     Rectangle()
                         .fill(Color.clear)
@@ -684,7 +684,7 @@ struct ShimmerView: View {
                 colors: [
                     Color.white.opacity(0),
                     Color.white.opacity(0.6),
-                    Color.white.opacity(0)
+                    Color.white.opacity(0),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -739,7 +739,7 @@ struct ConfettiView: UIViewRepresentable {
             UIColor.systemYellow,
             UIColor.systemGreen,
             UIColor.systemPurple,
-            UIColor.systemOrange
+            UIColor.systemOrange,
         ]
 
         return colors.map { color in
@@ -813,14 +813,14 @@ struct CardData: Identifiable {
                 items: [
                     CardItem(title: "Milk"),
                     CardItem(title: "Bread"),
-                    CardItem(title: "Sugar")
+                    CardItem(title: "Sugar"),
                 ]
             ),
             CardData(
                 kind: .todo,
                 items: [
                     CardItem(title: "Fix the faucet"),
-                    CardItem(title: "Take down the Christmas tree")
+                    CardItem(title: "Take down the Christmas tree"),
                 ]
             ),
             CardData(kind: .backlog, items: []),
@@ -828,7 +828,7 @@ struct CardData: Identifiable {
                 kind: .recurring,
                 items: [
                     CardItem(title: "Take out trash every Monday"),
-                    CardItem(title: "Vacuum living room weekly")
+                    CardItem(title: "Vacuum living room weekly"),
                 ]
             ),
             CardData(
@@ -836,9 +836,9 @@ struct CardData: Identifiable {
                 items: [
                     CardItem(title: "Kitchen"),
                     CardItem(title: "Bathroom"),
-                    CardItem(title: "Garden")
+                    CardItem(title: "Garden"),
                 ]
-            )
+            ),
         ]
     }
 
@@ -990,15 +990,15 @@ enum CardKind: String, CaseIterable {
     func subtitle(for count: Int) -> String {
         switch self {
         case .shoppingList:
-            return count == 1 ? "1 item to buy" : "\(count) items to buy"
+            count == 1 ? "1 item to buy" : "\(count) items to buy"
         case .todo:
-            return count == 1 ? "1 task remaining" : "\(count) tasks remaining"
+            count == 1 ? "1 task remaining" : "\(count) tasks remaining"
         case .backlog:
-            return count == 1 ? "1 idea in backlog" : "\(count) ideas in backlog"
+            count == 1 ? "1 idea in backlog" : "\(count) ideas in backlog"
         case .recurring:
-            return count == 1 ? "1 recurring chore" : "\(count) recurring chores"
+            count == 1 ? "1 recurring chore" : "\(count) recurring chores"
         case .household:
-            return count == 1 ? "1 area" : "\(count) areas"
+            count == 1 ? "1 area" : "\(count) areas"
         }
     }
 }
