@@ -219,10 +219,9 @@
         @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
         @Published private(set) var currentUser: AuthenticatedUser?
 
-        private let cloudKitContainer: CKContainer
+        private lazy var cloudKitContainer: CKContainer = .init(identifier: "iCloud.com.example.familytodo")
 
-        init(cloudKitContainer: CKContainer = CKContainer(identifier: "iCloud.com.example.familytodo")) {
-            self.cloudKitContainer = cloudKitContainer
+        override init() {
             super.init()
         }
 
