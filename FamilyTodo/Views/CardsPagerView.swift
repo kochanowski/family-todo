@@ -721,7 +721,11 @@ struct ConfettiView: UIViewRepresentable {
         guard let emitter = context.coordinator.emitter else { return }
         emitter.emitterPosition = CGPoint(x: uiView.bounds.midX, y: -10)
         emitter.emitterSize = CGSize(width: uiView.bounds.width, height: 1)
-        emitter.birthRate = isActive ? 1 : 0
+        #if CI
+            emitter.birthRate = 0
+        #else
+            emitter.birthRate = isActive ? 1 : 0
+        #endif
     }
 
     func makeCoordinator() -> Coordinator {
@@ -793,11 +797,15 @@ struct DeleteButtonStyle: ButtonStyle {
 
 enum Haptics {
     static func light() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #if !CI
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
     }
 
     static func medium() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #if !CI
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
     }
 }
 
