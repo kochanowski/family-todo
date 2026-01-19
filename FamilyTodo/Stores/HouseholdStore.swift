@@ -9,7 +9,7 @@ final class HouseholdStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
 
-    private let cloudKit = CloudKitManager.shared
+    private lazy var cloudKit = CloudKitManager.shared
 
     /// Check if user has a household
     var hasHousehold: Bool {

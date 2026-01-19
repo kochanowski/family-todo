@@ -10,7 +10,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
 
-    private let cloudKit = CloudKitManager.shared
+    private lazy var cloudKit = CloudKitManager.shared
     private let modelContext: ModelContext
     private var householdId: UUID?
 
