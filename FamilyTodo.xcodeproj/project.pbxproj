@@ -23,6 +23,9 @@
 		A1B2C3D4E5F60718293A4B92 /* Area.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B97 /* Area.swift */; };
 		A1B2C3D4E5F60718293A4B93 /* Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B98 /* Task.swift */; };
 		A1B2C3D4E5F60718293A4B94 /* RecurringChore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B99 /* RecurringChore.swift */; };
+		D1F7A0C7A07C4C67B7B8B4A1 /* ShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */; };
+		E3C9F1B3FAE44A9A91D2F23C /* ShoppingListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */; };
+		F8A44E2D4BCE4A6EA4E8D7E9 /* MemberStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E2B4C6A9F74B2C8C1D3E4F /* MemberStore.swift */; };
 		A1B2C3D4E5F60718293A4B9B /* CloudKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B9C /* CloudKitManager.swift */; };
 		F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */; };
 		FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A73F3BC9DD4B4A97890EEC /* UserSession.swift */; };
@@ -32,6 +35,7 @@
 		6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8002B6BF847E4BEEB264BCCE /* TaskListView.swift */; };
 		02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */; };
 		B7E2A1C49D3F4C1AA8B7C5D1 /* CardsPagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2D7C1E8A4B4D1A9C2E7F6B /* CardsPagerView.swift */; };
+		B4C5D6E7F8A94B0C9D8E7F6A /* CardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C8D9E0F1B24C3D9E8F7A6B /* CardComponents.swift */; };
 		36258FC6A196428AAD4C0C22 /* HouseholdStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */; };
 		C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65D304A5384580AD9E9724 /* OnboardingView.swift */; };
 		8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6E3A1A06B14DD7965A808D /* AreaStore.swift */; };
@@ -71,6 +75,9 @@
 		A1B2C3D4E5F60718293A4B97 /* Area.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Area.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B98 /* Task.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Task.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B99 /* RecurringChore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChore.swift; sourceTree = "<group>"; };
+		B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingItem.swift; sourceTree = "<group>"; };
+		C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStore.swift; sourceTree = "<group>"; };
+		D8E2B4C6A9F74B2C8C1D3E4F /* MemberStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberStore.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B9C /* CloudKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitManager.swift; sourceTree = "<group>"; };
 		F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
 		36A73F3BC9DD4B4A97890EEC /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
@@ -80,6 +87,7 @@
 		8002B6BF847E4BEEB264BCCE /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		4F2D7C1E8A4B4D1A9C2E7F6B /* CardsPagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardsPagerView.swift; sourceTree = "<group>"; };
+		A7C8D9E0F1B24C3D9E8F7A6B /* CardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardComponents.swift; sourceTree = "<group>"; };
 		14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStore.swift; sourceTree = "<group>"; };
 		EC65D304A5384580AD9E9724 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		CC6E3A1A06B14DD7965A808D /* AreaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaStore.swift; sourceTree = "<group>"; };
@@ -142,6 +150,7 @@
 				A1B2C3D4E5F60718293A4B97 /* Area.swift */,
 				A1B2C3D4E5F60718293A4B98 /* Task.swift */,
 				A1B2C3D4E5F60718293A4B99 /* RecurringChore.swift */,
+				B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -241,6 +250,7 @@
 				8002B6BF847E4BEEB264BCCE /* TaskListView.swift */,
 				3C9DF68CCFD84CCD96958C21 /* TaskDetailView.swift */,
 				4F2D7C1E8A4B4D1A9C2E7F6B /* CardsPagerView.swift */,
+				A7C8D9E0F1B24C3D9E8F7A6B /* CardComponents.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
 			);
 			path = Views;
@@ -252,6 +262,8 @@
 				B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */,
 				CC6E3A1A06B14DD7965A808D /* AreaStore.swift */,
 				14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */,
+				C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */,
+				D8E2B4C6A9F74B2C8C1D3E4F /* MemberStore.swift */,
 				F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */,
 			);
 			path = Stores;
@@ -326,12 +338,15 @@
 				8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */,
 				56EBB670B95D4B0385265E2E /* AreasView.swift in Sources */,
 				36258FC6A196428AAD4C0C22 /* HouseholdStore.swift in Sources */,
+				E3C9F1B3FAE44A9A91D2F23C /* ShoppingListStore.swift in Sources */,
+				F8A44E2D4BCE4A6EA4E8D7E9 /* MemberStore.swift in Sources */,
 				C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */,
 				4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */,
 				6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */,
 				6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */,
 				02061E52B5C74E0AB0D73367 /* TaskDetailView.swift in Sources */,
 				B7E2A1C49D3F4C1AA8B7C5D1 /* CardsPagerView.swift in Sources */,
+				B4C5D6E7F8A94B0C9D8E7F6A /* CardComponents.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B90 /* Household.swift in Sources */,
@@ -339,7 +354,9 @@
 				A1B2C3D4E5F60718293A4B92 /* Area.swift in Sources */,
 				A1B2C3D4E5F60718293A4B93 /* Task.swift in Sources */,
 				A1B2C3D4E5F60718293A4B94 /* RecurringChore.swift in Sources */,
-								F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */,
+				D1F7A0C7A07C4C67B7B8B4A1 /* ShoppingItem.swift in Sources */,
+				F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */,
+
 				FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */,
 				1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B9B /* CloudKitManager.swift in Sources */,

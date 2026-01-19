@@ -42,6 +42,7 @@ final class RecurringChoreStore: ObservableObject {
         recurrenceType: RecurringChore.RecurrenceType,
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
+        defaultAssigneeId: UUID? = nil,
         areaId: UUID? = nil,
         notes: String? = nil
     ) async {
@@ -53,6 +54,7 @@ final class RecurringChoreStore: ObservableObject {
             recurrenceType: recurrenceType,
             recurrenceDay: recurrenceDay,
             recurrenceDayOfMonth: recurrenceDayOfMonth,
+            defaultAssigneeId: defaultAssigneeId,
             areaId: areaId,
             notes: notes
         )

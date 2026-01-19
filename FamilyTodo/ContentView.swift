@@ -27,7 +27,9 @@ struct AuthenticatedView: View {
             if householdStore.isLoading {
                 ProgressView("Loading...")
             } else if householdStore.hasHousehold {
-                CardsPagerView(householdStore: householdStore)
+                if let householdId = householdStore.currentHousehold?.id {
+                    CardsPagerView(householdStore: householdStore, householdId: householdId, modelContext: modelContext)
+                }
             } else {
                 OnboardingView(
                     householdStore: householdStore,

@@ -69,6 +69,22 @@ actor CloudKitManager {
         return try member(from: record)
     }
 
+    /// Fetch all members for a household
+    func fetchMembers(householdId: UUID) async throws -> [Member] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "Member", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try member(from: record)
+        }
+    }
+
     // MARK: - Area
 
     func saveArea(_ area: Area) async throws -> CKRecord {
@@ -200,6 +216,38 @@ actor CloudKitManager {
         return try results.compactMap { _, result in
             guard case let .success(record) = result else { return nil }
             return try recurringChore(from: record)
+        }
+    }
+
+    // MARK: - Shopping Item
+
+    func saveShoppingItem(_ item: ShoppingItem) async throws -> CKRecord {
+        let record = shoppingItemRecord(from: item)
+        return try await sharedDatabase.save(record)
+    }
+
+    func fetchShoppingItem(id: UUID) async throws -> ShoppingItem {
+        let record = try await sharedDatabase.record(for: recordID(for: id))
+        return try shoppingItem(from: record)
+    }
+
+    func deleteShoppingItem(id: UUID) async throws {
+        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+    }
+
+    /// Fetch all shopping items for a household
+    func fetchShoppingItems(householdId: UUID) async throws -> [ShoppingItem] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "ShoppingItem", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try shoppingItem(from: record)
         }
     }
 
@@ -456,6 +504,53 @@ actor CloudKitManager {
             lastGeneratedDate: record["lastGeneratedDate"] as? Date,
             nextScheduledDate: record["nextScheduledDate"] as? Date,
             notes: record["notes"] as? String,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    private func shoppingItemRecord(from item: ShoppingItem) -> CKRecord {
+        let record = CKRecord(recordType: "ShoppingItem", recordID: recordID(for: item.id))
+        record["id"] = item.id.uuidString as CKRecordValue
+        record["householdId"] = reference(for: item.householdId)
+        record["title"] = item.title as CKRecordValue
+        if let quantityValue = item.quantityValue {
+            record["quantityValue"] = quantityValue as CKRecordValue
+        }
+        if let quantityUnit = item.quantityUnit {
+            record["quantityUnit"] = quantityUnit as CKRecordValue
+        }
+        record["isBought"] = (item.isBought ? 1 : 0) as CKRecordValue
+        if let boughtAt = item.boughtAt {
+            record["boughtAt"] = boughtAt as CKRecordValue
+        }
+        record["createdAt"] = item.createdAt as CKRecordValue
+        record["updatedAt"] = item.updatedAt as CKRecordValue
+        return record
+    }
+
+    private func shoppingItem(from record: CKRecord) throws -> ShoppingItem {
+        guard
+            let idString = record["id"] as? String,
+            let id = UUID(uuidString: idString),
+            let householdReference = record["householdId"] as? CKRecord.Reference,
+            let householdId = UUID(uuidString: householdReference.recordID.recordName),
+            let title = record["title"] as? String,
+            let isBoughtValue = record["isBought"] as? Int64,
+            let createdAt = record["createdAt"] as? Date,
+            let updatedAt = record["updatedAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        return ShoppingItem(
+            id: id,
+            householdId: householdId,
+            title: title,
+            quantityValue: record["quantityValue"] as? String,
+            quantityUnit: record["quantityUnit"] as? String,
+            isBought: isBoughtValue == 1,
+            boughtAt: record["boughtAt"] as? Date,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
