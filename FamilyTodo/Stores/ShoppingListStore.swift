@@ -22,7 +22,7 @@ final class ShoppingListStore: ObservableObject {
 
     var boughtItems: [ShoppingItem] {
         items
-            .filter { $0.isBought }
+            .filter(\.isBought)
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
