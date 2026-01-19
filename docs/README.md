@@ -16,6 +16,7 @@ This directory contains all technical documentation, guides, and architecture de
 ### Design Documentation
 
 - **[Core Screens Wireframes](2026-01-12_core-screens-wireframes.md)** - Low-fidelity wireframes for all MVP screens (Home, Task Create, Settings, Invitations)
+- **[Cards UI Spec](2026-01-18_cards-ui-spec.md)** - Book-style card pager with glass UI and interactions
 
 ### Concepts Explained
 
@@ -55,7 +56,8 @@ docs/
 │   └── 2026-01-11_cloudkit-schema.md           ← Database schema documentation
 │
 ├── Design Documentation:
-│   └── 2026-01-12_core-screens-wireframes.md   ← MVP screen wireframes
+│   ├── 2026-01-12_core-screens-wireframes.md   ← MVP screen wireframes
+│   └── 2026-01-18_cards-ui-spec.md             ← Book-style card UI spec
 │
 ├── Concepts Explained:
 │   ├── 2026-01-10_adr-explained.md             ← ADR methodology
@@ -173,4 +175,4 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** 2026-01-12
+**Last Updated:** 2026-01-18

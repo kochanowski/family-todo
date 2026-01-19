@@ -27,7 +27,7 @@ struct AuthenticatedView: View {
             if householdStore.isLoading {
                 ProgressView("Loading...")
             } else if householdStore.hasHousehold {
-                MainTabView(householdStore: householdStore)
+                CardsPagerView(householdStore: householdStore)
             } else {
                 OnboardingView(
                     householdStore: householdStore,
