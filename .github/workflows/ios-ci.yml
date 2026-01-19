@@ -78,46 +78,46 @@ jobs:
         run: swiftlint lint --reporter github-actions-logging
 
   # ─────────────────────────────────────────────────────────────
-  # Deploy to TestFlight (Fastlane)
+  # Deploy to TestFlight (Fastlane) — disabled until credentials exist
   # ─────────────────────────────────────────────────────────────
-  deploy-testflight:
-    name: Deploy to TestFlight
-    runs-on: macos-14
-    needs: [build-and-test, swiftlint]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-
-      - name: Deploy to TestFlight
-        env:
-          # App Store Connect API Key (create at App Store Connect → Users → Keys)
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
-          # App configuration
-          APP_IDENTIFIER: ${{ secrets.APP_IDENTIFIER }}
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-          # Build number from GitHub run
-          BUILD_NUMBER: ${{ github.run_number }}
-        run: bundle exec fastlane beta
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: FamilyTodo-IPA
-          path: build/FamilyTodo.ipa
-          retention-days: 30
+  # deploy-testflight:
+  #   name: Deploy to TestFlight
+  #   runs-on: macos-14
+  #   needs: [build-and-test, swiftlint]
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Select Xcode
+  #       run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+  #
+  #     - name: Setup Ruby
+  #       uses: ruby/setup-ruby@v1
+  #       with:
+  #         ruby-version: '3.2'
+  #         bundler-cache: true
+  #
+  #     - name: Deploy to TestFlight
+  #       env:
+  #         # App Store Connect API Key (create at App Store Connect → Users → Keys)
+  #         APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+  #         APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+  #         APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+  #         # App configuration
+  #         APP_IDENTIFIER: ${{ secrets.APP_IDENTIFIER }}
+  #         TEAM_ID: ${{ secrets.TEAM_ID }}
+  #         # Build number from GitHub run
+  #         BUILD_NUMBER: ${{ github.run_number }}
+  #       run: bundle exec fastlane beta
+  #
+  #     - name: Upload IPA
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: FamilyTodo-IPA
+  #         path: build/FamilyTodo.ipa
+  #         retention-days: 30
 
   # ─────────────────────────────────────────────────────────────
   # Notify on failure
