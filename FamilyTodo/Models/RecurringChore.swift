@@ -80,8 +80,11 @@ struct RecurringChore: Identifiable, Codable {
             return calendar.date(byAdding: .weekOfYear, value: 1, to: thisWeek)
 
         case .biweekly:
-            let baseDate = lastGeneratedDate ?? date
-            return calendar.date(byAdding: .weekOfYear, value: 2, to: baseDate)
+            if let lastGenerated = lastGeneratedDate {
+                return calendar.date(byAdding: .weekOfYear, value: 2, to: lastGenerated)
+            } else {
+                return date
+            }
 
         case .monthly:
             guard let dayOfMonth = recurrenceDayOfMonth else { return nil }
@@ -96,18 +99,27 @@ struct RecurringChore: Identifiable, Codable {
 
         case .everyNDays:
             let interval = max(recurrenceInterval ?? 1, 1)
-            let baseDate = lastGeneratedDate ?? date
-            return calendar.date(byAdding: .day, value: interval, to: baseDate)
+            if let lastGenerated = lastGeneratedDate {
+                return calendar.date(byAdding: .day, value: interval, to: lastGenerated)
+            } else {
+                return date
+            }
 
         case .everyNWeeks:
             let interval = max(recurrenceInterval ?? 1, 1)
-            let baseDate = lastGeneratedDate ?? date
-            return calendar.date(byAdding: .weekOfYear, value: interval, to: baseDate)
+            if let lastGenerated = lastGeneratedDate {
+                return calendar.date(byAdding: .weekOfYear, value: interval, to: lastGenerated)
+            } else {
+                return date
+            }
 
         case .everyNMonths:
             let interval = max(recurrenceInterval ?? 1, 1)
-            let baseDate = lastGeneratedDate ?? date
-            return calendar.date(byAdding: .month, value: interval, to: baseDate)
+            if let lastGenerated = lastGeneratedDate {
+                return calendar.date(byAdding: .month, value: interval, to: lastGenerated)
+            } else {
+                return date
+            }
         }
     }
 }

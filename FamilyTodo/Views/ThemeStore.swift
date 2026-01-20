@@ -21,7 +21,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
     var palette: ThemePalette {
         switch self {
         case .pastel:
-            return ThemePalette(cardThemes: [
+            ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
                     gradientColors: [Color(hex: "E9D5FF"), Color(hex: "DDD6FE")],
                     accentColor: Color(hex: "C084FC"),
@@ -63,10 +63,10 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "FB7185"),
                     primaryTextColor: Color(hex: "9F1239"),
                     secondaryTextColor: Color(hex: "BE123C")
-                )
+                ),
             ])
         case .soft:
-            return ThemePalette(cardThemes: [
+            ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
                     gradientColors: [Color(hex: "F3E8FF"), Color(hex: "EDE9FE")],
                     accentColor: Color(hex: "A855F7"),
@@ -108,10 +108,10 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "F43F5E"),
                     primaryTextColor: Color(hex: "9F1239"),
                     secondaryTextColor: Color(hex: "BE123C")
-                )
+                ),
             ])
         case .night:
-            return ThemePalette(cardThemes: [
+            ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
                     gradientColors: [Color(hex: "1E1B4B"), Color(hex: "312E81")],
                     accentColor: Color(hex: "A78BFA"),
@@ -153,7 +153,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "FB7185"),
                     primaryTextColor: Color(hex: "FFE4E6"),
                     secondaryTextColor: Color(hex: "FDA4AF")
-                )
+                ),
             ])
         }
     }
