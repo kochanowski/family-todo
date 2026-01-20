@@ -18,6 +18,14 @@ final class UserSession: ObservableObject {
     @Published private(set) var currentHouseholdID: UUID?
     @Published private(set) var user: AuthenticationService.AuthenticatedUser?
 
+    // MARK: - Computed Properties
+
+    /// Convenience accessor for user ID
+    var userId: String? { currentUserID }
+
+    /// Convenience accessor for display name
+    var displayName: String? { user?.displayName ?? user?.givenName }
+
     // MARK: - Dependencies
 
     let authService: AuthenticationService
