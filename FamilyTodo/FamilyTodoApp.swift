@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct FamilyTodoApp: App {
     @StateObject private var userSession = UserSession.shared
+    @StateObject private var themeStore = ThemeStore()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([CachedTask.self])
@@ -37,6 +38,7 @@ struct FamilyTodoApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(userSession)
+                .environmentObject(themeStore)
                 .modelContainer(sharedModelContainer)
                 .task {
                     #if !CI

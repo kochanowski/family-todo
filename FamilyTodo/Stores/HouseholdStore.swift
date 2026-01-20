@@ -67,6 +67,68 @@ final class HouseholdStore: ObservableObject {
                 _ = try await cloudKit.saveArea(area)
             }
 
+            // Seed starter tasks
+            let starterTasks = [
+                Task(
+                    householdId: household.id,
+                    title: "Fix the faucet",
+                    status: .next,
+                    assigneeId: member.id,
+                    assigneeIds: [member.id],
+                    taskType: .oneOff
+                ),
+                Task(
+                    householdId: household.id,
+                    title: "Take down the Christmas tree",
+                    status: .next,
+                    assigneeId: member.id,
+                    assigneeIds: [member.id],
+                    taskType: .oneOff
+                ),
+            ]
+            for task in starterTasks {
+                _ = try await cloudKit.saveTask(task)
+            }
+
+            // Seed shopping list
+            let starterItems = [
+                ShoppingItem(householdId: household.id, title: "Milk"),
+                ShoppingItem(householdId: household.id, title: "Bread"),
+                ShoppingItem(householdId: household.id, title: "Sugar"),
+            ]
+            for item in starterItems {
+                _ = try await cloudKit.saveShoppingItem(item)
+            }
+
+            // Seed recurring chores
+            let starterChores = [
+                RecurringChore(
+                    householdId: household.id,
+                    title: "Water the plants",
+                    recurrenceType: .everyNWeeks,
+                    recurrenceInterval: 2,
+                    defaultAssigneeIds: [member.id]
+                ),
+                RecurringChore(
+                    householdId: household.id,
+                    title: "Replace towels",
+                    recurrenceType: .everyNWeeks,
+                    recurrenceInterval: 3,
+                    defaultAssigneeIds: [member.id]
+                ),
+                RecurringChore(
+                    householdId: household.id,
+                    title: "Check purifier filters",
+                    recurrenceType: .everyNWeeks,
+                    recurrenceInterval: 2,
+                    defaultAssigneeIds: [member.id]
+                ),
+            ]
+            for var chore in starterChores {
+                chore.nextScheduledDate = chore.calculateNextScheduledDate()
+                _ = try await cloudKit.saveRecurringChore(chore)
+            }
+
             currentHousehold = household
             currentMember = member
         } catch {

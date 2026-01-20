@@ -31,14 +31,14 @@ final class RecurringChoreTests: XCTestCase {
             title: "Monthly Bills",
             recurrenceType: .monthly,
             recurrenceDayOfMonth: 15,
-            defaultAssigneeId: assigneeId,
+            defaultAssigneeIds: [assigneeId],
             areaId: areaId,
             isActive: false,
             notes: "Pay all bills"
         )
 
         XCTAssertEqual(chore.recurrenceDayOfMonth, 15)
-        XCTAssertEqual(chore.defaultAssigneeId, assigneeId)
+        XCTAssertEqual(chore.defaultAssigneeIds, [assigneeId])
         XCTAssertEqual(chore.areaId, areaId)
         XCTAssertFalse(chore.isActive)
         XCTAssertEqual(chore.notes, "Pay all bills")
@@ -51,6 +51,9 @@ final class RecurringChoreTests: XCTestCase {
         XCTAssertEqual(RecurringChore.RecurrenceType.weekly.rawValue, "weekly")
         XCTAssertEqual(RecurringChore.RecurrenceType.biweekly.rawValue, "biweekly")
         XCTAssertEqual(RecurringChore.RecurrenceType.monthly.rawValue, "monthly")
+        XCTAssertEqual(RecurringChore.RecurrenceType.everyNDays.rawValue, "every-n-days")
+        XCTAssertEqual(RecurringChore.RecurrenceType.everyNWeeks.rawValue, "every-n-weeks")
+        XCTAssertEqual(RecurringChore.RecurrenceType.everyNMonths.rawValue, "every-n-months")
     }
 
     // MARK: - Daily Recurrence Tests

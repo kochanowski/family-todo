@@ -6,6 +6,7 @@ struct Task: Identifiable, Codable {
     var title: String
     var status: TaskStatus
     var assigneeId: UUID?
+    var assigneeIds: [UUID]
     var areaId: UUID?
     var dueDate: Date?
     var completedAt: Date?
@@ -33,6 +34,7 @@ struct Task: Identifiable, Codable {
         title: String,
         status: TaskStatus,
         assigneeId: UUID? = nil,
+        assigneeIds: [UUID] = [],
         areaId: UUID? = nil,
         dueDate: Date? = nil,
         completedAt: Date? = nil,
@@ -48,6 +50,7 @@ struct Task: Identifiable, Codable {
         self.title = title
         self.status = status
         self.assigneeId = assigneeId
+        self.assigneeIds = assigneeIds
         self.areaId = areaId
         self.dueDate = dueDate
         self.completedAt = completedAt

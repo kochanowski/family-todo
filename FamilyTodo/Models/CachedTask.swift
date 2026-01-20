@@ -10,6 +10,7 @@ final class CachedTask {
     var title: String
     var statusRaw: String
     var assigneeId: UUID?
+    var assigneeIdsData: Data?
     var areaId: UUID?
     var dueDate: Date?
     var completedAt: Date?
@@ -30,6 +31,7 @@ final class CachedTask {
         title = task.title
         statusRaw = task.status.rawValue
         assigneeId = task.assigneeId
+        assigneeIdsData = Self.encodeAssigneeIds(task.assigneeIds)
         areaId = task.areaId
         dueDate = task.dueDate
         completedAt = task.completedAt
@@ -47,6 +49,7 @@ final class CachedTask {
         title = task.title
         statusRaw = task.status.rawValue
         assigneeId = task.assigneeId
+        assigneeIdsData = Self.encodeAssigneeIds(task.assigneeIds)
         areaId = task.areaId
         dueDate = task.dueDate
         completedAt = task.completedAt
@@ -63,6 +66,7 @@ final class CachedTask {
             title: title,
             status: Task.TaskStatus(rawValue: statusRaw) ?? .backlog,
             assigneeId: assigneeId,
+            assigneeIds: Self.decodeAssigneeIds(assigneeIdsData),
             areaId: areaId,
             dueDate: dueDate,
             completedAt: completedAt,
@@ -78,5 +82,14 @@ final class CachedTask {
     var status: Task.TaskStatus {
         get { Task.TaskStatus(rawValue: statusRaw) ?? .backlog }
         set { statusRaw = newValue.rawValue }
+    }
+
+    private static func encodeAssigneeIds(_ ids: [UUID]) -> Data? {
+        try? JSONEncoder().encode(ids)
+    }
+
+    private static func decodeAssigneeIds(_ data: Data?) -> [UUID] {
+        guard let data else { return [] }
+        return (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
     }
 }

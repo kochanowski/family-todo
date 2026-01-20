@@ -261,9 +261,18 @@ actor CloudKitManager {
         CKRecord.Reference(recordID: recordID(for: id), action: .none)
     }
 
+    private func references(from ids: [UUID]) -> [CKRecord.Reference] {
+        ids.map { reference(for: $0) }
+    }
+
     private func uuid(from reference: CKRecord.Reference?) -> UUID? {
         guard let reference else { return nil }
         return UUID(uuidString: reference.recordID.recordName)
+    }
+
+    private func uuidArray(from references: [CKRecord.Reference]?) -> [UUID] {
+        guard let references else { return [] }
+        return references.compactMap { UUID(uuidString: $0.recordID.recordName) }
     }
 
     private func householdRecord(from household: Household) -> CKRecord {
@@ -383,6 +392,9 @@ actor CloudKitManager {
         if let assigneeId = task.assigneeId {
             record["assigneeId"] = reference(for: assigneeId)
         }
+        if !task.assigneeIds.isEmpty {
+            record["assigneeIds"] = references(from: task.assigneeIds) as CKRecordValue
+        }
         if let areaId = task.areaId {
             record["areaId"] = reference(for: areaId)
         }
@@ -430,6 +442,7 @@ actor CloudKitManager {
             title: title,
             status: status,
             assigneeId: uuid(from: record["assigneeId"] as? CKRecord.Reference),
+            assigneeIds: uuidArray(from: record["assigneeIds"] as? [CKRecord.Reference]),
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             dueDate: record["dueDate"] as? Date,
             completedAt: record["completedAt"] as? Date,
@@ -454,8 +467,14 @@ actor CloudKitManager {
         if let recurrenceDayOfMonth = chore.recurrenceDayOfMonth {
             record["recurrenceDayOfMonth"] = recurrenceDayOfMonth as CKRecordValue
         }
-        if let defaultAssigneeId = chore.defaultAssigneeId {
-            record["defaultAssigneeId"] = reference(for: defaultAssigneeId)
+        if let recurrenceInterval = chore.recurrenceInterval {
+            record["recurrenceInterval"] = recurrenceInterval as CKRecordValue
+        }
+        if !chore.defaultAssigneeIds.isEmpty {
+            record["defaultAssigneeIds"] = references(from: chore.defaultAssigneeIds) as CKRecordValue
+        }
+        if let firstAssignee = chore.defaultAssigneeIds.first {
+            record["defaultAssigneeId"] = reference(for: firstAssignee)
         }
         if let areaId = chore.areaId {
             record["areaId"] = reference(for: areaId)
@@ -491,6 +510,14 @@ actor CloudKitManager {
             throw CloudKitManagerError.invalidRecord
         }
 
+        let intervalValue = record["recurrenceInterval"] as? Int
+            ?? (record["recurrenceInterval"] as? Int64).map(Int.init)
+        let defaultAssigneeIds = uuidArray(from: record["defaultAssigneeIds"] as? [CKRecord.Reference])
+        let fallbackAssigneeId = uuid(from: record["defaultAssigneeId"] as? CKRecord.Reference)
+        let resolvedAssigneeIds = defaultAssigneeIds.isEmpty
+            ? (fallbackAssigneeId.map { [$0] } ?? [])
+            : defaultAssigneeIds
+
         return RecurringChore(
             id: id,
             householdId: householdId,
@@ -498,7 +525,8 @@ actor CloudKitManager {
             recurrenceType: recurrenceType,
             recurrenceDay: record["recurrenceDay"] as? Int,
             recurrenceDayOfMonth: record["recurrenceDayOfMonth"] as? Int,
-            defaultAssigneeId: uuid(from: record["defaultAssigneeId"] as? CKRecord.Reference),
+            recurrenceInterval: intervalValue,
+            defaultAssigneeIds: resolvedAssigneeIds,
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             isActive: isActiveValue == 1,
             lastGeneratedDate: record["lastGeneratedDate"] as? Date,
@@ -524,6 +552,7 @@ actor CloudKitManager {
         if let boughtAt = item.boughtAt {
             record["boughtAt"] = boughtAt as CKRecordValue
         }
+        record["restockCount"] = item.restockCount as CKRecordValue
         record["createdAt"] = item.createdAt as CKRecordValue
         record["updatedAt"] = item.updatedAt as CKRecordValue
         return record
@@ -543,6 +572,10 @@ actor CloudKitManager {
             throw CloudKitManagerError.invalidRecord
         }
 
+        let restockCountValue = record["restockCount"] as? Int
+            ?? (record["restockCount"] as? Int64).map(Int.init)
+            ?? 0
+
         return ShoppingItem(
             id: id,
             householdId: householdId,
@@ -551,6 +584,7 @@ actor CloudKitManager {
             quantityUnit: record["quantityUnit"] as? String,
             isBought: isBoughtValue == 1,
             boughtAt: record["boughtAt"] as? Date,
+            restockCount: restockCountValue,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

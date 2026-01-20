@@ -1,14 +1,81 @@
 import SwiftUI
 import UIKit
 
+struct CardLayout {
+    let horizontalPadding: CGFloat
+    let headerTopPadding: CGFloat
+    let headerBottomPadding: CGFloat
+    let headerTitleFont: Font
+    let headerSubtitleFont: Font
+    let sectionSpacing: CGFloat
+    let rowSpacing: CGFloat
+    let rowPadding: CGFloat
+    let rowCornerRadius: CGFloat
+    let checkboxSize: CGFloat
+    let itemTitleFont: Font
+    let itemDetailFont: Font
+    let inputFieldPadding: CGFloat
+    let inputFont: Font
+    let inputCornerRadius: CGFloat
+    let inputContainerPadding: CGFloat
+    let addButtonSize: CGFloat
+    let addButtonIconSize: CGFloat
+
+    static let standard = CardLayout(
+        horizontalPadding: 24,
+        headerTopPadding: 16,
+        headerBottomPadding: 12,
+        headerTitleFont: .title2.weight(.bold),
+        headerSubtitleFont: .subheadline.weight(.semibold),
+        sectionSpacing: 16,
+        rowSpacing: 8,
+        rowPadding: 16,
+        rowCornerRadius: 16,
+        checkboxSize: 26,
+        itemTitleFont: .body.weight(.semibold),
+        itemDetailFont: .caption,
+        inputFieldPadding: 12,
+        inputFont: .body.weight(.semibold),
+        inputCornerRadius: 12,
+        inputContainerPadding: 16,
+        addButtonSize: 48,
+        addButtonIconSize: 22
+    )
+
+    static let compactShopping = CardLayout(
+        horizontalPadding: 20,
+        headerTopPadding: 12,
+        headerBottomPadding: 8,
+        headerTitleFont: .headline.weight(.bold),
+        headerSubtitleFont: .caption.weight(.semibold),
+        sectionSpacing: 12,
+        rowSpacing: 6,
+        rowPadding: 12,
+        rowCornerRadius: 12,
+        checkboxSize: 20,
+        itemTitleFont: .callout.weight(.semibold),
+        itemDetailFont: .caption2,
+        inputFieldPadding: 10,
+        inputFont: .callout.weight(.semibold),
+        inputCornerRadius: 10,
+        inputContainerPadding: 12,
+        addButtonSize: 40,
+        addButtonIconSize: 18
+    )
+}
+
 struct CardPageView: View {
     let kind: CardKind
+    let theme: CardTheme
+    let layout: CardLayout
     let subtitle: String
     let items: [CardListItem]
     let safeAreaInsets: EdgeInsets
     let isLoading: Bool
     let showsQuantity: Bool
     let emptyMessage: String?
+    let showsInput: Bool
+    let accessoryView: AnyView?
     let onAdd: (String) -> Void
     let onToggle: ((CardListItem) -> Void)?
     let onDelete: ((CardListItem) -> Void)?
@@ -26,15 +93,20 @@ struct CardPageView: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 16) {
+            VStack(spacing: layout.sectionSpacing) {
                 header
                 itemsSection
+                if let accessoryView {
+                    accessoryView
+                }
                 Spacer(minLength: 0)
-                inputSection
+                if showsInput {
+                    inputSection
+                }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + 12)
-            .padding(.bottom, LayoutConstants.footerHeight + safeAreaInsets.bottom + 12)
+            .padding(.horizontal, layout.horizontalPadding)
+            .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + layout.headerTopPadding)
+            .padding(.bottom, LayoutConstants.footerHeight + safeAreaInsets.bottom + layout.headerBottomPadding)
 
             if kind == .backlog, items.isEmpty {
                 ConfettiView(isActive: true)
@@ -57,15 +129,14 @@ struct CardPageView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(kind.title)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(kind.primaryTextColor)
+                .font(layout.headerTitleFont)
+                .foregroundStyle(theme.primaryTextColor)
 
             Text(subtitle)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(kind.secondaryTextColor)
+                .font(layout.headerSubtitleFont)
+                .foregroundStyle(theme.secondaryTextColor)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 12)
     }
 
     private var itemsSection: some View {
@@ -77,8 +148,8 @@ struct CardPageView: View {
                         ProgressView("Loading...")
                     } else if let emptyMessage {
                         Text(emptyMessage)
-                            .font(.system(size: 24, weight: .semibold, design: .rounded))
-                            .foregroundStyle(kind.secondaryTextColor)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(theme.secondaryTextColor)
                             .scaleEffect(1.02)
                             .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: emptyMessage)
                     }
@@ -87,18 +158,21 @@ struct CardPageView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 8) {
+                    LazyVStack(spacing: layout.rowSpacing) {
                         ForEach(items) { item in
                             CardItemRow(
                                 item: item,
-                                accentColor: kind.accentColor,
+                                theme: theme,
+                                layout: layout,
                                 onToggle: toggleAction(for: item),
                                 onDelete: deleteAction(for: item),
                                 onEdit: editAction(for: item)
                             )
                             .transition(
                                 .asymmetric(
-                                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                                    insertion: .move(edge: .bottom)
+                                        .combined(with: .opacity)
+                                        .combined(with: .scale(scale: 0.8)),
                                     removal: .move(edge: .trailing)
                                         .combined(with: .opacity)
                                         .combined(with: .scale(scale: 0.8))
@@ -115,23 +189,23 @@ struct CardPageView: View {
     private var inputSection: some View {
         HStack(spacing: 12) {
             TextField(kind.placeholder, text: $inputText)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .padding(12)
+                .font(layout.inputFont)
+                .padding(layout.inputFieldPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .overlay(Color.white.opacity(0.4))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
                         .stroke(
-                            inputFocused ? kind.accentColor.opacity(0.8) : Color.white.opacity(0.3),
+                            inputFocused ? theme.accentColor.opacity(0.8) : Color.white.opacity(0.3),
                             lineWidth: inputFocused ? 2 : 1
                         )
                 )
                 .scaleEffect(inputFocused ? 1.02 : inputScale)
                 .shadow(
-                    color: inputFocused ? kind.accentColor.opacity(0.3) : .clear,
+                    color: inputFocused ? theme.accentColor.opacity(0.3) : .clear,
                     radius: inputFocused ? 20 : 0,
                     x: 0,
                     y: 0
@@ -150,14 +224,20 @@ struct CardPageView: View {
                 }
 
             AddItemButton(
-                accentGradient: kind.buttonGradient,
+                accentGradient: LinearGradient(
+                    colors: [theme.accentColor, theme.accentColor.opacity(0.75)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
                 rotation: addButtonRotation,
+                size: layout.addButtonSize,
+                iconSize: layout.addButtonIconSize,
                 action: {
                     addItem()
                 }
             )
         }
-        .padding(16)
+        .padding(layout.inputContainerPadding)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.regularMaterial)
@@ -180,6 +260,7 @@ struct CardPageView: View {
     private func deleteAction(for item: CardListItem) -> (() -> Void)? {
         guard item.allowsDelete, let onDelete else { return nil }
         return {
+            Haptics.medium()
             onDelete(item)
         }
     }
@@ -231,12 +312,14 @@ struct CardPageView: View {
 
 struct CardItemRow: View {
     let item: CardListItem
-    let accentColor: Color
+    let theme: CardTheme
+    let layout: CardLayout
     let onToggle: (() -> Void)?
     let onDelete: (() -> Void)?
     let onEdit: (() -> Void)?
 
     @State private var pulse: CGFloat = 1
+    @State private var checkmarkRotation: Angle = .zero
 
     var body: some View {
         HStack(spacing: 12) {
@@ -244,18 +327,29 @@ struct CardItemRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(layout.itemTitleFont)
                     .foregroundStyle(.primary)
                     .strikethrough(item.isCompleted, color: .primary.opacity(0.6))
 
                 if let secondaryText = item.secondaryText {
-                    Text(secondaryText)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        if let detailIconName = item.detailIconName {
+                            Image(systemName: detailIconName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(secondaryText)
+                            .font(layout.itemDetailFont)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
             Spacer(minLength: 0)
+
+            if let assigneeInitials = item.assigneeInitials, !assigneeInitials.isEmpty {
+                AvatarStackView(initials: assigneeInitials, accentColor: theme.accentColor)
+            }
 
             if let onEdit {
                 Button {
@@ -263,36 +357,38 @@ struct CardItemRow: View {
                 } label: {
                     Image(systemName: "pencil")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(accentColor)
+                        .foregroundStyle(theme.accentColor)
                 }
                 .buttonStyle(PressableIconButtonStyle())
             }
 
             if let onDelete {
                 Button {
+                    Haptics.medium()
                     onDelete()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color.red)
+                        .foregroundStyle(.red)
                 }
                 .buttonStyle(DeleteButtonStyle())
             }
         }
-        .padding(16)
+        .padding(layout.rowPadding)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(Color.white.opacity(0.3))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
         .swipeActions(edge: .trailing) {
             if let onDelete {
                 Button(role: .destructive) {
+                    Haptics.medium()
                     onDelete()
                 } label: {
                     Label("Delete", systemImage: "trash")
@@ -303,39 +399,80 @@ struct CardItemRow: View {
 
     @ViewBuilder
     private var leadingView: some View {
-        if let iconName = item.iconName {
-            Image(systemName: iconName)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(item.iconColor ?? accentColor)
-                .frame(width: 26, height: 26)
-        } else if let onToggle {
+        if let onToggle {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    pulse = 1.2
-                }
+                triggerToggleAnimation()
                 onToggle()
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6).delay(0.05)) {
-                    pulse = 1
-                }
             } label: {
                 ZStack {
                     Circle()
-                        .strokeBorder(accentColor.opacity(item.isCompleted ? 0.3 : 0.6), lineWidth: 2)
+                        .strokeBorder(theme.accentColor.opacity(item.isCompleted ? 0.3 : 0.6), lineWidth: 2)
                         .background(
                             Circle()
-                                .fill(item.isCompleted ? accentColor : Color.clear)
+                                .fill(item.isCompleted ? theme.accentColor : Color.clear)
                         )
-                        .frame(width: 26, height: 26)
+                        .frame(width: layout.checkboxSize, height: layout.checkboxSize)
 
                     if item.isCompleted {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: layout.checkboxSize * 0.45, weight: .bold))
                             .foregroundStyle(.white)
+                            .rotationEffect(checkmarkRotation)
                     }
                 }
             }
             .scaleEffect(pulse)
         }
+    }
+
+    private func triggerToggleAnimation() {
+        Haptics.light()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            pulse = 1.2
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6).delay(0.05)) {
+            pulse = 1
+        }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+            checkmarkRotation += .degrees(360)
+        }
+    }
+}
+
+struct AvatarStackView: View {
+    let initials: [String]
+    let accentColor: Color
+
+    private var visibleInitials: [String] {
+        Array(initials.prefix(3))
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(visibleInitials, id: \.self) { value in
+                AvatarBadgeView(initials: value, accentColor: accentColor)
+            }
+            if initials.count > visibleInitials.count {
+                AvatarBadgeView(initials: "+\(initials.count - visibleInitials.count)", accentColor: accentColor)
+            }
+        }
+    }
+}
+
+struct AvatarBadgeView: View {
+    let initials: String
+    let accentColor: Color
+
+    var body: some View {
+        Text(initials)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(accentColor.opacity(0.2))
+            )
     }
 }
 
@@ -345,7 +482,7 @@ struct GlassHeaderView: View {
     var body: some View {
         HStack {
             Text("Tasks")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -375,6 +512,7 @@ struct GlassHeaderView: View {
 struct GlassFooterView: View {
     let cardKinds: [CardKind]
     let currentIndex: Int
+    let themeProvider: (CardKind) -> CardTheme
     let onSelect: (Int) -> Void
 
     var body: some View {
@@ -382,10 +520,11 @@ struct GlassFooterView: View {
             ForEach(cardKinds.indices, id: \.self) { index in
                 let isActive = index == currentIndex
                 Capsule(style: .continuous)
-                    .fill(isActive ? cardKinds[index].accentColor : Color.secondary.opacity(0.4))
+                    .fill(isActive ? themeProvider(cardKinds[index]).accentColor : Color.secondary.opacity(0.4))
                     .frame(width: isActive ? 24 : 8, height: 8)
                     .animation(.spring(response: 0.4, dampingFraction: 0.75), value: currentIndex)
                     .onTapGesture {
+                        Haptics.light()
                         onSelect(index)
                     }
             }
@@ -405,6 +544,8 @@ struct GlassFooterView: View {
 struct AddItemButton: View {
     let accentGradient: LinearGradient
     let rotation: Angle
+    let size: CGFloat
+    let iconSize: CGFloat
     let action: () -> Void
 
     var body: some View {
@@ -412,9 +553,9 @@ struct AddItemButton: View {
             action()
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
+                .frame(width: size, height: size)
                 .background(accentGradient)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -599,6 +740,14 @@ struct DeleteButtonStyle: ButtonStyle {
     }
 }
 
+struct PressableCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .brightness(configuration.isPressed ? 0.03 : 0)
+    }
+}
+
 enum Haptics {
     static func light() {
         #if !CI
@@ -611,6 +760,12 @@ enum Haptics {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
     }
+
+    static func heavy() {
+        #if !CI
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        #endif
+    }
 }
 
 struct CardListItem: Identifiable {
@@ -618,10 +773,10 @@ struct CardListItem: Identifiable {
     var title: String
     var isCompleted: Bool
     var secondaryText: String?
+    var detailIconName: String?
     var quantityValue: String?
     var quantityUnit: String?
-    var iconName: String?
-    var iconColor: Color?
+    var assigneeInitials: [String]?
     var allowsToggle: Bool
     var allowsEdit: Bool
     var allowsDelete: Bool
@@ -631,10 +786,10 @@ struct CardListItem: Identifiable {
         title: String,
         isCompleted: Bool = false,
         secondaryText: String? = nil,
+        detailIconName: String? = nil,
         quantityValue: String? = nil,
         quantityUnit: String? = nil,
-        iconName: String? = nil,
-        iconColor: Color? = nil,
+        assigneeInitials: [String]? = nil,
         allowsToggle: Bool = true,
         allowsEdit: Bool = true,
         allowsDelete: Bool = true
@@ -643,10 +798,10 @@ struct CardListItem: Identifiable {
         self.title = title
         self.isCompleted = isCompleted
         self.secondaryText = secondaryText
+        self.detailIconName = detailIconName
         self.quantityValue = quantityValue
         self.quantityUnit = quantityUnit
-        self.iconName = iconName
-        self.iconColor = iconColor
+        self.assigneeInitials = assigneeInitials
         self.allowsToggle = allowsToggle
         self.allowsEdit = allowsEdit
         self.allowsDelete = allowsDelete
@@ -659,6 +814,8 @@ enum CardKind: String, CaseIterable {
     case backlog
     case recurring
     case household
+    case areas
+    case settings
 
     static let displayOrder: [CardKind] = [
         .shoppingList,
@@ -666,6 +823,8 @@ enum CardKind: String, CaseIterable {
         .backlog,
         .recurring,
         .household,
+        .areas,
+        .settings,
     ]
 
     static var defaultIndex: Int {
@@ -681,9 +840,13 @@ enum CardKind: String, CaseIterable {
         case .backlog:
             "Backlog"
         case .recurring:
-            "Recurring"
+            "Recurring Tasks"
         case .household:
             "Household"
+        case .areas:
+            "Areas"
+        case .settings:
+            "Settings"
         }
     }
 
@@ -696,86 +859,13 @@ enum CardKind: String, CaseIterable {
         case .backlog:
             "Add idea..."
         case .recurring:
-            "Add recurring chore..."
+            "Add recurring task..."
         case .household:
+            "Add member..."
+        case .areas:
             "Add area..."
-        }
-    }
-
-    var gradientColors: [Color] {
-        switch self {
-        case .shoppingList:
-            [Color(hex: "E9D5FF"), Color(hex: "DDD6FE")]
-        case .todo:
-            [Color(hex: "DCFCE7"), Color(hex: "BBF7D0")]
-        case .backlog:
-            [Color(hex: "FEF9C3"), Color(hex: "FEF08A")]
-        case .recurring:
-            [Color(hex: "FFEDD5"), Color(hex: "FED7AA")]
-        case .household:
-            [Color(hex: "DBEAFE"), Color(hex: "BFDBFE")]
-        }
-    }
-
-    var accentColor: Color {
-        switch self {
-        case .shoppingList:
-            Color(hex: "C084FC")
-        case .todo:
-            Color(hex: "4ADE80")
-        case .backlog:
-            Color(hex: "FACC15")
-        case .recurring:
-            Color(hex: "FB923C")
-        case .household:
-            Color(hex: "60A5FA")
-        }
-    }
-
-    var primaryTextColor: Color {
-        switch self {
-        case .shoppingList:
-            Color(hex: "581C87")
-        case .todo:
-            Color(hex: "166534")
-        case .backlog:
-            Color(hex: "713F12")
-        case .recurring:
-            Color(hex: "9A3412")
-        case .household:
-            Color(hex: "1E3A8A")
-        }
-    }
-
-    var secondaryTextColor: Color {
-        switch self {
-        case .shoppingList:
-            Color(hex: "6B21A8")
-        case .todo:
-            Color(hex: "15803D")
-        case .backlog:
-            Color(hex: "A16207")
-        case .recurring:
-            Color(hex: "C2410C")
-        case .household:
-            Color(hex: "1D4ED8")
-        }
-    }
-
-    var buttonGradient: LinearGradient {
-        LinearGradient(
-            colors: [accentColor, accentColor.opacity(0.75)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    var emptyMessage: String? {
-        switch self {
-        case .backlog:
-            "Everything is done!"
-        default:
-            nil
+        case .settings:
+            ""
         }
     }
 
@@ -788,9 +878,13 @@ enum CardKind: String, CaseIterable {
         case .backlog:
             count == 1 ? "1 idea in backlog" : "\(count) ideas in backlog"
         case .recurring:
-            count == 1 ? "1 recurring chore" : "\(count) recurring chores"
+            count == 1 ? "1 recurring task" : "\(count) recurring tasks"
         case .household:
+            count == 1 ? "1 member" : "\(count) members"
+        case .areas:
             count == 1 ? "1 area" : "\(count) areas"
+        case .settings:
+            "Theme & preferences"
         }
     }
 }
@@ -799,6 +893,57 @@ enum LayoutConstants {
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 60
     static let cardCornerRadius: CGFloat = 24
+}
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? 0
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth + size.width > maxWidth, rowWidth > 0 {
+                width = max(width, rowWidth)
+                height += rowHeight + spacing
+                rowWidth = size.width
+                rowHeight = size.height
+            } else {
+                rowWidth += size.width + (rowWidth == 0 ? 0 : spacing)
+                rowHeight = max(rowHeight, size.height)
+            }
+        }
+
+        width = max(width, rowWidth)
+        height += rowHeight
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
 }
 
 extension Color {

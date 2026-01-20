@@ -19,6 +19,7 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(task.householdId, householdId)
         XCTAssertEqual(task.taskType, .oneOff)
         XCTAssertNil(task.assigneeId)
+        XCTAssertTrue(task.assigneeIds.isEmpty)
         XCTAssertNil(task.areaId)
         XCTAssertNil(task.dueDate)
         XCTAssertNil(task.completedAt)
@@ -34,6 +35,7 @@ final class TaskTests: XCTestCase {
             title: "Complete Task",
             status: .next,
             assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
             areaId: areaId,
             dueDate: dueDate,
             taskType: .recurring,
@@ -41,6 +43,7 @@ final class TaskTests: XCTestCase {
         )
 
         XCTAssertEqual(task.assigneeId, assigneeId)
+        XCTAssertEqual(task.assigneeIds, [assigneeId])
         XCTAssertEqual(task.areaId, areaId)
         XCTAssertEqual(task.dueDate, dueDate)
         XCTAssertEqual(task.notes, "Test notes")

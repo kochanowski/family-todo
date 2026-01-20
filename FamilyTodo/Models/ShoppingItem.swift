@@ -8,6 +8,7 @@ struct ShoppingItem: Identifiable, Codable {
     var quantityUnit: String?
     var isBought: Bool
     var boughtAt: Date?
+    var restockCount: Int
     let createdAt: Date
     var updatedAt: Date
 
@@ -19,6 +20,7 @@ struct ShoppingItem: Identifiable, Codable {
         quantityUnit: String? = nil,
         isBought: Bool = false,
         boughtAt: Date? = nil,
+        restockCount: Int = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -29,6 +31,7 @@ struct ShoppingItem: Identifiable, Codable {
         self.quantityUnit = quantityUnit
         self.isBought = isBought
         self.boughtAt = boughtAt
+        self.restockCount = restockCount
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

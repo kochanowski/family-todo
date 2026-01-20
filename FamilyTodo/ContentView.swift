@@ -82,6 +82,7 @@ struct MainTabView: View {
 /// Settings view with household info and sign out
 struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @ObservedObject var householdStore: HouseholdStore
 
     var body: some View {
@@ -123,6 +124,18 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Appearance") {
+                    Picker("Theme", selection: Binding(
+                        get: { themeStore.preset },
+                        set: { themeStore.preset = $0 }
+                    )) {
+                        ForEach(ThemePreset.allCases) { preset in
+                            Text(preset.displayName).tag(preset)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Section {
                     Button("Sign Out", role: .destructive) {
                         userSession.signOut()
@@ -140,5 +153,6 @@ struct SettingsView: View {
 
     return ContentView()
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
         .modelContainer(container)
 }

@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftData
+import SwiftUI
 
 /// Main store for task management with offline-first architecture.
 /// Follows ADR-002: optimistic UI updates with background sync.
@@ -102,7 +103,15 @@ final class TaskStore: ObservableObject {
 
     // MARK: - Task Operations
 
-    func createTask(title: String, status: Task.TaskStatus = .backlog, assigneeId: UUID? = nil, areaId: UUID? = nil, dueDate: Date? = nil, notes: String? = nil) async {
+    func createTask(
+        title: String,
+        status: Task.TaskStatus = .backlog,
+        assigneeId: UUID? = nil,
+        assigneeIds: [UUID] = [],
+        areaId: UUID? = nil,
+        dueDate: Date? = nil,
+        notes: String? = nil
+    ) async {
         guard let householdId else { return }
 
         // Check WIP limit
@@ -111,11 +120,20 @@ final class TaskStore: ObservableObject {
             return
         }
 
+        let resolvedAssigneeIds: [UUID] = if !assigneeIds.isEmpty {
+            assigneeIds
+        } else if let assigneeId {
+            [assigneeId]
+        } else {
+            []
+        }
+
         let task = Task(
             householdId: householdId,
             title: title,
             status: status,
             assigneeId: assigneeId,
+            assigneeIds: resolvedAssigneeIds,
             areaId: areaId,
             dueDate: dueDate,
             taskType: .oneOff,
@@ -123,7 +141,9 @@ final class TaskStore: ObservableObject {
         )
 
         // Optimistic UI update
-        tasks.append(task)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            tasks.append(task)
+        }
 
         // Save to cache
         let cached = CachedTask(from: task)
@@ -147,14 +167,17 @@ final class TaskStore: ObservableObject {
         updatedTask.updatedAt = Date()
 
         // Check WIP limit if moving to next
-        if task.status == .next, !canMoveToNext(assigneeId: task.assigneeId) {
+        let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
+        if task.status == .next, !canMoveToNext(assigneeId: wipAssigneeId) {
             error = TaskStoreError.wipLimitReached
             return
         }
 
         // Optimistic UI update
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
-            tasks[index] = updatedTask
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                tasks[index] = updatedTask
+            }
         }
 
         // Update cache
@@ -189,7 +212,9 @@ final class TaskStore: ObservableObject {
 
     func deleteTask(_ task: Task) async {
         // Optimistic UI update
-        tasks.removeAll { $0.id == task.id }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            tasks.removeAll { $0.id == task.id }
+        }
 
         // Remove from cache
         let descriptor = FetchDescriptor<CachedTask>(

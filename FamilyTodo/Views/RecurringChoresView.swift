@@ -138,10 +138,20 @@ struct ChoreRowView: View {
 
     private var recurrenceIcon: String {
         switch chore.recurrenceType {
-        case .daily: "sun.max"
-        case .weekly: "calendar.badge.clock"
-        case .biweekly: "calendar"
-        case .monthly: "calendar.circle"
+        case .daily:
+            "sun.max"
+        case .weekly:
+            "calendar.badge.clock"
+        case .biweekly:
+            "calendar"
+        case .monthly:
+            "calendar.circle"
+        case .everyNDays:
+            "clock"
+        case .everyNWeeks:
+            "calendar.badge.clock"
+        case .everyNMonths:
+            "calendar.circle"
         }
     }
 
@@ -163,6 +173,15 @@ struct ChoreRowView: View {
                 return "Monthly on day \(day)"
             }
             return "Monthly"
+        case .everyNDays:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Every \(interval) day\(interval == 1 ? "" : "s")"
+        case .everyNWeeks:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Every \(interval) week\(interval == 1 ? "" : "s")"
+        case .everyNMonths:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Every \(interval) month\(interval == 1 ? "" : "s")"
         }
     }
 }
@@ -179,6 +198,7 @@ struct RecurringChoreDetailView: View {
     @State private var recurrenceType: RecurringChore.RecurrenceType
     @State private var weekday: Int
     @State private var dayOfMonth: Int
+    @State private var recurrenceInterval: Int
     @State private var notes: String
 
     private var isNewChore: Bool { chore == nil }
@@ -190,6 +210,7 @@ struct RecurringChoreDetailView: View {
         _recurrenceType = State(initialValue: chore?.recurrenceType ?? .weekly)
         _weekday = State(initialValue: chore?.recurrenceDay ?? 2) // Monday
         _dayOfMonth = State(initialValue: chore?.recurrenceDayOfMonth ?? 1)
+        _recurrenceInterval = State(initialValue: chore?.recurrenceInterval ?? 2)
         _notes = State(initialValue: chore?.notes ?? "")
     }
 
@@ -206,6 +227,9 @@ struct RecurringChoreDetailView: View {
                         Text("Weekly").tag(RecurringChore.RecurrenceType.weekly)
                         Text("Every 2 weeks").tag(RecurringChore.RecurrenceType.biweekly)
                         Text("Monthly").tag(RecurringChore.RecurrenceType.monthly)
+                        Text("Every N days").tag(RecurringChore.RecurrenceType.everyNDays)
+                        Text("Every N weeks").tag(RecurringChore.RecurrenceType.everyNWeeks)
+                        Text("Every N months").tag(RecurringChore.RecurrenceType.everyNMonths)
                     }
 
                     if recurrenceType == .weekly || recurrenceType == .biweekly {
@@ -222,6 +246,18 @@ struct RecurringChoreDetailView: View {
                                 Text("\(day)").tag(day)
                             }
                         }
+                    }
+
+                    if recurrenceType == .everyNDays {
+                        Stepper("Every \(recurrenceInterval) day\(recurrenceInterval == 1 ? "" : "s")", value: $recurrenceInterval, in: 1 ... 30)
+                    }
+
+                    if recurrenceType == .everyNWeeks {
+                        Stepper("Every \(recurrenceInterval) week\(recurrenceInterval == 1 ? "" : "s")", value: $recurrenceInterval, in: 1 ... 12)
+                    }
+
+                    if recurrenceType == .everyNMonths {
+                        Stepper("Every \(recurrenceInterval) month\(recurrenceInterval == 1 ? "" : "s")", value: $recurrenceInterval, in: 1 ... 12)
                     }
                 }
 
@@ -255,18 +291,28 @@ struct RecurringChoreDetailView: View {
 
         let trimmedNotes = notes.trimmingCharacters(in: .whitespaces)
 
+        let usesInterval = recurrenceType == .everyNDays || recurrenceType == .everyNWeeks || recurrenceType == .everyNMonths
+        let intervalValue = usesInterval ? recurrenceInterval : nil
+        let recurrenceDayValue = (recurrenceType == .weekly || recurrenceType == .biweekly) ? weekday : nil
+        let recurrenceDayOfMonthValue = recurrenceType == .monthly ? dayOfMonth : nil
+
         _Concurrency.Task {
             if let existingChore = chore {
                 var updated = existingChore
                 updated.title = trimmedTitle
+                updated.recurrenceType = recurrenceType
+                updated.recurrenceDay = recurrenceDayValue
+                updated.recurrenceDayOfMonth = recurrenceDayOfMonthValue
+                updated.recurrenceInterval = intervalValue
                 updated.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
                 await choreStore.updateChore(updated)
             } else {
                 await choreStore.createChore(
                     title: trimmedTitle,
                     recurrenceType: recurrenceType,
-                    recurrenceDay: (recurrenceType == .weekly || recurrenceType == .biweekly) ? weekday : nil,
-                    recurrenceDayOfMonth: recurrenceType == .monthly ? dayOfMonth : nil,
+                    recurrenceDay: recurrenceDayValue,
+                    recurrenceDayOfMonth: recurrenceDayOfMonthValue,
+                    recurrenceInterval: intervalValue,
                     notes: trimmedNotes.isEmpty ? nil : trimmedNotes
                 )
             }

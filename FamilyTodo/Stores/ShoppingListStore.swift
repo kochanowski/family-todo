@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Store for shared shopping list management
 @MainActor
@@ -23,7 +24,12 @@ final class ShoppingListStore: ObservableObject {
     var boughtItems: [ShoppingItem] {
         items
             .filter(\.isBought)
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted {
+                if $0.restockCount != $1.restockCount {
+                    return $0.restockCount > $1.restockCount
+                }
+                return $0.updatedAt > $1.updatedAt
+            }
     }
 
     // MARK: - Load Items
@@ -56,12 +62,17 @@ final class ShoppingListStore: ObservableObject {
             isBought: false
         )
 
-        items.append(item)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            items.append(item)
+        }
 
         do {
             _ = try await cloudKit.saveShoppingItem(item)
         } catch {
-            items.removeAll { $0.id == item.id }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                items.removeAll { $0.id == item.id }
+            }
+
             self.error = error
         }
     }
@@ -73,7 +84,9 @@ final class ShoppingListStore: ObservableObject {
         updatedItem.updatedAt = Date()
 
         if let index = items.firstIndex(where: { $0.id == item.id }) {
-            items[index] = updatedItem
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                items[index] = updatedItem
+            }
         }
 
         do {
@@ -89,7 +102,12 @@ final class ShoppingListStore: ObservableObject {
     func toggleBought(_ item: ShoppingItem) async {
         var updatedItem = item
         updatedItem.isBought.toggle()
-        updatedItem.boughtAt = updatedItem.isBought ? Date() : nil
+        if updatedItem.isBought {
+            updatedItem.boughtAt = Date()
+        } else {
+            updatedItem.boughtAt = nil
+            updatedItem.restockCount += 1
+        }
         await updateItem(updatedItem)
     }
 

@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct CardsPagerView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     @ObservedObject var householdStore: HouseholdStore
     @StateObject private var taskStore: TaskStore
     @StateObject private var shoppingListStore: ShoppingListStore
@@ -17,6 +18,7 @@ struct CardsPagerView: View {
     @State private var swipeHapticTriggered = false
 
     private let edgeWidth: CGFloat = 25
+    private let edgeOverlap: CGFloat = 5
     private let maxVisibleEdges = 3
     private let swipeThreshold: CGFloat = 50
 
@@ -30,19 +32,25 @@ struct CardsPagerView: View {
         _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId))
     }
 
+    private var edgeSpacing: CGFloat {
+        edgeWidth - edgeOverlap
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
             let safeInsets = proxy.safeAreaInsets
+            let palette = themeStore.palette
 
             ZStack {
                 ForEach(cardKinds.indices, id: \.self) { index in
                     let kind = cardKinds[index]
-                    cardView(for: kind, safeAreaInsets: safeInsets)
+                    let theme = palette.theme(for: kind)
+                    cardView(for: kind, theme: theme, safeAreaInsets: safeInsets)
                         .frame(width: size.width, height: size.height)
                         .background(
                             LinearGradient(
-                                colors: kind.gradientColors,
+                                colors: theme.gradientColors,
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -79,6 +87,7 @@ struct CardsPagerView: View {
                 GlassFooterView(
                     cardKinds: cardKinds,
                     currentIndex: currentIndex,
+                    themeProvider: { palette.theme(for: $0) },
                     onSelect: { index in
                         Haptics.light()
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
@@ -106,34 +115,39 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func cardView(for kind: CardKind, safeAreaInsets: EdgeInsets) -> some View {
+    private func cardView(for kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
         switch kind {
         case .shoppingList:
             ShoppingListCardView(
                 kind: kind,
+                theme: theme,
                 store: shoppingListStore,
                 safeAreaInsets: safeAreaInsets
             )
         case .todo:
             TodoCardView(
                 kind: kind,
+                theme: theme,
                 taskStore: taskStore,
-                areaStore: areaStore,
+                memberStore: memberStore,
                 currentMemberId: householdStore.currentMember?.id,
                 safeAreaInsets: safeAreaInsets
             )
         case .backlog:
             BacklogCardView(
                 kind: kind,
+                theme: theme,
                 taskStore: taskStore,
-                areaStore: areaStore,
+                memberStore: memberStore,
                 currentMemberId: householdStore.currentMember?.id,
                 safeAreaInsets: safeAreaInsets
             )
         case .recurring:
             RecurringCardView(
                 kind: kind,
+                theme: theme,
                 choreStore: recurringChoreStore,
+                memberStore: memberStore,
                 taskStore: taskStore,
                 currentMemberId: householdStore.currentMember?.id,
                 safeAreaInsets: safeAreaInsets
@@ -141,8 +155,23 @@ struct CardsPagerView: View {
         case .household:
             HouseholdCardView(
                 kind: kind,
-                areaStore: areaStore,
+                theme: theme,
+                householdStore: householdStore,
                 memberStore: memberStore,
+                safeAreaInsets: safeAreaInsets
+            )
+        case .areas:
+            AreasCardView(
+                kind: kind,
+                theme: theme,
+                areaStore: areaStore,
+                safeAreaInsets: safeAreaInsets
+            )
+        case .settings:
+            SettingsCardView(
+                kind: kind,
+                theme: theme,
+                themeStore: themeStore,
                 safeAreaInsets: safeAreaInsets
             )
         }
@@ -162,8 +191,7 @@ struct CardsPagerView: View {
                 return width + edgeWidth
             }
 
-            let position = visibleCount - relative + 1
-            let baseOffset = width - edgeWidth * CGFloat(position)
+            let baseOffset = width - (edgeWidth + edgeSpacing * CGFloat(relative - 1))
             let dragAdjustment = dragOffset < 0 ? dragOffset * 0.3 : 0
             return baseOffset + dragAdjustment
         }
@@ -176,8 +204,7 @@ struct CardsPagerView: View {
             return -(width + edgeWidth)
         }
 
-        let position = visibleCount - relative + 1
-        let baseOffset = -(width - edgeWidth * CGFloat(position))
+        let baseOffset = -(width - (edgeWidth + edgeSpacing * CGFloat(relative - 1)))
         let dragAdjustment = dragOffset > 0 ? dragOffset * 0.3 : 0
         return baseOffset + dragAdjustment
     }
@@ -251,7 +278,7 @@ struct CardsPagerView: View {
         let rightCount = min(maxVisibleEdges, cardKinds.count - 1 - currentIndex)
 
         ZStack {
-            HStack(spacing: 0) {
+            HStack(spacing: -edgeOverlap) {
                 ForEach(0 ..< leftCount, id: \.self) { offset in
                     let targetIndex = currentIndex - leftCount + offset
                     Rectangle()
@@ -265,7 +292,7 @@ struct CardsPagerView: View {
                 Spacer(minLength: 0)
             }
 
-            HStack(spacing: 0) {
+            HStack(spacing: -edgeOverlap) {
                 Spacer(minLength: 0)
                 ForEach(0 ..< rightCount, id: \.self) { offset in
                     let targetIndex = currentIndex + offset + 1
@@ -292,16 +319,22 @@ struct CardsPagerView: View {
 
 struct ShoppingListCardView: View {
     let kind: CardKind
+    let theme: CardTheme
     @ObservedObject var store: ShoppingListStore
     let safeAreaInsets: EdgeInsets
+
+    @State private var restockPresented = false
 
     private var itemLookup: [UUID: ShoppingItem] {
         Dictionary(uniqueKeysWithValues: store.items.map { ($0.id, $0) })
     }
 
+    private var restockItems: [ShoppingItem] {
+        store.boughtItems
+    }
+
     private var cardItems: [CardListItem] {
-        let ordered = store.toBuyItems + store.boughtItems
-        return ordered.map { item in
+        store.toBuyItems.map { item in
             CardListItem(
                 id: item.id,
                 title: item.title,
@@ -317,99 +350,275 @@ struct ShoppingListCardView: View {
         kind.subtitle(for: store.toBuyItems.count)
     }
 
+    private var restockAccessory: AnyView? {
+        guard !restockItems.isEmpty else { return nil }
+        return AnyView(restockSection)
+    }
+
     var body: some View {
-        CardPageView(
-            kind: kind,
-            subtitle: subtitle,
-            items: cardItems,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: store.isLoading,
-            showsQuantity: true,
-            emptyMessage: "Add your first item",
-            onAdd: { title in
-                _Concurrency.Task {
-                    await store.createItem(title: title)
+        ZStack {
+            CardPageView(
+                kind: kind,
+                theme: theme,
+                layout: .compactShopping,
+                subtitle: subtitle,
+                items: cardItems,
+                safeAreaInsets: safeAreaInsets,
+                isLoading: store.isLoading,
+                showsQuantity: true,
+                emptyMessage: "Add your first item",
+                showsInput: true,
+                accessoryView: restockAccessory,
+                onAdd: { title in
+                    _Concurrency.Task {
+                        await store.createItem(title: title)
+                    }
+                },
+                onToggle: { item in
+                    guard let shoppingItem = itemLookup[item.id] else { return }
+                    _Concurrency.Task {
+                        await store.toggleBought(shoppingItem)
+                    }
+                },
+                onDelete: { item in
+                    guard let shoppingItem = itemLookup[item.id] else { return }
+                    _Concurrency.Task {
+                        await store.deleteItem(shoppingItem)
+                    }
+                },
+                onUpdate: { item, title, quantityValue, quantityUnit in
+                    guard var shoppingItem = itemLookup[item.id] else { return }
+                    shoppingItem.title = title
+                    shoppingItem.quantityValue = quantityValue
+                    shoppingItem.quantityUnit = quantityUnit
+                    _Concurrency.Task {
+                        await store.updateItem(shoppingItem)
+                    }
                 }
-            },
-            onToggle: { item in
-                guard let shoppingItem = itemLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await store.toggleBought(shoppingItem)
-                }
-            },
-            onDelete: { item in
-                guard let shoppingItem = itemLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await store.deleteItem(shoppingItem)
-                }
-            },
-            onUpdate: { item, title, quantityValue, quantityUnit in
-                guard var shoppingItem = itemLookup[item.id] else { return }
-                shoppingItem.title = title
-                shoppingItem.quantityValue = quantityValue
-                shoppingItem.quantityUnit = quantityUnit
-                _Concurrency.Task {
-                    await store.updateItem(shoppingItem)
-                }
+            )
+
+            if restockPresented {
+                RestockModalView(
+                    theme: theme,
+                    items: restockItems,
+                    onRestore: { item in
+                        let isLastItem = restockItems.count == 1
+                        _Concurrency.Task {
+                            await store.toggleBought(item)
+                        }
+                        if isLastItem {
+                            restockPresented = false
+                        }
+                    },
+                    onDismiss: {
+                        restockPresented = false
+                    }
+                )
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
-        )
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: restockPresented)
+    }
+
+    private var restockSection: some View {
+        Button {
+            Haptics.light()
+            restockPresented = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bag.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(Color.secondary.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Restock List (\(restockItems.count))")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(restockPreview)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thinMaterial)
+                    .overlay(Color.gray.opacity(0.2))
+            )
+            .overlay(
+                Rectangle()
+                    .fill(theme.accentColor.opacity(0.2))
+                    .frame(height: 0.5),
+                alignment: .top
+            )
+        }
+        .buttonStyle(PressableCardButtonStyle())
+    }
+
+    private var restockPreview: String {
+        let names = restockItems.prefix(3).map(\.title)
+        if names.isEmpty {
+            return ""
+        }
+        let joined = names.joined(separator: ", ")
+        return restockItems.count > 3 ? "\(joined)..." : joined
+    }
+}
+
+struct RestockModalView: View {
+    let theme: CardTheme
+    let items: [ShoppingItem]
+    let onRestore: (ShoppingItem) -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let maxWidth = proxy.size.width * 0.9
+            let maxHeight = proxy.size.height * 0.7
+
+            ZStack {
+                Color.black.opacity(0.4)
+                    .background(.ultraThinMaterial)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        onDismiss()
+                    }
+
+                VStack(spacing: 16) {
+                    HStack {
+                        HStack(spacing: 8) {
+                            Image(systemName: "bag.fill")
+                            Text("Restock List")
+                        }
+                        .font(.headline.weight(.bold))
+
+                        Spacer()
+
+                        Button {
+                            onDismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                                .background(Color.secondary.opacity(0.15), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if items.isEmpty {
+                        Text("Restock list is empty")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            FlowLayout(spacing: 12) {
+                                ForEach(items) { item in
+                                    Button {
+                                        Haptics.light()
+                                        onRestore(item)
+                                    } label: {
+                                        Text(item.title)
+                                            .font(wordCloudFont(for: item.id).weight(wordCloudWeight(for: item.id)))
+                                            .foregroundStyle(theme.primaryTextColor)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(theme.accentColor.opacity(0.2), in: Capsule())
+                                            .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+                                    }
+                                    .buttonStyle(RestockChipButtonStyle())
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func wordCloudFont(for id: UUID) -> Font {
+        let hash = abs(id.uuidString.hashValue)
+        let size = 12 + (hash % 7)
+        return .system(size: CGFloat(size))
+    }
+
+    private func wordCloudWeight(for id: UUID) -> Font.Weight {
+        let hash = abs(id.uuidString.hashValue)
+        return hash % 2 == 0 ? .regular : .semibold
+    }
+}
+
+struct RestockChipButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 1.05 : 1)
+            .shadow(color: Color.black.opacity(configuration.isPressed ? 0.2 : 0.1), radius: configuration.isPressed ? 6 : 3, x: 0, y: 2)
     }
 }
 
 struct TodoCardView: View {
     let kind: CardKind
+    let theme: CardTheme
     @ObservedObject var taskStore: TaskStore
-    @ObservedObject var areaStore: AreaStore
+    @ObservedObject var memberStore: MemberStore
     let currentMemberId: UUID?
     let safeAreaInsets: EdgeInsets
 
     @State private var wipAlertPresented = false
 
     private var taskLookup: [UUID: Task] {
-        Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
-    }
-
-    private var tasks: [Task] {
-        guard let currentMemberId else {
-            return taskStore.nextTasks
-        }
-        return taskStore.nextTasks.filter { $0.assigneeId == currentMemberId }
-    }
-
-    private var areaLookup: [UUID: String] {
-        Dictionary(uniqueKeysWithValues: areaStore.areas.map { ($0.id, $0.name) })
+        Dictionary(uniqueKeysWithValues: taskStore.nextTasks.map { ($0.id, $0) })
     }
 
     private var cardItems: [CardListItem] {
-        tasks.map { task in
+        taskStore.nextTasks.map { task in
             CardListItem(
                 id: task.id,
                 title: task.title,
-                secondaryText: areaLookup[task.areaId]
+                assigneeInitials: assigneeInitials(for: task)
             )
         }
     }
 
     private var subtitle: String {
-        kind.subtitle(for: tasks.count)
+        kind.subtitle(for: taskStore.nextTasks.count)
     }
 
     var body: some View {
         CardPageView(
             kind: kind,
+            theme: theme,
+            layout: .standard,
             subtitle: subtitle,
             items: cardItems,
             safeAreaInsets: safeAreaInsets,
             isLoading: taskStore.isLoading,
             showsQuantity: false,
             emptyMessage: "All clear",
+            showsInput: true,
+            accessoryView: nil,
             onAdd: { title in
                 guard canAddToNext() else {
                     wipAlertPresented = true
                     return
                 }
+                let assigneeIds = currentMemberId.map { [$0] } ?? []
                 _Concurrency.Task {
-                    await taskStore.createTask(title: title, status: .next, assigneeId: currentMemberId)
+                    await taskStore.createTask(title: title, status: .next, assigneeId: currentMemberId, assigneeIds: assigneeIds)
                 }
             },
             onToggle: { item in
@@ -443,12 +652,32 @@ struct TodoCardView: View {
         guard let currentMemberId else { return true }
         return taskStore.canMoveToNext(assigneeId: currentMemberId)
     }
+
+    private func assigneeInitials(for task: Task) -> [String] {
+        let ids = resolvedAssigneeIds(for: task)
+        let members = memberStore.members
+        let initials = ids.compactMap { id in
+            members.first { $0.id == id }?.displayName.initials
+        }
+        return initials
+    }
+
+    private func resolvedAssigneeIds(for task: Task) -> [UUID] {
+        if !task.assigneeIds.isEmpty {
+            return task.assigneeIds
+        }
+        if let assigneeId = task.assigneeId {
+            return [assigneeId]
+        }
+        return memberStore.members.map(\.id)
+    }
 }
 
 struct BacklogCardView: View {
     let kind: CardKind
+    let theme: CardTheme
     @ObservedObject var taskStore: TaskStore
-    @ObservedObject var areaStore: AreaStore
+    @ObservedObject var memberStore: MemberStore
     let currentMemberId: UUID?
     let safeAreaInsets: EdgeInsets
 
@@ -458,16 +687,12 @@ struct BacklogCardView: View {
         Dictionary(uniqueKeysWithValues: taskStore.backlogTasks.map { ($0.id, $0) })
     }
 
-    private var areaLookup: [UUID: String] {
-        Dictionary(uniqueKeysWithValues: areaStore.areas.map { ($0.id, $0.name) })
-    }
-
     private var cardItems: [CardListItem] {
         taskStore.backlogTasks.map { task in
             CardListItem(
                 id: task.id,
                 title: task.title,
-                secondaryText: areaLookup[task.areaId]
+                assigneeInitials: assigneeInitials(for: task)
             )
         }
     }
@@ -479,12 +704,16 @@ struct BacklogCardView: View {
     var body: some View {
         CardPageView(
             kind: kind,
+            theme: theme,
+            layout: .standard,
             subtitle: subtitle,
             items: cardItems,
             safeAreaInsets: safeAreaInsets,
             isLoading: taskStore.isLoading,
             showsQuantity: false,
-            emptyMessage: kind.emptyMessage,
+            emptyMessage: "Everything is done!",
+            showsInput: true,
+            accessoryView: nil,
             onAdd: { title in
                 _Concurrency.Task {
                     await taskStore.createTask(title: title, status: .backlog)
@@ -523,29 +752,43 @@ struct BacklogCardView: View {
 
         var updatedTask = task
         updatedTask.status = .next
-        if updatedTask.assigneeId == nil {
+        if let currentMemberId {
             updatedTask.assigneeId = currentMemberId
+            updatedTask.assigneeIds = [currentMemberId]
         }
 
         _Concurrency.Task {
             await taskStore.updateTask(updatedTask)
         }
     }
+
+    private func assigneeInitials(for task: Task) -> [String] {
+        let ids = resolvedAssigneeIds(for: task)
+        let members = memberStore.members
+        return ids.compactMap { id in
+            members.first { $0.id == id }?.displayName.initials
+        }
+    }
+
+    private func resolvedAssigneeIds(for task: Task) -> [UUID] {
+        if !task.assigneeIds.isEmpty {
+            return task.assigneeIds
+        }
+        if let assigneeId = task.assigneeId {
+            return [assigneeId]
+        }
+        return memberStore.members.map(\.id)
+    }
 }
 
 struct RecurringCardView: View {
     let kind: CardKind
+    let theme: CardTheme
     @ObservedObject var choreStore: RecurringChoreStore
+    @ObservedObject var memberStore: MemberStore
     @ObservedObject var taskStore: TaskStore
     let currentMemberId: UUID?
     let safeAreaInsets: EdgeInsets
-
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
 
     private var choreLookup: [UUID: RecurringChore] {
         Dictionary(uniqueKeysWithValues: choreStore.chores.map { ($0.id, $0) })
@@ -562,9 +805,9 @@ struct RecurringCardView: View {
             CardListItem(
                 id: chore.id,
                 title: chore.title,
-                secondaryText: secondaryText(for: chore),
-                iconName: chore.isActive ? nil : "pause.circle.fill",
-                iconColor: chore.isActive ? nil : .secondary,
+                secondaryText: recurrenceDescription(for: chore),
+                detailIconName: "calendar.badge.clock",
+                assigneeInitials: assigneeInitials(for: chore),
                 allowsToggle: chore.isActive
             )
         }
@@ -577,20 +820,24 @@ struct RecurringCardView: View {
     var body: some View {
         CardPageView(
             kind: kind,
+            theme: theme,
+            layout: .standard,
             subtitle: subtitle,
             items: cardItems,
             safeAreaInsets: safeAreaInsets,
             isLoading: choreStore.isLoading,
             showsQuantity: false,
-            emptyMessage: "Add a recurring chore",
+            emptyMessage: "Add a recurring task",
+            showsInput: true,
+            accessoryView: nil,
             onAdd: { title in
-                let weekday = Calendar.current.component(.weekday, from: Date())
+                let assigneeIds = currentMemberId.map { [$0] } ?? []
                 _Concurrency.Task {
                     await choreStore.createChore(
                         title: title,
-                        recurrenceType: .weekly,
-                        recurrenceDay: weekday,
-                        defaultAssigneeId: currentMemberId
+                        recurrenceType: .everyNWeeks,
+                        recurrenceInterval: 2,
+                        defaultAssigneeIds: assigneeIds
                     )
                 }
             },
@@ -616,71 +863,135 @@ struct RecurringCardView: View {
         )
     }
 
-    private func secondaryText(for chore: RecurringChore) -> String? {
-        guard chore.isActive else { return "Paused" }
-        guard let nextDate = chore.nextScheduledDate else { return "Next scheduled" }
-        let formatted = Self.dateFormatter.string(from: nextDate)
-        return "Next: \(formatted)"
+    private func recurrenceDescription(for chore: RecurringChore) -> String {
+        switch chore.recurrenceType {
+        case .daily:
+            return "Every day"
+        case .weekly:
+            if let weekday = chore.recurrenceDay {
+                let formatter = DateFormatter()
+                let name = formatter.weekdaySymbols[weekday - 1]
+                return "Every \(name)"
+            }
+            return "Every week"
+        case .biweekly:
+            return "Every 2 weeks"
+        case .monthly:
+            if let day = chore.recurrenceDayOfMonth {
+                return "Every month on day \(day)"
+            }
+            return "Every month"
+        case .everyNDays:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Every \(interval) day\(interval == 1 ? "" : "s")"
+        case .everyNWeeks:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Every \(interval) week\(interval == 1 ? "" : "s")"
+        case .everyNMonths:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Every \(interval) month\(interval == 1 ? "" : "s")"
+        }
+    }
+
+    private func assigneeInitials(for chore: RecurringChore) -> [String] {
+        let ids = resolvedAssigneeIds(for: chore)
+        let members = memberStore.members
+        return ids.compactMap { id in
+            members.first { $0.id == id }?.displayName.initials
+        }
+    }
+
+    private func resolvedAssigneeIds(for chore: RecurringChore) -> [UUID] {
+        if !chore.defaultAssigneeIds.isEmpty {
+            return chore.defaultAssigneeIds
+        }
+        return memberStore.members.map(\.id)
     }
 }
 
 struct HouseholdCardView: View {
     let kind: CardKind
-    @ObservedObject var areaStore: AreaStore
+    let theme: CardTheme
+    @ObservedObject var householdStore: HouseholdStore
     @ObservedObject var memberStore: MemberStore
+    let safeAreaInsets: EdgeInsets
+
+    private var memberItems: [CardListItem] {
+        memberStore.members.filter(\.isActive).map { member in
+            CardListItem(
+                id: member.id,
+                title: member.displayName,
+                secondaryText: member.role == .owner ? "Owner" : "Member",
+                allowsToggle: false,
+                allowsEdit: false,
+                allowsDelete: false
+            )
+        }
+    }
+
+    private var subtitle: String {
+        householdStore.currentHousehold?.name ?? kind.subtitle(for: memberItems.count)
+    }
+
+    var body: some View {
+        CardPageView(
+            kind: kind,
+            theme: theme,
+            layout: .standard,
+            subtitle: subtitle,
+            items: memberItems,
+            safeAreaInsets: safeAreaInsets,
+            isLoading: memberStore.isLoading || householdStore.isLoading,
+            showsQuantity: false,
+            emptyMessage: "Invite your first member",
+            showsInput: false,
+            accessoryView: nil,
+            onAdd: { _ in },
+            onToggle: nil,
+            onDelete: nil,
+            onUpdate: nil
+        )
+    }
+}
+
+struct AreasCardView: View {
+    let kind: CardKind
+    let theme: CardTheme
+    @ObservedObject var areaStore: AreaStore
     let safeAreaInsets: EdgeInsets
 
     private var areaLookup: [UUID: Area] {
         Dictionary(uniqueKeysWithValues: areaStore.areas.map { ($0.id, $0) })
     }
 
-    private var activeMembers: [Member] {
-        memberStore.members.filter(\.isActive)
-    }
-
     private var cardItems: [CardListItem] {
-        let areaItems = areaStore.areas.map { area in
+        areaStore.areas.map { area in
             CardListItem(
                 id: area.id,
                 title: area.name,
                 secondaryText: "Area",
-                iconName: area.icon ?? "folder",
-                iconColor: kind.accentColor,
                 allowsToggle: false
             )
         }
-
-        let memberItems = activeMembers.map { member in
-            CardListItem(
-                id: member.id,
-                title: member.displayName,
-                secondaryText: member.role == .owner ? "Owner" : "Member",
-                iconName: "person.fill",
-                iconColor: kind.accentColor,
-                allowsToggle: false,
-                allowsEdit: false,
-                allowsDelete: false
-            )
-        }
-
-        return areaItems + memberItems
     }
 
     private var subtitle: String {
-        let areaLabel = countLabel(areaStore.areas.count, singular: "area", plural: "areas")
-        let memberLabel = countLabel(activeMembers.count, singular: "member", plural: "members")
-        return "\(areaLabel) · \(memberLabel)"
+        kind.subtitle(for: areaStore.areas.count)
     }
 
     var body: some View {
         CardPageView(
             kind: kind,
+            theme: theme,
+            layout: .standard,
             subtitle: subtitle,
             items: cardItems,
             safeAreaInsets: safeAreaInsets,
-            isLoading: areaStore.isLoading || memberStore.isLoading,
+            isLoading: areaStore.isLoading,
             showsQuantity: false,
             emptyMessage: "Add your first area",
+            showsInput: true,
+            accessoryView: nil,
             onAdd: { title in
                 _Concurrency.Task {
                     await areaStore.createArea(name: title, icon: "folder")
@@ -702,12 +1013,72 @@ struct HouseholdCardView: View {
             }
         )
     }
+}
 
-    private func countLabel(_ count: Int, singular: String, plural: String) -> String {
-        if count == 1 {
-            return "1 \(singular)"
+struct SettingsCardView: View {
+    let kind: CardKind
+    let theme: CardTheme
+    @ObservedObject var themeStore: ThemeStore
+    let safeAreaInsets: EdgeInsets
+
+    private let options: [ThemeOption] = [
+        ThemeOption(id: UUID(uuidString: "0B7D1C64-5A5F-4B8A-9B7D-1F9B40A8F1AF")!, preset: .pastel),
+        ThemeOption(id: UUID(uuidString: "CB772A33-7D63-4B72-9C3C-6A0D8E2D551C")!, preset: .soft),
+        ThemeOption(id: UUID(uuidString: "5E5C5B6C-8CF4-4A7C-8B74-2E60C9C6B8FA")!, preset: .night),
+    ]
+
+    var body: some View {
+        let items = options.map { option in
+            CardListItem(
+                id: option.id,
+                title: option.preset.displayName,
+                isCompleted: themeStore.preset == option.preset,
+                secondaryText: "Theme preset",
+                allowsEdit: false,
+                allowsDelete: false
+            )
         }
-        return "\(count) \(plural)"
+
+        CardPageView(
+            kind: kind,
+            theme: theme,
+            layout: .standard,
+            subtitle: kind.subtitle(for: options.count),
+            items: items,
+            safeAreaInsets: safeAreaInsets,
+            isLoading: false,
+            showsQuantity: false,
+            emptyMessage: nil,
+            showsInput: false,
+            accessoryView: nil,
+            onAdd: { _ in },
+            onToggle: { item in
+                guard let option = options.first(where: { $0.id == item.id }) else { return }
+                themeStore.preset = option.preset
+            },
+            onDelete: nil,
+            onUpdate: nil
+        )
+    }
+}
+
+struct ThemeOption: Identifiable {
+    let id: UUID
+    let preset: ThemePreset
+}
+
+extension String {
+    var initials: String {
+        let components = split(separator: " ").filter { !$0.isEmpty }
+        if components.isEmpty {
+            return ""
+        }
+        if components.count == 1 {
+            return String(components[0].prefix(2)).uppercased()
+        }
+        let first = components[0].prefix(1)
+        let second = components[1].prefix(1)
+        return "\(first)\(second)".uppercased()
     }
 }
 
@@ -722,5 +1093,6 @@ struct HouseholdCardView: View {
         modelContext: container.mainContext
     )
     .environmentObject(UserSession.shared)
+    .environmentObject(ThemeStore())
     .modelContainer(container)
 }

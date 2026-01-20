@@ -42,7 +42,8 @@ final class RecurringChoreStore: ObservableObject {
         recurrenceType: RecurringChore.RecurrenceType,
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
-        defaultAssigneeId: UUID? = nil,
+        recurrenceInterval: Int? = nil,
+        defaultAssigneeIds: [UUID] = [],
         areaId: UUID? = nil,
         notes: String? = nil
     ) async {
@@ -54,7 +55,8 @@ final class RecurringChoreStore: ObservableObject {
             recurrenceType: recurrenceType,
             recurrenceDay: recurrenceDay,
             recurrenceDayOfMonth: recurrenceDayOfMonth,
-            defaultAssigneeId: defaultAssigneeId,
+            recurrenceInterval: recurrenceInterval,
+            defaultAssigneeIds: defaultAssigneeIds,
             areaId: areaId,
             notes: notes
         )
@@ -119,8 +121,9 @@ final class RecurringChoreStore: ObservableObject {
         // Create task from chore
         await taskStore.createTask(
             title: chore.title,
-            status: .backlog,
-            assigneeId: chore.defaultAssigneeId,
+            status: .next,
+            assigneeId: chore.defaultAssigneeIds.first,
+            assigneeIds: chore.defaultAssigneeIds,
             areaId: chore.areaId,
             dueDate: chore.nextScheduledDate,
             notes: chore.notes
