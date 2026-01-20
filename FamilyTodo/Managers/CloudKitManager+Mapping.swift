@@ -276,14 +276,14 @@ extension CloudKitManager {
 
         let intervalValue =
             record["recurrenceInterval"] as? Int
-            ?? (record["recurrenceInterval"] as? Int64).map(Int.init)
+                ?? (record["recurrenceInterval"] as? Int64).map(Int.init)
         let defaultAssigneeIds = uuidArray(
             from: record["defaultAssigneeIds"] as? [CKRecord.Reference])
         let fallbackAssigneeId = uuid(from: record["defaultAssigneeId"] as? CKRecord.Reference)
         let resolvedAssigneeIds =
             defaultAssigneeIds.isEmpty
-            ? (fallbackAssigneeId.map { [$0] } ?? [])
-            : defaultAssigneeIds
+                ? (fallbackAssigneeId.map { [$0] } ?? [])
+                : defaultAssigneeIds
 
         return RecurringChore(
             id: id,
@@ -343,8 +343,8 @@ extension CloudKitManager {
 
         let restockCountValue =
             record["restockCount"] as? Int
-            ?? (record["restockCount"] as? Int64).map(Int.init)
-            ?? 0
+                ?? (record["restockCount"] as? Int64).map(Int.init)
+                ?? 0
 
         return ShoppingItem(
             id: id,

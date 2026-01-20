@@ -260,6 +260,22 @@ When implementing features:
 5. Always consider offline-first architecture
 6. Ensure all decisions support the "two people living together" use case
 
+## Agent Permissions
+
+When working in this repository, the agent (Claude/Gemini) is allowed to:
+
+1. **Git operations**: Run `git add` and `git commit` autonomously after completing work
+2. **GitHub Actions**: Use `gh` CLI to check CI build status and fix failures
+3. **Pre-commit**: Always run `pre-commit run --all-files` after implementation and fix any errors
+4. **Command approval**: If a command is approved once, it's approved for all future uses
+
+**Workflow after implementation:**
+1. Run `pre-commit run --all-files`
+2. Fix any linting/formatting errors
+3. Run pre-commit again until it passes
+4. `git add -A && git commit -m "..."`
+5. User will do `git push`
+
 ## Language
 
 - Product requirements document (instructions.md) is in Polish
