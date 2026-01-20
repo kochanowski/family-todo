@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import SwiftData
 
@@ -173,15 +174,79 @@ final class HouseholdStore: ObservableObject {
         isLoading = false
     }
 
-    /// Get invite code for sharing (household ID for MVP)
+    /// Get invite code for sharing (household ID for MVP fallback)
     var inviteCode: String? {
         currentHousehold?.id.uuidString
+    }
+
+    // MARK: - CKShare Sharing
+
+    /// Get share URL for inviting members
+    func getShareURL() async throws -> URL? {
+        guard let household = currentHousehold else { return nil }
+        return try await cloudKit.getShareURL(for: household.id)
+    }
+
+    /// Create a CKShare for the current household
+    func createShare() async throws -> CKShare {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+        return try await cloudKit.createShare(for: household)
+    }
+
+    /// Accept a share invitation and join the household
+    func acceptShareInvitation(
+        metadata: CKShare.Metadata,
+        userId: String,
+        displayName: String
+    ) async throws {
+        isLoading = true
+        error = nil
+
+        do {
+            // Accept the CloudKit share
+            try await cloudKit.acceptShare(metadata: metadata)
+
+            // Fetch the shared household
+            guard let householdId = UUID(uuidString: metadata.rootRecordID.recordName) else {
+                throw HouseholdError.invalidShare
+            }
+
+            let household = try await cloudKit.fetchHousehold(id: householdId)
+
+            // Check if member already exists
+            let existingMember = try await cloudKit.fetchMemberByUserId(userId)
+            if existingMember != nil {
+                // Already a member, just load the household
+                currentHousehold = household
+                currentMember = existingMember
+            } else {
+                // Create new member record
+                let member = Member(
+                    householdId: household.id,
+                    userId: userId,
+                    displayName: displayName,
+                    role: .member
+                )
+                _ = try await cloudKit.saveMember(member)
+
+                currentHousehold = household
+                currentMember = member
+            }
+        } catch {
+            self.error = error
+            throw error
+        }
+
+        isLoading = false
     }
 }
 
 enum HouseholdError: LocalizedError {
     case invalidInviteCode
     case householdNotFound
+    case invalidShare
 
     var errorDescription: String? {
         switch self {
@@ -189,6 +254,8 @@ enum HouseholdError: LocalizedError {
             "Invalid invite code. Please check and try again."
         case .householdNotFound:
             "Household not found."
+        case .invalidShare:
+            "Invalid share invitation. The link may be expired or invalid."
         }
     }
 }

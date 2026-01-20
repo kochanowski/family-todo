@@ -1,0 +1,3 @@
+Notes 
+
+- gdy ktoś doda zadanie i je przydzieli to użytkownik otrzymuje notyfikację - powiadomienie i dźwięk

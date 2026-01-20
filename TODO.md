@@ -4,7 +4,7 @@
 **Purpose:** Single source of truth for all LLM agents on what is done, what is next, and where to start.
 
 ## Current Focus (Start Here)
-- [ ] Household onboarding + invitations (CKShare share/accept flow)
+- [x] Household onboarding + invitations (CKShare share/accept flow) ✅
 - [ ] Member management UI + roles (Owner/Member)
 - [ ] CloudKit CRUD for all core models (Household/Member/Area/Task/RecurringChore/ShoppingItem)
 - [ ] Offline-first sync engine per ADR-002 (sync states, LWW merge, retries)
@@ -34,7 +34,7 @@
 ## Planned Work (Prioritized)
 
 ### Priority 1 — MVP Must-Haves (Cards-first)
-- [ ] Household onboarding + invitations (CKShare share/accept flow)
+- [x] Household onboarding + invitations (CKShare share/accept flow)
 - [ ] Member management UI + roles (Owner/Member)
 - [ ] Full CloudKit CRUD for Household/Member/Area/RecurringChore/Task/ShoppingItem
 - [ ] Offline-first sync engine per ADR-002 (sync states, LWW merge, retries)

@@ -21,6 +21,7 @@ actor CloudKitManager {
 
     enum CloudKitManagerError: Error {
         case invalidRecord
+        case shareNotCreated
     }
 
     // MARK: - Household
@@ -253,6 +254,83 @@ actor CloudKitManager {
 
     // MARK: - Mapping
 
+    // MARK: - Sharing
+
+    /// Fetch raw CKRecord for household (needed for CKShare)
+    func fetchHouseholdRecord(id: UUID) async throws -> CKRecord {
+        try await sharedDatabase.record(for: recordID(for: id))
+    }
+
+    /// Create a CKShare for a household
+    func createShare(for household: Household) async throws -> CKShare {
+        let householdRecord = try await fetchHouseholdRecord(id: household.id)
+
+        let share = CKShare(rootRecord: householdRecord)
+        share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
+        share.publicPermission = .none // Private - requires invitation
+
+        let modifyOperation = CKModifyRecordsOperation(
+            recordsToSave: [householdRecord, share],
+            recordIDsToDelete: nil
+        )
+        modifyOperation.savePolicy = .changedKeys
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var savedShare: CKShare?
+
+            modifyOperation.perRecordSaveBlock = { _, result in
+                if case let .success(record) = result, let ckshare = record as? CKShare {
+                    savedShare = ckshare
+                }
+            }
+
+            modifyOperation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    if let share = savedShare {
+                        continuation.resume(returning: share)
+                    } else {
+                        continuation.resume(throwing: CloudKitManagerError.shareNotCreated)
+                    }
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            sharedDatabase.add(modifyOperation)
+        }
+    }
+
+    /// Get share URL for inviting members
+    func getShareURL(for householdId: UUID) async throws -> URL? {
+        let record = try await fetchHouseholdRecord(id: householdId)
+        guard let shareReference = record.share else { return nil }
+
+        let shareRecord = try await sharedDatabase.record(for: shareReference.recordID)
+        return (shareRecord as? CKShare)?.url
+    }
+
+    /// Accept a CloudKit share invitation
+    func acceptShare(metadata: CKShare.Metadata) async throws {
+        let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
+        acceptOperation.qualityOfService = .userInitiated
+
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, Error>) in
+            acceptOperation.perShareResultBlock = { _, result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+            container.add(acceptOperation)
+        }
+    }
+
+    // MARK: - Private Mapping
+
     private func recordID(for id: UUID) -> CKRecord.ID {
         CKRecord.ID(recordName: id.uuidString)
     }
@@ -471,7 +549,8 @@ actor CloudKitManager {
             record["recurrenceInterval"] = recurrenceInterval as CKRecordValue
         }
         if !chore.defaultAssigneeIds.isEmpty {
-            record["defaultAssigneeIds"] = references(from: chore.defaultAssigneeIds) as CKRecordValue
+            record["defaultAssigneeIds"] =
+                references(from: chore.defaultAssigneeIds) as CKRecordValue
         }
         if let firstAssignee = chore.defaultAssigneeIds.first {
             record["defaultAssigneeId"] = reference(for: firstAssignee)
@@ -510,13 +589,16 @@ actor CloudKitManager {
             throw CloudKitManagerError.invalidRecord
         }
 
-        let intervalValue = record["recurrenceInterval"] as? Int
-            ?? (record["recurrenceInterval"] as? Int64).map(Int.init)
-        let defaultAssigneeIds = uuidArray(from: record["defaultAssigneeIds"] as? [CKRecord.Reference])
+        let intervalValue =
+            record["recurrenceInterval"] as? Int
+                ?? (record["recurrenceInterval"] as? Int64).map(Int.init)
+        let defaultAssigneeIds = uuidArray(
+            from: record["defaultAssigneeIds"] as? [CKRecord.Reference])
         let fallbackAssigneeId = uuid(from: record["defaultAssigneeId"] as? CKRecord.Reference)
-        let resolvedAssigneeIds = defaultAssigneeIds.isEmpty
-            ? (fallbackAssigneeId.map { [$0] } ?? [])
-            : defaultAssigneeIds
+        let resolvedAssigneeIds =
+            defaultAssigneeIds.isEmpty
+                ? (fallbackAssigneeId.map { [$0] } ?? [])
+                : defaultAssigneeIds
 
         return RecurringChore(
             id: id,
@@ -572,9 +654,10 @@ actor CloudKitManager {
             throw CloudKitManagerError.invalidRecord
         }
 
-        let restockCountValue = record["restockCount"] as? Int
-            ?? (record["restockCount"] as? Int64).map(Int.init)
-            ?? 0
+        let restockCountValue =
+            record["restockCount"] as? Int
+                ?? (record["restockCount"] as? Int64).map(Int.init)
+                ?? 0
 
         return ShoppingItem(
             id: id,

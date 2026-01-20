@@ -1,5 +1,6 @@
-@testable import FamilyTodo
 import XCTest
+
+@testable import FamilyTodo
 
 final class HouseholdTests: XCTestCase {
     // MARK: - Initialization Tests
@@ -182,9 +183,11 @@ final class HouseholdStoreTests: XCTestCase {
     func testHouseholdErrorDescriptions() {
         XCTAssertNotNil(HouseholdError.invalidInviteCode.errorDescription)
         XCTAssertNotNil(HouseholdError.householdNotFound.errorDescription)
+        XCTAssertNotNil(HouseholdError.invalidShare.errorDescription)
 
         XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription!.contains("invite code"))
         XCTAssertTrue(HouseholdError.householdNotFound.errorDescription!.contains("not found"))
+        XCTAssertTrue(HouseholdError.invalidShare.errorDescription!.contains("share"))
     }
 }
 
