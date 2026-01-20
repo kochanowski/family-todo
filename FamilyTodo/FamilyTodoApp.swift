@@ -66,7 +66,7 @@ struct FamilyTodoApp: App {
 
     /// Process a pending share metadata
     private func processPendingShare(_ metadata: CKShare.Metadata) {
-        Task {
+        _Concurrency.Task {
             guard let userId = userSession.userId,
                   let displayName = userSession.displayName
             else {
