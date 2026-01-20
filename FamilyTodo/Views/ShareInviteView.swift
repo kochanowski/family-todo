@@ -132,7 +132,7 @@ struct ShareInviteView: View {
     }
 
     private func createShare() {
-        Task {
+        _Concurrency.Task {
             isLoading = true
             do {
                 let share = try await householdStore.createShare()
