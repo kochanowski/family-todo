@@ -66,17 +66,17 @@ final class UserSession: ObservableObject {
 
     // MARK: - Dependencies
 
-    let authService: any AuthenticationServiceType
+    let authService: AuthenticationService
     private let userDefaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
     init(
-        authService: any AuthenticationServiceType = AuthenticationService(),
+        authService: AuthenticationService? = nil,
         userDefaults: UserDefaults = .standard
     ) {
-        self.authService = authService
+        self.authService = authService ?? AuthenticationService()
         self.userDefaults = userDefaults
 
         // Observe authentication state changes
