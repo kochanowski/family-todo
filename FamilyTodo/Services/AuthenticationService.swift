@@ -2,6 +2,7 @@
     import AuthenticationServices
     import CloudKit
     import Foundation
+    import Security
 
     /// Service responsible for handling Sign in with Apple authentication
     /// and CloudKit user identity management
@@ -14,13 +15,15 @@
 
         // MARK: - Private Properties
 
-        private let cloudKitContainer: CKContainer
+        private lazy var cloudKitContainer: CKContainer? = makeCloudKitContainer()
         private var currentNonce: String?
 
         // MARK: - Initialization
 
-        init(cloudKitContainer: CKContainer = .default()) {
-            self.cloudKitContainer = cloudKitContainer
+        init(cloudKitContainer: CKContainer? = nil) {
+            if let cloudKitContainer {
+                self.cloudKitContainer = cloudKitContainer
+            }
             super.init()
         }
 
@@ -87,6 +90,10 @@
 
         /// Checks CloudKit account status and fetches user identity
         func checkCloudKitStatus() async {
+            guard let cloudKitContainer else {
+                authenticationState = .error(.cloudKitNotAvailable)
+                return
+            }
             do {
                 let status = try await cloudKitContainer.accountStatus()
 
@@ -112,6 +119,9 @@
         // MARK: - Private Methods
 
         private func fetchCloudKitUserIdentity() async throws {
+            guard let cloudKitContainer else {
+                throw AuthenticationError.cloudKitNotAvailable
+            }
             let userRecordID = try await cloudKitContainer.userRecordID()
             let userID = userRecordID.recordName
 
@@ -153,6 +163,41 @@
             } catch {
                 authenticationState = .error(.failed(error))
             }
+        }
+
+        private func makeCloudKitContainer() -> CKContainer? {
+            guard isCloudKitEntitled() else {
+                return nil
+            }
+            return .default()
+        }
+
+        private func isCloudKitEntitled() -> Bool {
+            guard let task = SecTaskCreateFromSelf(nil) else { return false }
+
+            let services = entitlementStrings(
+                SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-services" as CFString, nil)
+            )
+            guard services.contains("CloudKit") else { return false }
+
+            let containers = entitlementStrings(
+                SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-container-identifiers" as CFString, nil)
+            )
+            return !containers.isEmpty
+        }
+
+        private func entitlementStrings(_ value: CFTypeRef?) -> [String] {
+            guard let value else { return [] }
+            if let strings = value as? [String] {
+                return strings
+            }
+            if let array = value as? [Any] {
+                return array.compactMap { $0 as? String }
+            }
+            if let array = value as? NSArray {
+                return array.compactMap { $0 as? String }
+            }
+            return []
         }
     }
 
