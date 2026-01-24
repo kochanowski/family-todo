@@ -132,7 +132,7 @@ final class MemberStore: ObservableObject {
 
         // Save to CloudKit
         do {
-            try await cloudKit.saveMember(member)
+            _ = try await cloudKit.saveMember(member)
 
             // Mark as synced
             if let context = modelContext {
@@ -268,7 +268,7 @@ final class MemberStore: ObservableObject {
 
         // Save to CloudKit
         do {
-            try await cloudKit.saveMember(updatedMember)
+            _ = try await cloudKit.saveMember(updatedMember)
 
             // Mark as synced
             if let context = modelContext {

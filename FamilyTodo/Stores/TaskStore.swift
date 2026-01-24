@@ -148,14 +148,15 @@ final class TaskStore: ObservableObject {
 
         // Save to cache
         let cached = CachedTask(from: task)
-        cached.needsSync = true
+        cached.syncStatusRaw = "pendingUpload"
+        cached.lastSyncedAt = nil
         modelContext.insert(cached)
         try? modelContext.save()
 
         // Sync to CloudKit
         do {
             _ = try await cloudKit.saveTask(task)
-            cached.needsSync = false
+            cached.syncStatusRaw = "synced"
             cached.lastSyncedAt = Date()
             try? modelContext.save()
 
@@ -190,7 +191,8 @@ final class TaskStore: ObservableObject {
         )
         if let cached = try? modelContext.fetch(descriptor).first {
             cached.update(from: updatedTask)
-            cached.needsSync = true
+            cached.syncStatusRaw = "pendingUpload"
+            cached.lastSyncedAt = nil
             try? modelContext.save()
         }
 
