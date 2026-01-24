@@ -163,13 +163,18 @@ jobs:
           # Install provisioning profile
           PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
           echo "$PROVISIONING_PROFILE_BASE64" | decode_base64 > "$PROFILE_PATH"
-          PROFILE_UUID="$(security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)"
+
+          # Extract profile plist (security cms may output warnings to stderr)
+          PROFILE_PLIST=$(security cms -D -i "$PROFILE_PATH" 2>/dev/null)
+          PROFILE_UUID=$(echo "$PROFILE_PLIST" | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)
+          PROFILE_NAME=$(echo "$PROFILE_PLIST" | /usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin)
+
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
 
-          # Debug: show installed profile name + UUID
-          security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin
-          echo "$PROFILE_UUID"
+          # Debug: show installed profile
+          echo "Profile: $PROFILE_NAME"
+          echo "UUID: $PROFILE_UUID"
 
       - name: Deploy to TestFlight
         env:
