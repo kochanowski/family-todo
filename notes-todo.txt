@@ -6,3 +6,7 @@ Notes
   - co jest na ekranach
   - animacja pokazująca zmieniające się ekrany
   - możliwość zmiany theme
+
+
+- zaktualizować SDK: 90725: SDK version issue. This app was built with the iOS 18.2 SDK. Starting April 2026, all iOS and iPadOS apps must be built with the iOS 26 SDK or later, included in Xcode 26 or later, in order to be uploaded to App Store Connect or submitted for distribution.
+
