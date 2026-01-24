@@ -305,9 +305,14 @@ final class HouseholdStore: ObservableObject {
             try await cloudKit.acceptShare(metadata: metadata)
 
             // Fetch the shared household.
-            // NOTE: `rootRecordID` may be deprecated in newer SDKs, but it is the API
-            // available on `CKShare.Metadata` in our current CI toolchain.
-            guard let householdId = UUID(uuidString: metadata.rootRecordID.recordName) else {
+            //
+            // CI treats Swift warnings as errors, and `CKShare.Metadata.rootRecordID` is
+            // deprecated on newer SDKs. Use dynamic lookup to avoid compile-time
+            // deprecated API usage while still supporting both API shapes.
+            guard
+                let recordID = shareHierarchyRootRecordID(from: metadata),
+                let householdId = UUID(uuidString: recordID.recordName)
+            else {
                 throw HouseholdError.invalidShare
             }
 
@@ -338,6 +343,13 @@ final class HouseholdStore: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    private func shareHierarchyRootRecordID(from metadata: CKShare.Metadata) -> CKRecord.ID? {
+        // Preferred (newer SDKs), but not always present.
+        (metadata.value(forKey: "hierarchyRootRecordID") as? CKRecord.ID)
+            // Fallback (deprecated on newer SDKs).
+            ?? (metadata.value(forKey: "rootRecordID") as? CKRecord.ID)
     }
 }
 
