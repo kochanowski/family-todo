@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import SwiftUI
 
 /// Store for shared shopping list management
@@ -10,9 +11,16 @@ final class ShoppingListStore: ObservableObject {
 
     private lazy var cloudKit = CloudKitManager.shared
     private let householdId: UUID?
+    private var modelContext: ModelContext?
 
-    init(householdId: UUID?) {
+    init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
+        self.modelContext = modelContext
+    }
+
+    /// Set model context for offline caching
+    func setModelContext(_ context: ModelContext) {
+        modelContext = context
     }
 
     var toBuyItems: [ShoppingItem] {
@@ -40,13 +48,53 @@ final class ShoppingListStore: ObservableObject {
         isLoading = true
         error = nil
 
+        // 1. Load from cache first (instant UI)
+        loadFromCache()
+
+        // 2. Sync with CloudKit in background
         do {
-            items = try await cloudKit.fetchShoppingItems(householdId: householdId)
+            let fetchedItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
+            items = fetchedItems
+
+            // 3. Update cache
+            syncToCache(fetchedItems)
         } catch {
+            // Keep cached data on error
             self.error = error
         }
 
         isLoading = false
+    }
+
+    private func loadFromCache() {
+        guard let context = modelContext, let householdId else { return }
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+
+        if let cachedItems = try? context.fetch(descriptor) {
+            items = cachedItems.map { $0.toShoppingItem() }
+        }
+    }
+
+    private func syncToCache(_ items: [ShoppingItem]) {
+        guard let context = modelContext else { return }
+
+        for item in items {
+            let descriptor = FetchDescriptor<CachedShoppingItem>(
+                predicate: #Predicate { $0.id == item.id }
+            )
+
+            if let existing = try? context.fetch(descriptor).first {
+                existing.update(from: item)
+            } else {
+                let cached = CachedShoppingItem(from: item)
+                context.insert(cached)
+            }
+        }
+
+        try? context.save()
     }
 
     // MARK: - Create Item
@@ -62,17 +110,38 @@ final class ShoppingListStore: ObservableObject {
             isBought: false
         )
 
+        // Optimistic UI update with animation
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             items.append(item)
         }
 
+        // Save to cache with pending status
+        if let context = modelContext {
+            let cached = CachedShoppingItem(from: item)
+            cached.syncStatusRaw = "pendingUpload"
+            context.insert(cached)
+            try? context.save()
+        }
+
         do {
             _ = try await cloudKit.saveShoppingItem(item)
+
+            // Mark as synced
+            if let context = modelContext {
+                let descriptor = FetchDescriptor<CachedShoppingItem>(
+                    predicate: #Predicate { $0.id == item.id }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.syncStatusRaw = "synced"
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
         } catch {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 items.removeAll { $0.id == item.id }
             }
-
+            // Keep in cache with pending status
             self.error = error
         }
     }
@@ -83,16 +152,42 @@ final class ShoppingListStore: ObservableObject {
         var updatedItem = item
         updatedItem.updatedAt = Date()
 
+        // Optimistic UI update with animation
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 items[index] = updatedItem
             }
         }
 
+        // Save to cache with pending status
+        if let context = modelContext {
+            let descriptor = FetchDescriptor<CachedShoppingItem>(
+                predicate: #Predicate { $0.id == item.id }
+            )
+            if let cached = try? context.fetch(descriptor).first {
+                cached.update(from: updatedItem)
+                cached.syncStatusRaw = "pendingUpload"
+                try? context.save()
+            }
+        }
+
         do {
             _ = try await cloudKit.saveShoppingItem(updatedItem)
+
+            // Mark as synced
+            if let context = modelContext {
+                let descriptor = FetchDescriptor<CachedShoppingItem>(
+                    predicate: #Predicate { $0.id == item.id }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.syncStatusRaw = "synced"
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
         } catch {
             self.error = error
+            // Keep in cache with pending status
             await loadItems()
         }
     }
@@ -114,12 +209,36 @@ final class ShoppingListStore: ObservableObject {
     // MARK: - Delete Item
 
     func deleteItem(_ item: ShoppingItem) async {
+        // Optimistic UI update
         items.removeAll { $0.id == item.id }
+
+        // Mark as pending delete in cache
+        if let context = modelContext {
+            let descriptor = FetchDescriptor<CachedShoppingItem>(
+                predicate: #Predicate { $0.id == item.id }
+            )
+            if let cached = try? context.fetch(descriptor).first {
+                cached.syncStatusRaw = "pendingDelete"
+                try? context.save()
+            }
+        }
 
         do {
             try await cloudKit.deleteShoppingItem(id: item.id)
+
+            // Remove from cache
+            if let context = modelContext {
+                let descriptor = FetchDescriptor<CachedShoppingItem>(
+                    predicate: #Predicate { $0.id == item.id }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    context.delete(cached)
+                    try? context.save()
+                }
+            }
         } catch {
             self.error = error
+            // Keep in cache with pending status, reload UI
             await loadItems()
         }
     }

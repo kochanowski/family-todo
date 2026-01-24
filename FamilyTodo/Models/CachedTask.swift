@@ -21,9 +21,11 @@ final class CachedTask {
     var createdAt: Date
     var updatedAt: Date
 
-    /// Pending sync state
-    var needsSync: Bool
+    // Sync metadata
+    var syncStatusRaw: String = "synced"
     var lastSyncedAt: Date?
+    var ckRecordIDData: Data?
+    var ckSystemFieldsData: Data?
 
     init(from task: Task) {
         id = task.id
@@ -41,7 +43,7 @@ final class CachedTask {
         notes = task.notes
         createdAt = task.createdAt
         updatedAt = task.updatedAt
-        needsSync = false
+        syncStatusRaw = "synced"
         lastSyncedAt = Date()
     }
 
@@ -84,6 +86,11 @@ final class CachedTask {
         set { statusRaw = newValue.rawValue }
     }
 
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .synced }
+        set { syncStatusRaw = newValue.rawValue }
+    }
+
     private static func encodeAssigneeIds(_ ids: [UUID]) -> Data? {
         try? JSONEncoder().encode(ids)
     }
@@ -92,4 +99,13 @@ final class CachedTask {
         guard let data else { return [] }
         return (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
     }
+}
+
+// MARK: - Sync Status
+
+enum SyncStatus: String {
+    case synced
+    case pendingUpload
+    case pendingDelete
+    case conflict
 }

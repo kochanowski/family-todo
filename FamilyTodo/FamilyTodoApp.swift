@@ -12,7 +12,14 @@ struct FamilyTodoApp: App {
     @State private var pendingShareMetadata: CKShare.Metadata?
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([CachedTask.self])
+        let schema = Schema([
+            CachedTask.self,
+            CachedHousehold.self,
+            CachedMember.self,
+            CachedArea.self,
+            CachedRecurringChore.self,
+            CachedShoppingItem.self,
+        ])
         #if CI
             let modelConfiguration = ModelConfiguration(
                 schema: schema,

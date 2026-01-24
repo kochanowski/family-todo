@@ -19,9 +19,33 @@ actor CloudKitManager {
         sharedDatabase = self.container.sharedCloudDatabase
     }
 
-    enum CloudKitManagerError: Error {
+    enum CloudKitManagerError: LocalizedError {
         case invalidRecord
         case shareNotCreated
+        case networkUnavailable
+        case notAuthenticated
+        case quotaExceeded
+        case serverRecordChanged
+        case unknownError(Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidRecord:
+                "Invalid record data"
+            case .shareNotCreated:
+                "Failed to create share"
+            case .networkUnavailable:
+                "No internet connection. Changes will sync when online."
+            case .notAuthenticated:
+                "Please sign in to iCloud in Settings."
+            case .quotaExceeded:
+                "iCloud storage is full. Please free up space."
+            case .serverRecordChanged:
+                "This item was modified elsewhere. Refreshing..."
+            case let .unknownError(error):
+                "An error occurred: \(error.localizedDescription)"
+            }
+        }
     }
 
     // MARK: - Household
@@ -293,7 +317,7 @@ actor CloudKitManager {
                         continuation.resume(throwing: CloudKitManagerError.shareNotCreated)
                     }
                 case let .failure(error):
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: self.categorizeError(error))
                 }
             }
 
@@ -322,10 +346,32 @@ actor CloudKitManager {
                 case .success:
                     continuation.resume()
                 case let .failure(error):
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: self.categorizeError(error))
                 }
             }
             container.add(acceptOperation)
+        }
+    }
+
+    // MARK: - Error Handling
+
+    /// Categorize CloudKit errors into user-friendly error messages
+    private func categorizeError(_ error: Error) -> CloudKitManagerError {
+        guard let ckError = error as? CKError else {
+            return .unknownError(error)
+        }
+
+        switch ckError.code {
+        case .networkUnavailable, .networkFailure:
+            return .networkUnavailable
+        case .notAuthenticated:
+            return .notAuthenticated
+        case .quotaExceeded:
+            return .quotaExceeded
+        case .serverRecordChanged:
+            return .serverRecordChanged
+        default:
+            return .unknownError(error)
         }
     }
 }

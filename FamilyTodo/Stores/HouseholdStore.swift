@@ -11,6 +11,12 @@ final class HouseholdStore: ObservableObject {
     @Published private(set) var error: Error?
 
     private lazy var cloudKit = CloudKitManager.shared
+    private var modelContext: ModelContext?
+
+    /// Set model context for offline caching
+    func setModelContext(_ context: ModelContext) {
+        modelContext = context
+    }
 
     /// Check if user has a household
     var hasHousehold: Bool {
@@ -24,18 +30,67 @@ final class HouseholdStore: ObservableObject {
         isLoading = true
         error = nil
 
+        // 1. Load from cache first (instant UI)
+        loadFromCache(userId: userId)
+
+        // 2. Sync with CloudKit in background
         do {
             // Try to find user's membership
             if let member = try await cloudKit.fetchMemberByUserId(userId) {
                 currentMember = member
-                currentHousehold = try await cloudKit.fetchHousehold(id: member.householdId)
+                if let household = try await cloudKit.fetchHousehold(id: member.householdId) {
+                    currentHousehold = household
+
+                    // 3. Update cache
+                    syncToCache(household)
+                }
             }
         } catch {
             // No household found is OK for new users
+            // Keep cached data on error
             self.error = error
         }
 
         isLoading = false
+    }
+
+    private func loadFromCache(userId: String) {
+        guard let context = modelContext else { return }
+
+        // Find member by userId to get householdId
+        let memberDescriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate { $0.userId == userId }
+        )
+
+        guard let cachedMember = try? context.fetch(memberDescriptor).first else { return }
+
+        currentMember = cachedMember.toMember()
+
+        // Load household from cache
+        let householdDescriptor = FetchDescriptor<CachedHousehold>(
+            predicate: #Predicate { $0.id == cachedMember.householdId }
+        )
+
+        if let cachedHousehold = try? context.fetch(householdDescriptor).first {
+            currentHousehold = cachedHousehold.toHousehold()
+        }
+    }
+
+    private func syncToCache(_ household: Household) {
+        guard let context = modelContext else { return }
+
+        let descriptor = FetchDescriptor<CachedHousehold>(
+            predicate: #Predicate { $0.id == household.id }
+        )
+
+        if let existing = try? context.fetch(descriptor).first {
+            existing.update(from: household)
+        } else {
+            let cached = CachedHousehold(from: household)
+            context.insert(cached)
+        }
+
+        try? context.save()
     }
 
     // MARK: - Create Household
@@ -172,6 +227,48 @@ final class HouseholdStore: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    /// Save/update household with optimistic updates
+    func saveHousehold(_ household: Household) async throws {
+        // Optimistic UI update
+        currentHousehold = household
+
+        guard let context = modelContext else {
+            // Fallback to direct CloudKit save if no cache
+            try await cloudKit.saveHousehold(household)
+            return
+        }
+
+        // Save to cache with pending status
+        let descriptor = FetchDescriptor<CachedHousehold>(
+            predicate: #Predicate { $0.id == household.id }
+        )
+
+        if let cached = try? context.fetch(descriptor).first {
+            cached.update(from: household)
+            cached.syncStatusRaw = "pendingUpload"
+        } else {
+            let cached = CachedHousehold(from: household)
+            cached.syncStatusRaw = "pendingUpload"
+            context.insert(cached)
+        }
+        try? context.save()
+
+        // Sync to CloudKit
+        do {
+            try await cloudKit.saveHousehold(household)
+
+            // Mark as synced
+            if let cached = try? context.fetch(descriptor).first {
+                cached.syncStatusRaw = "synced"
+                cached.lastSyncedAt = Date()
+                try? context.save()
+            }
+        } catch {
+            // Keep in cache with pending status
+            throw error
+        }
     }
 
     /// Get invite code for sharing (household ID for MVP fallback)

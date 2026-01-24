@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import SwiftData
 import SwiftUI
 
@@ -26,10 +27,10 @@ struct CardsPagerView: View {
         self.householdStore = householdStore
         self.householdId = householdId
         _taskStore = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
-        _shoppingListStore = StateObject(wrappedValue: ShoppingListStore(householdId: householdId))
-        _recurringChoreStore = StateObject(wrappedValue: RecurringChoreStore(householdId: householdId))
-        _areaStore = StateObject(wrappedValue: AreaStore(householdId: householdId))
-        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId))
+        _shoppingListStore = StateObject(wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
+        _recurringChoreStore = StateObject(wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext))
+        _areaStore = StateObject(wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
     }
 
     private var edgeSpacing: CGFloat {
@@ -914,43 +915,112 @@ struct HouseholdCardView: View {
     let theme: CardTheme
     @ObservedObject var householdStore: HouseholdStore
     @ObservedObject var memberStore: MemberStore
+    @EnvironmentObject var userSession: UserSession
     let safeAreaInsets: EdgeInsets
 
-    private var memberItems: [CardListItem] {
-        memberStore.members.filter(\.isActive).map { member in
-            CardListItem(
-                id: member.id,
-                title: member.displayName,
-                secondaryText: member.role == .owner ? "Owner" : "Member",
-                allowsToggle: false,
-                allowsEdit: false,
-                allowsDelete: false
-            )
-        }
-    }
-
     private var subtitle: String {
-        householdStore.currentHousehold?.name ?? kind.subtitle(for: memberItems.count)
+        householdStore.currentHousehold?.name ?? kind.subtitle(for: memberStore.members.count)
     }
 
     var body: some View {
-        CardPageView(
-            kind: kind,
-            theme: theme,
-            layout: .standard,
-            subtitle: subtitle,
-            items: memberItems,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: memberStore.isLoading || householdStore.isLoading,
-            showsQuantity: false,
-            emptyMessage: "Invite your first member",
-            showsInput: false,
-            accessoryView: nil,
-            onAdd: { _ in },
-            onToggle: nil,
-            onDelete: nil,
-            onUpdate: nil
-        )
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(kind.title)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(theme.primaryTextColor)
+
+                    Text(subtitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(theme.secondaryTextColor)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + 16)
+
+                // Navigation to Member Management
+                NavigationLink {
+                    MemberManagementView(
+                        memberStore: memberStore,
+                        householdStore: householdStore
+                    )
+                    .environmentObject(userSession)
+                } label: {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Members (\(memberStore.members.count))")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(theme.primaryTextColor)
+
+                        if memberStore.isLoading {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                        } else if memberStore.members.isEmpty {
+                            Text("Invite your first member")
+                                .font(.body)
+                                .foregroundStyle(theme.secondaryTextColor)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding()
+                        } else {
+                            ForEach(memberStore.members.prefix(3)) { member in
+                                HStack(spacing: 12) {
+                                    Image(systemName: member.role == .owner ? "star.fill" : "person.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(member.role == .owner ? .yellow : theme.secondaryTextColor)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(member.displayName)
+                                            .font(.body.weight(.semibold))
+                                            .foregroundStyle(theme.primaryTextColor)
+                                        Text(member.role == .owner ? "Owner" : "Member")
+                                            .font(.caption)
+                                            .foregroundStyle(theme.secondaryTextColor)
+                                    }
+
+                                    Spacer()
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(Color.white.opacity(0.4))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
+                                )
+                            }
+
+                            if memberStore.members.count > 3 {
+                                Text("+ \(memberStore.members.count - 3) more")
+                                    .font(.caption)
+                                    .foregroundStyle(theme.secondaryTextColor.opacity(0.7))
+                                    .padding(.top, 4)
+                            }
+                        }
+
+                        // Tap to manage hint
+                        HStack {
+                            Spacer()
+                            Text("Tap to manage members")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                        }
+                        .padding(.top, 8)
+                    }
+                    .padding(.horizontal, 24)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 }
 
