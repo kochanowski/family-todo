@@ -74,6 +74,7 @@ struct OnboardingView: View {
 
                 Spacer()
             }
+            .ignoresSafeArea(edges: .bottom)
             .sheet(isPresented: $showCreateSheet) {
                 CreateHouseholdSheet(
                     householdStore: householdStore,

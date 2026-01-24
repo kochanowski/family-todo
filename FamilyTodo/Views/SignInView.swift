@@ -67,6 +67,7 @@ struct SignInView: View {
             .padding(.bottom, 60)
         }
         .padding()
+        .ignoresSafeArea(edges: .bottom)
     }
 
     // MARK: - Subviews
