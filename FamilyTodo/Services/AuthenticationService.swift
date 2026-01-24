@@ -19,7 +19,7 @@
 
         // MARK: - Initialization
 
-        init(cloudKitContainer: CKContainer = CKContainer(identifier: "iCloud.com.example.familytodo")) {
+        init(cloudKitContainer: CKContainer = .default()) {
             self.cloudKitContainer = cloudKitContainer
             super.init()
         }
@@ -219,7 +219,7 @@
         @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
         @Published private(set) var currentUser: AuthenticatedUser?
 
-        private lazy var cloudKitContainer: CKContainer = .init(identifier: "iCloud.com.example.familytodo")
+        private lazy var cloudKitContainer: CKContainer = .default()
 
         override init() {
             super.init()
