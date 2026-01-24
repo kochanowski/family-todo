@@ -20,10 +20,10 @@
         // MARK: - Initialization
 
         init(cloudKitContainer: CKContainer? = nil) {
+            super.init()
             if let cloudKitContainer {
                 self.cloudKitContainer = cloudKitContainer
             }
-            super.init()
         }
 
         // MARK: - Authentication State
