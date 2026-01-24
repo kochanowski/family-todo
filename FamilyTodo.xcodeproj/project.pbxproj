@@ -58,10 +58,18 @@
 		DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */; };
 		ED982C614F4F4C09A05ECD6D /* NotificationSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */; };
 		004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */; };
+		UITEST00000000000000003 /* FamilyTodoUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST00000000000000002 /* FamilyTodoUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		A1B2C3D4E5F60718293A4B82 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1B2C3D4E5F60718293A4B5C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3D4E5F60718293A4B60;
+			remoteInfo = HousePulse;
+		};
+		UITEST0000000000000000B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A1B2C3D4E5F60718293A4B5C /* Project object */;
 			proxyType = 1;
@@ -125,6 +133,8 @@
 		1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedShoppingItem.swift; sourceTree = "<group>"; };
 		6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsStore.swift; sourceTree = "<group>"; };
 		AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
+		UITEST00000000000000002 /* FamilyTodoUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoUITests.swift; sourceTree = "<group>"; };
+		UITEST0000000000000000D /* FamilyTodoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +152,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D4E5F60718293A4B80 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		UITEST00000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,6 +216,7 @@
 			children = (
 				A1B2C3D4E5F60718293A4B75 /* HousePulse.app */,
 				A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */,
+				UITEST0000000000000000D /* FamilyTodoUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -257,6 +275,7 @@
 			targets = (
 				A1B2C3D4E5F60718293A4B60 /* HousePulse */,
 				A1B2C3D4E5F60718293A4B61 /* FamilyTodoTests */,
+				UITEST00000000000000001 /* FamilyTodoUITests */,
 			);
 		};
 		A1B2C3D4E5F60718293A4B84 /* Main Group */ = {
@@ -264,6 +283,7 @@
 			children = (
 				A1B2C3D4E5F60718293A4B5D /* FamilyTodo */,
 				A1B2C3D4E5F60718293A4B83 /* FamilyTodoTests */,
+				UITEST00000000000000004 /* FamilyTodoUITests */,
 				A1B2C3D4E5F60718293A4B5E /* Products */,
 				A1B2C3D4E5F60718293A4B5F /* Frameworks */,
 			);
@@ -330,6 +350,14 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		UITEST00000000000000004 /* FamilyTodoUITests */ = {
+			isa = PBXGroup;
+			children = (
+				UITEST00000000000000002 /* FamilyTodoUITests.swift */,
+			);
+			path = FamilyTodoUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -368,6 +396,24 @@
 			productReference = A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		UITEST00000000000000001 /* FamilyTodoUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = UITEST0000000000000000A /* Build configuration list for PBXNativeTarget "FamilyTodoUITests" */;
+			buildPhases = (
+				UITEST00000000000000005 /* Sources */,
+				UITEST00000000000000006 /* Frameworks */,
+				UITEST00000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				UITEST0000000000000000C /* PBXTargetDependency */,
+			);
+			name = FamilyTodoUITests;
+			productName = FamilyTodoUITests;
+			productReference = UITEST0000000000000000D /* FamilyTodoUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -381,6 +427,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B2C3D4E5F60718293A4B70 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		UITEST00000000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -452,6 +505,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		UITEST00000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				UITEST00000000000000003 /* FamilyTodoUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -459,6 +520,11 @@
 			isa = PBXTargetDependency;
 			target = A1B2C3D4E5F60718293A4B60 /* HousePulse */;
 			targetProxy = A1B2C3D4E5F60718293A4B82 /* PBXContainerItemProxy */;
+		};
+		UITEST0000000000000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3D4E5F60718293A4B60 /* HousePulse */;
+			targetProxy = UITEST0000000000000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -598,6 +664,43 @@
 			};
 			name = Release;
 		};
+		UITEST00000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.familytodo.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = HousePulse;
+			};
+			name = Debug;
+		};
+		UITEST00000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.familytodo.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = HousePulse;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -624,6 +727,15 @@
 			buildConfigurations = (
 				A1B2C3D4E5F60718293A4B69 /* Debug */,
 				A1B2C3D4E5F60718293A4B6A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		UITEST0000000000000000A /* Build configuration list for PBXNativeTarget "FamilyTodoUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				UITEST00000000000000008 /* Debug */,
+				UITEST00000000000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

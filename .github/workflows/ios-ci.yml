@@ -61,6 +61,7 @@ jobs:
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
             -destination "platform=iOS Simulator,name=iPhone 16,OS=18.2" \
+            -only-testing:FamilyTodoTests \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             ARCHS=arm64 \
@@ -70,6 +71,25 @@ jobs:
               status=$?; \
               echo "::group::xcodebuild-test.log (tail)"; \
               tail -n 200 xcodebuild-test.log || true; \
+              echo "::endgroup::"; \
+              exit $status; \
+            }
+
+      - name: Run UI tests (app launch verification)
+        run: |
+          xcodebuild test \
+            -project FamilyTodo.xcodeproj \
+            -scheme HousePulse \
+            -destination "platform=iOS Simulator,name=iPhone 16,OS=18.2" \
+            -only-testing:FamilyTodoUITests \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            2>&1 | tee xcodebuild-uitest.log | bundle exec xcpretty || { \
+              status=$?; \
+              echo "::group::xcodebuild-uitest.log (tail)"; \
+              tail -n 200 xcodebuild-uitest.log || true; \
               echo "::endgroup::"; \
               exit $status; \
             }
