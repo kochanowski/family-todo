@@ -1,3 +1,8 @@
 Notes
 
 - gdy ktoś doda zadanie i je przydzieli to użytkownik otrzymuje notyfikację - powiadomienie i dźwięk
+- gdy aplikacja uruchamia się pierwszy raz potrzebujemy prezentacji co robi aplikacja, takie slajdy:
+  - jak szybko dodać zadania
+  - co jest na ekranach
+  - animacja pokazująca zmieniające się ekrany
+  - możliwość zmiany theme

@@ -49,6 +49,13 @@
 		60DB798C87D7427FA2FD3DBF /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACFE4E9FB4E4E81BDB3E2E6 /* UserSession.swift */; };
 		803FC0ECBD75468BBDEFD911 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38792E606F5E458BBBC2F493 /* SignInView.swift */; };
 		A1B2C3D4E5F60718293A4B8A /* ShareInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B8B /* ShareInviteView.swift */; };
+		B4F73F5182AF4EBFA326779E /* CachedHousehold.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63506D8C54DF4D9BB2C5EBB7 /* CachedHousehold.swift */; };
+		310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5698A6FED3C457788B6A60C /* CachedMember.swift */; };
+		5BC39FDF53C2435A98BEC6A8 /* CachedArea.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC09F7A0A20C4B748B753CD3 /* CachedArea.swift */; };
+		8A1F0EB742754497896DB701 /* CachedRecurringChore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2D401AD5CA4326A17841EA /* CachedRecurringChore.swift */; };
+		DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */; };
+		ED982C614F4F4C09A05ECD6D /* NotificationSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */; };
+		004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,6 +114,13 @@
 		2ACFE4E9FB4E4E81BDB3E2E6 /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 		38792E606F5E458BBBC2F493 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B8B /* ShareInviteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInviteView.swift; sourceTree = "<group>"; };
+		63506D8C54DF4D9BB2C5EBB7 /* CachedHousehold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedHousehold.swift; sourceTree = "<group>"; };
+		D5698A6FED3C457788B6A60C /* CachedMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedMember.swift; sourceTree = "<group>"; };
+		DC09F7A0A20C4B748B753CD3 /* CachedArea.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedArea.swift; sourceTree = "<group>"; };
+		FE2D401AD5CA4326A17841EA /* CachedRecurringChore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedRecurringChore.swift; sourceTree = "<group>"; };
+		1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedShoppingItem.swift; sourceTree = "<group>"; };
+		6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsStore.swift; sourceTree = "<group>"; };
+		AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -159,6 +173,11 @@
 		A1B2C3D4E5F60718293A4B9A /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				63506D8C54DF4D9BB2C5EBB7 /* CachedHousehold.swift */,
+				D5698A6FED3C457788B6A60C /* CachedMember.swift */,
+				DC09F7A0A20C4B748B753CD3 /* CachedArea.swift */,
+				FE2D401AD5CA4326A17841EA /* CachedRecurringChore.swift */,
+				1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */,
 				86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */,
 				A1B2C3D4E5F60718293A4B95 /* Household.swift */,
 				A1B2C3D4E5F60718293A4B96 /* Member.swift */,
@@ -259,6 +278,7 @@
 		2253304769774D3792B036F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */,
 				28AF10EE9B8B4A09B5DCD599 /* RecurringChoresView.swift */,
 				40CFCD6FD0AE4845A8AF5631 /* AreasView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
@@ -276,6 +296,7 @@
 		FA1C0439FFD449E092083889 /* Stores */ = {
 			isa = PBXGroup;
 			children = (
+				6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */,
 				B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */,
 				CC6E3A1A06B14DD7965A808D /* AreaStore.swift */,
 				14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */,
@@ -366,6 +387,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B4F73F5182AF4EBFA326779E /* CachedHousehold.swift in Sources */,
+				310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */,
+				5BC39FDF53C2435A98BEC6A8 /* CachedArea.swift in Sources */,
+				8A1F0EB742754497896DB701 /* CachedRecurringChore.swift in Sources */,
+				DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */,
+				ED982C614F4F4C09A05ECD6D /* NotificationSettingsStore.swift in Sources */,
+				004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */,
 				58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */,
 				A477D45D71774433A314377F /* RecurringChoreStore.swift in Sources */,
 				0C8ECE6E2288433FAD9FE1AF /* RecurringChoresView.swift in Sources */,
