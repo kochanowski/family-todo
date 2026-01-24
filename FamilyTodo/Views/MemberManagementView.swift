@@ -78,7 +78,7 @@ struct MemberManagementView: View {
                 }
 
                 // Invite section
-                if currentUserIsOwner, let household = householdStore.currentHousehold {
+                if currentUserIsOwner, householdStore.currentHousehold != nil {
                     Section("Invite New Members") {
                         NavigationLink {
                             ShareInviteView()

@@ -38,12 +38,11 @@ final class HouseholdStore: ObservableObject {
             // Try to find user's membership
             if let member = try await cloudKit.fetchMemberByUserId(userId) {
                 currentMember = member
-                if let household = try await cloudKit.fetchHousehold(id: member.householdId) {
-                    currentHousehold = household
+                let household = try await cloudKit.fetchHousehold(id: member.householdId)
+                currentHousehold = household
 
-                    // 3. Update cache
-                    syncToCache(household)
-                }
+                // 3. Update cache
+                syncToCache(household)
             }
         } catch {
             // No household found is OK for new users
@@ -236,7 +235,7 @@ final class HouseholdStore: ObservableObject {
 
         guard let context = modelContext else {
             // Fallback to direct CloudKit save if no cache
-            try await cloudKit.saveHousehold(household)
+            _ = try await cloudKit.saveHousehold(household)
             return
         }
 
@@ -257,7 +256,7 @@ final class HouseholdStore: ObservableObject {
 
         // Sync to CloudKit
         do {
-            try await cloudKit.saveHousehold(household)
+            _ = try await cloudKit.saveHousehold(household)
 
             // Mark as synced
             if let cached = try? context.fetch(descriptor).first {
@@ -306,7 +305,13 @@ final class HouseholdStore: ObservableObject {
             try await cloudKit.acceptShare(metadata: metadata)
 
             // Fetch the shared household
-            guard let householdId = UUID(uuidString: metadata.rootRecordID.recordName) else {
+            let recordID: CKRecord.ID = if #available(iOS 16.0, *) {
+                metadata.hierarchyRootRecordID
+            } else {
+                metadata.rootRecordID
+            }
+
+            guard let householdId = UUID(uuidString: recordID.recordName) else {
                 throw HouseholdError.invalidShare
             }
 

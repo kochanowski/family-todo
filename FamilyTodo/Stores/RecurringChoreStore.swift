@@ -234,7 +234,7 @@ final class RecurringChoreStore: ObservableObject {
     // MARK: - Generate Task from Chore
 
     func generateTask(from chore: RecurringChore, taskStore: TaskStore) async {
-        guard let householdId else { return }
+        guard householdId != nil else { return }
 
         // Create task from chore
         await taskStore.createTask(
