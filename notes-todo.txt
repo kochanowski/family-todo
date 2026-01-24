@@ -10,3 +10,23 @@ Notes
 
 - zaktualizować SDK: 90725: SDK version issue. This app was built with the iOS 18.2 SDK. Starting April 2026, all iOS and iPadOS apps must be built with the iOS 26 SDK or later, included in Xcode 26 or later, in order to be uploaded to App Store Connect or submitted for distribution.
 
+- Name
+HousePulse Profile 2
+Status
+Active
+Platform
+iOS
+Expires
+2027/01/24
+Type
+App Store
+Created By
+WOJCIECH JAN KOCHANOWSKI (kochanowski.wojtek@icloud.com)
+Enabled Capabilities
+iCloud, In-App Purchase, Push Notifications, Sign In with Apple
+
+
+App ID
+HousePulse (com.kochanowski.housepulse)
+
+ale  iCloud is not available - po klinięciu w Sign in with Apple pojawia się błąd - Authentcation failed

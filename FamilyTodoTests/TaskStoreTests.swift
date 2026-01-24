@@ -61,7 +61,7 @@ final class TaskStoreTests: XCTestCase {
         let error = TaskStoreError.wipLimitReached
 
         XCTAssertNotNil(error.errorDescription)
-        XCTAssertTrue(error.errorDescription!.contains("WIP limit"))
+        XCTAssertTrue(error.errorDescription?.contains("WIP limit") == true)
     }
 }
 
@@ -202,8 +202,14 @@ final class WIPLimitLogicTests: XCTestCase {
 
     func testBacklogSortedByDueDate() {
         let now = Date()
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now)!
-        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: now)!
+        guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now) else {
+            XCTFail("Failed to create tomorrow date")
+            return
+        }
+        guard let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: now) else {
+            XCTFail("Failed to create next week date")
+            return
+        }
 
         let tasks = [
             Task(householdId: householdId, title: "Later", status: .backlog, dueDate: nextWeek, taskType: .oneOff),
@@ -221,8 +227,14 @@ final class WIPLimitLogicTests: XCTestCase {
 
     func testDoneSortedByCompletedAtDescending() {
         let now = Date()
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
-        let lastWeek = Calendar.current.date(byAdding: .day, value: -7, to: now)!
+        guard let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) else {
+            XCTFail("Failed to create yesterday date")
+            return
+        }
+        guard let lastWeek = Calendar.current.date(byAdding: .day, value: -7, to: now) else {
+            XCTFail("Failed to create last week date")
+            return
+        }
 
         let tasks = [
             Task(

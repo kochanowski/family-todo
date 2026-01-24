@@ -184,7 +184,12 @@ struct AreaDetailView: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: CachedArea.self, configurations: config)
+    let container: ModelContainer
+    do {
+        container = try ModelContainer(for: CachedArea.self, configurations: config)
+    } catch {
+        fatalError("Failed to create preview container: \(error)")
+    }
 
     return AreasView(householdStore: HouseholdStore())
         .environmentObject(UserSession.shared)

@@ -132,63 +132,98 @@ struct CardsPagerView: View {
     private func cardView(for kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
         switch kind {
         case .shoppingList:
-            ShoppingListCardView(
-                kind: kind,
-                theme: theme,
-                store: shoppingListStore,
-                safeAreaInsets: safeAreaInsets
-            )
+            shoppingListCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         case .todo:
-            TodoCardView(
-                kind: kind,
-                theme: theme,
-                taskStore: taskStore,
-                memberStore: memberStore,
-                currentMemberId: householdStore.currentMember?.id,
-                safeAreaInsets: safeAreaInsets
-            )
+            todoCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         case .backlog:
-            BacklogCardView(
-                kind: kind,
-                theme: theme,
-                taskStore: taskStore,
-                memberStore: memberStore,
-                currentMemberId: householdStore.currentMember?.id,
-                safeAreaInsets: safeAreaInsets
-            )
+            backlogCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         case .recurring:
-            RecurringCardView(
-                kind: kind,
-                theme: theme,
-                choreStore: recurringChoreStore,
-                memberStore: memberStore,
-                taskStore: taskStore,
-                currentMemberId: householdStore.currentMember?.id,
-                safeAreaInsets: safeAreaInsets
-            )
+            recurringCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         case .household:
-            HouseholdCardView(
-                kind: kind,
-                theme: theme,
-                householdStore: householdStore,
-                memberStore: memberStore,
-                safeAreaInsets: safeAreaInsets
-            )
+            householdCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         case .areas:
-            AreasCardView(
-                kind: kind,
-                theme: theme,
-                areaStore: areaStore,
-                safeAreaInsets: safeAreaInsets
-            )
+            areasCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         case .settings:
-            SettingsCardView(
-                kind: kind,
-                theme: theme,
-                themeStore: themeStore,
-                safeAreaInsets: safeAreaInsets
-            )
+            settingsCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
         }
+    }
+
+    @ViewBuilder
+    private func shoppingListCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        ShoppingListCardView(
+            kind: kind,
+            theme: theme,
+            store: shoppingListStore,
+            safeAreaInsets: safeAreaInsets
+        )
+    }
+
+    @ViewBuilder
+    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        TodoCardView(
+            kind: kind,
+            theme: theme,
+            taskStore: taskStore,
+            memberStore: memberStore,
+            currentMemberId: householdStore.currentMember?.id,
+            safeAreaInsets: safeAreaInsets
+        )
+    }
+
+    @ViewBuilder
+    private func backlogCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        BacklogCardView(
+            kind: kind,
+            theme: theme,
+            taskStore: taskStore,
+            memberStore: memberStore,
+            currentMemberId: householdStore.currentMember?.id,
+            safeAreaInsets: safeAreaInsets
+        )
+    }
+
+    @ViewBuilder
+    private func recurringCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        RecurringCardView(
+            kind: kind,
+            theme: theme,
+            choreStore: recurringChoreStore,
+            memberStore: memberStore,
+            taskStore: taskStore,
+            currentMemberId: householdStore.currentMember?.id,
+            safeAreaInsets: safeAreaInsets
+        )
+    }
+
+    @ViewBuilder
+    private func householdCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        HouseholdCardView(
+            kind: kind,
+            theme: theme,
+            householdStore: householdStore,
+            memberStore: memberStore,
+            safeAreaInsets: safeAreaInsets
+        )
+    }
+
+    @ViewBuilder
+    private func areasCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        AreasCardView(
+            kind: kind,
+            theme: theme,
+            areaStore: areaStore,
+            safeAreaInsets: safeAreaInsets
+        )
+    }
+
+    @ViewBuilder
+    private func settingsCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+        SettingsCardView(
+            kind: kind,
+            theme: theme,
+            themeStore: themeStore,
+            safeAreaInsets: safeAreaInsets
+        )
     }
 
     private func cardOffset(for index: Int, width: CGFloat) -> CGFloat {
@@ -1160,10 +1195,17 @@ struct SettingsCardView: View {
     let safeAreaInsets: EdgeInsets
 
     private let options: [ThemeOption] = [
-        ThemeOption(id: UUID(uuidString: "0B7D1C64-5A5F-4B8A-9B7D-1F9B40A8F1AF")!, preset: .pastel),
-        ThemeOption(id: UUID(uuidString: "CB772A33-7D63-4B72-9C3C-6A0D8E2D551C")!, preset: .soft),
-        ThemeOption(id: UUID(uuidString: "5E5C5B6C-8CF4-4A7C-8B74-2E60C9C6B8FA")!, preset: .night),
+        ThemeOption(id: Self.themeId("0B7D1C64-5A5F-4B8A-9B7D-1F9B40A8F1AF"), preset: .pastel),
+        ThemeOption(id: Self.themeId("CB772A33-7D63-4B72-9C3C-6A0D8E2D551C"), preset: .soft),
+        ThemeOption(id: Self.themeId("5E5C5B6C-8CF4-4A7C-8B74-2E60C9C6B8FA"), preset: .night),
     ]
+
+    private static func themeId(_ value: String) -> UUID {
+        guard let id = UUID(uuidString: value) else {
+            fatalError("Invalid theme UUID: \(value)")
+        }
+        return id
+    }
 
     var body: some View {
         let items = options.map { option in
@@ -1223,7 +1265,12 @@ extension String {
 #Preview {
     let householdStore = HouseholdStore()
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: CachedTask.self, configurations: config)
+    let container: ModelContainer
+    do {
+        container = try ModelContainer(for: CachedTask.self, configurations: config)
+    } catch {
+        fatalError("Failed to create preview container: \(error)")
+    }
 
     return CardsPagerView(
         householdStore: householdStore,

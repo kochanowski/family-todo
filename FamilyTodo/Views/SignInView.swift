@@ -72,13 +72,16 @@ struct SignInView: View {
     // MARK: - Subviews
 
     private var signInButton: some View {
-        Button(action: {
-            userSession.signIn()
-        }) {
-            SignInWithAppleButtonView()
-                .frame(height: 50)
-                .frame(maxWidth: 280)
-        }
+        Button(
+            action: {
+                userSession.signIn()
+            },
+            label: {
+                SignInWithAppleButtonView()
+                    .frame(height: 50)
+                    .frame(maxWidth: 280)
+            }
+        )
     }
 
     private var guestButton: some View {

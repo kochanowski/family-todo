@@ -2,6 +2,7 @@ import CloudKit
 import Foundation
 import SwiftData
 
+// swiftlint:disable type_body_length
 /// Store for household management
 @MainActor
 final class HouseholdStore: ObservableObject {
@@ -119,186 +120,25 @@ final class HouseholdStore: ObservableObject {
         isLoading = true
         error = nil
 
+        let household = Household(
+            name: name,
+            ownerId: userId
+        )
+        let member = Member(
+            householdId: household.id,
+            userId: userId,
+            displayName: displayName,
+            role: .owner
+        )
+
         if !isCloudSyncEnabled {
-            let household = Household(
-                name: name,
-                ownerId: userId
-            )
-            let member = Member(
-                householdId: household.id,
-                userId: userId,
-                displayName: displayName,
-                role: .owner
-            )
-
-            currentHousehold = household
-            currentMember = member
-
-            guard let context = modelContext else {
-                isLoading = false
-                return
-            }
-
-            context.insert(CachedHousehold(from: household))
-            context.insert(CachedMember(from: member))
-
-            let defaultAreas = Area.defaults(for: household.id)
-            for area in defaultAreas {
-                context.insert(CachedArea(from: area))
-            }
-
-            let starterTasks = [
-                Task(
-                    householdId: household.id,
-                    title: "Fix the faucet",
-                    status: .next,
-                    assigneeId: member.id,
-                    assigneeIds: [member.id],
-                    taskType: .oneOff
-                ),
-                Task(
-                    householdId: household.id,
-                    title: "Take down the Christmas tree",
-                    status: .next,
-                    assigneeId: member.id,
-                    assigneeIds: [member.id],
-                    taskType: .oneOff
-                ),
-            ]
-
-            for task in starterTasks {
-                context.insert(CachedTask(from: task))
-            }
-
-            let starterItems = [
-                ShoppingItem(householdId: household.id, title: "Milk"),
-                ShoppingItem(householdId: household.id, title: "Bread"),
-                ShoppingItem(householdId: household.id, title: "Sugar"),
-            ]
-
-            for item in starterItems {
-                context.insert(CachedShoppingItem(from: item))
-            }
-
-            let starterChores = [
-                RecurringChore(
-                    householdId: household.id,
-                    title: "Water the plants",
-                    recurrenceType: .everyNWeeks,
-                    recurrenceInterval: 2,
-                    defaultAssigneeIds: [member.id]
-                ),
-                RecurringChore(
-                    householdId: household.id,
-                    title: "Replace towels",
-                    recurrenceType: .everyNWeeks,
-                    recurrenceInterval: 3,
-                    defaultAssigneeIds: [member.id]
-                ),
-                RecurringChore(
-                    householdId: household.id,
-                    title: "Check purifier filters",
-                    recurrenceType: .everyNWeeks,
-                    recurrenceInterval: 2,
-                    defaultAssigneeIds: [member.id]
-                ),
-            ]
-
-            for var chore in starterChores {
-                chore.nextScheduledDate = chore.calculateNextScheduledDate()
-                context.insert(CachedRecurringChore(from: chore))
-            }
-
-            try? context.save()
+            seedLocalHousehold(household: household, member: member)
             isLoading = false
             return
         }
 
         do {
-            // Create household
-            let household = Household(
-                name: name,
-                ownerId: userId
-            )
-            _ = try await cloudKit.saveHousehold(household)
-
-            // Create owner member
-            let member = Member(
-                householdId: household.id,
-                userId: userId,
-                displayName: displayName,
-                role: .owner
-            )
-            _ = try await cloudKit.saveMember(member)
-
-            // Create default areas
-            let defaultAreas = Area.defaults(for: household.id)
-            for area in defaultAreas {
-                _ = try await cloudKit.saveArea(area)
-            }
-
-            // Seed starter tasks
-            let starterTasks = [
-                Task(
-                    householdId: household.id,
-                    title: "Fix the faucet",
-                    status: .next,
-                    assigneeId: member.id,
-                    assigneeIds: [member.id],
-                    taskType: .oneOff
-                ),
-                Task(
-                    householdId: household.id,
-                    title: "Take down the Christmas tree",
-                    status: .next,
-                    assigneeId: member.id,
-                    assigneeIds: [member.id],
-                    taskType: .oneOff
-                ),
-            ]
-            for task in starterTasks {
-                _ = try await cloudKit.saveTask(task)
-            }
-
-            // Seed shopping list
-            let starterItems = [
-                ShoppingItem(householdId: household.id, title: "Milk"),
-                ShoppingItem(householdId: household.id, title: "Bread"),
-                ShoppingItem(householdId: household.id, title: "Sugar"),
-            ]
-            for item in starterItems {
-                _ = try await cloudKit.saveShoppingItem(item)
-            }
-
-            // Seed recurring chores
-            let starterChores = [
-                RecurringChore(
-                    householdId: household.id,
-                    title: "Water the plants",
-                    recurrenceType: .everyNWeeks,
-                    recurrenceInterval: 2,
-                    defaultAssigneeIds: [member.id]
-                ),
-                RecurringChore(
-                    householdId: household.id,
-                    title: "Replace towels",
-                    recurrenceType: .everyNWeeks,
-                    recurrenceInterval: 3,
-                    defaultAssigneeIds: [member.id]
-                ),
-                RecurringChore(
-                    householdId: household.id,
-                    title: "Check purifier filters",
-                    recurrenceType: .everyNWeeks,
-                    recurrenceInterval: 2,
-                    defaultAssigneeIds: [member.id]
-                ),
-            ]
-            for var chore in starterChores {
-                chore.nextScheduledDate = chore.calculateNextScheduledDate()
-                _ = try await cloudKit.saveRecurringChore(chore)
-            }
-
+            try await seedCloudHousehold(household: household, member: member)
             currentHousehold = household
             currentMember = member
         } catch {
@@ -307,6 +147,120 @@ final class HouseholdStore: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    private func seedLocalHousehold(household: Household, member: Member) {
+        currentHousehold = household
+        currentMember = member
+
+        guard let context = modelContext else { return }
+
+        context.insert(CachedHousehold(from: household))
+        context.insert(CachedMember(from: member))
+
+        for area in defaultAreas(for: household.id) {
+            context.insert(CachedArea(from: area))
+        }
+
+        for task in starterTasks(for: household.id, memberId: member.id) {
+            context.insert(CachedTask(from: task))
+        }
+
+        for item in starterItems(for: household.id) {
+            context.insert(CachedShoppingItem(from: item))
+        }
+
+        for chore in starterChores(for: household.id, memberId: member.id) {
+            context.insert(CachedRecurringChore(from: chore))
+        }
+
+        try? context.save()
+    }
+
+    private func seedCloudHousehold(household: Household, member: Member) async throws {
+        _ = try await cloudKit.saveHousehold(household)
+        _ = try await cloudKit.saveMember(member)
+
+        for area in defaultAreas(for: household.id) {
+            _ = try await cloudKit.saveArea(area)
+        }
+
+        for task in starterTasks(for: household.id, memberId: member.id) {
+            _ = try await cloudKit.saveTask(task)
+        }
+
+        for item in starterItems(for: household.id) {
+            _ = try await cloudKit.saveShoppingItem(item)
+        }
+
+        for chore in starterChores(for: household.id, memberId: member.id) {
+            _ = try await cloudKit.saveRecurringChore(chore)
+        }
+    }
+
+    private func defaultAreas(for householdId: UUID) -> [Area] {
+        Area.defaults(for: householdId)
+    }
+
+    private func starterTasks(for householdId: UUID, memberId: UUID) -> [Task] {
+        [
+            Task(
+                householdId: householdId,
+                title: "Fix the faucet",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Take down the Christmas tree",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                taskType: .oneOff
+            ),
+        ]
+    }
+
+    private func starterItems(for householdId: UUID) -> [ShoppingItem] {
+        [
+            ShoppingItem(householdId: householdId, title: "Milk"),
+            ShoppingItem(householdId: householdId, title: "Bread"),
+            ShoppingItem(householdId: householdId, title: "Sugar"),
+        ]
+    }
+
+    private func starterChores(for householdId: UUID, memberId: UUID) -> [RecurringChore] {
+        var chores = [
+            RecurringChore(
+                householdId: householdId,
+                title: "Water the plants",
+                recurrenceType: .everyNWeeks,
+                recurrenceInterval: 2,
+                defaultAssigneeIds: [memberId]
+            ),
+            RecurringChore(
+                householdId: householdId,
+                title: "Replace towels",
+                recurrenceType: .everyNWeeks,
+                recurrenceInterval: 3,
+                defaultAssigneeIds: [memberId]
+            ),
+            RecurringChore(
+                householdId: householdId,
+                title: "Check purifier filters",
+                recurrenceType: .everyNWeeks,
+                recurrenceInterval: 2,
+                defaultAssigneeIds: [memberId]
+            ),
+        ]
+
+        for index in chores.indices {
+            chores[index].nextScheduledDate = chores[index].calculateNextScheduledDate()
+        }
+
+        return chores
     }
 
     // MARK: - Join Household
@@ -498,6 +452,8 @@ final class HouseholdStore: ObservableObject {
             ?? (metadata.value(forKey: "rootRecordID") as? CKRecord.ID)
     }
 }
+
+// swiftlint:enable type_body_length
 
 enum HouseholdError: LocalizedError {
     case invalidInviteCode

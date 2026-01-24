@@ -1,5 +1,5 @@
-@testable import HousePulse
 import Combine
+@testable import HousePulse
 import XCTest
 
 /// Base test file - specific tests are in dedicated test files:
@@ -36,7 +36,10 @@ final class UserSessionTests: XCTestCase {
 
     private func makeUserDefaults() -> UserDefaults {
         let suiteName = "UserSessionTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Failed to create UserDefaults suite")
+            return .standard
+        }
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
     }

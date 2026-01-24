@@ -339,8 +339,7 @@ actor CloudKitManager {
         let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
         acceptOperation.qualityOfService = .userInitiated
 
-        try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<Void, Error>) in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             acceptOperation.perShareResultBlock = { _, result in
                 switch result {
                 case .success:

@@ -64,7 +64,10 @@ final class TaskTests: XCTestCase {
     }
 
     func testIsOverdue_FutureDueDate_ReturnsFalse() {
-        let futureDate = Calendar.current.date(byAdding: .day, value: 7, to: Date())!
+        guard let futureDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) else {
+            XCTFail("Failed to create future date")
+            return
+        }
 
         let task = Task(
             householdId: householdId,
@@ -78,7 +81,10 @@ final class TaskTests: XCTestCase {
     }
 
     func testIsOverdue_PastDueDate_ReturnsTrue() {
-        let pastDate = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        guard let pastDate = Calendar.current.date(byAdding: .day, value: -1, to: Date()) else {
+            XCTFail("Failed to create past date")
+            return
+        }
 
         let task = Task(
             householdId: householdId,
@@ -92,7 +98,10 @@ final class TaskTests: XCTestCase {
     }
 
     func testIsOverdue_DoneTask_ReturnsFalse() {
-        let pastDate = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        guard let pastDate = Calendar.current.date(byAdding: .day, value: -1, to: Date()) else {
+            XCTFail("Failed to create past date")
+            return
+        }
 
         let task = Task(
             householdId: householdId,

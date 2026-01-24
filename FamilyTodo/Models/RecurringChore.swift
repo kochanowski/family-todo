@@ -66,60 +66,82 @@ struct RecurringChore: Identifiable, Codable {
 
         switch recurrenceType {
         case .daily:
-            return calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date))
+            return nextDailyDate(calendar: calendar, date: date)
 
         case .weekly:
-            guard let weekday = recurrenceDay else { return nil }
-            var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-            components.weekday = weekday
-            guard let thisWeek = calendar.date(from: components) else { return nil }
-            if thisWeek > date {
-                return thisWeek
-            }
-
-            return calendar.date(byAdding: .weekOfYear, value: 1, to: thisWeek)
+            return nextWeeklyDate(calendar: calendar, date: date)
 
         case .biweekly:
-            if let lastGenerated = lastGeneratedDate {
-                return calendar.date(byAdding: .weekOfYear, value: 2, to: lastGenerated)
-            } else {
-                return date
-            }
+            return nextBiweeklyDate(calendar: calendar, fallback: date)
 
         case .monthly:
-            guard let dayOfMonth = recurrenceDayOfMonth else { return nil }
-            var components = calendar.dateComponents([.year, .month], from: date)
-            components.day = dayOfMonth
-            guard let thisMonth = calendar.date(from: components) else { return nil }
-            if thisMonth > date {
-                return thisMonth
-            }
-
-            return calendar.date(byAdding: .month, value: 1, to: thisMonth)
+            return nextMonthlyDate(calendar: calendar, date: date)
 
         case .everyNDays:
-            let interval = max(recurrenceInterval ?? 1, 1)
-            if let lastGenerated = lastGeneratedDate {
-                return calendar.date(byAdding: .day, value: interval, to: lastGenerated)
-            } else {
-                return date
-            }
+            return nextEveryNDays(calendar: calendar, fallback: date)
 
         case .everyNWeeks:
-            let interval = max(recurrenceInterval ?? 1, 1)
-            if let lastGenerated = lastGeneratedDate {
-                return calendar.date(byAdding: .weekOfYear, value: interval, to: lastGenerated)
-            } else {
-                return date
-            }
+            return nextEveryNWeeks(calendar: calendar, fallback: date)
 
         case .everyNMonths:
-            let interval = max(recurrenceInterval ?? 1, 1)
-            if let lastGenerated = lastGeneratedDate {
-                return calendar.date(byAdding: .month, value: interval, to: lastGenerated)
-            } else {
-                return date
-            }
+            return nextEveryNMonths(calendar: calendar, fallback: date)
         }
+    }
+
+    private func nextDailyDate(calendar: Calendar, date: Date) -> Date? {
+        calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date))
+    }
+
+    private func nextWeeklyDate(calendar: Calendar, date: Date) -> Date? {
+        guard let weekday = recurrenceDay else { return nil }
+        var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        components.weekday = weekday
+        guard let thisWeek = calendar.date(from: components) else { return nil }
+        if thisWeek > date {
+            return thisWeek
+        }
+        return calendar.date(byAdding: .weekOfYear, value: 1, to: thisWeek)
+    }
+
+    private func nextBiweeklyDate(calendar: Calendar, fallback: Date) -> Date? {
+        if let lastGenerated = lastGeneratedDate {
+            return calendar.date(byAdding: .weekOfYear, value: 2, to: lastGenerated)
+        }
+        return fallback
+    }
+
+    private func nextMonthlyDate(calendar: Calendar, date: Date) -> Date? {
+        guard let dayOfMonth = recurrenceDayOfMonth else { return nil }
+        var components = calendar.dateComponents([.year, .month], from: date)
+        components.day = dayOfMonth
+        guard let thisMonth = calendar.date(from: components) else { return nil }
+        if thisMonth > date {
+            return thisMonth
+        }
+        return calendar.date(byAdding: .month, value: 1, to: thisMonth)
+    }
+
+    private func nextEveryNDays(calendar: Calendar, fallback: Date) -> Date? {
+        let interval = max(recurrenceInterval ?? 1, 1)
+        if let lastGenerated = lastGeneratedDate {
+            return calendar.date(byAdding: .day, value: interval, to: lastGenerated)
+        }
+        return fallback
+    }
+
+    private func nextEveryNWeeks(calendar: Calendar, fallback: Date) -> Date? {
+        let interval = max(recurrenceInterval ?? 1, 1)
+        if let lastGenerated = lastGeneratedDate {
+            return calendar.date(byAdding: .weekOfYear, value: interval, to: lastGenerated)
+        }
+        return fallback
+    }
+
+    private func nextEveryNMonths(calendar: Calendar, fallback: Date) -> Date? {
+        let interval = max(recurrenceInterval ?? 1, 1)
+        if let lastGenerated = lastGeneratedDate {
+            return calendar.date(byAdding: .month, value: interval, to: lastGenerated)
+        }
+        return fallback
     }
 }

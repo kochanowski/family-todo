@@ -302,7 +302,12 @@ struct TaskRowView: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: CachedTask.self, configurations: config)
+    let container: ModelContainer
+    do {
+        container = try ModelContainer(for: CachedTask.self, configurations: config)
+    } catch {
+        fatalError("Failed to create preview container: \(error)")
+    }
 
     return TaskListView(
         householdId: UUID(),

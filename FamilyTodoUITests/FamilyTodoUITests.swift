@@ -3,7 +3,6 @@ import XCTest
 /// UI Tests for HousePulse app
 /// Tests that the app can launch successfully without crashing
 final class FamilyTodoUITests: XCTestCase {
-
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -38,6 +37,7 @@ final class FamilyTodoUITests: XCTestCase {
 
         // Verify app is still running
         XCTAssertTrue(
-            app.wait(for: .runningForeground, timeout: 3.0), "App should return to foreground")
+            app.wait(for: .runningForeground, timeout: 3.0), "App should return to foreground"
+        )
     }
 }

@@ -223,10 +223,10 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNotNil(HouseholdError.invalidShare.errorDescription)
         XCTAssertNotNil(HouseholdError.cloudSyncRequired.errorDescription)
 
-        XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription!.contains("invite code"))
-        XCTAssertTrue(HouseholdError.householdNotFound.errorDescription!.contains("not found"))
-        XCTAssertTrue(HouseholdError.invalidShare.errorDescription!.contains("share"))
-        XCTAssertTrue(HouseholdError.cloudSyncRequired.errorDescription!.contains("Sign in"))
+        XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription?.contains("invite code") == true)
+        XCTAssertTrue(HouseholdError.householdNotFound.errorDescription?.contains("not found") == true)
+        XCTAssertTrue(HouseholdError.invalidShare.errorDescription?.contains("share") == true)
+        XCTAssertTrue(HouseholdError.cloudSyncRequired.errorDescription?.contains("Sign in") == true)
     }
 }
 

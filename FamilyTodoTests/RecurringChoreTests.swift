@@ -68,9 +68,14 @@ final class RecurringChoreTests: XCTestCase {
         let today = Date()
         let nextDate = chore.calculateNextScheduledDate(after: today)
 
-        XCTAssertNotNil(nextDate)
-
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today))!
+        guard let nextDate else {
+            XCTFail("Expected next scheduled date")
+            return
+        }
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) else {
+            XCTFail("Failed to create tomorrow date")
+            return
+        }
         XCTAssertEqual(nextDate, tomorrow)
     }
 
@@ -88,14 +93,20 @@ final class RecurringChoreTests: XCTestCase {
         // Get Monday of this week
         var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
         components.weekday = 2 // Monday
-        let monday = calendar.date(from: components)!
+        guard let monday = calendar.date(from: components) else {
+            XCTFail("Failed to create Monday date")
+            return
+        }
 
         let nextDate = chore.calculateNextScheduledDate(after: monday)
 
-        XCTAssertNotNil(nextDate)
+        guard let nextDate else {
+            XCTFail("Expected next scheduled date")
+            return
+        }
 
         // Should be next Sunday
-        let expectedComponents = calendar.dateComponents([.weekday], from: nextDate!)
+        let expectedComponents = calendar.dateComponents([.weekday], from: nextDate)
         XCTAssertEqual(expectedComponents.weekday, 1) // Sunday
     }
 
@@ -129,7 +140,10 @@ final class RecurringChoreTests: XCTestCase {
     }
 
     func testCalculateNextScheduledDate_Biweekly_WithLastGenerated() {
-        let lastGenerated = calendar.date(byAdding: .day, value: -7, to: Date())!
+        guard let lastGenerated = calendar.date(byAdding: .day, value: -7, to: Date()) else {
+            XCTFail("Failed to create last generated date")
+            return
+        }
 
         let chore = RecurringChore(
             householdId: householdId,
@@ -140,10 +154,16 @@ final class RecurringChoreTests: XCTestCase {
 
         let nextDate = chore.calculateNextScheduledDate()
 
-        XCTAssertNotNil(nextDate)
+        guard let nextDate else {
+            XCTFail("Expected next scheduled date")
+            return
+        }
 
         // Should be 14 days after last generated
-        let expected = calendar.date(byAdding: .day, value: 14, to: lastGenerated)!
+        guard let expected = calendar.date(byAdding: .day, value: 14, to: lastGenerated) else {
+            XCTFail("Failed to create expected date")
+            return
+        }
         XCTAssertEqual(nextDate, expected)
     }
 
@@ -161,13 +181,19 @@ final class RecurringChoreTests: XCTestCase {
         // Test from the 1st of the month
         var components = calendar.dateComponents([.year, .month], from: Date())
         components.day = 1
-        let firstOfMonth = calendar.date(from: components)!
+        guard let firstOfMonth = calendar.date(from: components) else {
+            XCTFail("Failed to create first of month date")
+            return
+        }
 
         let nextDate = chore.calculateNextScheduledDate(after: firstOfMonth)
 
-        XCTAssertNotNil(nextDate)
+        guard let nextDate else {
+            XCTFail("Expected next scheduled date")
+            return
+        }
 
-        let nextDateComponents = calendar.dateComponents([.day], from: nextDate!)
+        let nextDateComponents = calendar.dateComponents([.day], from: nextDate)
         XCTAssertEqual(nextDateComponents.day, 28)
     }
 
@@ -183,15 +209,21 @@ final class RecurringChoreTests: XCTestCase {
         // Test from the 15th of the month
         var components = calendar.dateComponents([.year, .month], from: Date())
         components.day = 15
-        let midMonth = calendar.date(from: components)!
+        guard let midMonth = calendar.date(from: components) else {
+            XCTFail("Failed to create mid-month date")
+            return
+        }
 
         let nextDate = chore.calculateNextScheduledDate(after: midMonth)
 
-        XCTAssertNotNil(nextDate)
+        guard let nextDate else {
+            XCTFail("Expected next scheduled date")
+            return
+        }
 
         // Should be next month
         let currentMonth = calendar.component(.month, from: midMonth)
-        let nextMonth = calendar.component(.month, from: nextDate!)
+        let nextMonth = calendar.component(.month, from: nextDate)
 
         // Handle December -> January wrap
         if currentMonth == 12 {
