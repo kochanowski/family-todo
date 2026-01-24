@@ -9,5 +9,5 @@ final class ShoppingListSettingsStore: ObservableObject {
     }
 
     // Valid range: 5-50
-    static let suggestionLimitRange = 5...50
+    static let suggestionLimitRange = 5 ... 50
 }

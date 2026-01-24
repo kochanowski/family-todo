@@ -149,9 +149,11 @@ jobs:
           # `-A` avoids interactive prompts ("User interaction is not allowed") during codesign in CI.
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
 
-          # Some runners fail here with "Cannot parse a NULL or zero-length data".
-          # If it keeps failing, we can remove this and rely on `-A`, but keep it for now.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # Some runners fail with "Cannot parse a NULL or zero-length data".
+          # The `-A` flag on import should be sufficient, so we make this non-fatal.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || {
+            echo "::warning::set-key-partition-list failed (non-fatal, -A flag should suffice)"
+          }
 
           # Install provisioning profile
           PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
