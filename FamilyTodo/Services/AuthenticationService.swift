@@ -2,7 +2,6 @@
     import AuthenticationServices
     import CloudKit
     import Foundation
-    import Security
 
     /// Service responsible for handling Sign in with Apple authentication
     /// and CloudKit user identity management
@@ -166,38 +165,17 @@
         }
 
         private func makeCloudKitContainer() -> CKContainer? {
-            guard isCloudKitEntitled() else {
+            guard isCloudKitEnabled() else {
                 return nil
             }
             return .default()
         }
 
-        private func isCloudKitEntitled() -> Bool {
-            guard let task = SecTaskCreateFromSelf(nil) else { return false }
-
-            let services = entitlementStrings(
-                SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-services" as CFString, nil)
-            )
-            guard services.contains("CloudKit") else { return false }
-
-            let containers = entitlementStrings(
-                SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-container-identifiers" as CFString, nil)
-            )
-            return !containers.isEmpty
-        }
-
-        private func entitlementStrings(_ value: CFTypeRef?) -> [String] {
-            guard let value else { return [] }
-            if let strings = value as? [String] {
-                return strings
+        private func isCloudKitEnabled() -> Bool {
+            if let enabled = Bundle.main.object(forInfoDictionaryKey: "HPCloudKitEnabled") as? Bool {
+                return enabled
             }
-            if let array = value as? [Any] {
-                return array.compactMap { $0 as? String }
-            }
-            if let array = value as? NSArray {
-                return array.compactMap { $0 as? String }
-            }
-            return []
+            return false
         }
     }
 
