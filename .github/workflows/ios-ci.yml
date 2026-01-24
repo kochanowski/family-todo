@@ -131,28 +131,37 @@ jobs:
             fi
           }
 
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+
           # Create and configure a dedicated keychain for CI
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security list-keychains -d user -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 
           # Import certificate (.p12) into keychain
-          echo "$BUILD_CERTIFICATE_BASE64" | decode_base64 > certificate.p12
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$BUILD_CERTIFICATE_BASE64" | decode_base64 > "$CERT_PATH"
           # Validate the PKCS#12 upfront to fail with a clearer error message.
-          openssl pkcs12 -info -in certificate.p12 -passin pass:"$P12_PASSWORD" -noout >/dev/null
-          security import certificate.p12 -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          openssl pkcs12 -info -in "$CERT_PATH" -passin pass:"$P12_PASSWORD" -noout >/dev/null
+
+          # `-A` avoids interactive prompts ("User interaction is not allowed") during codesign in CI.
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
+
+          # Some runners fail here with "Cannot parse a NULL or zero-length data".
+          # If it keeps failing, we can remove this and rely on `-A`, but keep it for now.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           # Install provisioning profile
-          echo "$PROVISIONING_PROFILE_BASE64" | decode_base64 > profile.mobileprovision
-          PROFILE_UUID="$(security cms -D -i profile.mobileprovision | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$PROVISIONING_PROFILE_BASE64" | decode_base64 > "$PROFILE_PATH"
+          PROFILE_UUID="$(security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)"
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
 
           # Debug: show installed profile name + UUID
-          security cms -D -i profile.mobileprovision | /usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin
+          security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin
           echo "$PROFILE_UUID"
 
       - name: Deploy to TestFlight
