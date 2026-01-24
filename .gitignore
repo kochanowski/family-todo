@@ -127,3 +127,6 @@ GoogleService-Info.plist
 # Documentation temp files
 docs/**/*.backup
 docs/**/*.tmp
+
+# TestFlight crash logs / feedback
+testflight_feedback/
