@@ -206,6 +206,40 @@ final class ShoppingListStore: ObservableObject {
         await updateItem(updatedItem)
     }
 
+    // MARK: - Clear To Buy
+
+    func clearToBuy() async {
+        let itemsToClear = items.filter { !$0.isBought }
+        guard !itemsToClear.isEmpty else { return }
+
+        // Optimistic UI update
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            items.removeAll { !$0.isBought }
+        }
+
+        // Delete from CloudKit and cache
+        for item in itemsToClear {
+            // Mark as pending delete in cache
+            if let context = modelContext {
+                let itemId = item.id
+                let descriptor = FetchDescriptor<CachedShoppingItem>(
+                    predicate: #Predicate { $0.id == itemId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    context.delete(cached)
+                }
+            }
+
+            do {
+                try await cloudKit.deleteShoppingItem(id: item.id)
+            } catch {
+                self.error = error
+            }
+        }
+
+        try? modelContext?.save()
+    }
+
     // MARK: - Delete Item
 
     func deleteItem(_ item: ShoppingItem) async {

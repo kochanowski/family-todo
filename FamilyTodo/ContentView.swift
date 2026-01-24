@@ -84,6 +84,7 @@ struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var notificationSettingsStore: NotificationSettingsStore
+    @EnvironmentObject private var shoppingListSettingsStore: ShoppingListSettingsStore
     @ObservedObject var householdStore: HouseholdStore
 
     private func requestNotificationPermission() async {
@@ -205,6 +206,14 @@ struct SettingsView: View {
                     Toggle("Sound", isOn: $notificationSettingsStore.soundEnabled)
                 }
 
+                Section("Shopping List") {
+                    Stepper(
+                        "Suggestions: \(shoppingListSettingsStore.suggestionLimit)",
+                        value: $shoppingListSettingsStore.suggestionLimit,
+                        in: ShoppingListSettingsStore.suggestionLimitRange
+                    )
+                }
+
                 // Permission status info
                 if !NotificationService.shared.isAuthorized {
                     Section {
@@ -242,5 +251,7 @@ struct SettingsView: View {
     return ContentView()
         .environmentObject(UserSession.shared)
         .environmentObject(ThemeStore())
+        .environmentObject(NotificationSettingsStore())
+        .environmentObject(ShoppingListSettingsStore())
         .modelContainer(container)
 }

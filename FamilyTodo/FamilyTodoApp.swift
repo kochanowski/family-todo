@@ -8,6 +8,7 @@ struct FamilyTodoApp: App {
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var themeStore = ThemeStore()
     @StateObject private var notificationSettingsStore = NotificationSettingsStore()
+    @StateObject private var shoppingListSettingsStore = ShoppingListSettingsStore()
 
     /// Pending share metadata to be processed after authentication
     @State private var pendingShareMetadata: CKShare.Metadata?
@@ -54,6 +55,7 @@ struct FamilyTodoApp: App {
                 .environmentObject(householdStore)
                 .environmentObject(themeStore)
                 .environmentObject(notificationSettingsStore)
+                .environmentObject(shoppingListSettingsStore)
                 .modelContainer(sharedModelContainer)
                 .task {
                     #if !CI

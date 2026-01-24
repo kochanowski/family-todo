@@ -34,6 +34,7 @@
 - [x] SwiftData cache for all models (Task, Household, Member, Area, RecurringChore, ShoppingItem)
 - [x] Offline-first foundation (cache-first load + optimistic updates)
 - [x] CloudKit error categorization (network, auth, quota, conflicts)
+- [x] Shopping list enhancements (suggestion limit + clear to buy)
 
 ## Planned Work (Prioritized)
 
@@ -46,9 +47,9 @@
 - [x] Basic notifications (daily digest + real deadlines)
 - [x] Settings for notifications + celebrations
 
-### Priority 2 — Shared Shopping List (Enhancements)
-- [ ] Suggestions from `Bought` (sort by count + recency, limit 5–50)
-- [ ] Settings: suggestion limit + “Clear To Buy”
+### Priority 2 — Shared Shopping List (Enhancements) ✅
+- [x] Suggestions from `Bought` (sort by count + recency, limit 5–50)
+- [x] Settings: suggestion limit + "Clear To Buy"
 
 ### Priority 3 — Quality & Infrastructure
 - [ ] Unit tests for critical logic (recurrence, WIP, task transitions)

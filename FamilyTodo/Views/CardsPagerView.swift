@@ -324,14 +324,16 @@ struct ShoppingListCardView: View {
     @ObservedObject var store: ShoppingListStore
     let safeAreaInsets: EdgeInsets
 
+    @EnvironmentObject private var settingsStore: ShoppingListSettingsStore
     @State private var restockPresented = false
+    @State private var showClearConfirmation = false
 
     private var itemLookup: [UUID: ShoppingItem] {
         Dictionary(uniqueKeysWithValues: store.items.map { ($0.id, $0) })
     }
 
     private var restockItems: [ShoppingItem] {
-        store.boughtItems
+        Array(store.boughtItems.prefix(settingsStore.suggestionLimit))
     }
 
     private var cardItems: [CardListItem] {
@@ -352,8 +354,21 @@ struct ShoppingListCardView: View {
     }
 
     private var restockAccessory: AnyView? {
-        guard !restockItems.isEmpty else { return nil }
-        return AnyView(restockSection)
+        let hasRestock = !restockItems.isEmpty
+        let hasToBuy = !store.toBuyItems.isEmpty
+
+        guard hasRestock || hasToBuy else { return nil }
+
+        return AnyView(
+            VStack(spacing: 12) {
+                if hasRestock {
+                    restockSection
+                }
+                if hasToBuy {
+                    clearToBuyButton
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -419,6 +434,46 @@ struct ShoppingListCardView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: restockPresented)
+        .confirmationDialog(
+            "Clear all items from To Buy list?",
+            isPresented: $showClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear All", role: .destructive) {
+                _Concurrency.Task {
+                    await store.clearToBuy()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private var clearToBuyButton: some View {
+        Button {
+            Haptics.light()
+            showClearConfirmation = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(Color.red.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                Text("Clear To Buy List")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thinMaterial)
+                    .overlay(Color.gray.opacity(0.1))
+            )
+        }
+        .buttonStyle(PressableCardButtonStyle())
     }
 
     private var restockSection: some View {
@@ -1164,5 +1219,6 @@ extension String {
     )
     .environmentObject(UserSession.shared)
     .environmentObject(ThemeStore())
+    .environmentObject(ShoppingListSettingsStore())
     .modelContainer(container)
 }
