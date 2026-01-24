@@ -304,14 +304,10 @@ final class HouseholdStore: ObservableObject {
             // Accept the CloudKit share
             try await cloudKit.acceptShare(metadata: metadata)
 
-            // Fetch the shared household
-            let recordID: CKRecord.ID = if #available(iOS 16.0, *) {
-                metadata.hierarchyRootRecordID
-            } else {
-                metadata.rootRecordID
-            }
-
-            guard let householdId = UUID(uuidString: recordID.recordName) else {
+            // Fetch the shared household.
+            // NOTE: `rootRecordID` may be deprecated in newer SDKs, but it is the API
+            // available on `CKShare.Metadata` in our current CI toolchain.
+            guard let householdId = UUID(uuidString: metadata.rootRecordID.recordName) else {
                 throw HouseholdError.invalidShare
             }
 
