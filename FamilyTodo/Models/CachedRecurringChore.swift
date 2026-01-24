@@ -67,11 +67,10 @@ final class CachedRecurringChore {
     }
 
     func toRecurringChore() -> RecurringChore {
-        let defaultAssigneeIds: [UUID]
-        if let data = defaultAssigneeIdsData {
-            defaultAssigneeIds = (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
+        let defaultAssigneeIds: [UUID] = if let data = defaultAssigneeIdsData {
+            (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
         } else {
-            defaultAssigneeIds = []
+            []
         }
 
         return RecurringChore(

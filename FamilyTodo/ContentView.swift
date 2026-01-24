@@ -83,7 +83,12 @@ struct MainTabView: View {
 struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var notificationSettingsStore: NotificationSettingsStore
     @ObservedObject var householdStore: HouseholdStore
+
+    private func requestNotificationPermission() async {
+        await NotificationService.shared.requestAuthorization()
+    }
 
     var body: some View {
         NavigationStack {
@@ -134,6 +139,89 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                }
+
+                Section("Notifications") {
+                    Toggle("Task Reminders", isOn: $notificationSettingsStore.taskRemindersEnabled)
+                        .onChange(of: notificationSettingsStore.taskRemindersEnabled) { _, enabled in
+                            if enabled {
+                                _Concurrency.Task {
+                                    await requestNotificationPermission()
+                                }
+                            } else {
+                                NotificationService.shared.removeAllTaskReminders()
+                            }
+                        }
+
+                    Toggle("Daily Digest", isOn: $notificationSettingsStore.dailyDigestEnabled)
+                        .onChange(of: notificationSettingsStore.dailyDigestEnabled) { _, enabled in
+                            if enabled {
+                                _Concurrency.Task {
+                                    await requestNotificationPermission()
+                                    if NotificationService.shared.isAuthorized {
+                                        await NotificationService.shared.scheduleDailyDigest(
+                                            at: notificationSettingsStore.dailyDigestHour,
+                                            minute: notificationSettingsStore.dailyDigestMinute
+                                        )
+                                    }
+                                }
+                            } else {
+                                NotificationService.shared.cancelDailyDigest()
+                            }
+                        }
+
+                    if notificationSettingsStore.dailyDigestEnabled {
+                        DatePicker(
+                            "Digest Time",
+                            selection: Binding(
+                                get: {
+                                    Calendar.current.date(
+                                        bySettingHour: notificationSettingsStore.dailyDigestHour,
+                                        minute: notificationSettingsStore.dailyDigestMinute,
+                                        second: 0,
+                                        of: Date()
+                                    ) ?? Date()
+                                },
+                                set: { newDate in
+                                    let components = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                                    notificationSettingsStore.dailyDigestHour = components.hour ?? 8
+                                    notificationSettingsStore.dailyDigestMinute = components.minute ?? 0
+
+                                    // Reschedule with new time
+                                    _Concurrency.Task {
+                                        await NotificationService.shared.scheduleDailyDigest(
+                                            at: notificationSettingsStore.dailyDigestHour,
+                                            minute: notificationSettingsStore.dailyDigestMinute
+                                        )
+                                    }
+                                }
+                            ),
+                            displayedComponents: .hourAndMinute
+                        )
+                    }
+
+                    Toggle("Celebrations", isOn: $notificationSettingsStore.celebrationsEnabled)
+
+                    Toggle("Sound", isOn: $notificationSettingsStore.soundEnabled)
+                }
+
+                // Permission status info
+                if !NotificationService.shared.isAuthorized {
+                    Section {
+                        HStack {
+                            Image(systemName: "bell.slash")
+                                .foregroundStyle(.orange)
+                            Text("Notifications are disabled. Enable in Settings.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button("Open Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    }
                 }
 
                 Section {

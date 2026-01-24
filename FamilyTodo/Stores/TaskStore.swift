@@ -12,6 +12,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var error: Error?
 
     private lazy var cloudKit = CloudKitManager.shared
+    private lazy var notificationService = NotificationService.shared
     private let modelContext: ModelContext
     private var householdId: UUID?
 
@@ -157,6 +158,9 @@ final class TaskStore: ObservableObject {
             cached.needsSync = false
             cached.lastSyncedAt = Date()
             try? modelContext.save()
+
+            // Schedule notification if task has due date
+            await notificationService.scheduleTaskReminder(for: task)
         } catch {
             self.error = error
         }
@@ -193,6 +197,9 @@ final class TaskStore: ObservableObject {
         // Sync to CloudKit
         do {
             _ = try await cloudKit.saveTask(updatedTask)
+
+            // Update notification (remove old, schedule new if due date changed)
+            await notificationService.scheduleTaskReminder(for: updatedTask)
         } catch {
             self.error = error
         }
@@ -228,6 +235,9 @@ final class TaskStore: ObservableObject {
         // Delete from CloudKit
         do {
             try await cloudKit.deleteTask(id: task.id)
+
+            // Remove any scheduled notification
+            await notificationService.removeTaskReminder(for: task)
         } catch {
             self.error = error
         }

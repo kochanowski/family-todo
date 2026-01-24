@@ -14,8 +14,13 @@ import Foundation
         @Published private(set) var isAuthorized = false
 
         private let center = UNUserNotificationCenter.current()
+        private var settingsStore: NotificationSettingsStore?
 
         private init() {}
+
+        func setSettingsStore(_ store: NotificationSettingsStore) {
+            settingsStore = store
+        }
 
         // MARK: - Authorization
 
@@ -37,7 +42,11 @@ import Foundation
 
         /// Schedule a reminder for a task with due date
         func scheduleTaskReminder(for task: Task) async {
-            guard isAuthorized, let dueDate = task.dueDate else { return }
+            // Check settings gate
+            guard isAuthorized,
+                  settingsStore?.taskRemindersEnabled != false,
+                  let dueDate = task.dueDate
+            else { return }
 
             // Remove existing notification for this task
             await removeTaskReminder(for: task)
@@ -49,7 +58,7 @@ import Foundation
             let content = UNMutableNotificationContent()
             content.title = "Task Due Today"
             content.body = task.title
-            content.sound = .default
+            content.sound = settingsStore?.soundEnabled == true ? .default : nil
             content.categoryIdentifier = "TASK_REMINDER"
 
             var dateComponents = Calendar.current.dateComponents([.year, .month, .day], from: dueDate)
@@ -88,7 +97,8 @@ import Foundation
 
         /// Schedule daily digest notification (configurable time)
         func scheduleDailyDigest(at hour: Int = 8, minute: Int = 0) async {
-            guard isAuthorized else { return }
+            // Check settings gate
+            guard isAuthorized, settingsStore?.dailyDigestEnabled != false else { return }
 
             // Remove existing daily digest
             center.removePendingNotificationRequests(withIdentifiers: ["daily-digest"])
@@ -96,7 +106,7 @@ import Foundation
             let content = UNMutableNotificationContent()
             content.title = "Good morning!"
             content.body = "Check your tasks for today"
-            content.sound = .default
+            content.sound = settingsStore?.soundEnabled == true ? .default : nil
             content.categoryIdentifier = "DAILY_DIGEST"
 
             var dateComponents = DateComponents()
@@ -130,6 +140,8 @@ import Foundation
         @Published private(set) var isAuthorized = false
 
         private init() {}
+
+        func setSettingsStore(_: NotificationSettingsStore) {}
 
         func requestAuthorization() async {
             isAuthorized = false

@@ -7,6 +7,7 @@ struct FamilyTodoApp: App {
     @StateObject private var userSession = UserSession.shared
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var themeStore = ThemeStore()
+    @StateObject private var notificationSettingsStore = NotificationSettingsStore()
 
     /// Pending share metadata to be processed after authentication
     @State private var pendingShareMetadata: CKShare.Metadata?
@@ -52,11 +53,16 @@ struct FamilyTodoApp: App {
                 .environmentObject(userSession)
                 .environmentObject(householdStore)
                 .environmentObject(themeStore)
+                .environmentObject(notificationSettingsStore)
                 .modelContainer(sharedModelContainer)
                 .task {
                     #if !CI
                         // Check authentication status on app launch
                         await userSession.checkAuthenticationStatus()
+                        await NotificationService.shared.checkAuthorizationStatus()
+
+                        // Wire settings store to notification service
+                        NotificationService.shared.setSettingsStore(notificationSettingsStore)
                     #endif
                 }
                 .onChange(of: userSession.isAuthenticated) { _, isAuthenticated in
