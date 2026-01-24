@@ -36,6 +36,8 @@ jobs:
 
       - name: Build (no signing)
         run: |
+          # `xcpretty` sometimes omits the underlying compiler error output.
+          # Keep a raw log and print its tail on failure for easier debugging in CI.
           xcodebuild clean build \
             -project FamilyTodo.xcodeproj \
             -scheme FamilyTodo \
@@ -45,7 +47,13 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
-            | bundle exec xcpretty && exit ${PIPESTATUS[0]}
+            2>&1 | tee xcodebuild-build.log | bundle exec xcpretty || { \
+              status=$?; \
+              echo "::group::xcodebuild-build.log (tail)"; \
+              tail -n 200 xcodebuild-build.log || true; \
+              echo "::endgroup::"; \
+              exit $status; \
+            }
 
       - name: Run tests
         run: |
@@ -58,7 +66,13 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
-            | bundle exec xcpretty && exit ${PIPESTATUS[0]}
+            2>&1 | tee xcodebuild-test.log | bundle exec xcpretty || { \
+              status=$?; \
+              echo "::group::xcodebuild-test.log (tail)"; \
+              tail -n 200 xcodebuild-test.log || true; \
+              echo "::endgroup::"; \
+              exit $status; \
+            }
 
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
