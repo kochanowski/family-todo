@@ -52,6 +52,14 @@ platform :ios do
       in_house: false
     )
 
+    app_identifier = ENV["APP_IDENTIFIER"]
+    team_id = ENV["TEAM_ID"]
+    profile_name = ENV["PROVISIONING_PROFILE_NAME"]
+
+    if app_identifier.to_s.empty? || team_id.to_s.empty? || profile_name.to_s.empty?
+      UI.user_error!("Missing signing env vars: APP_IDENTIFIER, TEAM_ID, PROVISIONING_PROFILE_NAME")
+    end
+
     # Increment build number
     increment_build_number(
       build_number: ENV["BUILD_NUMBER"] || Time.now.strftime("%Y%m%d%H%M")
@@ -62,6 +70,18 @@ platform :ios do
       project: PROJECT,
       scheme: SCHEME,
       export_method: "app-store",
+      export_options: {
+        signingStyle: "manual",
+        teamID: team_id,
+        provisioningProfiles: {
+          app_identifier => profile_name,
+        },
+      },
+      xcargs: [
+        "PRODUCT_BUNDLE_IDENTIFIER=#{app_identifier}",
+        "DEVELOPMENT_TEAM=#{team_id}",
+        "CODE_SIGN_STYLE=Manual",
+      ].join(" "),
       output_directory: "./build",
       output_name: "HousePulse.ipa"
     )

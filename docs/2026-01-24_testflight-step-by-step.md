@@ -10,11 +10,12 @@ If you want automation later, see:
 - `docs/2026-01-17_fastlane-setup.md`
 - `docs/2026-01-10_github-actions-setup.md`
 
-## 0) Prerequisites
+## 0) Prerequisites (no Mac / GitHub Actions only)
 
-- macOS with Xcode installed.
+- You do NOT need a Mac/Xcode.
 - Two-factor auth enabled for your Apple ID (required by Apple).
-- A real device to test (optional but recommended; simulator is not enough for many real-world behaviors).
+- A real iPhone to test on (TestFlight runs on device, not simulator).
+- Admin access to this GitHub repo (to add Actions secrets).
 
 ## 1) Create the app in App Store Connect
 
@@ -47,64 +48,104 @@ Notes:
    - Push Notifications (if you will use notifications)
 6. Save.
 
-## 3) Configure Xcode project signing + bundle identifier
+## 3) Configure signing and uploads for GitHub Actions
 
-1. Open the project:
-   - `open FamilyTodo.xcodeproj`
-2. In Xcode:
-   - Select the app target: `HousePulse`
-   - Go to "Signing & Capabilities"
-3. Set:
-   - Team: your Apple Developer team
-   - Bundle Identifier: the same as in step 2 (e.g. `com.yourcompany.housepulse`)
-   - Enable "Automatically manage signing" (recommended for first TestFlight build)
-4. Ensure "Version" and "Build" are set (General tab):
-   - Version: e.g. `0.1.0`
-   - Build: `1` (must increase each upload)
+Because you do not have Xcode, signing must be done in CI (GitHub Actions).
+
+You need to create:
+1) App Store Connect API key (for uploading builds to TestFlight)
+2) An Apple Distribution certificate + App Store provisioning profile (for code signing)
+
+### 3.1 Create App Store Connect API key (upload auth)
+
+1. App Store Connect -> Users and Access -> Keys -> App Store Connect API
+2. Generate API key
+3. Save:
+   - Issuer ID
+   - Key ID
+   - Download `.p8` (only once)
+
+### 3.2 Create an Apple Distribution certificate WITHOUT a Mac
+
+You can generate the private key and CSR on any machine (Linux/Windows via WSL is fine).
+
+1. Generate a private key + CSR:
+   ```bash
+   openssl genrsa -out housepulse_dist.key 2048
+   openssl req -new -key housepulse_dist.key -out housepulse_dist.csr -subj "/CN=HousePulse Distribution"
+   ```
+2. Apple Developer portal -> Certificates -> "+" -> Apple Distribution
+3. Upload the CSR (`housepulse_dist.csr`)
+4. Download the certificate as `.cer` (e.g. `distribution.cer`)
+5. Convert `.cer` + private key -> `.p12`:
+   ```bash
+   openssl x509 -in distribution.cer -inform DER -out distribution.pem -outform PEM
+   openssl pkcs12 -export \
+     -inkey housepulse_dist.key \
+     -in distribution.pem \
+     -out housepulse_distribution.p12 \
+     -passout pass:YOUR_P12_PASSWORD
+   ```
+
+### 3.3 Create an App Store provisioning profile
+
+1. Apple Developer portal -> Profiles -> "+" -> App Store
+2. Select your App ID (Bundle ID from step 2)
+3. Select the Apple Distribution certificate you created in 3.2
+4. Name the profile (remember the exact name; you will store it in GitHub secrets)
+5. Generate and download `.mobileprovision`
+
+## 4) Add GitHub Actions secrets (required)
+
+GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret:
+
+App config:
+- `APP_IDENTIFIER`: your bundle id, e.g. `com.yourcompany.housepulse`
+- `TEAM_ID`: Apple Developer Team ID (Developer portal -> Membership)
+- `PROVISIONING_PROFILE_NAME`: EXACT profile name from step 3.3
+
+App Store Connect API key (upload auth):
+- `APP_STORE_CONNECT_API_KEY_ID`: Key ID
+- `APP_STORE_CONNECT_API_ISSUER_ID`: Issuer ID
+- `APP_STORE_CONNECT_API_KEY_CONTENT`: base64 of the `.p8` file content
+
+Signing (code signing in CI):
+- `BUILD_CERTIFICATE_BASE64`: base64 of `housepulse_distribution.p12`
+- `P12_PASSWORD`: the password you used when exporting the `.p12`
+- `KEYCHAIN_PASSWORD`: any random password (used only on CI runner)
+- `PROVISIONING_PROFILE_BASE64`: base64 of your `.mobileprovision`
+
+Base64 helpers:
+```bash
+# macOS
+base64 -i file.p8 | pbcopy
+
+# Linux
+base64 -w 0 file.p8
+```
+
+## 5) Trigger the TestFlight upload from GitHub Actions
+
+This repo includes a `deploy-testflight` job in `.github/workflows/ios-ci.yml`.
+
+1. Push to `main`.
+2. Go to GitHub -> Actions -> workflow "iOS CI".
+3. Ensure `deploy-testflight` runs and succeeds.
+4. Go to App Store Connect -> TestFlight and wait for processing to finish.
 
 CloudKit:
 - If you enable iCloud/CloudKit capability, Xcode may prompt you to create/select an iCloud container.
 - Use a container like `iCloud.com.yourcompany.housepulse` and ensure it matches your bundle id strategy.
 
-## 4) Create the first Archive
+## 6) Install from TestFlight on iPhone
 
-1. Select the scheme: `HousePulse`
-2. Select "Any iOS Device (arm64)" (not a simulator).
-3. Product -> Archive
-4. Xcode will build an Archive and open the Organizer.
-
-If Archive is disabled:
-- Make sure you selected a device target (not a simulator).
-- Confirm the scheme is an app scheme (HousePulse) and build configuration is Release for Archive.
-
-## 5) Upload to TestFlight
-
-In Organizer:
-1. Select the newest archive.
-2. Click "Distribute App".
-3. Choose "App Store Connect".
-4. Choose "Upload".
-5. Follow prompts (Xcode will handle signing if "Automatically manage signing" is enabled).
-6. Upload.
-
-Then in App Store Connect:
-1. Go to the HousePulse app -> TestFlight tab.
-2. Wait for "Processing" to finish (can take 5-30 minutes).
-3. If Apple asks for export compliance / encryption:
-   - For most apps using standard Apple crypto only, you typically answer "No" for custom encryption.
-   - If you are unsure, answer carefully and consider Apple docs.
-
-## 6) Enable Internal Testing and install from TestFlight
-
-1. In App Store Connect -> HousePulse -> TestFlight:
-   - Create an "Internal Testing" group (or use the default).
-2. Add testers:
-   - Add your Apple ID email and any teammates (must have access or be invited).
-3. Assign the build to the group.
-4. On your iPhone:
-   - Install the "TestFlight" app from the App Store.
-   - Accept the invite / open the TestFlight link.
-   - Install HousePulse from TestFlight.
+1. App Store Connect -> HousePulse -> TestFlight:
+   - Create an "Internal Testing" group (or use the default)
+2. Add yourself as an internal tester and assign the new build to the group.
+3. On iPhone:
+   - Install the "TestFlight" app
+   - Accept the invite
+   - Install HousePulse
 
 ## 7) Common blockers (quick fixes)
 
@@ -123,17 +164,8 @@ Then in App Store Connect:
   - Verify the CloudKit environment (Development vs Production) and that schema is configured.
   - See `docs/2026-01-10_cloudkit-setup-guide.md`.
 
-## 8) Optional: automate uploads (Fastlane + GitHub Actions)
+## Notes about this repo's CI implementation
 
-Once the manual flow works end-to-end, automation is worth doing.
-
-High-level:
-1. Create an App Store Connect API key (Users and Access -> Keys).
-2. Store secrets in GitHub (repo settings -> Secrets).
-3. Enable TestFlight deploy job in `.github/workflows/ios-ci.yml` (it is currently disabled/commented in this repo).
-4. Use Fastlane lanes from `fastlane/Fastfile`.
-
-Detailed references:
-- `docs/2026-01-17_fastlane-setup.md`
-- `docs/2026-01-10_github-actions-setup.md`
-
+- Upload is done via Fastlane lane `beta` in `fastlane/Fastfile`.
+- Signing is done via a Distribution `.p12` + App Store `.mobileprovision` injected via GitHub Actions secrets.
+- The workflow always runs build/tests; TestFlight upload runs only on pushes to `main`.
