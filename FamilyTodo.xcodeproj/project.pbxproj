@@ -64,7 +64,7 @@
 			containerPortal = A1B2C3D4E5F60718293A4B5C /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A1B2C3D4E5F60718293A4B60;
-			remoteInfo = FamilyTodo;
+			remoteInfo = HousePulse;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -78,7 +78,7 @@
 		3F05BA5B21AD42F7892B3C0D /* RecurringChoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoreTests.swift; sourceTree = "<group>"; };
 		29641B06528147179F25068D /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdTests.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A4B75 /* FamilyTodo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = FamilyTodo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60718293A4B75 /* HousePulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = HousePulse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B77 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F60718293A4B78 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -192,7 +192,7 @@
 		A1B2C3D4E5F60718293A4B5E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A1B2C3D4E5F60718293A4B75 /* FamilyTodo.app */,
+				A1B2C3D4E5F60718293A4B75 /* HousePulse.app */,
 				A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */,
 			);
 			name = Products;
@@ -250,7 +250,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A1B2C3D4E5F60718293A4B60 /* FamilyTodo */,
+				A1B2C3D4E5F60718293A4B60 /* HousePulse */,
 				A1B2C3D4E5F60718293A4B61 /* FamilyTodoTests */,
 			);
 		};
@@ -327,9 +327,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A1B2C3D4E5F60718293A4B60 /* FamilyTodo */ = {
+		A1B2C3D4E5F60718293A4B60 /* HousePulse */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A1B2C3D4E5F60718293A4B63 /* Build configuration list for PBXNativeTarget "FamilyTodo" */;
+			buildConfigurationList = A1B2C3D4E5F60718293A4B63 /* Build configuration list for PBXNativeTarget "HousePulse" */;
 			buildPhases = (
 				A1B2C3D4E5F60718293A4B6B /* Sources */,
 				A1B2C3D4E5F60718293A4B6C /* Frameworks */,
@@ -339,9 +339,9 @@
 			);
 			dependencies = (
 			);
-			name = FamilyTodo;
-			productName = FamilyTodo;
-			productReference = A1B2C3D4E5F60718293A4B75 /* FamilyTodo.app */;
+			name = HousePulse;
+			productName = HousePulse;
+			productReference = A1B2C3D4E5F60718293A4B75 /* HousePulse.app */;
 			productType = "com.apple.product-type.application";
 		};
 		A1B2C3D4E5F60718293A4B61 /* FamilyTodoTests */ = {
@@ -449,7 +449,7 @@
 /* Begin PBXTargetDependency section */
 		A1B2C3D4E5F60718293A4B81 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A1B2C3D4E5F60718293A4B60 /* FamilyTodo */;
+			target = A1B2C3D4E5F60718293A4B60 /* HousePulse */;
 			targetProxy = A1B2C3D4E5F60718293A4B82 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -559,7 +559,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FamilyTodo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FamilyTodo";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HousePulse.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HousePulse";
 			};
 			name = Debug;
 		};
@@ -584,7 +584,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FamilyTodo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FamilyTodo";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HousePulse.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HousePulse";
 			};
 			name = Release;
 		};
@@ -600,7 +600,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A1B2C3D4E5F60718293A4B63 /* Build configuration list for PBXNativeTarget "FamilyTodo" */ = {
+		A1B2C3D4E5F60718293A4B63 /* Build configuration list for PBXNativeTarget "HousePulse" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A1B2C3D4E5F60718293A4B67 /* Debug */,

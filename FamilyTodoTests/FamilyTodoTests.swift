@@ -1,4 +1,4 @@
-@testable import FamilyTodo
+@testable import HousePulse
 import XCTest
 
 /// Base test file - specific tests are in dedicated test files:
@@ -10,6 +10,6 @@ import XCTest
 final class FamilyTodoTests: XCTestCase {
     func testAppImportsCorrectly() {
         // Verify the app module can be imported
-        XCTAssertTrue(true, "FamilyTodo module imported successfully")
+        XCTAssertTrue(true, "HousePulse module imported successfully")
     }
 }

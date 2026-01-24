@@ -199,7 +199,7 @@ func test_calculateNextScheduledDate_weekly_addsSevenDays() {
 **Struktura testu:**
 ```swift
 import XCTest
-@testable import FamilyTodo // Import your app module
+@testable import HousePulse // Import your app module
 
 class RecurringChoreTests: XCTestCase {
     // 1. Setup (runs before each test)
@@ -319,7 +319,7 @@ func test_completeTask_savesToCloudKit() async throws {
 **Opcja 2: Command Line**
 ```bash
 xcodebuild test \
-  -scheme FamilyTodo \
+  -scheme HousePulse \
   -destination 'platform=iOS Simulator,name=iPhone 15'
 ```
 
@@ -330,7 +330,7 @@ xcodebuild test \
   run: |
     xcodebuild test \
       -project FamilyTodo.xcodeproj \
-      -scheme FamilyTodo \
+      -scheme HousePulse \
       -destination 'platform=iOS Simulator,name=iPhone 15'
 ```
 
@@ -340,7 +340,7 @@ xcodebuild test \
 ```
 1. Edit Scheme → Test tab
 2. Code Coverage → ☑ Gather coverage for some targets
-3. Select FamilyTodo target
+3. Select HousePulse target
 4. Run tests (Cmd+U)
 5. View coverage: Report Navigator (Cmd+9) → Coverage tab
 ```
@@ -807,7 +807,7 @@ W `.github/workflows/ios-ci.yml`:
   run: |
     xcodebuild test \
       -project FamilyTodo.xcodeproj \
-      -scheme FamilyTodo \
+      -scheme HousePulse \
       -destination 'platform=iOS Simulator,name=iPhone 15'
 ```
 

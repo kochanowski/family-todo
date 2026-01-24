@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import FamilyTodo
+@testable import HousePulse
 
 final class HouseholdTests: XCTestCase {
     // MARK: - Initialization Tests

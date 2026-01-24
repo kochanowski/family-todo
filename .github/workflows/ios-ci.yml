@@ -40,7 +40,7 @@ jobs:
           # Keep a raw log and print its tail on failure for easier debugging in CI.
           xcodebuild clean build \
             -project FamilyTodo.xcodeproj \
-            -scheme FamilyTodo \
+            -scheme HousePulse \
             -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -59,7 +59,7 @@ jobs:
         run: |
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
-            -scheme FamilyTodo \
+            -scheme HousePulse \
             -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -129,8 +129,8 @@ jobs:
   #     - name: Upload IPA
   #       uses: actions/upload-artifact@v4
   #       with:
-  #         name: FamilyTodo-IPA
-  #         path: build/FamilyTodo.ipa
+  #         name: HousePulse-IPA
+  #         path: build/HousePulse.ipa
   #         retention-days: 30
 
   # ─────────────────────────────────────────────────────────────

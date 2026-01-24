@@ -1,4 +1,4 @@
-@testable import FamilyTodo
+@testable import HousePulse
 import XCTest
 
 final class TaskTests: XCTestCase {

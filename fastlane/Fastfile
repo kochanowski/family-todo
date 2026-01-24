@@ -5,7 +5,7 @@ platform :ios do
   # Configuration
   # ─────────────────────────────────────────────────────────────
 
-  SCHEME = "FamilyTodo"
+  SCHEME = "HousePulse"
   PROJECT = "FamilyTodo.xcodeproj"
 
   before_all do
@@ -63,7 +63,7 @@ platform :ios do
       scheme: SCHEME,
       export_method: "app-store",
       output_directory: "./build",
-      output_name: "FamilyTodo.ipa"
+      output_name: "HousePulse.ipa"
     )
 
     # Upload to TestFlight
@@ -103,7 +103,7 @@ platform :ios do
       scheme: SCHEME,
       export_method: "app-store",
       output_directory: "./build",
-      output_name: "FamilyTodo.ipa"
+      output_name: "HousePulse.ipa"
     )
 
     # Upload to App Store
