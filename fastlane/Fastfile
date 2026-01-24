@@ -84,7 +84,7 @@ platform :ios do
         "DEVELOPMENT_TEAM=#{team_id}",
         "CODE_SIGN_STYLE=Manual",
         "PROVISIONING_PROFILE_SPECIFIER=\"#{profile_name_escaped}\"",
-        "CODE_SIGN_IDENTITY=Apple Distribution",
+        "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
       ].join(" "),
       output_directory: "./build",
       output_name: "HousePulse.ipa"
