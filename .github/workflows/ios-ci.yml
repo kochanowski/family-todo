@@ -147,11 +147,15 @@ jobs:
           openssl pkcs12 -info -in "$CERT_PATH" -passin pass:"$P12_PASSWORD" -noout >/dev/null
 
           # `-A` avoids interactive prompts ("User interaction is not allowed") during codesign in CI.
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
+          # The import may output "Cannot parse a NULL or zero-length data" warning and exit 1,
+          # but the identity is still imported successfully. We ignore the exit code and verify.
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security || true
 
-          # Some runners fail with "Cannot parse a NULL or zero-length data".
-          # The `-A` flag on import should be sufficient, so we skip partition-list entirely.
-          # The import with -A grants codesign access without needing partition-list.
+          # Verify the certificate was imported
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q "Apple Distribution" || {
+            echo "::error::Failed to import signing certificate"
+            exit 1
+          }
 
           # Install provisioning profile
           PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
