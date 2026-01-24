@@ -151,9 +151,8 @@ jobs:
 
           # Some runners fail with "Cannot parse a NULL or zero-length data".
           # The `-A` flag on import should be sufficient, so we make this non-fatal.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || {
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || \
             echo "::warning::set-key-partition-list failed (non-fatal, -A flag should suffice)"
-          }
 
           # Install provisioning profile
           PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
