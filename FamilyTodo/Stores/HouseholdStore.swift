@@ -66,8 +66,10 @@ final class HouseholdStore: ObservableObject {
         currentMember = cachedMember.toMember()
 
         // Load household from cache
+        // Note: SwiftData #Predicate requires captured values to be local variables
+        let targetHouseholdId = cachedMember.householdId
         let householdDescriptor = FetchDescriptor<CachedHousehold>(
-            predicate: #Predicate { $0.id == cachedMember.householdId }
+            predicate: #Predicate { $0.id == targetHouseholdId }
         )
 
         if let cachedHousehold = try? context.fetch(householdDescriptor).first {
