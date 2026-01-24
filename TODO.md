@@ -9,8 +9,8 @@
 - [x] CloudKit CRUD for all core models ✅
 - [x] SwiftData local storage for all models ✅
 - [x] Basic offline support (cache + optimistic updates) ✅
-- [ ] Basic notifications (daily digest + real deadlines)
-- [ ] Settings for notifications + celebrations
+- [x] Basic notifications (daily digest + real deadlines) ✅
+- [x] Settings for notifications + celebrations ✅
 
 ## Completed (Implemented or in codebase)
 - [x] Xcode project scaffold and SwiftUI app shell
@@ -43,8 +43,8 @@
 - [x] Full CloudKit CRUD for Household/Member/Area/RecurringChore/Task/ShoppingItem
 - [x] SwiftData local storage for all models
 - [x] Basic offline support (cache-first load + optimistic updates)
-- [ ] Basic notifications (daily digest + real deadlines)
-- [ ] Settings for notifications + celebrations
+- [x] Basic notifications (daily digest + real deadlines)
+- [x] Settings for notifications + celebrations
 
 ### Priority 2 — Shared Shopping List (Enhancements)
 - [ ] Suggestions from `Bought` (sort by count + recency, limit 5–50)
