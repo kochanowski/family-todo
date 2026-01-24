@@ -25,6 +25,7 @@
 		A1B2C3D4E5F60718293A4B94 /* RecurringChore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B99 /* RecurringChore.swift */; };
 		D1F7A0C7A07C4C67B7B8B4A1 /* ShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */; };
 		E3C9F1B3FAE44A9A91D2F23C /* ShoppingListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */; };
+		CA4C5B16A021E566985F7D41 /* ShoppingListSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80B1F672FCD02ACCEA4E4094 /* ShoppingListSettingsStore.swift */; };
 		F8A44E2D4BCE4A6EA4E8D7E9 /* MemberStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E2B4C6A9F74B2C8C1D3E4F /* MemberStore.swift */; };
 		A1B2C3D4E5F60718293A4B9B /* CloudKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B9C /* CloudKitManager.swift */; };
 		A1B2C3D4E5F60718293A4B9D1 /* CloudKitManager+Mapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B9D2 /* CloudKitManager+Mapping.swift */; };
@@ -89,6 +90,7 @@
 		A1B2C3D4E5F60718293A4B98 /* Task.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Task.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B99 /* RecurringChore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChore.swift; sourceTree = "<group>"; };
 		B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingItem.swift; sourceTree = "<group>"; };
+		80B1F672FCD02ACCEA4E4094 /* ShoppingListSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListSettingsStore.swift; sourceTree = "<group>"; };
 		C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStore.swift; sourceTree = "<group>"; };
 		D8E2B4C6A9F74B2C8C1D3E4F /* MemberStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberStore.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B9C /* CloudKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitManager.swift; sourceTree = "<group>"; };
@@ -299,6 +301,7 @@
 				6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */,
 				B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */,
 				CC6E3A1A06B14DD7965A808D /* AreaStore.swift */,
+				80B1F672FCD02ACCEA4E4094 /* ShoppingListSettingsStore.swift */,
 				14A0E4DF648F4103BE515D90 /* HouseholdStore.swift */,
 				C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */,
 				D8E2B4C6A9F74B2C8C1D3E4F /* MemberStore.swift */,
@@ -398,6 +401,7 @@
 				A477D45D71774433A314377F /* RecurringChoreStore.swift in Sources */,
 				0C8ECE6E2288433FAD9FE1AF /* RecurringChoresView.swift in Sources */,
 				8D60350E033D46F3B6B944E1 /* AreaStore.swift in Sources */,
+				CA4C5B16A021E566985F7D41 /* ShoppingListSettingsStore.swift in Sources */,
 				56EBB670B95D4B0385265E2E /* AreasView.swift in Sources */,
 				36258FC6A196428AAD4C0C22 /* HouseholdStore.swift in Sources */,
 				E3C9F1B3FAE44A9A91D2F23C /* ShoppingListStore.swift in Sources */,
