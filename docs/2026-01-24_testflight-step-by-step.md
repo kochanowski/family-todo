@@ -80,7 +80,10 @@ You can generate the private key and CSR on any machine (Linux/Windows via WSL i
 5. Convert `.cer` + private key -> `.p12`:
    ```bash
    openssl x509 -in distribution.cer -inform DER -out distribution.pem -outform PEM
-   openssl pkcs12 -export \
+   # IMPORTANT (OpenSSL 3): add `-legacy` for macOS Keychain compatibility.
+   # Without it GitHub Actions may fail with:
+   # "SecKeychainItemImport: MAC verification failed during PKCS12 import".
+   openssl pkcs12 -export -legacy \
      -inkey housepulse_dist.key \
      -in distribution.pem \
      -out housepulse_distribution.p12 \
@@ -163,6 +166,12 @@ CloudKit:
   - Verify iCloud container exists and is enabled for the target.
   - Verify the CloudKit environment (Development vs Production) and that schema is configured.
   - See `docs/2026-01-10_cloudkit-setup-guide.md`.
+
+- GitHub Actions fails at "Install signing certificate" with:
+  - `SecKeychainItemImport: MAC verification failed during PKCS12 import`:
+    - You likely created the `.p12` with OpenSSL 3 defaults (PBES2/AES/HMAC-SHA256).
+    - Re-export the `.p12` with `-legacy` (see step 3.2) and re-upload `BUILD_CERTIFICATE_BASE64`.
+    - Use an ASCII-only `P12_PASSWORD` (letters/numbers) to avoid encoding issues.
 
 ## Notes about this repo's CI implementation
 
