@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
-"""Add areas management files to Xcode project"""
+"""Add household onboarding files to Xcode project"""
 
 import re
 import uuid
+from pathlib import Path
 
-PROJECT_FILE = 'FamilyTodo.xcodeproj/project.pbxproj'
+def find_repo_root(start: Path) -> Path:
+    cur = start
+    while True:
+        if (cur / "FamilyTodo.xcodeproj").is_dir():
+            return cur
+        if cur.parent == cur:
+            raise FileNotFoundError("Could not locate repo root containing FamilyTodo.xcodeproj")
+        cur = cur.parent
+
+
+PROJECT_FILE = (
+    find_repo_root(Path(__file__).resolve().parent)
+    / "FamilyTodo.xcodeproj"
+    / "project.pbxproj"
+)
 
 def generate_xcode_uuid():
     return uuid.uuid4().hex[:24].upper()
@@ -13,11 +28,13 @@ def main():
     with open(PROJECT_FILE, 'r') as f:
         content = f.read()
 
+    # New files to add
     files = {
-        'AreaStore.swift': {'group': 'Stores', 'path': 'Stores'},
-        'AreasView.swift': {'group': 'Views', 'path': 'Views'},
+        'HouseholdStore.swift': {'group': 'Stores', 'path': 'Stores'},
+        'OnboardingView.swift': {'group': 'Views', 'path': 'Views'},
     }
 
+    # Generate UUIDs
     for filename, data in files.items():
         data['file_ref'] = generate_xcode_uuid()
         data['build_file'] = generate_xcode_uuid()
@@ -36,27 +53,27 @@ def main():
         file_ref_entries += f"\t\t{data['file_ref']} /* {filename} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {filename}; sourceTree = \"<group>\"; }};\n"
     content = content[:file_ref_end] + file_ref_entries + content[file_ref_end:]
 
-    # 3. Find group UUIDs
+    # 3. Find Stores and Views group UUIDs
     stores_uuid = re.search(r'(\w+) /\* Stores \*/ = \{', content).group(1)
     views_uuid = re.search(r'(\w+) /\* Views \*/ = \{', content).group(1)
 
-    # 4. Add to Stores group
+    # 4. Add HouseholdStore.swift to Stores group
     stores_pattern = rf'({stores_uuid} /\* Stores \*/ = \{{\s*isa = PBXGroup;\s*children = \()'
     match = re.search(stores_pattern, content)
     if match:
         insert_pos = match.end()
-        ref = files['AreaStore.swift']['file_ref']
-        content = content[:insert_pos] + f"\n\t\t\t\t{ref} /* AreaStore.swift */," + content[insert_pos:]
+        ref = files['HouseholdStore.swift']['file_ref']
+        content = content[:insert_pos] + f"\n\t\t\t\t{ref} /* HouseholdStore.swift */," + content[insert_pos:]
 
-    # 5. Add to Views group
+    # 5. Add OnboardingView.swift to Views group
     views_pattern = rf'({views_uuid} /\* Views \*/ = \{{\s*isa = PBXGroup;\s*children = \()'
     match = re.search(views_pattern, content)
     if match:
         insert_pos = match.end()
-        ref = files['AreasView.swift']['file_ref']
-        content = content[:insert_pos] + f"\n\t\t\t\t{ref} /* AreasView.swift */," + content[insert_pos:]
+        ref = files['OnboardingView.swift']['file_ref']
+        content = content[:insert_pos] + f"\n\t\t\t\t{ref} /* OnboardingView.swift */," + content[insert_pos:]
 
-    # 6. Add to PBXSourcesBuildPhase
+    # 6. Add files to PBXSourcesBuildPhase
     sources_pattern = r'(isa = PBXSourcesBuildPhase;[^}]+files = \()'
     match = re.search(sources_pattern, content)
     if match:
@@ -69,7 +86,9 @@ def main():
     with open(PROJECT_FILE, 'w') as f:
         f.write(content)
 
-    print("✅ Added areas files to Xcode project")
+    print("✅ Added household files to Xcode project:")
+    for filename, data in files.items():
+        print(f"  - {data['path']}/{filename}")
 
 if __name__ == '__main__':
     main()

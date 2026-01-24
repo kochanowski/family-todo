@@ -5,7 +5,7 @@
 
 require 'securerandom'
 
-PROJECT_FILE = 'FamilyTodo.xcodeproj/project.pbxproj'
+PROJECT_FILE = File.expand_path('../../FamilyTodo.xcodeproj/project.pbxproj', __dir__)
 
 # Files to add
 NEW_FILES = {

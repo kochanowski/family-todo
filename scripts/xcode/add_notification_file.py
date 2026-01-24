@@ -1,8 +1,25 @@
 #!/usr/bin/env python3
+"""Add NotificationService.swift to Xcode project."""
+
 import re
 import uuid
+from pathlib import Path
 
-PROJECT_FILE = 'FamilyTodo.xcodeproj/project.pbxproj'
+def find_repo_root(start: Path) -> Path:
+    cur = start
+    while True:
+        if (cur / "FamilyTodo.xcodeproj").is_dir():
+            return cur
+        if cur.parent == cur:
+            raise FileNotFoundError("Could not locate repo root containing FamilyTodo.xcodeproj")
+        cur = cur.parent
+
+
+PROJECT_FILE = (
+    find_repo_root(Path(__file__).resolve().parent)
+    / "FamilyTodo.xcodeproj"
+    / "project.pbxproj"
+)
 
 def generate_xcode_uuid():
     return uuid.uuid4().hex[:24].upper()
