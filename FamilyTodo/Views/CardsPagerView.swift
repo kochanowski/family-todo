@@ -4,6 +4,7 @@ import SwiftUI
 
 struct CardsPagerView: View {
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var userSession: UserSession
     @ObservedObject var householdStore: HouseholdStore
     @StateObject private var taskStore: TaskStore
     @StateObject private var shoppingListStore: ShoppingListStore
@@ -106,12 +107,24 @@ struct CardsPagerView: View {
         }
         .ignoresSafeArea()
         .task(id: householdId) {
+            taskStore.setSyncMode(userSession.syncMode)
+            shoppingListStore.setSyncMode(userSession.syncMode)
+            recurringChoreStore.setSyncMode(userSession.syncMode)
+            areaStore.setSyncMode(userSession.syncMode)
+            memberStore.setSyncMode(userSession.syncMode)
             taskStore.setHousehold(householdId)
             await taskStore.loadTasks()
             await shoppingListStore.loadItems()
             await recurringChoreStore.loadChores()
             await areaStore.loadAreas()
             await memberStore.loadMembers()
+        }
+        .onChange(of: userSession.syncMode) { _, newMode in
+            taskStore.setSyncMode(newMode)
+            shoppingListStore.setSyncMode(newMode)
+            recurringChoreStore.setSyncMode(newMode)
+            areaStore.setSyncMode(newMode)
+            memberStore.setSyncMode(newMode)
         }
     }
 

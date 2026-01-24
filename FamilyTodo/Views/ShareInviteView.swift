@@ -1,9 +1,9 @@
-import CloudKit
 import SwiftUI
 
 /// View for generating and sharing invite links to household
 struct ShareInviteView: View {
     @EnvironmentObject var householdStore: HouseholdStore
+    @EnvironmentObject private var userSession: UserSession
     @State private var shareURL: URL?
     @State private var isLoading = false
     @State private var showShareSheet = false
@@ -62,7 +62,12 @@ struct ShareInviteView: View {
 
     @ViewBuilder
     private var shareContent: some View {
-        if isLoading {
+        if userSession.isGuest {
+            Text("Sign in with Apple to invite members and sync with iCloud.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        } else if isLoading {
             ProgressView("Loading...")
         } else if let url = shareURL {
             shareButtonSection(url: url)
@@ -122,6 +127,7 @@ struct ShareInviteView: View {
     // MARK: - Actions
 
     private func loadExistingShare() async {
+        guard !userSession.isGuest else { return }
         isLoading = true
         do {
             shareURL = try await householdStore.getShareURL()
@@ -133,6 +139,7 @@ struct ShareInviteView: View {
 
     private func createShare() {
         _Concurrency.Task {
+            guard !userSession.isGuest else { return }
             isLoading = true
             do {
                 let share = try await householdStore.createShare()
@@ -162,5 +169,6 @@ struct ShareSheet: UIViewControllerRepresentable {
     NavigationStack {
         ShareInviteView()
             .environmentObject(HouseholdStore())
+            .environmentObject(UserSession.shared)
     }
 }

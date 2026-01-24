@@ -5,6 +5,7 @@ struct OnboardingView: View {
     @ObservedObject var householdStore: HouseholdStore
     let userId: String
     let displayName: String
+    let isCloudSyncEnabled: Bool
 
     @State private var showCreateSheet = false
     @State private var showJoinSheet = false
@@ -29,6 +30,14 @@ struct OnboardingView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+
+                    if !isCloudSyncEnabled {
+                        Text("Guest mode keeps everything on this device.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
                 }
 
                 Spacer()
@@ -52,6 +61,14 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .disabled(!isCloudSyncEnabled)
+
+                    if !isCloudSyncEnabled {
+                        Text("Sign in to join an existing household or invite others.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .padding(.horizontal, 32)
 
@@ -219,6 +236,7 @@ struct JoinHouseholdSheet: View {
     OnboardingView(
         householdStore: HouseholdStore(),
         userId: "test-user",
-        displayName: "Test User"
+        displayName: "Test User",
+        isCloudSyncEnabled: true
     )
 }

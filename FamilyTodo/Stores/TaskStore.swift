@@ -15,6 +15,15 @@ final class TaskStore: ObservableObject {
     private lazy var notificationService = NotificationService.shared
     private let modelContext: ModelContext
     private var householdId: UUID?
+    private var syncMode: SyncMode = .cloud
+
+    func setSyncMode(_ mode: SyncMode) {
+        syncMode = mode
+    }
+
+    private var isCloudSyncEnabled: Bool {
+        syncMode == .cloud
+    }
 
     /// WIP limit per user (max 3 tasks in "Next")
     static let wipLimit = 3
@@ -61,6 +70,11 @@ final class TaskStore: ObservableObject {
 
         // First, load from local cache
         loadFromCache()
+
+        if !isCloudSyncEnabled {
+            isLoading = false
+            return
+        }
 
         // Then sync with CloudKit
         do {
@@ -148,10 +162,15 @@ final class TaskStore: ObservableObject {
 
         // Save to cache
         let cached = CachedTask(from: task)
-        cached.syncStatusRaw = "pendingUpload"
-        cached.lastSyncedAt = nil
+        cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+        cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
         modelContext.insert(cached)
         try? modelContext.save()
+
+        if !isCloudSyncEnabled {
+            await notificationService.scheduleTaskReminder(for: task)
+            return
+        }
 
         // Sync to CloudKit
         do {
@@ -191,9 +210,14 @@ final class TaskStore: ObservableObject {
         )
         if let cached = try? modelContext.fetch(descriptor).first {
             cached.update(from: updatedTask)
-            cached.syncStatusRaw = "pendingUpload"
-            cached.lastSyncedAt = nil
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             try? modelContext.save()
+        }
+
+        if !isCloudSyncEnabled {
+            await notificationService.scheduleTaskReminder(for: updatedTask)
+            return
         }
 
         // Sync to CloudKit
@@ -232,6 +256,11 @@ final class TaskStore: ObservableObject {
         if let cached = try? modelContext.fetch(descriptor).first {
             modelContext.delete(cached)
             try? modelContext.save()
+        }
+
+        if !isCloudSyncEnabled {
+            await notificationService.removeTaskReminder(for: task)
+            return
         }
 
         // Delete from CloudKit

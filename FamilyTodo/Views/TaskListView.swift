@@ -4,6 +4,7 @@ import SwiftUI
 /// Main Kanban-style task list view with three columns: Next, Backlog, Done
 struct TaskListView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var userSession: UserSession
     @StateObject private var store: TaskStore
     @StateObject private var areaStore: AreaStore
     @State private var showingAddTask = false
@@ -15,7 +16,7 @@ struct TaskListView: View {
     init(householdId: UUID, modelContext: ModelContext) {
         self.householdId = householdId
         _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
-        _areaStore = StateObject(wrappedValue: AreaStore(householdId: householdId))
+        _areaStore = StateObject(wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext))
     }
 
     private func filteredTasks(_ tasks: [Task]) -> [Task] {
@@ -115,9 +116,15 @@ struct TaskListView: View {
                 }
             }
             .task {
+                store.setSyncMode(userSession.syncMode)
+                areaStore.setSyncMode(userSession.syncMode)
                 store.setHousehold(householdId)
                 await store.loadTasks()
                 await areaStore.loadAreas()
+            }
+            .onChange(of: userSession.syncMode) { _, newMode in
+                store.setSyncMode(newMode)
+                areaStore.setSyncMode(newMode)
             }
         }
     }
@@ -301,4 +308,5 @@ struct TaskRowView: View {
         householdId: UUID(),
         modelContext: container.mainContext
     )
+    .environmentObject(UserSession.shared)
 }

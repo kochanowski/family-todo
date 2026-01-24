@@ -1,3 +1,4 @@
+import SwiftData
 import XCTest
 
 @testable import HousePulse
@@ -178,16 +179,54 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNil(store.error)
     }
 
+    func testCreateHouseholdLocalOnlySeedsCache() async throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+            CachedArea.self,
+            CachedTask.self,
+            CachedRecurringChore.self,
+            CachedShoppingItem.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        store.setModelContext(container.mainContext)
+        store.setSyncMode(.localOnly)
+
+        try await store.createHousehold(name: "Local Home", userId: "guest-user", displayName: "Guest")
+
+        XCTAssertNotNil(store.currentHousehold)
+        XCTAssertNotNil(store.currentMember)
+        XCTAssertEqual(store.currentMember?.role, .owner)
+
+        let households = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
+        let members = try container.mainContext.fetch(FetchDescriptor<CachedMember>())
+        let areas = try container.mainContext.fetch(FetchDescriptor<CachedArea>())
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedTask>())
+        let items = try container.mainContext.fetch(FetchDescriptor<CachedShoppingItem>())
+        let chores = try container.mainContext.fetch(FetchDescriptor<CachedRecurringChore>())
+
+        XCTAssertEqual(households.count, 1)
+        XCTAssertEqual(members.count, 1)
+        XCTAssertFalse(areas.isEmpty)
+        XCTAssertFalse(tasks.isEmpty)
+        XCTAssertFalse(items.isEmpty)
+        XCTAssertFalse(chores.isEmpty)
+    }
+
     // MARK: - HouseholdError Tests
 
     func testHouseholdErrorDescriptions() {
         XCTAssertNotNil(HouseholdError.invalidInviteCode.errorDescription)
         XCTAssertNotNil(HouseholdError.householdNotFound.errorDescription)
         XCTAssertNotNil(HouseholdError.invalidShare.errorDescription)
+        XCTAssertNotNil(HouseholdError.cloudSyncRequired.errorDescription)
 
         XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription!.contains("invite code"))
         XCTAssertTrue(HouseholdError.householdNotFound.errorDescription!.contains("not found"))
         XCTAssertTrue(HouseholdError.invalidShare.errorDescription!.contains("share"))
+        XCTAssertTrue(HouseholdError.cloudSyncRequired.errorDescription!.contains("Sign in"))
     }
 }
 

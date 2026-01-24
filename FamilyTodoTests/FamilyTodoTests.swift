@@ -1,4 +1,5 @@
 @testable import HousePulse
+import Combine
 import XCTest
 
 /// Base test file - specific tests are in dedicated test files:
@@ -11,5 +12,91 @@ final class FamilyTodoTests: XCTestCase {
     func testAppImportsCorrectly() {
         // Verify the app module can be imported
         XCTAssertTrue(true, "HousePulse module imported successfully")
+    }
+}
+
+@MainActor
+final class UserSessionTests: XCTestCase {
+    @MainActor
+    private final class TestAuthenticationService: AuthenticationServiceType {
+        @Published var authenticationState: AuthenticationService.AuthenticationState = .unauthenticated
+        @Published var currentUser: AuthenticationService.AuthenticatedUser?
+
+        func signInWithApple() {
+            authenticationState = .authenticating
+        }
+
+        func signOut() {
+            authenticationState = .unauthenticated
+            currentUser = nil
+        }
+
+        func checkCloudKitStatus() async {}
+    }
+
+    private func makeUserDefaults() -> UserDefaults {
+        let suiteName = "UserSessionTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
+    func testStartGuestSessionSetsAccessAndUserId() {
+        let authService = TestAuthenticationService()
+        let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
+
+        session.startGuestSession()
+
+        XCTAssertEqual(session.sessionMode, .guest)
+        XCTAssertTrue(session.hasActiveSession)
+        XCTAssertFalse(session.isAuthenticated)
+        XCTAssertNotNil(session.userId)
+        XCTAssertEqual(session.displayName, "Guest")
+    }
+
+    func testEndGuestSessionClearsAccess() {
+        let authService = TestAuthenticationService()
+        let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
+
+        session.startGuestSession()
+        session.endGuestSession()
+
+        XCTAssertEqual(session.sessionMode, .signedOut)
+        XCTAssertFalse(session.hasActiveSession)
+        XCTAssertNil(session.userId)
+    }
+
+    func testAuthenticatedOverridesGuest() async {
+        let authService = TestAuthenticationService()
+        let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
+
+        session.startGuestSession()
+
+        let expectation = expectation(description: "Session switches to signed in")
+        var cancellable: AnyCancellable?
+        cancellable = session.$sessionMode
+            .dropFirst()
+            .sink { mode in
+                if mode == .signedIn {
+                    expectation.fulfill()
+                }
+            }
+
+        let user = AuthenticationService.AuthenticatedUser(
+            id: "cloudkit-user",
+            appleUserID: "apple-user",
+            email: nil,
+            displayName: "Test User",
+            givenName: "Test",
+            familyName: "User"
+        )
+        authService.currentUser = user
+        authService.authenticationState = .authenticated(userID: user.id)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+        cancellable?.cancel()
+
+        XCTAssertEqual(session.sessionMode, .signedIn)
+        XCTAssertEqual(session.userId, user.id)
     }
 }

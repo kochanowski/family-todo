@@ -7,7 +7,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if userSession.isAuthenticated {
+            if userSession.hasActiveSession {
                 AuthenticatedView()
             } else {
                 SignInView()
@@ -33,13 +33,17 @@ struct AuthenticatedView: View {
             } else {
                 OnboardingView(
                     householdStore: householdStore,
-                    userId: userSession.user?.id ?? "",
-                    displayName: userSession.user?.displayName ?? "User"
+                    userId: userSession.userId ?? "",
+                    displayName: userSession.displayName ?? "User",
+                    isCloudSyncEnabled: userSession.syncMode == .cloud
                 )
             }
         }
-        .task {
-            if let userId = userSession.user?.id {
+        .task(id: userSession.sessionMode) {
+            householdStore.setModelContext(modelContext)
+            householdStore.setSyncMode(userSession.syncMode)
+
+            if let userId = userSession.userId {
                 await householdStore.loadHousehold(userId: userId)
             }
         }
@@ -234,8 +238,18 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button("Sign Out", role: .destructive) {
-                        userSession.signOut()
+                    if userSession.isGuest {
+                        Button("Sign In with Apple") {
+                            userSession.signIn()
+                        }
+
+                        Button("Exit Guest Mode", role: .destructive) {
+                            userSession.endGuestSession()
+                        }
+                    } else {
+                        Button("Sign Out", role: .destructive) {
+                            userSession.signOut()
+                        }
                     }
                 }
             }

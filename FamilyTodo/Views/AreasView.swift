@@ -1,7 +1,10 @@
+import SwiftData
 import SwiftUI
 
 /// View for managing household areas/boards
 struct AreasView: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var userSession: UserSession
     @ObservedObject var householdStore: HouseholdStore
     @StateObject private var areaStore: AreaStore
     @State private var showingAddArea = false
@@ -56,7 +59,12 @@ struct AreasView: View {
                 }
             }
             .task {
+                areaStore.setModelContext(modelContext)
+                areaStore.setSyncMode(userSession.syncMode)
                 await areaStore.loadAreas()
+            }
+            .onChange(of: userSession.syncMode) { _, newMode in
+                areaStore.setSyncMode(newMode)
             }
         }
     }
@@ -175,5 +183,10 @@ struct AreaDetailView: View {
 }
 
 #Preview {
-    AreasView(householdStore: HouseholdStore())
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: CachedArea.self, configurations: config)
+
+    return AreasView(householdStore: HouseholdStore())
+        .environmentObject(UserSession.shared)
+        .modelContainer(container)
 }

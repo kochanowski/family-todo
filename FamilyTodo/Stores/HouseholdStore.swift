@@ -12,6 +12,15 @@ final class HouseholdStore: ObservableObject {
 
     private lazy var cloudKit = CloudKitManager.shared
     private var modelContext: ModelContext?
+    private var syncMode: SyncMode = .cloud
+
+    func setSyncMode(_ mode: SyncMode) {
+        syncMode = mode
+    }
+
+    private var isCloudSyncEnabled: Bool {
+        syncMode == .cloud
+    }
 
     /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
@@ -32,6 +41,11 @@ final class HouseholdStore: ObservableObject {
 
         // 1. Load from cache first (instant UI)
         loadFromCache(userId: userId)
+
+        if !isCloudSyncEnabled {
+            isLoading = false
+            return
+        }
 
         // 2. Sync with CloudKit in background
         do {
@@ -61,7 +75,11 @@ final class HouseholdStore: ObservableObject {
             predicate: #Predicate { $0.userId == userId }
         )
 
-        guard let cachedMember = try? context.fetch(memberDescriptor).first else { return }
+        guard let cachedMember = try? context.fetch(memberDescriptor).first else {
+            currentMember = nil
+            currentHousehold = nil
+            return
+        }
 
         currentMember = cachedMember.toMember()
 
@@ -100,6 +118,101 @@ final class HouseholdStore: ObservableObject {
     func createHousehold(name: String, userId: String, displayName: String) async throws {
         isLoading = true
         error = nil
+
+        if !isCloudSyncEnabled {
+            let household = Household(
+                name: name,
+                ownerId: userId
+            )
+            let member = Member(
+                householdId: household.id,
+                userId: userId,
+                displayName: displayName,
+                role: .owner
+            )
+
+            currentHousehold = household
+            currentMember = member
+
+            guard let context = modelContext else {
+                isLoading = false
+                return
+            }
+
+            context.insert(CachedHousehold(from: household))
+            context.insert(CachedMember(from: member))
+
+            let defaultAreas = Area.defaults(for: household.id)
+            for area in defaultAreas {
+                context.insert(CachedArea(from: area))
+            }
+
+            let starterTasks = [
+                Task(
+                    householdId: household.id,
+                    title: "Fix the faucet",
+                    status: .next,
+                    assigneeId: member.id,
+                    assigneeIds: [member.id],
+                    taskType: .oneOff
+                ),
+                Task(
+                    householdId: household.id,
+                    title: "Take down the Christmas tree",
+                    status: .next,
+                    assigneeId: member.id,
+                    assigneeIds: [member.id],
+                    taskType: .oneOff
+                ),
+            ]
+
+            for task in starterTasks {
+                context.insert(CachedTask(from: task))
+            }
+
+            let starterItems = [
+                ShoppingItem(householdId: household.id, title: "Milk"),
+                ShoppingItem(householdId: household.id, title: "Bread"),
+                ShoppingItem(householdId: household.id, title: "Sugar"),
+            ]
+
+            for item in starterItems {
+                context.insert(CachedShoppingItem(from: item))
+            }
+
+            let starterChores = [
+                RecurringChore(
+                    householdId: household.id,
+                    title: "Water the plants",
+                    recurrenceType: .everyNWeeks,
+                    recurrenceInterval: 2,
+                    defaultAssigneeIds: [member.id]
+                ),
+                RecurringChore(
+                    householdId: household.id,
+                    title: "Replace towels",
+                    recurrenceType: .everyNWeeks,
+                    recurrenceInterval: 3,
+                    defaultAssigneeIds: [member.id]
+                ),
+                RecurringChore(
+                    householdId: household.id,
+                    title: "Check purifier filters",
+                    recurrenceType: .everyNWeeks,
+                    recurrenceInterval: 2,
+                    defaultAssigneeIds: [member.id]
+                ),
+            ]
+
+            for var chore in starterChores {
+                chore.nextScheduledDate = chore.calculateNextScheduledDate()
+                context.insert(CachedRecurringChore(from: chore))
+            }
+
+            try? context.save()
+            isLoading = false
+            return
+        }
 
         do {
             // Create household
@@ -203,6 +316,13 @@ final class HouseholdStore: ObservableObject {
         isLoading = true
         error = nil
 
+        guard isCloudSyncEnabled else {
+            let syncError = HouseholdError.cloudSyncRequired
+            error = syncError
+            isLoading = false
+            throw syncError
+        }
+
         do {
             // Find household by invite code (using household ID as simple invite code for MVP)
             guard let householdId = UUID(uuidString: inviteCode) else {
@@ -237,7 +357,9 @@ final class HouseholdStore: ObservableObject {
 
         guard let context = modelContext else {
             // Fallback to direct CloudKit save if no cache
-            _ = try await cloudKit.saveHousehold(household)
+            if isCloudSyncEnabled {
+                _ = try await cloudKit.saveHousehold(household)
+            }
             return
         }
 
@@ -248,13 +370,22 @@ final class HouseholdStore: ObservableObject {
 
         if let cached = try? context.fetch(descriptor).first {
             cached.update(from: household)
-            cached.syncStatusRaw = "pendingUpload"
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
         } else {
             let cached = CachedHousehold(from: household)
-            cached.syncStatusRaw = "pendingUpload"
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
             context.insert(cached)
         }
         try? context.save()
+
+        if !isCloudSyncEnabled {
+            if let cached = try? context.fetch(descriptor).first {
+                cached.syncStatusRaw = "synced"
+                cached.lastSyncedAt = Date()
+                try? context.save()
+            }
+            return
+        }
 
         // Sync to CloudKit
         do {
@@ -281,12 +412,18 @@ final class HouseholdStore: ObservableObject {
 
     /// Get share URL for inviting members
     func getShareURL() async throws -> URL? {
+        guard isCloudSyncEnabled else {
+            throw HouseholdError.cloudSyncRequired
+        }
         guard let household = currentHousehold else { return nil }
         return try await cloudKit.getShareURL(for: household.id)
     }
 
     /// Create a CKShare for the current household
     func createShare() async throws -> CKShare {
+        guard isCloudSyncEnabled else {
+            throw HouseholdError.cloudSyncRequired
+        }
         guard let household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
@@ -301,6 +438,13 @@ final class HouseholdStore: ObservableObject {
     ) async throws {
         isLoading = true
         error = nil
+
+        guard isCloudSyncEnabled else {
+            let syncError = HouseholdError.cloudSyncRequired
+            error = syncError
+            isLoading = false
+            throw syncError
+        }
 
         do {
             // Accept the CloudKit share
@@ -359,6 +503,7 @@ enum HouseholdError: LocalizedError {
     case invalidInviteCode
     case householdNotFound
     case invalidShare
+    case cloudSyncRequired
 
     var errorDescription: String? {
         switch self {
@@ -368,6 +513,8 @@ enum HouseholdError: LocalizedError {
             "Household not found."
         case .invalidShare:
             "Invalid share invitation. The link may be expired or invalid."
+        case .cloudSyncRequired:
+            "Sign in to iCloud to use sharing features."
         }
     }
 }

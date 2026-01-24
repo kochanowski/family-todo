@@ -46,10 +46,16 @@ struct SignInView: View {
                             .padding(.horizontal, 40)
 
                         signInButton
+                        guestButton
+                        guestFootnote
                     }
 
                 case .unauthenticated:
-                    signInButton
+                    VStack(spacing: 12) {
+                        signInButton
+                        guestButton
+                        guestFootnote
+                    }
 
                 case .authenticated:
                     // This should not be visible when authenticated
@@ -73,6 +79,20 @@ struct SignInView: View {
                 .frame(height: 50)
                 .frame(maxWidth: 280)
         }
+    }
+
+    private var guestButton: some View {
+        Button("Continue without account") {
+            userSession.startGuestSession()
+        }
+        .buttonStyle(.bordered)
+        .frame(maxWidth: 280)
+    }
+
+    private var guestFootnote: some View {
+        Text("Local-only mode. Data stays on this device.")
+            .font(.footnote)
+            .foregroundColor(.secondary)
     }
 }
 

@@ -1,7 +1,10 @@
+import SwiftData
 import SwiftUI
 
 /// View for managing recurring chores
 struct RecurringChoresView: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var userSession: UserSession
     @ObservedObject var householdStore: HouseholdStore
     @StateObject private var choreStore: RecurringChoreStore
     @State private var showingAddChore = false
@@ -97,7 +100,12 @@ struct RecurringChoresView: View {
                 }
             }
             .task {
+                choreStore.setModelContext(modelContext)
+                choreStore.setSyncMode(userSession.syncMode)
                 await choreStore.loadChores()
+            }
+            .onChange(of: userSession.syncMode) { _, newMode in
+                choreStore.setSyncMode(newMode)
             }
         }
     }
@@ -322,5 +330,10 @@ struct RecurringChoreDetailView: View {
 }
 
 #Preview {
-    RecurringChoresView(householdStore: HouseholdStore())
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: CachedRecurringChore.self, configurations: config)
+
+    return RecurringChoresView(householdStore: HouseholdStore())
+        .environmentObject(UserSession.shared)
+        .modelContainer(container)
 }

@@ -11,6 +11,15 @@ final class MemberStore: ObservableObject {
     private lazy var cloudKit = CloudKitManager.shared
     private let householdId: UUID?
     private var modelContext: ModelContext?
+    private var syncMode: SyncMode = .cloud
+
+    func setSyncMode(_ mode: SyncMode) {
+        syncMode = mode
+    }
+
+    private var isCloudSyncEnabled: Bool {
+        syncMode == .cloud
+    }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
@@ -30,6 +39,11 @@ final class MemberStore: ObservableObject {
 
         // 1. Load from cache first (instant UI)
         loadFromCache()
+
+        if !isCloudSyncEnabled {
+            isLoading = false
+            return
+        }
 
         // 2. Sync with CloudKit in background
         do {
@@ -125,9 +139,14 @@ final class MemberStore: ObservableObject {
             )
             if let cached = try? context.fetch(descriptor).first {
                 cached.update(from: member)
-                cached.syncStatusRaw = "pendingUpload"
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 try? context.save()
             }
+        }
+
+        if !isCloudSyncEnabled {
+            return
         }
 
         // Save to CloudKit
@@ -177,9 +196,18 @@ final class MemberStore: ObservableObject {
                 predicate: #Predicate { $0.id == id }
             )
             if let cached = try? context.fetch(descriptor).first {
-                cached.syncStatusRaw = "pendingDelete"
-                try? context.save()
+                if isCloudSyncEnabled {
+                    cached.syncStatusRaw = "pendingDelete"
+                    try? context.save()
+                } else {
+                    context.delete(cached)
+                    try? context.save()
+                }
             }
+        }
+
+        if !isCloudSyncEnabled {
+            return
         }
 
         // Delete from CloudKit
@@ -261,9 +289,14 @@ final class MemberStore: ObservableObject {
             )
             if let cached = try? context.fetch(descriptor).first {
                 cached.update(from: updatedMember)
-                cached.syncStatusRaw = "pendingUpload"
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 try? context.save()
             }
+        }
+
+        if !isCloudSyncEnabled {
+            return
         }
 
         // Save to CloudKit
