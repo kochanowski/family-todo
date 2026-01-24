@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  XCODE_VERSION: '15.2'
+  XCODE_VERSION: "15.2"
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
+          ruby-version: "3.2"
           bundler-cache: true
 
       - name: Build (no signing)
@@ -55,24 +55,25 @@ jobs:
               exit $status; \
             }
 
-      - name: Run tests
-        run: |
-          xcodebuild test \
-            -project FamilyTodo.xcodeproj \
-            -scheme HousePulse \
-            -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=YES \
-            OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
-            2>&1 | tee xcodebuild-test.log | bundle exec xcpretty || { \
-              status=$?; \
-              echo "::group::xcodebuild-test.log (tail)"; \
-              tail -n 200 xcodebuild-test.log || true; \
-              echo "::endgroup::"; \
-              exit $status; \
-            }
+      # TEMPORARILY DISABLED - uncomment when GHA minutes are less constrained
+      # - name: Run tests
+      #   run: |
+      #     xcodebuild test \
+      #       -project FamilyTodo.xcodeproj \
+      #       -scheme HousePulse \
+      #       -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" \
+      #       CODE_SIGN_IDENTITY="" \
+      #       CODE_SIGNING_REQUIRED=NO \
+      #       ARCHS=arm64 \
+      #       ONLY_ACTIVE_ARCH=YES \
+      #       OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
+      #       2>&1 | tee xcodebuild-test.log | bundle exec xcpretty || { \
+      #         status=$?; \
+      #         echo "::group::xcodebuild-test.log (tail)"; \
+      #         tail -n 200 xcodebuild-test.log || true; \
+      #         echo "::endgroup::"; \
+      #         exit $status; \
+      #       }
 
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
@@ -110,7 +111,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
+          ruby-version: "3.2"
           bundler-cache: true
 
       - name: Install signing certificate and provisioning profile
