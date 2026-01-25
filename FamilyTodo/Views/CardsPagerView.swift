@@ -84,9 +84,12 @@ struct CardsPagerView: View {
             .background(Color(.systemBackground))
             .gesture(cardDragGesture(width: size.width))
             .overlay(alignment: .top) {
-                GlassHeaderView(onSettingsTap: {
-                    settingsPresented = true
-                })
+                GlassHeaderView(
+                    title: cardKinds[currentIndex].title,
+                    onSettingsTap: {
+                        settingsPresented = true
+                    }
+                )
                 .padding(.top, safeInsets.top)
             }
             .overlay(alignment: .bottom) {
@@ -167,7 +170,8 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View
+    {
         TodoCardView(
             kind: kind,
             theme: theme,
@@ -346,7 +350,7 @@ struct CardsPagerView: View {
 
         ZStack {
             HStack(spacing: -edgeOverlap) {
-                ForEach(0 ..< leftCount, id: \.self) { offset in
+                ForEach(0..<leftCount, id: \.self) { offset in
                     let targetIndex = currentIndex - leftCount + offset
                     Rectangle()
                         .fill(Color.clear)
@@ -361,7 +365,7 @@ struct CardsPagerView: View {
 
             HStack(spacing: -edgeOverlap) {
                 Spacer(minLength: 0)
-                ForEach(0 ..< rightCount, id: \.self) { offset in
+                ForEach(0..<rightCount, id: \.self) { offset in
                     let targetIndex = currentIndex + offset + 1
                     Rectangle()
                         .fill(Color.clear)

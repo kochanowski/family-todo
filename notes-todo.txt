@@ -31,4 +31,9 @@ HousePulse (com.kochanowski.housepulse)
 
 ale  iCloud is not available - po klinięciu w Sign in with Apple pojawia się błąd - Authentcation failed
 
-- Clear to buy list ma być małą ikonką, nie takim dużym dymkiem jak teraz - ma być 
+- Clear to buy list ma być małą ikonką, nie takim dużym dymkiem jak teraz - ma być w prawym górnym rogu
+- Karty po prawej stronie nie wyglądają jak karty - nie mają zagiętych rogów, to zwykłe prostokąty - ma to być na wysokość całego ekranu
+- Wokół elementów zaokrąglonych np 'Add product' jest dodatkowy prostokąt - musi on zniknąć, ma być samo zaokrąglenie. Tak jest w całym interfejsie
+- Wszędzie jest nagłówek Tasks na belce - tam ma być nazwa ekranu, np 'Recurring Tasks' lub 'Shopping List'
+- Przypomnij mi z dokumentacji do czego służy ekran Areas?
+- Nowe kolory kart od lewej: 2D3C59, 94A378, E5BA41, D1855C, 36656B, 75B06F, DAD887

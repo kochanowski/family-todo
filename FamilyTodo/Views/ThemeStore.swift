@@ -23,46 +23,46 @@ enum ThemePreset: String, CaseIterable, Identifiable {
         case .pastel:
             ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
-                    gradientColors: [Color(hex: "E9D5FF"), Color(hex: "DDD6FE")],
-                    accentColor: Color(hex: "C084FC"),
-                    primaryTextColor: Color(hex: "581C87"),
-                    secondaryTextColor: Color(hex: "6B21A8")
+                    gradientColors: [Color(hex: "2D3C59"), Color(hex: "3D4C6F")],
+                    accentColor: Color(hex: "2D3C59"),
+                    primaryTextColor: Color.white,
+                    secondaryTextColor: Color.white.opacity(0.85)
                 ),
                 .todo: CardTheme(
-                    gradientColors: [Color(hex: "DCFCE7"), Color(hex: "BBF7D0")],
-                    accentColor: Color(hex: "4ADE80"),
-                    primaryTextColor: Color(hex: "166534"),
-                    secondaryTextColor: Color(hex: "15803D")
+                    gradientColors: [Color(hex: "94A378"), Color(hex: "A4B388")],
+                    accentColor: Color(hex: "94A378"),
+                    primaryTextColor: Color.white,
+                    secondaryTextColor: Color.white.opacity(0.85)
                 ),
                 .backlog: CardTheme(
-                    gradientColors: [Color(hex: "FEF9C3"), Color(hex: "FEF08A")],
-                    accentColor: Color(hex: "FACC15"),
-                    primaryTextColor: Color(hex: "713F12"),
-                    secondaryTextColor: Color(hex: "CA8A04")
+                    gradientColors: [Color(hex: "E5BA41"), Color(hex: "F0C955")],
+                    accentColor: Color(hex: "E5BA41"),
+                    primaryTextColor: Color(hex: "4A3A0F"),
+                    secondaryTextColor: Color(hex: "5A4812")
                 ),
                 .recurring: CardTheme(
-                    gradientColors: [Color(hex: "FED7AA"), Color(hex: "FDBA74")],
-                    accentColor: Color(hex: "FB923C"),
-                    primaryTextColor: Color(hex: "9A3412"),
-                    secondaryTextColor: Color(hex: "C2410C")
+                    gradientColors: [Color(hex: "D1855C"), Color(hex: "DC9570")],
+                    accentColor: Color(hex: "D1855C"),
+                    primaryTextColor: Color.white,
+                    secondaryTextColor: Color.white.opacity(0.85)
                 ),
                 .household: CardTheme(
-                    gradientColors: [Color(hex: "CCFBF1"), Color(hex: "99F6E4")],
-                    accentColor: Color(hex: "2DD4BF"),
-                    primaryTextColor: Color(hex: "115E59"),
-                    secondaryTextColor: Color(hex: "0F766E")
+                    gradientColors: [Color(hex: "36656B"), Color(hex: "447580")],
+                    accentColor: Color(hex: "36656B"),
+                    primaryTextColor: Color.white,
+                    secondaryTextColor: Color.white.opacity(0.85)
                 ),
                 .areas: CardTheme(
-                    gradientColors: [Color(hex: "BAE6FD"), Color(hex: "7DD3FC")],
-                    accentColor: Color(hex: "38BDF8"),
-                    primaryTextColor: Color(hex: "0C4A6E"),
-                    secondaryTextColor: Color(hex: "0369A1")
+                    gradientColors: [Color(hex: "75B06F"), Color(hex: "85C07F")],
+                    accentColor: Color(hex: "75B06F"),
+                    primaryTextColor: Color.white,
+                    secondaryTextColor: Color.white.opacity(0.85)
                 ),
                 .settings: CardTheme(
-                    gradientColors: [Color(hex: "FECDD3"), Color(hex: "FDA4AF")],
-                    accentColor: Color(hex: "FB7185"),
-                    primaryTextColor: Color(hex: "9F1239"),
-                    secondaryTextColor: Color(hex: "BE123C")
+                    gradientColors: [Color(hex: "DAD887"), Color(hex: "E5E397")],
+                    accentColor: Color(hex: "DAD887"),
+                    primaryTextColor: Color(hex: "4A4812"),
+                    secondaryTextColor: Color(hex: "5A5215")
                 ),
             ])
         case .soft:
@@ -170,12 +170,13 @@ struct ThemePalette {
     let cardThemes: [CardKind: CardTheme]
 
     func theme(for kind: CardKind) -> CardTheme {
-        cardThemes[kind] ?? CardTheme(
-            gradientColors: [Color(.systemGray5), Color(.systemGray4)],
-            accentColor: Color(.systemGray),
-            primaryTextColor: Color.primary,
-            secondaryTextColor: Color.secondary
-        )
+        cardThemes[kind]
+            ?? CardTheme(
+                gradientColors: [Color(.systemGray5), Color(.systemGray4)],
+                accentColor: Color(.systemGray),
+                primaryTextColor: Color.primary,
+                secondaryTextColor: Color.secondary
+            )
     }
 }
 

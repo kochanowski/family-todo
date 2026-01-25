@@ -491,11 +491,12 @@ struct AvatarBadgeView: View {
 }
 
 struct GlassHeaderView: View {
+    let title: String
     let onSettingsTap: () -> Void
 
     var body: some View {
         HStack {
-            Text("Tasks")
+            Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
