@@ -133,16 +133,10 @@ struct CardPageView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(kind.title)
-                .font(layout.headerTitleFont)
-                .foregroundStyle(theme.primaryTextColor)
-
-            Text(subtitle)
-                .font(layout.headerSubtitleFont)
-                .foregroundStyle(theme.secondaryTextColor)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Text(subtitle)
+            .font(layout.headerSubtitleFont)
+            .foregroundStyle(theme.secondaryTextColor)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var itemsSection: some View {
