@@ -474,7 +474,8 @@ struct AvatarBadgeView: View {
 
 struct GlassHeaderView: View {
     let title: String
-    let onSettingsTap: () -> Void
+    let cardKind: CardKind
+    let onCompletedTap: () -> Void
 
     var body: some View {
         HStack {
@@ -484,15 +485,18 @@ struct GlassHeaderView: View {
 
             Spacer()
 
-            Button {
-                onSettingsTap()
-            } label: {
-                Image(systemName: "gear")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 40, height: 40)
-                    .background(.ultraThinMaterial, in: Circle())
+            // Show completed items icon for all cards except Settings
+            if cardKind != .settings {
+                Button {
+                    onCompletedTap()
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(PressableIconButtonStyle())
             }
-            .buttonStyle(PressableIconButtonStyle())
         }
         .padding(.horizontal, 20)
         .frame(height: LayoutConstants.headerHeight)

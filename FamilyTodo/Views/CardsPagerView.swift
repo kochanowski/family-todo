@@ -17,6 +17,7 @@ struct CardsPagerView: View {
     @State private var currentIndex = CardKind.defaultIndex
     @State private var dragOffset: CGFloat = 0
     @State private var settingsPresented = false
+    @State private var completedPresented = false
     @State private var swipeHapticTriggered = false
 
     private let edgeWidth: CGFloat = 6
@@ -86,8 +87,9 @@ struct CardsPagerView: View {
             .overlay(alignment: .top) {
                 GlassHeaderView(
                     title: cardKinds[currentIndex].title,
-                    onSettingsTap: {
-                        settingsPresented = true
+                    cardKind: cardKinds[currentIndex],
+                    onCompletedTap: {
+                        completedPresented = true
                     }
                 )
                 .padding(.top, safeInsets.top)
@@ -109,6 +111,9 @@ struct CardsPagerView: View {
             .overlay(edgeTapZones(size: size))
             .sheet(isPresented: $settingsPresented) {
                 SettingsView(householdStore: householdStore)
+            }
+            .sheet(isPresented: $completedPresented) {
+                CompletedItemsView(taskStore: taskStore)
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentIndex)
         }
