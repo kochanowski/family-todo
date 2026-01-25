@@ -69,13 +69,6 @@ struct CardsPagerView: View {
                             )
                         )
                         .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
-                        .overlay(
-                            RoundedRectangle(
-                                cornerRadius: LayoutConstants.cardCornerRadius,
-                                style: .continuous
-                            )
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
                         .offset(x: cardOffset(for: index, width: size.width))
                         .opacity(cardOpacity(for: index))
                         .zIndex(zIndex(for: index))
@@ -473,8 +466,8 @@ struct ShoppingListCardView: View {
                     if !shoppingItem.isBought {
                         pendingDrops.insert(item.id)
 
-                        // Auto-drop after 0.5s
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        // Auto-drop after 0.25s (faster animation)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                             // Check if still pending (user didn't undo)
                             if pendingDrops.contains(item.id) {
                                 _Concurrency.Task {
@@ -569,9 +562,9 @@ struct ShoppingListCardView: View {
                     .background(Color.secondary.opacity(0.2))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Restock List (\(restockItems.count))")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
 
                     Text(restockPreview)
@@ -582,15 +575,15 @@ struct ShoppingListCardView: View {
 
                 Spacer()
             }
-            .padding(12)
+            .padding(8)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(.thinMaterial)
-                    .overlay(Color.gray.opacity(0.2))
+                    .overlay(Color.gray.opacity(0.1))
             )
             .overlay(
                 Rectangle()
-                    .fill(theme.accentColor.opacity(0.2))
+                    .fill(theme.accentColor.opacity(0.15))
                     .frame(height: 0.5),
                 alignment: .top
             )

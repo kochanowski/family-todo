@@ -32,5 +32,8 @@ HousePulse (com.kochanowski.housepulse)
 ale  iCloud is not available - po klinięciu w Sign in with Apple pojawia się błąd - Authentcation failed
 
 
-- musi być lista rzeczy zrobionych - jeżel zaznaczę w Todo, że coś jest zrobione to musi to trafić do listy rzeczy zrobionych -  zamiast ikonki gear z settings niech będzie tam ikonka zrobionych rzeczy - tak samo też na innych ekranach - a na ekranie Settings niech w ogóle zniknie
-- nazwy Kart nadal są w miejscu gdzie są taski
+- po kliknięciu w shopping list done dla przedmiotu - animacja musi być szybsza
+- fonty w Restock list mniejsze
+- okienko z restock list musi być mniejsze - mniejsze bordery
+- Add product ma prostokątną ramkę, musi mieć okrągłe rogi
+- Te bordery prostokątne wokół zaokrąglonych elementów nadal występują - muszą być usunięte
