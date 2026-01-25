@@ -30,3 +30,5 @@ App ID
 HousePulse (com.kochanowski.housepulse)
 
 ale  iCloud is not available - po klinięciu w Sign in with Apple pojawia się błąd - Authentcation failed
+
+- Clear to buy list ma być małą ikonką, nie takim dużym dymkiem jak teraz - ma być 
