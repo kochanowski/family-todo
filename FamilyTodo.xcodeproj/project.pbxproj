@@ -59,6 +59,7 @@
 		ED982C614F4F4C09A05ECD6D /* NotificationSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA6022D4E7D4DF8816BC38B /* NotificationSettingsStore.swift */; };
 		004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */; };
 		UITEST00000000000000003 /* FamilyTodoUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST00000000000000002 /* FamilyTodoUITests.swift */; };
+		7414A40315A443578EC675CB /* CompletedItemsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80E7583F848944439556ECF3 /* CompletedItemsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -135,6 +136,7 @@
 		AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
 		UITEST00000000000000002 /* FamilyTodoUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoUITests.swift; sourceTree = "<group>"; };
 		UITEST0000000000000000D /* FamilyTodoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		80E7583F848944439556ECF3 /* CompletedItemsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedItemsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -314,7 +316,8 @@
 				D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
 				A1B2C3D4E5F60718293A4B8B /* ShareInviteView.swift */,
-			);
+							80E7583F848944439556ECF3 /* CompletedItemsView.swift */,
+);
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -489,7 +492,8 @@
 				A1B2C3D4E5F60718293A4B9B /* CloudKitManager.swift in Sources */,
 				A1B2C3D4E5F60718293A4B9D1 /* CloudKitManager+Mapping.swift in Sources */,
 				A1B2C3D4E5F60718293A4B8A /* ShareInviteView.swift in Sources */,
-			);
+							7414A40315A443578EC675CB /* CompletedItemsView.swift in Sources */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B2C3D4E5F60718293A4B6E /* Sources */ = {
