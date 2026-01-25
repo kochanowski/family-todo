@@ -31,7 +31,8 @@ struct AuthenticatedView: View {
                 if let householdId = householdStore.currentHousehold?.id {
                     CardsPagerView(
                         householdStore: householdStore, householdId: householdId,
-                        modelContext: modelContext)
+                        modelContext: modelContext
+                    )
                 }
             } else {
                 OnboardingView(
@@ -196,7 +197,8 @@ struct SettingsView: View {
                                 },
                                 set: { newDate in
                                     let components = Calendar.current.dateComponents(
-                                        [.hour, .minute], from: newDate)
+                                        [.hour, .minute], from: newDate
+                                    )
                                     notificationSettingsStore.dailyDigestHour = components.hour ?? 8
                                     notificationSettingsStore.dailyDigestMinute =
                                         components.minute ?? 0

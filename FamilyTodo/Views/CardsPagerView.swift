@@ -19,8 +19,8 @@ struct CardsPagerView: View {
     @State private var settingsPresented = false
     @State private var swipeHapticTriggered = false
 
-    private let edgeWidth: CGFloat = 12
-    private let edgeOverlap: CGFloat = 5
+    private let edgeWidth: CGFloat = 6
+    private let edgeOverlap: CGFloat = 3
     private let maxVisibleEdges = 3
     private let swipeThreshold: CGFloat = 50
 
@@ -167,8 +167,7 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View
-    {
+    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
         TodoCardView(
             kind: kind,
             theme: theme,
@@ -347,7 +346,7 @@ struct CardsPagerView: View {
 
         ZStack {
             HStack(spacing: -edgeOverlap) {
-                ForEach(0..<leftCount, id: \.self) { offset in
+                ForEach(0 ..< leftCount, id: \.self) { offset in
                     let targetIndex = currentIndex - leftCount + offset
                     Rectangle()
                         .fill(Color.clear)
@@ -362,7 +361,7 @@ struct CardsPagerView: View {
 
             HStack(spacing: -edgeOverlap) {
                 Spacer(minLength: 0)
-                ForEach(0..<rightCount, id: \.self) { offset in
+                ForEach(0 ..< rightCount, id: \.self) { offset in
                     let targetIndex = currentIndex + offset + 1
                     Rectangle()
                         .fill(Color.clear)
@@ -542,7 +541,7 @@ struct ShoppingListCardView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "trash")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .frame(width: 40, height: 40)
                     .background(Color.red.opacity(0.2))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -570,7 +569,7 @@ struct ShoppingListCardView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "bag.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .frame(width: 40, height: 40)
                     .background(Color.secondary.opacity(0.2))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -681,7 +680,8 @@ struct RestockModalView: View {
                                             )
                                             .shadow(
                                                 color: Color.black.opacity(0.1), radius: 3, x: 0,
-                                                y: 2)
+                                                y: 2
+                                            )
                                     }
                                     .buttonStyle(RestockChipButtonStyle())
                                 }
@@ -718,7 +718,8 @@ struct RestockChipButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 1.05 : 1)
             .shadow(
                 color: Color.black.opacity(configuration.isPressed ? 0.2 : 0.1),
-                radius: configuration.isPressed ? 6 : 3, x: 0, y: 2)
+                radius: configuration.isPressed ? 6 : 3, x: 0, y: 2
+            )
     }
 }
 
@@ -772,7 +773,8 @@ struct TodoCardView: View {
                 _Concurrency.Task {
                     await taskStore.createTask(
                         title: title, status: .next, assigneeId: currentMemberId,
-                        assigneeIds: assigneeIds)
+                        assigneeIds: assigneeIds
+                    )
                 }
             },
             onToggle: { item in

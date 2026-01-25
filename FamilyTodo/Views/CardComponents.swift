@@ -26,42 +26,42 @@ struct CardLayout {
         horizontalPadding: 20,
         headerTopPadding: 12,
         headerBottomPadding: 8,
-        headerTitleFont: .headline.weight(.bold),
-        headerSubtitleFont: .caption2.weight(.semibold),
+        headerTitleFont: .subheadline.weight(.bold),
+        headerSubtitleFont: .caption2.weight(.medium),
         sectionSpacing: 12,
         rowSpacing: 6,
         rowPadding: 12,
         rowCornerRadius: 14,
-        checkboxSize: 22,
-        itemTitleFont: .footnote.weight(.semibold),
+        checkboxSize: 20,
+        itemTitleFont: .caption.weight(.semibold),
         itemDetailFont: .caption2,
         inputFieldPadding: 10,
-        inputFont: .footnote.weight(.semibold),
+        inputFont: .caption.weight(.semibold),
         inputCornerRadius: 10,
         inputContainerPadding: 12,
-        addButtonSize: 42,
-        addButtonIconSize: 18
+        addButtonSize: 38,
+        addButtonIconSize: 16
     )
 
     static let compactShopping = CardLayout(
         horizontalPadding: 16,
         headerTopPadding: 10,
         headerBottomPadding: 6,
-        headerTitleFont: .subheadline.weight(.bold),
-        headerSubtitleFont: .caption2.weight(.medium),
+        headerTitleFont: .caption.weight(.bold),
+        headerSubtitleFont: .caption2.weight(.regular),
         sectionSpacing: 10,
         rowSpacing: 5,
         rowPadding: 10,
         rowCornerRadius: 12,
-        checkboxSize: 18,
-        itemTitleFont: .caption.weight(.semibold),
+        checkboxSize: 16,
+        itemTitleFont: .caption2.weight(.semibold),
         itemDetailFont: .caption2,
         inputFieldPadding: 8,
-        inputFont: .caption.weight(.semibold),
+        inputFont: .caption2.weight(.semibold),
         inputCornerRadius: 10,
         inputContainerPadding: 10,
-        addButtonSize: 36,
-        addButtonIconSize: 16
+        addButtonSize: 32,
+        addButtonIconSize: 14
     )
 }
 
@@ -111,7 +111,8 @@ struct CardPageView: View {
             )
             .padding(
                 .bottom,
-                LayoutConstants.footerHeight + safeAreaInsets.bottom + layout.headerBottomPadding)
+                LayoutConstants.footerHeight + safeAreaInsets.bottom + layout.headerBottomPadding
+            )
 
             if kind == .backlog, items.isEmpty {
                 ConfettiView(isActive: true)
@@ -153,12 +154,13 @@ struct CardPageView: View {
                         ProgressView("Loading...")
                     } else if let emptyMessage {
                         Text(emptyMessage)
-                            .font(.title3.weight(.semibold))
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(theme.secondaryTextColor)
                             .scaleEffect(1.02)
                             .animation(
                                 .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
-                                value: emptyMessage)
+                                value: emptyMessage
+                            )
                     }
                     Spacer(minLength: 20)
                 }
@@ -494,7 +496,7 @@ struct GlassHeaderView: View {
     var body: some View {
         HStack {
             Text("Tasks")
-                .font(.headline.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -503,7 +505,7 @@ struct GlassHeaderView: View {
                 onSettingsTap()
             } label: {
                 Image(systemName: "gear")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .frame(width: 40, height: 40)
                     .background(.ultraThinMaterial, in: Circle())
             }

@@ -10,27 +10,27 @@ extension Color {
     // Purple (Shopping List)
     static let pastelPurple = Color(red: 0.85, green: 0.75, blue: 0.95)
     static let pastelPurpleLight = Color(red: 0.92, green: 0.85, blue: 0.98)
-    
+
     // Green (Todo)
     static let pastelGreen = Color(red: 0.75, green: 0.92, blue: 0.75)
     static let pastelGreenLight = Color(red: 0.85, green: 0.97, blue: 0.85)
-    
+
     // Yellow (Backlog)
     static let pastelYellow = Color(red: 0.98, green: 0.95, blue: 0.70)
     static let pastelYellowLight = Color(red: 1.0, green: 0.98, blue: 0.85)
-    
+
     // Orange (Recurring)
     static let pastelOrange = Color(red: 1.0, green: 0.88, blue: 0.70)
     static let pastelOrangeLight = Color(red: 1.0, green: 0.93, blue: 0.85)
-    
+
     // Blue (Household)
     static let pastelBlue = Color(red: 0.70, green: 0.85, blue: 0.98)
     static let pastelBlueLight = Color(red: 0.85, green: 0.92, blue: 1.0)
-    
+
     // Pink (Areas)
     static let pastelPink = Color(red: 0.98, green: 0.75, blue: 0.85)
     static let pastelPinkLight = Color(red: 1.0, green: 0.87, blue: 0.92)
-    
+
     // Gray (Settings)
     static let pastelGray = Color(red: 0.85, green: 0.85, blue: 0.85)
     static let pastelGrayLight = Color(red: 0.92, green: 0.92, blue: 0.92)
@@ -63,7 +63,7 @@ struct TodoItem: Identifiable, Codable {
     var text: String
     var isCompleted: Bool
     var createdAt: Date
-    
+
     init(id: UUID = UUID(), text: String, isCompleted: Bool = false, createdAt: Date = Date()) {
         self.id = id
         self.text = text
@@ -74,9 +74,9 @@ struct TodoItem: Identifiable, Codable {
 CardType.swift:
 enum CardType: Int, CaseIterable, Identifiable {
     case shopping = 0, todo = 1, backlog = 2, recurring = 3, household = 4, areas = 5, settings = 6
-    
+
     var id: Int { rawValue }
-    
+
     var title: String {
         switch self {
         case .shopping: return "Shopping List"
@@ -88,7 +88,7 @@ enum CardType: Int, CaseIterable, Identifiable {
         case .settings: return "Settings"
         }
     }
-    
+
     var color: Color {
         switch self {
         case .shopping: return .pastelPurple
@@ -100,7 +100,7 @@ enum CardType: Int, CaseIterable, Identifiable {
         case .settings: return .pastelGray
         }
     }
-    
+
     var lightColor: Color {
         switch self {
         case .shopping: return .pastelPurpleLight
@@ -142,7 +142,7 @@ KOMPONENTY DO ZBUDOWANIA
 struct GlassCard<Content: View>: View {
     let cardType: CardType
     let content: Content
-    
+
     var body: some View {
         ZStack {
             LinearGradient(colors: [cardType.lightColor, cardType.color], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -157,7 +157,7 @@ struct GlassCard<Content: View>: View {
 struct CardPeekView: View {
     let cardType: CardType
     let isLeft: Bool
-    
+
     var body: some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
             .fill(LinearGradient(colors: [cardType.color, cardType.lightColor], startPoint: isLeft ? .leading : .trailing, endPoint: isLeft ? .trailing : .leading))
@@ -171,13 +171,13 @@ struct TaskRow: View {
     let accentColor: Color
     let onDelete: () -> Void
     @State private var isAppearing = false
-    
+
     var body: some View {
         HStack(spacing: 12) {
             // Checkbox
-            Button(action: { 
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { 
-                    item.isCompleted.toggle() 
+            Button(action: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    item.isCompleted.toggle()
                 }
                 hapticFeedback()
             }) {
@@ -188,10 +188,10 @@ struct TaskRow: View {
                     }
                 }
             }
-            
+
             Text(item.text).font(.system(size: 15)).foregroundColor(item.isCompleted ? .secondary : .primary).strikethrough(item.isCompleted, color: .secondary)
             Spacer()
-            
+
             // Delete
             Button(action: { onDelete(); hapticFeedback() }) {
                 Image(systemName: "xmark.circle.fill").font(.system(size: 20)).foregroundColor(.red.opacity(0.7))
@@ -202,7 +202,7 @@ struct TaskRow: View {
         .opacity(isAppearing ? 1 : 0).offset(y: isAppearing ? 0 : 20)
         .onAppear { withAnimation(.spring(response: 0.4, dampingFraction: 0.8).delay(0.1)) { isAppearing = true } }
     }
-    
+
     private func hapticFeedback() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -219,7 +219,7 @@ struct BasketView: View {
     @Binding var items: [TodoItem]
     let onRestore: (TodoItem) -> Void
     @Environment(\.dismiss) var dismiss
-    
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -243,22 +243,22 @@ struct BasketView: View {
 FlowLayout (Word Cloud):
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
-    
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         FlowResult(in: proposal.replacingUnspecifiedDimensions().width, subviews: subviews, spacing: spacing).size
     }
-    
+
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
         for (index, subview) in subviews.enumerated() {
             subview.place(at: CGPoint(x: bounds.minX + result.frames[index].minX, y: bounds.minY + result.frames[index].minY), proposal: .unspecified)
         }
     }
-    
+
     struct FlowResult {
         var frames: [CGRect] = []
         var size: CGSize = .zero
-        
+
         init(in maxWidth: CGFloat, subviews: Subviews, spacing: CGFloat) {
             var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0
             for subview in subviews {
