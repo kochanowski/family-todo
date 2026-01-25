@@ -13,6 +13,7 @@ struct ContentView: View {
                 SignInView()
             }
         }
+        .ignoresSafeArea(.all, edges: .all)
     }
 }
 
@@ -28,7 +29,9 @@ struct AuthenticatedView: View {
                 ProgressView("Loading...")
             } else if householdStore.hasHousehold {
                 if let householdId = householdStore.currentHousehold?.id {
-                    CardsPagerView(householdStore: householdStore, householdId: householdId, modelContext: modelContext)
+                    CardsPagerView(
+                        householdStore: householdStore, householdId: householdId,
+                        modelContext: modelContext)
                 }
             } else {
                 OnboardingView(
@@ -135,10 +138,13 @@ struct SettingsView: View {
                 }
 
                 Section("Appearance") {
-                    Picker("Theme", selection: Binding(
-                        get: { themeStore.preset },
-                        set: { themeStore.preset = $0 }
-                    )) {
+                    Picker(
+                        "Theme",
+                        selection: Binding(
+                            get: { themeStore.preset },
+                            set: { themeStore.preset = $0 }
+                        )
+                    ) {
                         ForEach(ThemePreset.allCases) { preset in
                             Text(preset.displayName).tag(preset)
                         }
@@ -148,7 +154,8 @@ struct SettingsView: View {
 
                 Section("Notifications") {
                     Toggle("Task Reminders", isOn: $notificationSettingsStore.taskRemindersEnabled)
-                        .onChange(of: notificationSettingsStore.taskRemindersEnabled) { _, enabled in
+                        .onChange(of: notificationSettingsStore.taskRemindersEnabled) {
+                            _, enabled in
                             if enabled {
                                 _Concurrency.Task {
                                     await requestNotificationPermission()
@@ -188,9 +195,11 @@ struct SettingsView: View {
                                     ) ?? Date()
                                 },
                                 set: { newDate in
-                                    let components = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                                    let components = Calendar.current.dateComponents(
+                                        [.hour, .minute], from: newDate)
                                     notificationSettingsStore.dailyDigestHour = components.hour ?? 8
-                                    notificationSettingsStore.dailyDigestMinute = components.minute ?? 0
+                                    notificationSettingsStore.dailyDigestMinute =
+                                        components.minute ?? 0
 
                                     // Reschedule with new time
                                     _Concurrency.Task {

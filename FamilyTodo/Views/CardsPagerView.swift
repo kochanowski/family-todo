@@ -19,7 +19,7 @@ struct CardsPagerView: View {
     @State private var settingsPresented = false
     @State private var swipeHapticTriggered = false
 
-    private let edgeWidth: CGFloat = 20
+    private let edgeWidth: CGFloat = 12
     private let edgeOverlap: CGFloat = 5
     private let maxVisibleEdges = 3
     private let swipeThreshold: CGFloat = 50

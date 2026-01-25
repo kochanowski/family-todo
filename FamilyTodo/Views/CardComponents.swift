@@ -23,45 +23,45 @@ struct CardLayout {
     let addButtonIconSize: CGFloat
 
     static let standard = CardLayout(
-        horizontalPadding: 24,
-        headerTopPadding: 16,
-        headerBottomPadding: 12,
-        headerTitleFont: .title3.weight(.bold),
-        headerSubtitleFont: .footnote.weight(.semibold),
-        sectionSpacing: 16,
-        rowSpacing: 8,
-        rowPadding: 16,
-        rowCornerRadius: 16,
-        checkboxSize: 26,
-        itemTitleFont: .callout.weight(.semibold),
-        itemDetailFont: .caption2,
-        inputFieldPadding: 12,
-        inputFont: .callout.weight(.semibold),
-        inputCornerRadius: 12,
-        inputContainerPadding: 16,
-        addButtonSize: 48,
-        addButtonIconSize: 22
-    )
-
-    static let compactShopping = CardLayout(
         horizontalPadding: 20,
         headerTopPadding: 12,
         headerBottomPadding: 8,
-        headerTitleFont: .callout.weight(.bold),
+        headerTitleFont: .headline.weight(.bold),
         headerSubtitleFont: .caption2.weight(.semibold),
         sectionSpacing: 12,
         rowSpacing: 6,
         rowPadding: 12,
-        rowCornerRadius: 12,
-        checkboxSize: 20,
+        rowCornerRadius: 14,
+        checkboxSize: 22,
         itemTitleFont: .footnote.weight(.semibold),
         itemDetailFont: .caption2,
         inputFieldPadding: 10,
         inputFont: .footnote.weight(.semibold),
         inputCornerRadius: 10,
         inputContainerPadding: 12,
-        addButtonSize: 40,
+        addButtonSize: 42,
         addButtonIconSize: 18
+    )
+
+    static let compactShopping = CardLayout(
+        horizontalPadding: 16,
+        headerTopPadding: 10,
+        headerBottomPadding: 6,
+        headerTitleFont: .subheadline.weight(.bold),
+        headerSubtitleFont: .caption2.weight(.medium),
+        sectionSpacing: 10,
+        rowSpacing: 5,
+        rowPadding: 10,
+        rowCornerRadius: 12,
+        checkboxSize: 18,
+        itemTitleFont: .caption.weight(.semibold),
+        itemDetailFont: .caption2,
+        inputFieldPadding: 8,
+        inputFont: .caption.weight(.semibold),
+        inputCornerRadius: 10,
+        inputContainerPadding: 10,
+        addButtonSize: 36,
+        addButtonIconSize: 16
     )
 }
 
