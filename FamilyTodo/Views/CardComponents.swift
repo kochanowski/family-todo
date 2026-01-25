@@ -26,17 +26,17 @@ struct CardLayout {
         horizontalPadding: 24,
         headerTopPadding: 16,
         headerBottomPadding: 12,
-        headerTitleFont: .title2.weight(.bold),
-        headerSubtitleFont: .subheadline.weight(.semibold),
+        headerTitleFont: .title3.weight(.bold),
+        headerSubtitleFont: .footnote.weight(.semibold),
         sectionSpacing: 16,
         rowSpacing: 8,
         rowPadding: 16,
         rowCornerRadius: 16,
         checkboxSize: 26,
-        itemTitleFont: .body.weight(.semibold),
-        itemDetailFont: .caption,
+        itemTitleFont: .callout.weight(.semibold),
+        itemDetailFont: .caption2,
         inputFieldPadding: 12,
-        inputFont: .body.weight(.semibold),
+        inputFont: .callout.weight(.semibold),
         inputCornerRadius: 12,
         inputContainerPadding: 16,
         addButtonSize: 48,
@@ -47,17 +47,17 @@ struct CardLayout {
         horizontalPadding: 20,
         headerTopPadding: 12,
         headerBottomPadding: 8,
-        headerTitleFont: .headline.weight(.bold),
-        headerSubtitleFont: .caption.weight(.semibold),
+        headerTitleFont: .callout.weight(.bold),
+        headerSubtitleFont: .caption2.weight(.semibold),
         sectionSpacing: 12,
         rowSpacing: 6,
         rowPadding: 12,
         rowCornerRadius: 12,
         checkboxSize: 20,
-        itemTitleFont: .callout.weight(.semibold),
+        itemTitleFont: .footnote.weight(.semibold),
         itemDetailFont: .caption2,
         inputFieldPadding: 10,
-        inputFont: .callout.weight(.semibold),
+        inputFont: .footnote.weight(.semibold),
         inputCornerRadius: 10,
         inputContainerPadding: 12,
         addButtonSize: 40,
@@ -106,8 +106,12 @@ struct CardPageView: View {
                 }
             }
             .padding(.horizontal, layout.horizontalPadding)
-            .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + layout.headerTopPadding)
-            .padding(.bottom, LayoutConstants.footerHeight + safeAreaInsets.bottom + layout.headerBottomPadding)
+            .padding(
+                .top, LayoutConstants.headerHeight + safeAreaInsets.top + layout.headerTopPadding
+            )
+            .padding(
+                .bottom,
+                LayoutConstants.footerHeight + safeAreaInsets.bottom + layout.headerBottomPadding)
 
             if kind == .backlog, items.isEmpty {
                 ConfettiView(isActive: true)
@@ -152,7 +156,9 @@ struct CardPageView: View {
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(theme.secondaryTextColor)
                             .scaleEffect(1.02)
-                            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: emptyMessage)
+                            .animation(
+                                .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                                value: emptyMessage)
                     }
                     Spacer(minLength: 20)
                 }
@@ -200,7 +206,8 @@ struct CardPageView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
                         .stroke(
-                            inputFocused ? theme.accentColor.opacity(0.8) : Color.white.opacity(0.3),
+                            inputFocused
+                                ? theme.accentColor.opacity(0.8) : Color.white.opacity(0.3),
                             lineWidth: inputFocused ? 2 : 1
                         )
                 )
@@ -407,7 +414,9 @@ struct CardItemRow: View {
             } label: {
                 ZStack {
                     Circle()
-                        .strokeBorder(theme.accentColor.opacity(item.isCompleted ? 0.3 : 0.6), lineWidth: 2)
+                        .strokeBorder(
+                            theme.accentColor.opacity(item.isCompleted ? 0.3 : 0.6), lineWidth: 2
+                        )
                         .background(
                             Circle()
                                 .fill(item.isCompleted ? theme.accentColor : Color.clear)
@@ -454,7 +463,9 @@ struct AvatarStackView: View {
                 AvatarBadgeView(initials: value, accentColor: accentColor)
             }
             if initials.count > visibleInitials.count {
-                AvatarBadgeView(initials: "+\(initials.count - visibleInitials.count)", accentColor: accentColor)
+                AvatarBadgeView(
+                    initials: "+\(initials.count - visibleInitials.count)", accentColor: accentColor
+                )
             }
         }
     }
@@ -521,7 +532,11 @@ struct GlassFooterView: View {
             ForEach(cardKinds.indices, id: \.self) { index in
                 let isActive = index == currentIndex
                 Capsule(style: .continuous)
-                    .fill(isActive ? themeProvider(cardKinds[index]).accentColor : Color.secondary.opacity(0.4))
+                    .fill(
+                        isActive
+                            ? themeProvider(cardKinds[index]).accentColor
+                            : Color.secondary.opacity(0.4)
+                    )
                     .frame(width: isActive ? 24 : 8, height: 8)
                     .animation(.spring(response: 0.4, dampingFraction: 0.75), value: currentIndex)
                     .onTapGesture {
@@ -924,7 +939,9 @@ struct FlowLayout: Layout {
         return CGSize(width: width, height: height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+    func placeSubviews(
+        in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()
+    ) {
         var x = bounds.minX
         var y = bounds.minY
         var rowHeight: CGFloat = 0

@@ -19,7 +19,7 @@ struct CardsPagerView: View {
     @State private var settingsPresented = false
     @State private var swipeHapticTriggered = false
 
-    private let edgeWidth: CGFloat = 25
+    private let edgeWidth: CGFloat = 20
     private let edgeOverlap: CGFloat = 5
     private let maxVisibleEdges = 3
     private let swipeThreshold: CGFloat = 50
@@ -28,10 +28,14 @@ struct CardsPagerView: View {
         self.householdStore = householdStore
         self.householdId = householdId
         _taskStore = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
-        _shoppingListStore = StateObject(wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
-        _recurringChoreStore = StateObject(wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext))
-        _areaStore = StateObject(wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext))
-        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _shoppingListStore = StateObject(
+            wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
+        _recurringChoreStore = StateObject(
+            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext))
+        _areaStore = StateObject(
+            wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
     }
 
     private var edgeSpacing: CGFloat {
@@ -105,7 +109,7 @@ struct CardsPagerView: View {
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentIndex)
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(.all, edges: .all)
         .task(id: householdId) {
             taskStore.setSyncMode(userSession.syncMode)
             shoppingListStore.setSyncMode(userSession.syncMode)
@@ -129,7 +133,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func cardView(for kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func cardView(for kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         switch kind {
         case .shoppingList:
             shoppingListCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
@@ -149,7 +155,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func shoppingListCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func shoppingListCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         ShoppingListCardView(
             kind: kind,
             theme: theme,
@@ -159,7 +167,8 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View
+    {
         TodoCardView(
             kind: kind,
             theme: theme,
@@ -171,7 +180,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func backlogCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func backlogCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         BacklogCardView(
             kind: kind,
             theme: theme,
@@ -183,7 +194,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func recurringCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func recurringCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         RecurringCardView(
             kind: kind,
             theme: theme,
@@ -196,7 +209,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func householdCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func householdCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         HouseholdCardView(
             kind: kind,
             theme: theme,
@@ -207,7 +222,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func areasCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func areasCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         AreasCardView(
             kind: kind,
             theme: theme,
@@ -217,7 +234,9 @@ struct CardsPagerView: View {
     }
 
     @ViewBuilder
-    private func settingsCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
+    private func settingsCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
         SettingsCardView(
             kind: kind,
             theme: theme,
@@ -328,7 +347,7 @@ struct CardsPagerView: View {
 
         ZStack {
             HStack(spacing: -edgeOverlap) {
-                ForEach(0 ..< leftCount, id: \.self) { offset in
+                ForEach(0..<leftCount, id: \.self) { offset in
                     let targetIndex = currentIndex - leftCount + offset
                     Rectangle()
                         .fill(Color.clear)
@@ -343,7 +362,7 @@ struct CardsPagerView: View {
 
             HStack(spacing: -edgeOverlap) {
                 Spacer(minLength: 0)
-                ForEach(0 ..< rightCount, id: \.self) { offset in
+                ForEach(0..<rightCount, id: \.self) { offset in
                     let targetIndex = currentIndex + offset + 1
                     Rectangle()
                         .fill(Color.clear)
@@ -650,12 +669,19 @@ struct RestockModalView: View {
                                         onRestore(item)
                                     } label: {
                                         Text(item.title)
-                                            .font(wordCloudFont(for: item.id).weight(wordCloudWeight(for: item.id)))
+                                            .font(
+                                                wordCloudFont(for: item.id).weight(
+                                                    wordCloudWeight(for: item.id))
+                                            )
                                             .foregroundStyle(theme.primaryTextColor)
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 8)
-                                            .background(theme.accentColor.opacity(0.2), in: Capsule())
-                                            .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+                                            .background(
+                                                theme.accentColor.opacity(0.2), in: Capsule()
+                                            )
+                                            .shadow(
+                                                color: Color.black.opacity(0.1), radius: 3, x: 0,
+                                                y: 2)
                                     }
                                     .buttonStyle(RestockChipButtonStyle())
                                 }
@@ -690,7 +716,9 @@ struct RestockChipButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 1.05 : 1)
-            .shadow(color: Color.black.opacity(configuration.isPressed ? 0.2 : 0.1), radius: configuration.isPressed ? 6 : 3, x: 0, y: 2)
+            .shadow(
+                color: Color.black.opacity(configuration.isPressed ? 0.2 : 0.1),
+                radius: configuration.isPressed ? 6 : 3, x: 0, y: 2)
     }
 }
 
@@ -742,7 +770,9 @@ struct TodoCardView: View {
                 }
                 let assigneeIds = currentMemberId.map { [$0] } ?? []
                 _Concurrency.Task {
-                    await taskStore.createTask(title: title, status: .next, assigneeId: currentMemberId, assigneeIds: assigneeIds)
+                    await taskStore.createTask(
+                        title: title, status: .next, assigneeId: currentMemberId,
+                        assigneeIds: assigneeIds)
                 }
             },
             onToggle: { item in
@@ -1088,9 +1118,13 @@ struct HouseholdCardView: View {
                         } else {
                             ForEach(memberStore.members.prefix(3)) { member in
                                 HStack(spacing: 12) {
-                                    Image(systemName: member.role == .owner ? "star.fill" : "person.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(member.role == .owner ? .yellow : theme.secondaryTextColor)
+                                    Image(
+                                        systemName: member.role == .owner
+                                            ? "star.fill" : "person.fill"
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(
+                                        member.role == .owner ? .yellow : theme.secondaryTextColor)
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(member.displayName)
@@ -1400,7 +1434,8 @@ struct SettingsToggleRow: View {
                 }) {
                     Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 24))
-                        .foregroundStyle(isOn ? theme.accentColor : theme.secondaryTextColor.opacity(0.4))
+                        .foregroundStyle(
+                            isOn ? theme.accentColor : theme.secondaryTextColor.opacity(0.4))
                 }
             } else {
                 Toggle("", isOn: $isOn)
