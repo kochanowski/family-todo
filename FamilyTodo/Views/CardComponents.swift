@@ -205,14 +205,6 @@ struct CardPageView: View {
                         .fill(.ultraThinMaterial)
                         .overlay(Color.white.opacity(0.4))
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
-                        .stroke(
-                            inputFocused
-                                ? theme.accentColor.opacity(0.8) : Color.white.opacity(0.3),
-                            lineWidth: inputFocused ? 2 : 1
-                        )
-                )
                 .scaleEffect(inputFocused ? 1.02 : inputScale)
                 .shadow(
                     color: inputFocused ? theme.accentColor.opacity(0.3) : .clear,
@@ -389,10 +381,6 @@ struct CardItemRow: View {
             RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(Color.white.opacity(0.3))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
         .swipeActions(edge: .trailing) {

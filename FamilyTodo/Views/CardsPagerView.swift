@@ -543,27 +543,13 @@ struct ShoppingListCardView: View {
             Haptics.light()
             showClearConfirmation = true
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 40, height: 40)
-                    .background(Color.red.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                Text("Clear To Buy List")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.thinMaterial)
-                    .overlay(Color.gray.opacity(0.1))
-            )
+            Image(systemName: "trash")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.red)
+                .frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: Circle())
         }
-        .buttonStyle(PressableCardButtonStyle())
+        .buttonStyle(PressableIconButtonStyle())
     }
 
     private var restockSection: some View {
