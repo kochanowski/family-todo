@@ -375,6 +375,7 @@ struct ShoppingListCardView: View {
     @EnvironmentObject private var settingsStore: ShoppingListSettingsStore
     @State private var restockPresented = false
     @State private var showClearConfirmation = false
+    @State private var pendingDrops: Set<UUID> = []
 
     private var itemLookup: [UUID: ShoppingItem] {
         Dictionary(uniqueKeysWithValues: store.items.map { ($0.id, $0) })
@@ -389,7 +390,7 @@ struct ShoppingListCardView: View {
             CardListItem(
                 id: item.id,
                 title: item.title,
-                isCompleted: item.isBought,
+                isCompleted: item.isBought || pendingDrops.contains(item.id),
                 secondaryText: item.quantityDisplay,
                 quantityValue: item.quantityValue,
                 quantityUnit: item.quantityUnit
@@ -440,8 +441,27 @@ struct ShoppingListCardView: View {
                 },
                 onToggle: { item in
                     guard let shoppingItem = itemLookup[item.id] else { return }
-                    _Concurrency.Task {
-                        await store.toggleBought(shoppingItem)
+
+                    // If marking as bought, add to pending drops
+                    if !shoppingItem.isBought {
+                        pendingDrops.insert(item.id)
+
+                        // Auto-drop after 0.5s
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            // Check if still pending (user didn't undo)
+                            if pendingDrops.contains(item.id) {
+                                _Concurrency.Task {
+                                    await store.toggleBought(shoppingItem)
+                                }
+                                pendingDrops.remove(item.id)
+                            }
+                        }
+                    } else {
+                        // Unmarking - toggle immediately, cancel pending drop
+                        pendingDrops.remove(item.id)
+                        _Concurrency.Task {
+                            await store.toggleBought(shoppingItem)
+                        }
                     }
                 },
                 onDelete: { item in
@@ -1194,57 +1214,211 @@ struct SettingsCardView: View {
     @ObservedObject var themeStore: ThemeStore
     let safeAreaInsets: EdgeInsets
 
-    private let options: [ThemeOption] = [
-        ThemeOption(id: Self.themeId("0B7D1C64-5A5F-4B8A-9B7D-1F9B40A8F1AF"), preset: .pastel),
-        ThemeOption(id: Self.themeId("CB772A33-7D63-4B72-9C3C-6A0D8E2D551C"), preset: .soft),
-        ThemeOption(id: Self.themeId("5E5C5B6C-8CF4-4A7C-8B74-2E60C9C6B8FA"), preset: .night),
-    ]
-
-    private static func themeId(_ value: String) -> UUID {
-        guard let id = UUID(uuidString: value) else {
-            fatalError("Invalid theme UUID: \(value)")
-        }
-        return id
-    }
+    @EnvironmentObject private var notificationSettingsStore: NotificationSettingsStore
+    @EnvironmentObject private var shoppingListSettingsStore: ShoppingListSettingsStore
 
     var body: some View {
-        let items = options.map { option in
-            CardListItem(
-                id: option.id,
-                title: option.preset.displayName,
-                isCompleted: themeStore.preset == option.preset,
-                secondaryText: "Theme preset",
-                allowsEdit: false,
-                allowsDelete: false
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
+                    headerSection
+
+                    // Theme Section
+                    themeSection
+
+                    // Notifications Section
+                    notificationsSection
+
+                    // Shopping List Section
+                    shoppingListSection
+
+                    // About Section
+                    aboutSection
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + 16)
+                .padding(.bottom, LayoutConstants.footerHeight + safeAreaInsets.bottom + 16)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(kind.title)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(theme.primaryTextColor)
+
+            Text("App configuration")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.secondaryTextColor)
+        }
+    }
+
+    private var themeSection: some View {
+        SettingsSectionView(title: "Appearance", theme: theme) {
+            ForEach(ThemePreset.allCases) { preset in
+                SettingsToggleRow(
+                    title: preset.displayName,
+                    isOn: themeStore.preset == preset,
+                    theme: theme,
+                    onToggle: { themeStore.preset = preset }
+                )
+            }
+        }
+    }
+
+    private var notificationsSection: some View {
+        SettingsSectionView(title: "Notifications", theme: theme) {
+            SettingsToggleRow(
+                title: "Task Reminders",
+                isOn: $notificationSettingsStore.taskRemindersEnabled,
+                theme: theme
+            )
+
+            SettingsToggleRow(
+                title: "Daily Digest",
+                isOn: $notificationSettingsStore.dailyDigestEnabled,
+                theme: theme
+            )
+
+            SettingsToggleRow(
+                title: "Celebrations",
+                isOn: $notificationSettingsStore.celebrationsEnabled,
+                theme: theme
+            )
+
+            SettingsToggleRow(
+                title: "Sound",
+                isOn: $notificationSettingsStore.soundEnabled,
+                theme: theme
             )
         }
+    }
 
-        CardPageView(
-            kind: kind,
-            theme: theme,
-            layout: .standard,
-            subtitle: kind.subtitle(for: options.count),
-            items: items,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: false,
-            showsQuantity: false,
-            emptyMessage: nil,
-            showsInput: false,
-            accessoryView: nil,
-            onAdd: { _ in },
-            onToggle: { item in
-                guard let option = options.first(where: { $0.id == item.id }) else { return }
-                themeStore.preset = option.preset
-            },
-            onDelete: nil,
-            onUpdate: nil
-        )
+    private var shoppingListSection: some View {
+        SettingsSectionView(title: "Shopping List", theme: theme) {
+            HStack {
+                Text("Suggestions")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(theme.primaryTextColor)
+
+                Spacer()
+
+                Stepper(
+                    "\(shoppingListSettingsStore.suggestionLimit)",
+                    value: $shoppingListSettingsStore.suggestionLimit,
+                    in: ShoppingListSettingsStore.suggestionLimitRange
+                )
+                .labelsHidden()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(Color.white.opacity(0.4))
+            )
+        }
+    }
+
+    private var aboutSection: some View {
+        SettingsSectionView(title: "About", theme: theme) {
+            HStack {
+                Text("Version")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(theme.primaryTextColor)
+
+                Spacer()
+
+                Text("1.0.0")
+                    .font(.system(size: 13))
+                    .foregroundStyle(theme.secondaryTextColor)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(Color.white.opacity(0.4))
+            )
+        }
     }
 }
 
-struct ThemeOption: Identifiable {
-    let id: UUID
-    let preset: ThemePreset
+struct SettingsSectionView<Content: View>: View {
+    let title: String
+    let theme: CardTheme
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.subheadline.bold())
+                .foregroundStyle(theme.primaryTextColor)
+
+            VStack(spacing: 8) {
+                content
+            }
+        }
+    }
+}
+
+struct SettingsToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+    let theme: CardTheme
+    var onToggle: (() -> Void)?
+
+    init(title: String, isOn: Binding<Bool>, theme: CardTheme, onToggle: (() -> Void)? = nil) {
+        self.title = title
+        _isOn = isOn
+        self.theme = theme
+        self.onToggle = onToggle
+    }
+
+    init(title: String, isOn: Bool, theme: CardTheme, onToggle: @escaping () -> Void) {
+        self.title = title
+        _isOn = .constant(isOn)
+        self.theme = theme
+        self.onToggle = onToggle
+    }
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(theme.primaryTextColor)
+
+            Spacer()
+
+            if let onToggle {
+                Button(action: {
+                    Haptics.light()
+                    onToggle()
+                }) {
+                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 24))
+                        .foregroundStyle(isOn ? theme.accentColor : theme.secondaryTextColor.opacity(0.4))
+                }
+            } else {
+                Toggle("", isOn: $isOn)
+                    .labelsHidden()
+                    .tint(theme.accentColor)
+                    .onChange(of: isOn) { _, _ in
+                        Haptics.light()
+                    }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(Color.white.opacity(0.4))
+        )
+    }
 }
 
 extension String {

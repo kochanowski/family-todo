@@ -893,7 +893,7 @@ enum CardKind: String, CaseIterable {
 enum LayoutConstants {
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 60
-    static let cardCornerRadius: CGFloat = 24
+    static let cardCornerRadius: CGFloat = 32
 }
 
 struct FlowLayout: Layout {
