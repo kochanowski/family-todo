@@ -94,6 +94,10 @@ struct CardPageView: View {
 
     var body: some View {
         ZStack {
+            // White background like in screenshot
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
             VStack(spacing: layout.sectionSpacing) {
                 header
                 itemsSection
@@ -106,13 +110,8 @@ struct CardPageView: View {
                 }
             }
             .padding(.horizontal, layout.horizontalPadding)
-            .padding(
-                .top, LayoutConstants.headerHeight + safeAreaInsets.top + layout.headerTopPadding
-            )
-            .padding(
-                .bottom,
-                LayoutConstants.footerHeight + safeAreaInsets.bottom + layout.headerBottomPadding
-            )
+            .padding(.top, 16)
+            .padding(.bottom, 16)
 
             if kind == .backlog, items.isEmpty {
                 ConfettiView(isActive: true)
@@ -466,6 +465,41 @@ struct AvatarBadgeView: View {
     }
 }
 
+// MARK: - Simple Header (like in screenshot)
+
+struct SimpleHeaderView: View {
+    let title: String
+    let subtitle: String?
+    let onCompletedTap: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.primary)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Button(action: onCompletedTap) {
+                Image(systemName: "checkmark.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color(.systemBackground))
+    }
+}
+
 // MARK: - Floating Header (Redesign 2026-01-28)
 
 struct FloatingHeaderView: View {
@@ -568,7 +602,92 @@ struct GlassHeaderView: View {
     }
 }
 
-// MARK: - Hybrid Navigation Footer (Redesign 2026-01-28)
+// MARK: - Modern Tab Bar (like in screenshot)
+
+struct ModernTabBarView: View {
+    let currentKind: CardKind
+    let onSelect: (CardKind) -> Void
+    let onMoreTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Shopping
+            TabBarItem(
+                icon: "cart.fill",
+                title: "Shopping",
+                isActive: currentKind == .shoppingList
+            ) {
+                onSelect(.shoppingList)
+            }
+
+            // Tasks
+            TabBarItem(
+                icon: "checkmark.circle.fill",
+                title: "Tasks",
+                isActive: currentKind == .todo
+            ) {
+                onSelect(.todo)
+            }
+
+            // Household
+            TabBarItem(
+                icon: "person.3.fill",
+                title: "Family",
+                isActive: currentKind == .household
+            ) {
+                onSelect(.household)
+            }
+
+            // More
+            TabBarItem(
+                icon: "ellipsis",
+                title: "More",
+                isActive: currentKind.isMoreMenuItem
+            ) {
+                onMoreTap()
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: -4)
+        )
+        .padding(.horizontal, 16)
+    }
+}
+
+struct TabBarItem: View {
+    let icon: String
+    let title: String
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                    .frame(height: 28)
+
+                Text(title)
+                    .font(.system(size: 10, weight: isActive ? .semibold : .medium))
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Legacy: Hybrid Navigation Footer (kept for reference)
 
 struct HybridTabBarView: View {
     let currentKind: CardKind
@@ -585,7 +704,7 @@ struct HybridTabBarView: View {
                 let theme = themeProvider(kind)
                 let badge = badgeProvider(kind)
 
-                TabBarButton(
+                LegacyTabBarButton(
                     kind: kind,
                     theme: theme,
                     isActive: isActive,
@@ -596,7 +715,7 @@ struct HybridTabBarView: View {
             }
 
             // More button
-            MoreTabButton(
+            LegacyMoreTabButton(
                 isActive: currentKind.isMoreMenuItem,
                 hasBadge: CardKind.moreMenuItems.contains { badgeProvider($0) > 0 }
             ) {
@@ -615,7 +734,7 @@ struct HybridTabBarView: View {
     }
 }
 
-struct TabBarButton: View {
+struct LegacyTabBarButton: View {
     let kind: CardKind
     let theme: CardTheme
     let isActive: Bool
@@ -632,7 +751,7 @@ struct TabBarButton: View {
                         .frame(width: 44, height: 32)
 
                     if badge > 0 {
-                        BadgeView(count: badge, color: theme.accentColor)
+                        TabBadgeView(count: badge, color: theme.accentColor)
                             .offset(x: 4, y: -4)
                     }
                 }
@@ -652,7 +771,7 @@ struct TabBarButton: View {
     }
 }
 
-struct MoreTabButton: View {
+struct LegacyMoreTabButton: View {
     let isActive: Bool
     let hasBadge: Bool
     let action: () -> Void
@@ -689,7 +808,7 @@ struct MoreTabButton: View {
     }
 }
 
-struct BadgeView: View {
+struct TabBadgeView: View {
     let count: Int
     let color: Color
 

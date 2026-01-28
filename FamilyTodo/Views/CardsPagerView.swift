@@ -65,34 +65,36 @@ struct CardsPagerView: View {
             let theme = palette.theme(for: currentKind)
 
             ZStack {
-                // Background gradient based on current tab
-                theme.gradientColors[0]
+                // White background like in screenshot
+                Color(.systemBackground)
                     .ignoresSafeArea()
 
                 // Main content based on selected tab
                 mainContentView(for: currentKind, theme: theme, safeAreaInsets: safeInsets)
                     .frame(width: size.width, height: size.height)
+                    .padding(.top, safeInsets.top + 60) // Space for header
+                    .padding(.bottom, 90) // Space for tab bar
 
-                // Floating Header
-                FloatingHeaderView(
-                    title: currentKind.title,
-                    cardKind: currentKind,
-                    onCompletedTap: {
-                        completedPresented = true
-                    },
-                    safeAreaTop: safeInsets.top,
-                    subtitle: cardSubtitle(for: currentKind),
-                    showProgress: true,
-                    progress: cardProgress(for: currentKind)
-                )
+                // Simple Header (not floating, fixed at top)
+                VStack(spacing: 0) {
+                    SimpleHeaderView(
+                        title: currentKind.title,
+                        subtitle: cardSubtitle(for: currentKind),
+                        onCompletedTap: {
+                            completedPresented = true
+                        }
+                    )
+                    .padding(.top, safeInsets.top)
+                    .background(Color(.systemBackground))
 
-                // Hybrid Tab Bar at bottom
+                    Spacer()
+                }
+
+                // Tab Bar at bottom (like in screenshot)
                 VStack {
                     Spacer()
-                    HybridTabBarView(
+                    ModernTabBarView(
                         currentKind: currentKind,
-                        themeProvider: { palette.theme(for: $0) },
-                        badgeProvider: { badgeCount(for: $0) },
                         onSelect: { kind in
                             withAnimation(CardAnimations.cardSwitch) {
                                 currentKind = kind
@@ -103,11 +105,10 @@ struct CardsPagerView: View {
                             moreMenuPresented = true
                         }
                     )
+                    .padding(.bottom, safeInsets.bottom)
                 }
-                .ignoresSafeArea(.keyboard)
             }
             .frame(width: size.width, height: size.height)
-            .background(Color(.systemBackground))
             .sheet(isPresented: $moreMenuPresented) {
                 MoreMenuView(
                     currentKind: $currentKind,
@@ -123,7 +124,6 @@ struct CardsPagerView: View {
                 CompletedItemsView(taskStore: taskStore)
             }
         }
-        .ignoresSafeArea(.all, edges: [.horizontal, .bottom])
         .task(id: householdId) {
             await loadAllData()
         }
