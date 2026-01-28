@@ -2,6 +2,9 @@
 import SwiftData
 import SwiftUI
 
+// MARK: - Hybrid Navigation View (Redesign 2026-01-28)
+
+/// Replaces card pager with tab-based navigation (3 main + More menu)
 struct CardsPagerView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var userSession: UserSession
@@ -13,11 +16,18 @@ struct CardsPagerView: View {
     @StateObject private var memberStore: MemberStore
 
     private let householdId: UUID
+
+    // MARK: - Navigation State
+
+    @State private var currentKind: CardKind = .todo
+    @State private var moreMenuPresented = false
+    @State private var settingsPresented = false
+    @State private var completedPresented = false
+
+    // Legacy: keep for backward compatibility with card pager
     private let cardKinds = CardKind.displayOrder
     @State private var currentIndex = CardKind.defaultIndex
     @State private var dragOffset: CGFloat = 0
-    @State private var settingsPresented = false
-    @State private var completedPresented = false
     @State private var swipeHapticTriggered = false
 
     private let edgeWidth: CGFloat = 6
@@ -52,100 +62,151 @@ struct CardsPagerView: View {
             let size = proxy.size
             let safeInsets = proxy.safeAreaInsets
             let palette = themeStore.palette
+            let theme = palette.theme(for: currentKind)
 
             ZStack {
-                ForEach(cardKinds.indices, id: \.self) { index in
-                    let kind = cardKinds[index]
-                    let theme = palette.theme(for: kind)
-                    cardView(for: kind, theme: theme, safeAreaInsets: safeInsets)
-                        .frame(width: size.width, height: size.height)
-                        .background(
-                            LinearGradient(
-                                colors: theme.gradientColors,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipShape(
-                            RoundedRectangle(
-                                cornerRadius: LayoutConstants.cardCornerRadius,
-                                style: .continuous
-                            )
-                        )
-                        .shadow(
-                            color: Color.black.opacity(index == currentIndex ? 0.12 : 0.06),
-                            radius: index == currentIndex ? 16 : 8,
-                            x: 0,
-                            y: index == currentIndex ? 8 : 4
-                        )
-                        .offset(x: cardOffset(for: index, width: size.width))
-                        .opacity(cardOpacity(for: index))
-                        .scaleEffect(cardScale(for: index))
-                        .zIndex(zIndex(for: index))
-                        .animation(CardAnimations.cardSwitch, value: currentIndex)
-                        .animation(CardAnimations.cardSwitch, value: dragOffset)
-                }
-            }
-            .frame(width: size.width, height: size.height)
-            .background(Color(.systemBackground))
-            .gesture(cardDragGesture(width: size.width))
-            .overlay(alignment: .top) {
+                // Background gradient based on current tab
+                theme.gradientColors[0]
+                    .ignoresSafeArea()
+
+                // Main content based on selected tab
+                mainContentView(for: currentKind, theme: theme, safeAreaInsets: safeInsets)
+                    .frame(width: size.width, height: size.height)
+
+                // Floating Header
                 FloatingHeaderView(
-                    title: cardKinds[currentIndex].title,
-                    cardKind: cardKinds[currentIndex],
+                    title: currentKind.title,
+                    cardKind: currentKind,
                     onCompletedTap: {
                         completedPresented = true
                     },
                     safeAreaTop: safeInsets.top,
-                    subtitle: cardSubtitle(for: cardKinds[currentIndex]),
+                    subtitle: cardSubtitle(for: currentKind),
                     showProgress: true,
-                    progress: cardProgress(for: cardKinds[currentIndex])
+                    progress: cardProgress(for: currentKind)
                 )
-            }
-            .overlay(alignment: .bottom) {
-                GlassFooterView(
-                    cardKinds: cardKinds,
-                    currentIndex: currentIndex,
-                    themeProvider: { palette.theme(for: $0) },
-                    onSelect: { index in
-                        EnhancedHaptics.cardChanged()
-                        withAnimation(CardAnimations.cardSwitch) {
-                            currentIndex = index
+
+                // Hybrid Tab Bar at bottom
+                VStack {
+                    Spacer()
+                    HybridTabBarView(
+                        currentKind: currentKind,
+                        themeProvider: { palette.theme(for: $0) },
+                        badgeProvider: { badgeCount(for: $0) },
+                        onSelect: { kind in
+                            withAnimation(CardAnimations.cardSwitch) {
+                                currentKind = kind
+                            }
+                            EnhancedHaptics.cardChanged()
+                        },
+                        onMoreTap: {
+                            moreMenuPresented = true
                         }
-                    }
-                )
-                .padding(.bottom, safeInsets.bottom)
+                    )
+                }
+                .ignoresSafeArea(.keyboard)
             }
-            .overlay(edgeTapZones(size: size))
+            .frame(width: size.width, height: size.height)
+            .background(Color(.systemBackground))
+            .sheet(isPresented: $moreMenuPresented) {
+                MoreMenuView(
+                    currentKind: $currentKind,
+                    themeProvider: { palette.theme(for: $0) },
+                    badgeProvider: { badgeCount(for: $0) },
+                    isPresented: $moreMenuPresented
+                )
+            }
             .sheet(isPresented: $settingsPresented) {
                 SettingsView(householdStore: householdStore)
             }
             .sheet(isPresented: $completedPresented) {
                 CompletedItemsView(taskStore: taskStore)
             }
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentIndex)
         }
-        .ignoresSafeArea(.all, edges: .all)
+        .ignoresSafeArea(.all, edges: [.horizontal, .bottom])
         .task(id: householdId) {
-            taskStore.setSyncMode(userSession.syncMode)
-            shoppingListStore.setSyncMode(userSession.syncMode)
-            recurringChoreStore.setSyncMode(userSession.syncMode)
-            areaStore.setSyncMode(userSession.syncMode)
-            memberStore.setSyncMode(userSession.syncMode)
-            taskStore.setHousehold(householdId)
-            await taskStore.loadTasks()
-            await shoppingListStore.loadItems()
-            await recurringChoreStore.loadChores()
-            await areaStore.loadAreas()
-            await memberStore.loadMembers()
+            await loadAllData()
         }
         .onChange(of: userSession.syncMode) { _, newMode in
-            taskStore.setSyncMode(newMode)
-            shoppingListStore.setSyncMode(newMode)
-            recurringChoreStore.setSyncMode(newMode)
-            areaStore.setSyncMode(newMode)
-            memberStore.setSyncMode(newMode)
+            updateSyncMode(newMode)
         }
+    }
+
+    // MARK: - Main Content View
+
+    @ViewBuilder
+    private func mainContentView(for kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
+        -> some View
+    {
+        switch kind {
+        case .shoppingList:
+            shoppingListCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        case .todo:
+            todoCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        case .household:
+            householdCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        case .backlog:
+            backlogCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        case .recurring:
+            recurringCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        case .areas:
+            areasCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        case .settings:
+            settingsCard(kind: kind, theme: theme, safeAreaInsets: safeAreaInsets)
+        }
+    }
+
+    // MARK: - Badge Count Helper
+
+    private func badgeCount(for kind: CardKind) -> Int {
+        switch kind {
+        case .shoppingList:
+            shoppingListStore.toBuyItems.count
+        case .todo:
+            taskStore.nextTasks.count
+        case .backlog:
+            taskStore.backlogTasks.count
+        case .recurring:
+            recurringChoreStore.chores.count
+        case .household:
+            memberStore.members.count
+        case .areas:
+            areaStore.areas.count
+        case .settings:
+            0
+        }
+    }
+
+    // MARK: - Data Loading
+
+    private func loadAllData() async {
+        taskStore.setSyncMode(userSession.syncMode)
+        shoppingListStore.setSyncMode(userSession.syncMode)
+        recurringChoreStore.setSyncMode(userSession.syncMode)
+        areaStore.setSyncMode(userSession.syncMode)
+        memberStore.setSyncMode(userSession.syncMode)
+        taskStore.setHousehold(householdId)
+
+        await taskStore.loadTasks()
+        await shoppingListStore.loadItems()
+        await recurringChoreStore.loadChores()
+        await areaStore.loadAreas()
+        await memberStore.loadMembers()
+    }
+
+    private func updateSyncMode(_ mode: SyncMode) {
+        taskStore.setSyncMode(mode)
+        shoppingListStore.setSyncMode(mode)
+        recurringChoreStore.setSyncMode(mode)
+        areaStore.setSyncMode(mode)
+        memberStore.setSyncMode(mode)
+    }
+
+    // MARK: - Legacy Card Pager (kept for reference - not used in hybrid navigation)
+
+    /// Note: All card pager logic is preserved but not used. Remove in future cleanup.
+    private var legacyCardPager: some View {
+        EmptyView()
     }
 
     // MARK: - Smart Header Helpers (Redesign 2026-01-28)
@@ -1522,6 +1583,74 @@ struct SettingsToggleRow: View {
                 .fill(.ultraThinMaterial)
                 .overlay(Color.white.opacity(0.4))
         )
+    }
+}
+
+// MARK: - More Menu View (Redesign 2026-01-28)
+
+struct MoreMenuView: View {
+    @Binding var currentKind: CardKind
+    let themeProvider: (CardKind) -> CardTheme
+    let badgeProvider: (CardKind) -> Int
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("More Options") {
+                    ForEach(CardKind.moreMenuItems, id: \.self) { kind in
+                        let theme = themeProvider(kind)
+                        let badge = badgeProvider(kind)
+
+                        Button {
+                            withAnimation(CardAnimations.cardSwitch) {
+                                currentKind = kind
+                            }
+                            isPresented = false
+                            EnhancedHaptics.cardChanged()
+                        } label: {
+                            HStack(spacing: 16) {
+                                Image(systemName: kind.iconName)
+                                    .font(.title2)
+                                    .foregroundStyle(theme.accentColor)
+                                    .frame(width: 32)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(kind.title)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+
+                                    Text(kind.subtitle(for: badge))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                if badge > 0 {
+                                    BadgeView(count: badge, color: theme.accentColor)
+                                }
+
+                                if currentKind == kind {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(theme.accentColor)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("More")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        isPresented = false
+                    }
+                }
+            }
+        }
     }
 }
 

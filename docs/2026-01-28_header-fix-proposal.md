@@ -65,22 +65,22 @@ struct GlassHeaderView: View {
     let cardKind: CardKind
     let onCompletedTap: () -> Void
     let safeAreaTop: CGFloat  // <- Nowy parametr
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Wypełnienie pod status bar
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .frame(height: safeAreaTop)
-            
+
             // Główna zawartość headera
             HStack {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                
+
                 Spacer()
-                
+
                 if cardKind != .settings {
                     Button(action: onCompletedTap) {
                         Image(systemName: "checkmark.circle.fill")
@@ -141,15 +141,15 @@ struct FloatingHeaderView: View {
     let cardKind: CardKind
     let onCompletedTap: () -> Void
     let safeAreaTop: CGFloat
-    
+
     var body: some View {
         HStack {
             Text(title)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            
+
             Spacer()
-            
+
             if cardKind != .settings {
                 Button(action: onCompletedTap) {
                     Image(systemName: "checkmark.circle.fill")
@@ -215,13 +215,13 @@ var body: some View {
         let size = proxy.size
         let safeInsets = proxy.safeAreaInsets
         let palette = themeStore.palette
-        
+
         ZStack {
             // Karty - bez zmian
             ForEach(cardKinds.indices, id: \.self) { index in
                 // ... istniejący kod kart
             }
-            
+
             // Header jako osobna warstwa - POD status bar
             VStack(spacing: 0) {
                 GlassHeaderView(
@@ -231,7 +231,7 @@ var body: some View {
                 )
                 .frame(height: LayoutConstants.headerHeight)
                 .background(.ultraThinMaterial)
-                
+
                 Spacer()
             }
             .padding(.top, safeInsets.top)  // <- Tutaj padding działa poprawnie
@@ -277,22 +277,22 @@ struct GlassHeaderView: View {
     let cardKind: CardKind
     let onCompletedTap: () -> Void
     let safeAreaTop: CGFloat  // Dodaj ten parametr
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Wypełnienie pod status bar
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .frame(height: safeAreaTop)
-            
+
             // Główna zawartość
             HStack {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                
+
                 Spacer()
-                
+
                 if cardKind != .settings {
                     Button(action: onCompletedTap) {
                         Image(systemName: "checkmark.circle.fill")

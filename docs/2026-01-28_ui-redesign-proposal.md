@@ -116,14 +116,14 @@ enum Typography {
     // Nagłówki kart
     static let cardTitle = Font.system(size: 28, weight: .bold, design: .rounded)
     static let cardSubtitle = Font.system(size: 15, weight: .medium, design: .default)
-    
+
     // Zadania
     static let taskTitle = Font.system(size: 17, weight: .semibold, design: .default)
     static let taskDetail = Font.system(size: 13, weight: .regular, design: .default)
-    
+
     // Input
     static let inputText = Font.system(size: 16, weight: .regular, design: .default)
-    
+
     // Etykiety
     static let badge = Font.system(size: 11, weight: .bold, design: .rounded)
     static let count = Font.system(size: 13, weight: .bold, design: .rounded)
@@ -153,13 +153,13 @@ enum CardAnimations {
         dampingFraction: 0.75,
         blendDuration: 0.1
     )
-    
+
     // Wejście nowej karty
     static let cardEnter = Animation.spring(
         response: 0.5,
         dampingFraction: 0.6
     )
-    
+
     // Parallax podczas swipe
     static let parallax = Animation.easeOut(duration: 0.3)
 }
@@ -194,13 +194,13 @@ enum EnhancedHaptics {
             generator.impactOccurred(intensity: 0.3)
         }
     }
-    
+
     static func taskCompleted() {
         // Success pattern
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
     }
-    
+
     static func limitReached() {
         // Warning
         let generator = UINotificationFeedbackGenerator()
@@ -221,21 +221,21 @@ Header zmienia się dynamicznie w zależności od kontekstu:
 struct SmartHeaderView: View {
     let cardKind: CardKind
     let stats: CardStats
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(cardKind.title)
                     .font(.headline)
-                
+
                 // Dynamiczny podtytuł
                 Text(dynamicSubtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
-            
+
             // Context-aware actions
             switch cardKind {
             case .todo:
@@ -249,7 +249,7 @@ struct SmartHeaderView: View {
             default:
                 EmptyView()
             }
-            
+
             // Settings zawsze dostępne
             SettingsButton()
         }
@@ -284,12 +284,12 @@ Wizualizacja postępu na każdej karcie:
 struct CardProgressRing: View {
     let completed: Int
     let total: Int
-    
+
     var body: some View {
         ZStack {
             Circle()
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 3)
-            
+
             Circle()
                 .trim(from: 0, to: CGFloat(completed) / CGFloat(total))
                 .stroke(
@@ -330,7 +330,7 @@ struct CardProgressRing: View {
             Label("Do zrobienia", systemImage: "arrow.up")
         }
         .tint(.green)
-        
+
         Button { snooze(task) } label: {
             Label("Przypomnij", systemImage: "clock")
         }
@@ -340,7 +340,7 @@ struct CardProgressRing: View {
         Button(role: .destructive) { delete(task) } label: {
             Label("Usuń", systemImage: "trash")
         }
-        
+
         Button { edit(task) } label: {
             Label("Edytuj", systemImage: "pencil")
         }

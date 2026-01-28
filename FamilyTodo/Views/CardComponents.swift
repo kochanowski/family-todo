@@ -568,6 +568,156 @@ struct GlassHeaderView: View {
     }
 }
 
+// MARK: - Hybrid Navigation Footer (Redesign 2026-01-28)
+
+struct HybridTabBarView: View {
+    let currentKind: CardKind
+    let themeProvider: (CardKind) -> CardTheme
+    let badgeProvider: (CardKind) -> Int
+    let onSelect: (CardKind) -> Void
+    let onMoreTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Main tabs: Shopping, Tasks, Household
+            ForEach(CardKind.mainTabs, id: \.self) { kind in
+                let isActive = currentKind == kind
+                let theme = themeProvider(kind)
+                let badge = badgeProvider(kind)
+
+                TabBarButton(
+                    kind: kind,
+                    theme: theme,
+                    isActive: isActive,
+                    badge: badge
+                ) {
+                    onSelect(kind)
+                }
+            }
+
+            // More button
+            MoreTabButton(
+                isActive: currentKind.isMoreMenuItem,
+                hasBadge: CardKind.moreMenuItems.contains { badgeProvider($0) > 0 }
+            ) {
+                onMoreTap()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+}
+
+struct TabBarButton: View {
+    let kind: CardKind
+    let theme: CardTheme
+    let isActive: Bool
+    let badge: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: kind.iconName)
+                        .font(.system(size: 22, weight: isActive ? .semibold : .regular))
+                        .foregroundStyle(isActive ? theme.accentColor : .secondary)
+                        .frame(width: 44, height: 32)
+
+                    if badge > 0 {
+                        BadgeView(count: badge, color: theme.accentColor)
+                            .offset(x: 4, y: -4)
+                    }
+                }
+
+                Text(kind.shortTitle)
+                    .font(.system(size: 11, weight: isActive ? .semibold : .medium))
+                    .foregroundStyle(isActive ? theme.accentColor : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isActive ? theme.accentColor.opacity(0.15) : Color.clear)
+            )
+        }
+        .buttonStyle(PressableTabButtonStyle())
+    }
+}
+
+struct MoreTabButton: View {
+    let isActive: Bool
+    let hasBadge: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 22, weight: isActive ? .semibold : .regular))
+                        .foregroundStyle(isActive ? .accentColor : .secondary)
+                        .frame(width: 44, height: 32)
+
+                    if hasBadge {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 4, y: -4)
+                    }
+                }
+
+                Text("More")
+                    .font(.system(size: 11, weight: isActive ? .semibold : .medium))
+                    .foregroundStyle(isActive ? .accentColor : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
+            )
+        }
+        .buttonStyle(PressableTabButtonStyle())
+    }
+}
+
+struct BadgeView: View {
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        Text("\(min(count, 99))")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(
+                Capsule()
+                    .fill(color)
+            )
+            .frame(minWidth: 16, minHeight: 16)
+    }
+}
+
+struct PressableTabButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Legacy Footer (kept for backward compatibility)
+
 struct GlassFooterView: View {
     let cardKinds: [CardKind]
     let currentIndex: Int
@@ -971,18 +1121,37 @@ enum CardKind: String, CaseIterable {
     case areas
     case settings
 
-    static let displayOrder: [CardKind] = [
+    // MARK: - Hybrid Navigation (3+1) - Redesign 2026-01-28
+
+    // Main tabs: Shopping, Tasks (Todo), Household
+    // More menu: Backlog, Recurring, Areas, Settings
+
+    static let mainTabs: [CardKind] = [
         .shoppingList,
         .todo,
+        .household,
+    ]
+
+    static let moreMenuItems: [CardKind] = [
         .backlog,
         .recurring,
-        .household,
         .areas,
         .settings,
     ]
 
+    // Legacy: keep for backward compatibility
+    static let displayOrder: [CardKind] = mainTabs + moreMenuItems
+
     static var defaultIndex: Int {
-        displayOrder.firstIndex(of: .todo) ?? 0
+        mainTabs.firstIndex(of: .todo) ?? 0
+    }
+
+    var isMainTab: Bool {
+        CardKind.mainTabs.contains(self)
+    }
+
+    var isMoreMenuItem: Bool {
+        CardKind.moreMenuItems.contains(self)
     }
 
     var title: String {
@@ -990,17 +1159,55 @@ enum CardKind: String, CaseIterable {
         case .shoppingList:
             "Shopping List"
         case .todo:
-            "Todo"
+            "Tasks"
         case .backlog:
             "Backlog"
         case .recurring:
-            "Recurring Tasks"
+            "Recurring"
         case .household:
             "Household"
         case .areas:
             "Areas"
         case .settings:
             "Settings"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .shoppingList:
+            "Shopping"
+        case .todo:
+            "Tasks"
+        case .backlog:
+            "Backlog"
+        case .recurring:
+            "Recurring"
+        case .household:
+            "Family"
+        case .areas:
+            "Areas"
+        case .settings:
+            "Settings"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .shoppingList:
+            "cart.fill"
+        case .todo:
+            "checkmark.circle.fill"
+        case .backlog:
+            "archivebox.fill"
+        case .recurring:
+            "arrow.clockwise.circle.fill"
+        case .household:
+            "person.3.fill"
+        case .areas:
+            "folder.fill"
+        case .settings:
+            "gearshape.fill"
         }
     }
 
