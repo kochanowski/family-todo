@@ -8,6 +8,6 @@ final class ShoppingListSettingsStore: ObservableObject {
         didSet { objectWillChange.send() }
     }
 
-    // Valid range: 5-50
+    /// Valid range: 5-50
     static let suggestionLimitRange = 5 ... 50
 }

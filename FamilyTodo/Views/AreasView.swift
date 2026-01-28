@@ -108,7 +108,9 @@ struct AreaDetailView: View {
     @State private var name: String
     @State private var selectedIcon: String
 
-    private var isNewArea: Bool { area == nil }
+    private var isNewArea: Bool {
+        area == nil
+    }
 
     private let availableIcons = [
         "fork.knife", "shower", "sofa", "bed.double", "leaf",

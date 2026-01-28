@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 final class NotificationSettingsStore: ObservableObject {
-    // Daily digest
+    /// Daily digest
     @AppStorage("notifications.dailyDigest.enabled")
     var dailyDigestEnabled = false {
         didSet { objectWillChange.send() }
@@ -19,19 +19,19 @@ final class NotificationSettingsStore: ObservableObject {
         didSet { objectWillChange.send() }
     }
 
-    // Task reminders
+    /// Task reminders
     @AppStorage("notifications.taskReminders.enabled")
     var taskRemindersEnabled = true {
         didSet { objectWillChange.send() }
     }
 
-    // Celebrations (UI implementation post-MVP)
+    /// Celebrations (UI implementation post-MVP)
     @AppStorage("notifications.celebrations.enabled")
     var celebrationsEnabled = true {
         didSet { objectWillChange.send() }
     }
 
-    // Sound
+    /// Sound
     @AppStorage("notifications.sound.enabled")
     var soundEnabled = true {
         didSet { objectWillChange.send() }

@@ -278,7 +278,8 @@ extension CloudKitManager {
             record["recurrenceInterval"] as? Int
                 ?? (record["recurrenceInterval"] as? Int64).map(Int.init)
         let defaultAssigneeIds = uuidArray(
-            from: record["defaultAssigneeIds"] as? [CKRecord.Reference])
+            from: record["defaultAssigneeIds"] as? [CKRecord.Reference]
+        )
         let fallbackAssigneeId = uuid(from: record["defaultAssigneeId"] as? CKRecord.Reference)
         let resolvedAssigneeIds =
             defaultAssigneeIds.isEmpty

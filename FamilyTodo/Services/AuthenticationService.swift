@@ -213,7 +213,7 @@
             }
         }
 
-        // Helper to update state from nonisolated context
+        /// Helper to update state from nonisolated context
         private func updateAuthenticationState(_ newState: AuthenticationState) async {
             authenticationState = newState
         }

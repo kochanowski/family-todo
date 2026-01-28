@@ -18,7 +18,9 @@ struct TaskDetailView: View {
     @State private var notes: String
     @State private var showingDeleteConfirmation = false
 
-    private var isNewTask: Bool { task == nil }
+    private var isNewTask: Bool {
+        task == nil
+    }
 
     init(store: TaskStore, householdId: UUID, task: Task? = nil, areas: [Area] = []) {
         self.store = store

@@ -43,18 +43,28 @@ final class UserSession: ObservableObject {
     // MARK: - Computed Properties
 
     /// Convenience accessor for user ID
-    var userId: String? { currentUserID }
+    var userId: String? {
+        currentUserID
+    }
 
     /// True when the user is signed in with iCloud/CloudKit
-    var isAuthenticated: Bool { sessionMode == .signedIn }
+    var isAuthenticated: Bool {
+        sessionMode == .signedIn
+    }
 
     /// True when the user can access the app (signed in or guest)
-    var hasActiveSession: Bool { sessionMode != .signedOut }
+    var hasActiveSession: Bool {
+        sessionMode != .signedOut
+    }
 
     /// True when the session is local-only (guest mode)
-    var isGuest: Bool { sessionMode == .guest }
+    var isGuest: Bool {
+        sessionMode == .guest
+    }
 
-    var syncMode: SyncMode { isGuest ? .localOnly : .cloud }
+    var syncMode: SyncMode {
+        isGuest ? .localOnly : .cloud
+    }
 
     /// Convenience accessor for display name
     var displayName: String? {

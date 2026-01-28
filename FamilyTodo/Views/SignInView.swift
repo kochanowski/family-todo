@@ -100,15 +100,14 @@ struct SignInView: View {
     }
 }
 
-/// Custom Sign in with Apple button using ASAuthorizationAppleIDButton
+// Custom Sign in with Apple button using ASAuthorizationAppleIDButton
 #if !CI
     struct SignInWithAppleButtonView: UIViewRepresentable {
         func makeUIView(context _: Context) -> ASAuthorizationAppleIDButton {
-            let button = ASAuthorizationAppleIDButton(
+            ASAuthorizationAppleIDButton(
                 authorizationButtonType: .signIn,
                 authorizationButtonStyle: .black
             )
-            return button
         }
 
         func updateUIView(_: ASAuthorizationAppleIDButton, context _: Context) {

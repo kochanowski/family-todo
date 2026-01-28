@@ -9,7 +9,7 @@ final class FamilyTodoUITests: XCTestCase {
 
     /// Verify app launches and reaches foreground state
     /// This catches crashes that occur during app initialization
-    func testAppLaunches() throws {
+    func testAppLaunches() {
         let app = XCUIApplication()
         app.launch()
 
@@ -19,7 +19,7 @@ final class FamilyTodoUITests: XCTestCase {
     }
 
     /// Verify app doesn't crash when backgrounded and foregrounded
-    func testAppSurvivesBackgroundForegroundCycle() throws {
+    func testAppSurvivesBackgroundForegroundCycle() {
         let app = XCUIApplication()
         app.launch()
 

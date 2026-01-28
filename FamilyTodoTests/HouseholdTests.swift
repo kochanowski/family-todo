@@ -1,7 +1,6 @@
+@testable import HousePulse
 import SwiftData
 import XCTest
-
-@testable import HousePulse
 
 final class HouseholdTests: XCTestCase {
     // MARK: - Initialization Tests

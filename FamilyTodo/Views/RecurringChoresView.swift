@@ -209,7 +209,9 @@ struct RecurringChoreDetailView: View {
     @State private var recurrenceInterval: Int
     @State private var notes: String
 
-    private var isNewChore: Bool { chore == nil }
+    private var isNewChore: Bool {
+        chore == nil
+    }
 
     init(choreStore: RecurringChoreStore, chore: RecurringChore? = nil) {
         self.choreStore = choreStore
