@@ -47,9 +47,6 @@
 		A477D45D71774433A314377F /* RecurringChoreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */; };
 		0C8ECE6E2288433FAD9FE1AF /* RecurringChoresView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AF10EE9B8B4A09B5DCD599 /* RecurringChoresView.swift */; };
 		58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */; };
-		909DBD557B1F4C31A4618B1A /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D3D39831DE64CCC8BDFBE90 /* AuthenticationService.swift */; };
-		60DB798C87D7427FA2FD3DBF /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACFE4E9FB4E4E81BDB3E2E6 /* UserSession.swift */; };
-		803FC0ECBD75468BBDEFD911 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38792E606F5E458BBBC2F493 /* SignInView.swift */; };
 		A1B2C3D4E5F60718293A4B8A /* ShareInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B8B /* ShareInviteView.swift */; };
 		B4F73F5182AF4EBFA326779E /* CachedHousehold.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63506D8C54DF4D9BB2C5EBB7 /* CachedHousehold.swift */; };
 		310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5698A6FED3C457788B6A60C /* CachedMember.swift */; };
@@ -123,9 +120,6 @@
 		B84E985427504CC48A9AF8C7 /* RecurringChoreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoreStore.swift; sourceTree = "<group>"; };
 		28AF10EE9B8B4A09B5DCD599 /* RecurringChoresView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringChoresView.swift; sourceTree = "<group>"; };
 		E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		9D3D39831DE64CCC8BDFBE90 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
-		2ACFE4E9FB4E4E81BDB3E2E6 /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
-		38792E606F5E458BBBC2F493 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B8B /* ShareInviteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInviteView.swift; sourceTree = "<group>"; };
 		63506D8C54DF4D9BB2C5EBB7 /* CachedHousehold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedHousehold.swift; sourceTree = "<group>"; };
 		D5698A6FED3C457788B6A60C /* CachedMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedMember.swift; sourceTree = "<group>"; };
@@ -336,19 +330,9 @@
 			path = Stores;
 			sourceTree = "<group>";
 		};
-		D95C09A841194103A6996EAA /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				9D3D39831DE64CCC8BDFBE90 /* AuthenticationService.swift */,
-				2ACFE4E9FB4E4E81BDB3E2E6 /* UserSession.swift */,
-			);
-			path = Services;
-			sourceTree = "<group>";
-		};
 		D6C0FC4A8B084788928AACE8 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				38792E606F5E458BBBC2F493 /* SignInView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -483,16 +467,12 @@
 				A1B2C3D4E5F60718293A4B94 /* RecurringChore.swift in Sources */,
 				D1F7A0C7A07C4C67B7B8B4A1 /* ShoppingItem.swift in Sources */,
 				F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */,
-
 				FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */,
 				1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */,
-								909DBD557B1F4C31A4618B1A /* AuthenticationService.swift in Sources */,
-				60DB798C87D7427FA2FD3DBF /* UserSession.swift in Sources */,
-				803FC0ECBD75468BBDEFD911 /* SignInView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B9B /* CloudKitManager.swift in Sources */,
 				A1B2C3D4E5F60718293A4B9D1 /* CloudKitManager+Mapping.swift in Sources */,
 				A1B2C3D4E5F60718293A4B8A /* ShareInviteView.swift in Sources */,
-							7414A40315A443578EC675CB /* CompletedItemsView.swift in Sources */,
+				7414A40315A443578EC675CB /* CompletedItemsView in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
