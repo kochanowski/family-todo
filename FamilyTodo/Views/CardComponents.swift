@@ -669,18 +669,18 @@ struct TabBarItem: View {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                    .foregroundStyle(isActive ? Color.blue : Color.secondary)
                     .frame(height: 28)
 
                 Text(title)
                     .font(.system(size: 10, weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                    .foregroundStyle(isActive ? Color.blue : Color.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .fill(isActive ? Color.blue.opacity(0.12) : Color.clear)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -747,7 +747,7 @@ struct LegacyTabBarButton: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: kind.iconName)
                         .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                        .foregroundStyle(isActive ? theme.accentColor : .secondary)
+                        .foregroundStyle(isActive ? theme.accentColor : Color.secondary)
                         .frame(width: 44, height: 32)
 
                     if badge > 0 {
@@ -758,7 +758,7 @@ struct LegacyTabBarButton: View {
 
                 Text(kind.shortTitle)
                     .font(.system(size: 11, weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive ? theme.accentColor : .secondary)
+                    .foregroundStyle(isActive ? theme.accentColor : Color.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
@@ -782,7 +782,7 @@ struct LegacyMoreTabButton: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "ellipsis.circle.fill")
                         .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                        .foregroundStyle(isActive ? .accentColor : .secondary)
+                        .foregroundStyle(isActive ? Color.blue : Color.secondary)
                         .frame(width: 44, height: 32)
 
                     if hasBadge {
@@ -795,13 +795,13 @@ struct LegacyMoreTabButton: View {
 
                 Text("More")
                     .font(.system(size: 11, weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive ? .accentColor : .secondary)
+                    .foregroundStyle(isActive ? Color.blue : Color.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
+                    .fill(isActive ? Color.blue.opacity(0.15) : Color.clear)
             )
         }
         .buttonStyle(PressableTabButtonStyle())
