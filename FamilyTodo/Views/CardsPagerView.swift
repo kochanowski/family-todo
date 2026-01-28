@@ -1628,7 +1628,7 @@ struct MoreMenuView: View {
                                 Spacer()
 
                                 if badge > 0 {
-                                    BadgeView(count: badge, color: theme.accentColor)
+                                    TabBadgeView(count: badge, color: theme.accentColor)
                                 }
 
                                 if currentKind == kind {
