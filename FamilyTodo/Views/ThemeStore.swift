@@ -5,7 +5,9 @@ enum ThemePreset: String, CaseIterable, Identifiable {
     case soft
     case night
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
@@ -21,48 +23,49 @@ enum ThemePreset: String, CaseIterable, Identifiable {
     var palette: ThemePalette {
         switch self {
         case .pastel:
+            // Soft Aurora palette - Redesign 2026-01-28
             ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
-                    gradientColors: [Color(hex: "2D3C59"), Color(hex: "3D4C6F")],
-                    accentColor: Color(hex: "2D3C59"),
-                    primaryTextColor: Color.white,
-                    secondaryTextColor: Color.white.opacity(0.85)
+                    gradientColors: [Color(hex: "F3E8FF"), Color(hex: "E9D5FF")],
+                    accentColor: Color(hex: "A855F7"),
+                    primaryTextColor: Color(hex: "6B21A8"),
+                    secondaryTextColor: Color(hex: "7E22CE")
                 ),
                 .todo: CardTheme(
-                    gradientColors: [Color(hex: "94A378"), Color(hex: "A4B388")],
-                    accentColor: Color(hex: "94A378"),
-                    primaryTextColor: Color.white,
-                    secondaryTextColor: Color.white.opacity(0.85)
+                    gradientColors: [Color(hex: "ECFDF5"), Color(hex: "D1FAE5")],
+                    accentColor: Color(hex: "10B981"),
+                    primaryTextColor: Color(hex: "065F46"),
+                    secondaryTextColor: Color(hex: "047857")
                 ),
                 .backlog: CardTheme(
-                    gradientColors: [Color(hex: "E5BA41"), Color(hex: "F0C955")],
-                    accentColor: Color(hex: "E5BA41"),
-                    primaryTextColor: Color(hex: "4A3A0F"),
-                    secondaryTextColor: Color(hex: "5A4812")
+                    gradientColors: [Color(hex: "FEF3C7"), Color(hex: "FDE68A")],
+                    accentColor: Color(hex: "F59E0B"),
+                    primaryTextColor: Color(hex: "92400E"),
+                    secondaryTextColor: Color(hex: "B45309")
                 ),
                 .recurring: CardTheme(
-                    gradientColors: [Color(hex: "D1855C"), Color(hex: "DC9570")],
-                    accentColor: Color(hex: "D1855C"),
-                    primaryTextColor: Color.white,
-                    secondaryTextColor: Color.white.opacity(0.85)
+                    gradientColors: [Color(hex: "FFEDD5"), Color(hex: "FED7AA")],
+                    accentColor: Color(hex: "F97316"),
+                    primaryTextColor: Color(hex: "9A3412"),
+                    secondaryTextColor: Color(hex: "C2410C")
                 ),
                 .household: CardTheme(
-                    gradientColors: [Color(hex: "36656B"), Color(hex: "447580")],
-                    accentColor: Color(hex: "36656B"),
-                    primaryTextColor: Color.white,
-                    secondaryTextColor: Color.white.opacity(0.85)
+                    gradientColors: [Color(hex: "EFF6FF"), Color(hex: "BFDBFE")],
+                    accentColor: Color(hex: "3B82F6"),
+                    primaryTextColor: Color(hex: "1E40AF"),
+                    secondaryTextColor: Color(hex: "1D4ED8")
                 ),
                 .areas: CardTheme(
-                    gradientColors: [Color(hex: "75B06F"), Color(hex: "85C07F")],
-                    accentColor: Color(hex: "75B06F"),
-                    primaryTextColor: Color.white,
-                    secondaryTextColor: Color.white.opacity(0.85)
+                    gradientColors: [Color(hex: "F0FDFA"), Color(hex: "99F6E4")],
+                    accentColor: Color(hex: "14B8A6"),
+                    primaryTextColor: Color(hex: "115E59"),
+                    secondaryTextColor: Color(hex: "0F766E")
                 ),
                 .settings: CardTheme(
-                    gradientColors: [Color(hex: "DAD887"), Color(hex: "E5E397")],
-                    accentColor: Color(hex: "DAD887"),
-                    primaryTextColor: Color(hex: "4A4812"),
-                    secondaryTextColor: Color(hex: "5A5215")
+                    gradientColors: [Color(hex: "F8FAFC"), Color(hex: "E2E8F0")],
+                    accentColor: Color(hex: "64748B"),
+                    primaryTextColor: Color(hex: "334155"),
+                    secondaryTextColor: Color(hex: "475569")
                 ),
             ])
         case .soft:

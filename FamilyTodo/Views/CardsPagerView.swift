@@ -30,13 +30,17 @@ struct CardsPagerView: View {
         self.householdId = householdId
         _taskStore = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
         _shoppingListStore = StateObject(
-            wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
+        )
         _recurringChoreStore = StateObject(
-            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
+        )
         _areaStore = StateObject(
-            wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext)
+        )
         _memberStore = StateObject(
-            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
+        )
     }
 
     private var edgeSpacing: CGFloat {
@@ -68,24 +72,35 @@ struct CardsPagerView: View {
                                 style: .continuous
                             )
                         )
-                        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+                        .shadow(
+                            color: Color.black.opacity(index == currentIndex ? 0.12 : 0.06),
+                            radius: index == currentIndex ? 16 : 8,
+                            x: 0,
+                            y: index == currentIndex ? 8 : 4
+                        )
                         .offset(x: cardOffset(for: index, width: size.width))
                         .opacity(cardOpacity(for: index))
+                        .scaleEffect(cardScale(for: index))
                         .zIndex(zIndex(for: index))
+                        .animation(CardAnimations.cardSwitch, value: currentIndex)
+                        .animation(CardAnimations.cardSwitch, value: dragOffset)
                 }
             }
             .frame(width: size.width, height: size.height)
             .background(Color(.systemBackground))
             .gesture(cardDragGesture(width: size.width))
             .overlay(alignment: .top) {
-                GlassHeaderView(
+                FloatingHeaderView(
                     title: cardKinds[currentIndex].title,
                     cardKind: cardKinds[currentIndex],
                     onCompletedTap: {
                         completedPresented = true
-                    }
+                    },
+                    safeAreaTop: safeInsets.top,
+                    subtitle: cardSubtitle(for: cardKinds[currentIndex]),
+                    showProgress: true,
+                    progress: cardProgress(for: cardKinds[currentIndex])
                 )
-                .padding(.top, safeInsets.top)
             }
             .overlay(alignment: .bottom) {
                 GlassFooterView(
@@ -93,8 +108,8 @@ struct CardsPagerView: View {
                     currentIndex: currentIndex,
                     themeProvider: { palette.theme(for: $0) },
                     onSelect: { index in
-                        Haptics.light()
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                        EnhancedHaptics.cardChanged()
+                        withAnimation(CardAnimations.cardSwitch) {
                             currentIndex = index
                         }
                     }
@@ -133,6 +148,48 @@ struct CardsPagerView: View {
         }
     }
 
+    // MARK: - Smart Header Helpers (Redesign 2026-01-28)
+
+    private func cardSubtitle(for kind: CardKind) -> String? {
+        switch kind {
+        case .shoppingList:
+            let count = shoppingListStore.toBuyItems.count
+            return count == 1 ? "1 item to buy" : "\(count) items to buy"
+        case .todo:
+            let count = taskStore.nextTasks.count
+            return count == 1 ? "1 task remaining" : "\(count) tasks remaining"
+        case .backlog:
+            let count = taskStore.backlogTasks.count
+            return count == 1 ? "1 idea in backlog" : "\(count) ideas in backlog"
+        case .recurring:
+            let count = recurringChoreStore.chores.count
+            return count == 1 ? "1 recurring task" : "\(count) recurring tasks"
+        case .household:
+            let count = memberStore.members.count
+            return count == 1 ? "1 member" : "\(count) members"
+        case .areas:
+            let count = areaStore.areas.count
+            return count == 1 ? "1 area" : "\(count) areas"
+        case .settings:
+            return "Theme & preferences"
+        }
+    }
+
+    private func cardProgress(for kind: CardKind) -> Double {
+        switch kind {
+        case .shoppingList:
+            let total = shoppingListStore.items.count
+            let bought = shoppingListStore.boughtItems.count
+            return total > 0 ? Double(bought) / Double(total) : 0
+        case .todo:
+            let total = taskStore.tasks.count
+            let done = taskStore.tasks.filter { $0.status == .done }.count
+            return total > 0 ? Double(done) / Double(total) : 0
+        default:
+            return 0
+        }
+    }
+
     @ViewBuilder
     private func cardView(for kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
@@ -155,7 +212,6 @@ struct CardsPagerView: View {
         }
     }
 
-    @ViewBuilder
     private func shoppingListCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
     {
@@ -167,9 +223,7 @@ struct CardsPagerView: View {
         )
     }
 
-    @ViewBuilder
-    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View
-    {
+    private func todoCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets) -> some View {
         TodoCardView(
             kind: kind,
             theme: theme,
@@ -180,7 +234,6 @@ struct CardsPagerView: View {
         )
     }
 
-    @ViewBuilder
     private func backlogCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
     {
@@ -194,7 +247,6 @@ struct CardsPagerView: View {
         )
     }
 
-    @ViewBuilder
     private func recurringCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
     {
@@ -209,7 +261,6 @@ struct CardsPagerView: View {
         )
     }
 
-    @ViewBuilder
     private func householdCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
     {
@@ -222,7 +273,6 @@ struct CardsPagerView: View {
         )
     }
 
-    @ViewBuilder
     private func areasCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
     {
@@ -234,7 +284,6 @@ struct CardsPagerView: View {
         )
     }
 
-    @ViewBuilder
     private func settingsCard(kind: CardKind, theme: CardTheme, safeAreaInsets: EdgeInsets)
         -> some View
     {
@@ -283,7 +332,8 @@ struct CardsPagerView: View {
             return 1
         }
 
-        let baseOpacity = 0.78
+        // Enhanced opacity with blur-like effect for non-active cards
+        let baseOpacity = 0.75
         let progress = min(1, abs(dragOffset) / 120)
 
         if index == currentIndex + 1, dragOffset < 0 {
@@ -294,7 +344,30 @@ struct CardsPagerView: View {
             return baseOpacity + (1 - baseOpacity) * Double(progress)
         }
 
-        return baseOpacity
+        // Further reduce opacity for cards further away
+        let distance = abs(index - currentIndex)
+        return max(0.4, baseOpacity - Double(distance) * 0.15)
+    }
+
+    private func cardScale(for index: Int) -> CGFloat {
+        if index == currentIndex {
+            return 1.0
+        }
+
+        let distance = abs(index - currentIndex)
+        let baseScale: CGFloat = 0.95
+        let progress = CGFloat(min(1, abs(dragOffset) / 120))
+
+        if distance == 1 {
+            // Neighboring cards scale up when dragging towards them
+            if (index == currentIndex + 1 && dragOffset < 0) ||
+                (index == currentIndex - 1 && dragOffset > 0)
+            {
+                return baseScale + (1.0 - baseScale) * progress
+            }
+        }
+
+        return max(0.9, baseScale - CGFloat(distance - 1) * 0.03)
     }
 
     private func zIndex(for index: Int) -> Double {
@@ -319,7 +392,7 @@ struct CardsPagerView: View {
                 }
 
                 if !swipeHapticTriggered {
-                    Haptics.light()
+                    EnhancedHaptics.cardChanged()
                     swipeHapticTriggered = true
                 }
             }
@@ -328,14 +401,18 @@ struct CardsPagerView: View {
 
                 let translation = value.translation.width
                 if translation < -swipeThreshold, currentIndex < cardKinds.count - 1 {
-                    currentIndex += 1
-                    Haptics.medium()
+                    withAnimation(CardAnimations.cardSwitch) {
+                        currentIndex += 1
+                    }
+                    EnhancedHaptics.cardChanged()
                 } else if translation > swipeThreshold, currentIndex > 0 {
-                    currentIndex -= 1
-                    Haptics.medium()
+                    withAnimation(CardAnimations.cardSwitch) {
+                        currentIndex -= 1
+                    }
+                    EnhancedHaptics.cardChanged()
                 }
 
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                withAnimation(CardAnimations.cardSwitch) {
                     dragOffset = 0
                 }
             }
@@ -348,7 +425,7 @@ struct CardsPagerView: View {
 
         ZStack {
             HStack(spacing: -edgeOverlap) {
-                ForEach(0..<leftCount, id: \.self) { offset in
+                ForEach(0 ..< leftCount, id: \.self) { offset in
                     let targetIndex = currentIndex - leftCount + offset
                     Rectangle()
                         .fill(Color.clear)
@@ -363,7 +440,7 @@ struct CardsPagerView: View {
 
             HStack(spacing: -edgeOverlap) {
                 Spacer(minLength: 0)
-                ForEach(0..<rightCount, id: \.self) { offset in
+                ForEach(0 ..< rightCount, id: \.self) { offset in
                     let targetIndex = currentIndex + offset + 1
                     Rectangle()
                         .fill(Color.clear)
@@ -379,8 +456,8 @@ struct CardsPagerView: View {
 
     private func switchTo(index: Int) {
         guard index != currentIndex, cardKinds.indices.contains(index) else { return }
-        Haptics.light()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        EnhancedHaptics.cardChanged()
+        withAnimation(CardAnimations.cardSwitch) {
             currentIndex = index
         }
     }
@@ -658,7 +735,8 @@ struct RestockModalView: View {
                                         Text(item.title)
                                             .font(
                                                 wordCloudFont(for: item.id).weight(
-                                                    wordCloudWeight(for: item.id))
+                                                    wordCloudWeight(for: item.id)
+                                                )
                                             )
                                             .foregroundStyle(theme.primaryTextColor)
                                             .padding(.horizontal, 12)
@@ -800,10 +878,9 @@ struct TodoCardView: View {
     private func assigneeInitials(for task: Task) -> [String] {
         let ids = resolvedAssigneeIds(for: task)
         let members = memberStore.members
-        let initials = ids.compactMap { id in
+        return ids.compactMap { id in
             members.first { $0.id == id }?.displayName.initials
         }
-        return initials
     }
 
     private func resolvedAssigneeIds(for task: Task) -> [UUID] {
@@ -1114,7 +1191,8 @@ struct HouseholdCardView: View {
                                     )
                                     .font(.caption)
                                     .foregroundStyle(
-                                        member.role == .owner ? .yellow : theme.secondaryTextColor)
+                                        member.role == .owner ? .yellow : theme.secondaryTextColor
+                                    )
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(member.displayName)
@@ -1425,7 +1503,8 @@ struct SettingsToggleRow: View {
                     Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 24))
                         .foregroundStyle(
-                            isOn ? theme.accentColor : theme.secondaryTextColor.opacity(0.4))
+                            isOn ? theme.accentColor : theme.secondaryTextColor.opacity(0.4)
+                        )
                 }
             } else {
                 Toggle("", isOn: $isOn)

@@ -142,23 +142,12 @@ struct CardPageView: View {
     private var itemsSection: some View {
         Group {
             if items.isEmpty {
-                VStack(spacing: 12) {
-                    Spacer(minLength: 20)
-                    if isLoading {
-                        ProgressView("Loading...")
-                    } else if let emptyMessage {
-                        Text(emptyMessage)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(theme.secondaryTextColor)
-                            .scaleEffect(1.02)
-                            .animation(
-                                .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
-                                value: emptyMessage
-                            )
-                    }
-                    Spacer(minLength: 20)
-                }
-                .frame(maxWidth: .infinity)
+                SmartEmptyStateView(
+                    kind: kind,
+                    isLoading: isLoading,
+                    emptyMessage: emptyMessage,
+                    theme: theme
+                )
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: layout.rowSpacing) {
@@ -274,11 +263,11 @@ struct CardPageView: View {
 
         onAdd(trimmed)
 
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+        withAnimation(CardAnimations.microInteraction) {
             addButtonRotation += .degrees(90)
         }
 
-        Haptics.medium()
+        EnhancedHaptics.addedItem()
         inputText = ""
     }
 
@@ -420,14 +409,19 @@ struct CardItemRow: View {
     }
 
     private func triggerToggleAnimation() {
-        Haptics.light()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            pulse = 1.2
+        if item.isCompleted {
+            EnhancedHaptics.taskCompleted()
+        } else {
+            Haptics.light()
         }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6).delay(0.05)) {
+
+        withAnimation(CardAnimations.microInteraction) {
+            pulse = 1.25
+        }
+        withAnimation(CardAnimations.microInteraction.delay(0.08)) {
             pulse = 1
         }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
             checkmarkRotation += .degrees(360)
         }
     }
@@ -471,6 +465,70 @@ struct AvatarBadgeView: View {
             )
     }
 }
+
+// MARK: - Floating Header (Redesign 2026-01-28)
+
+struct FloatingHeaderView: View {
+    let title: String
+    let cardKind: CardKind
+    let onCompletedTap: () -> Void
+    let safeAreaTop: CGFloat
+    let subtitle: String?
+    let showProgress: Bool
+    let progress: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Title section
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Typography.headerTitle)
+                    .foregroundStyle(.primary)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Typography.headerSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Progress ring (if enabled)
+            if showProgress {
+                CardProgressRing(progress: progress)
+                    .frame(width: 28, height: 28)
+            }
+
+            // Completed items button
+            if cardKind != .settings {
+                Button(action: onCompletedTap) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(.ultraThinMaterial)
+                                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+                        )
+                }
+                .buttonStyle(PressableIconButtonStyle())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, safeAreaTop + 8)
+    }
+}
+
+// MARK: - Legacy Header (kept for backward compatibility)
 
 struct GlassHeaderView: View {
     let title: String
@@ -619,6 +677,97 @@ struct EditItemView: View {
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Smart Empty State View (Redesign 2026-01-28)
+
+struct SmartEmptyStateView: View {
+    let kind: CardKind
+    let isLoading: Bool
+    let emptyMessage: String?
+    let theme: CardTheme
+
+    @State private var isAnimating = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer(minLength: 40)
+
+            if isLoading {
+                ProgressView("Loading...")
+                    .scaleEffect(1.2)
+            } else {
+                // Animated icon
+                Image(systemName: iconName)
+                    .font(.system(size: 60, weight: .light))
+                    .foregroundStyle(theme.accentColor.opacity(0.6))
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+                    .rotationEffect(.degrees(isAnimating ? 5 : 0))
+                    .animation(
+                        .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
+                        value: isAnimating
+                    )
+                    .onAppear { isAnimating = true }
+
+                // Message
+                if let message = emptyMessage {
+                    Text(message)
+                        .font(Typography.cardSubtitle)
+                        .foregroundStyle(theme.secondaryTextColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
+                // CTA hint
+                Text(ctaText)
+                    .font(Typography.taskDetail)
+                    .foregroundStyle(theme.accentColor)
+                    .padding(.top, 8)
+                    .opacity(0.8)
+            }
+
+            Spacer(minLength: 40)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var iconName: String {
+        switch kind {
+        case .shoppingList:
+            "cart.badge.plus"
+        case .todo:
+            "checkmark.circle.badge.checkmark"
+        case .backlog:
+            "lightbulb.fill"
+        case .recurring:
+            "arrow.clockwise.circle.fill"
+        case .household:
+            "person.3.fill"
+        case .areas:
+            "folder.fill.badge.plus"
+        case .settings:
+            "gearshape.fill"
+        }
+    }
+
+    private var ctaText: String {
+        switch kind {
+        case .shoppingList:
+            "Add your first product"
+        case .todo:
+            "All caught up! 🎉"
+        case .backlog:
+            "Tap + to add an idea"
+        case .recurring:
+            "Create your first routine"
+        case .household:
+            "Invite family members"
+        case .areas:
+            "Organize your spaces"
+        case .settings:
+            ""
         }
     }
 }
@@ -891,6 +1040,108 @@ enum CardKind: String, CaseIterable {
         case .settings:
             "Theme & preferences"
         }
+    }
+}
+
+// MARK: - Typography System (Redesign 2026-01-28)
+
+enum Typography {
+    // Headers
+    static let headerTitle = Font.system(size: 20, weight: .bold, design: .rounded)
+    static let headerSubtitle = Font.system(size: 13, weight: .medium, design: .default)
+
+    // Card content
+    static let cardTitle = Font.system(size: 28, weight: .bold, design: .rounded)
+    static let cardSubtitle = Font.system(size: 15, weight: .medium, design: .default)
+
+    // Tasks
+    static let taskTitle = Font.system(size: 17, weight: .semibold, design: .default)
+    static let taskDetail = Font.system(size: 13, weight: .regular, design: .default)
+
+    /// Input
+    static let inputText = Font.system(size: 16, weight: .regular, design: .default)
+
+    // Badges
+    static let badge = Font.system(size: 11, weight: .bold, design: .rounded)
+    static let count = Font.system(size: 13, weight: .bold, design: .rounded)
+}
+
+// MARK: - Progress Ring Component
+
+struct CardProgressRing: View {
+    let progress: Double // 0.0 to 1.0
+    let lineWidth: CGFloat = 3
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.secondary.opacity(0.2), lineWidth: lineWidth)
+
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    AngularGradient(
+                        colors: [.green, .blue, .purple, .green],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .animation(.spring(response: 0.6), value: progress)
+        }
+    }
+}
+
+// MARK: - Enhanced Animations
+
+enum CardAnimations {
+    static let cardSwitch = Animation.spring(
+        response: 0.45,
+        dampingFraction: 0.75,
+        blendDuration: 0.1
+    )
+
+    static let cardEnter = Animation.spring(
+        response: 0.5,
+        dampingFraction: 0.6
+    )
+
+    static let parallax = Animation.easeOut(duration: 0.3)
+    static let microInteraction = Animation.spring(response: 0.3, dampingFraction: 0.6)
+}
+
+// MARK: - Enhanced Haptics
+
+enum EnhancedHaptics {
+    static func cardChanged() {
+        #if !CI
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred(intensity: 0.7)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                generator.impactOccurred(intensity: 0.3)
+            }
+        #endif
+    }
+
+    static func taskCompleted() {
+        #if !CI
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+        #endif
+    }
+
+    static func limitReached() {
+        #if !CI
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+        #endif
+    }
+
+    static func addedItem() {
+        #if !CI
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred(intensity: 0.8)
+        #endif
     }
 }
 
