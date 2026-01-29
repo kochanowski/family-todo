@@ -71,8 +71,8 @@ struct CardsPagerView: View {
                 // Main content based on selected tab
                 mainContentView(for: currentKind, theme: theme, safeAreaInsets: safeInsets)
                     .frame(width: size.width, height: size.height)
-                    .padding(.top, safeInsets.top + LayoutConstants.headerHeight + 20) // Space for header
-                    .padding(.bottom, safeInsets.bottom + LayoutConstants.footerHeight + 20) // Space for tab bar
+                    .padding(.top, safeInsets.top + LayoutConstants.headerHeight + 28) // Space for header
+                    .padding(.bottom, safeInsets.bottom + LayoutConstants.footerHeight + 28) // Space for tab bar
 
                 // Simple Header (not floating, fixed at top)
                 VStack(spacing: 0) {
@@ -80,7 +80,7 @@ struct CardsPagerView: View {
                         title: currentKind.title,
                         subtitle: cardSubtitle(for: currentKind)
                     )
-                    .padding(.top, safeInsets.top + 16)
+                    .padding(.top, safeInsets.top + 24)
                     .background(surfacePalette.canvas)
 
                     Spacer()
@@ -102,7 +102,7 @@ struct CardsPagerView: View {
                             moreMenuPresented = true
                         }
                     )
-                    .padding(.bottom, safeInsets.bottom + 16)
+                    .padding(.bottom, safeInsets.bottom + 28)
                 }
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
