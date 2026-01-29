@@ -95,6 +95,7 @@ struct CardsPagerView: View {
                     Spacer()
                     ModernTabBarView(
                         currentKind: currentKind,
+                        badgeProvider: { badgeCount(for: $0) },
                         onSelect: { kind in
                             withAnimation(CardAnimations.cardSwitch) {
                                 currentKind = kind

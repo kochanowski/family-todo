@@ -610,43 +610,34 @@ struct GlassHeaderView: View {
 
 struct ModernTabBarView: View {
     let currentKind: CardKind
+    let badgeProvider: (CardKind) -> Int
     let onSelect: (CardKind) -> Void
     let onMoreTap: () -> Void
 
+    private var moreBadgeCount: Int {
+        CardKind.moreMenuItems.reduce(0) { $0 + badgeProvider($1) }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            // Shopping
-            TabBarItem(
-                icon: "cart.fill",
-                title: "Shopping",
-                isActive: currentKind == .shoppingList
-            ) {
-                onSelect(.shoppingList)
-            }
-
-            // Tasks
-            TabBarItem(
-                icon: "checkmark.circle.fill",
-                title: "Tasks",
-                isActive: currentKind == .todo
-            ) {
-                onSelect(.todo)
-            }
-
-            // Household
-            TabBarItem(
-                icon: "person.3.fill",
-                title: "Family",
-                isActive: currentKind == .household
-            ) {
-                onSelect(.household)
+            ForEach(CardKind.mainTabs, id: \.self) { kind in
+                TabBarItem(
+                    icon: kind.iconName,
+                    title: kind.shortTitle,
+                    isActive: currentKind == kind,
+                    badgeCount: badgeProvider(kind)
+                ) {
+                    onSelect(kind)
+                }
             }
 
             // More
             TabBarItem(
                 icon: "ellipsis",
                 title: "More",
-                isActive: currentKind.isMoreMenuItem
+                isActive: currentKind.isMoreMenuItem,
+                badgeCount: moreBadgeCount,
+                showsDotForBadge: true
             ) {
                 onMoreTap()
             }
@@ -670,15 +661,31 @@ struct TabBarItem: View {
     let icon: String
     let title: String
     let isActive: Bool
+    let badgeCount: Int
+    var showsDotForBadge: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? AppColors.ink : AppColors.inkMuted)
-                    .frame(height: 28)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: 22, weight: isActive ? .semibold : .regular))
+                        .foregroundStyle(isActive ? AppColors.ink : AppColors.inkMuted)
+                        .frame(height: 28)
+
+                    if badgeCount > 0 {
+                        if showsDotForBadge {
+                            Circle()
+                                .fill(AppColors.accent)
+                                .frame(width: 8, height: 8)
+                                .offset(x: 8, y: -4)
+                        } else {
+                            TabBadgeView(count: badgeCount, color: AppColors.accent)
+                                .offset(x: 8, y: -6)
+                        }
+                    }
+                }
 
                 Text(title)
                     .font(.system(size: 10, weight: isActive ? .semibold : .medium))
@@ -706,7 +713,7 @@ struct HybridTabBarView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Main tabs: Shopping, Tasks, Household
+            // Main tabs: Shopping, Tasks, Backlog
             ForEach(CardKind.mainTabs, id: \.self) { kind in
                 let isActive = currentKind == kind
                 let theme = themeProvider(kind)
@@ -1250,18 +1257,18 @@ enum CardKind: String, CaseIterable {
 
     // MARK: - Hybrid Navigation (3+1) - Redesign 2026-01-28
 
-    // Main tabs: Shopping, Tasks (Todo), Household
-    // More menu: Backlog, Recurring, Areas, Settings
+    // Main tabs: Shopping, Tasks (Todo), Backlog
+    // More menu: Recurring, Household, Areas, Settings
 
     static let mainTabs: [CardKind] = [
         .shoppingList,
         .todo,
-        .household,
+        .backlog,
     ]
 
     static let moreMenuItems: [CardKind] = [
-        .backlog,
         .recurring,
+        .household,
         .areas,
         .settings,
     ]

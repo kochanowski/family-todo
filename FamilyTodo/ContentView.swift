@@ -13,7 +13,6 @@ struct ContentView: View {
                 SignInView()
             }
         }
-        .ignoresSafeArea(.all, edges: .all)
     }
 }
 
