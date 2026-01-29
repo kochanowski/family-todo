@@ -916,7 +916,7 @@ struct TodoCardView: View {
             safeAreaInsets: safeAreaInsets,
             isLoading: taskStore.isLoading,
             showsQuantity: false,
-            emptyMessage: "All clear",
+            emptyMessage: nil,
             showsInput: true,
             accessoryView: nil,
             onAdd: { title in

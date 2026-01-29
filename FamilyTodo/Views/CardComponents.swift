@@ -44,24 +44,24 @@ struct CardLayout {
     )
 
     static let compactShopping = CardLayout(
-        horizontalPadding: 16,
-        headerTopPadding: 10,
-        headerBottomPadding: 6,
-        headerTitleFont: .caption.weight(.bold),
-        headerSubtitleFont: .caption2.weight(.regular),
-        sectionSpacing: 10,
-        rowSpacing: 5,
-        rowPadding: 10,
-        rowCornerRadius: 12,
-        checkboxSize: 16,
-        itemTitleFont: .caption2.weight(.semibold),
+        horizontalPadding: 20,
+        headerTopPadding: 12,
+        headerBottomPadding: 8,
+        headerTitleFont: .subheadline.weight(.bold),
+        headerSubtitleFont: .caption2.weight(.medium),
+        sectionSpacing: 12,
+        rowSpacing: 6,
+        rowPadding: 12,
+        rowCornerRadius: 14,
+        checkboxSize: 20,
+        itemTitleFont: .caption.weight(.semibold),
         itemDetailFont: .caption2,
-        inputFieldPadding: 8,
-        inputFont: .caption2.weight(.semibold),
+        inputFieldPadding: 10,
+        inputFont: .caption.weight(.semibold),
         inputCornerRadius: 10,
-        inputContainerPadding: 10,
-        addButtonSize: 32,
-        addButtonIconSize: 14
+        inputContainerPadding: 12,
+        addButtonSize: 38,
+        addButtonIconSize: 16
     )
 }
 
@@ -1542,9 +1542,9 @@ enum LayoutConstants {
     static let footerHeight: CGFloat = 60
     static let cardCornerRadius: CGFloat = 32
     static let headerSafePadding: CGFloat = 60
-    static let footerSafePadding: CGFloat = 24
-    static let contentTopPadding: CGFloat = 20
-    static let contentBottomPadding: CGFloat = 24
+    static let footerSafePadding: CGFloat = 32
+    static let contentTopPadding: CGFloat = 28
+    static let contentBottomPadding: CGFloat = 32
 }
 
 struct FlowLayout: Layout {
