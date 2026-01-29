@@ -9,7 +9,7 @@ platform :ios do
   PROJECT = "FamilyTodo.xcodeproj"
 
   before_all do
-    setup_ci if ENV["CI"]
+    setup_ci if ENV["CI"] && ENV["SKIP_FASTLANE_SETUP_CI"] != "1"
   end
 
   # ─────────────────────────────────────────────────────────────

@@ -214,6 +214,8 @@ jobs:
           PROVISIONING_PROFILE_NAME: ${{ secrets.PROVISIONING_PROFILE_NAME }}
           # Build number from GitHub run
           BUILD_NUMBER: ${{ github.run_number }}
+          # Use the keychain we created in CI (avoid fastlane creating another)
+          SKIP_FASTLANE_SETUP_CI: "1"
         run: bundle exec fastlane beta
 
       - name: Upload IPA
