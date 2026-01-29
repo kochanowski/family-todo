@@ -37,3 +37,10 @@ ale  iCloud is not available - po klinięciu w Sign in with Apple pojawia się b
 - okienko z restock list musi być mniejsze - mniejsze bordery
 - Add product ma prostokątną ramkę, musi mieć okrągłe rogi
 - Te bordery prostokątne wokół zaokrąglonych elementów nadal występują - muszą być usunięte
+
+
+
+- ikonka shopping list musi być inna, bo wskazuje, że tam można coś kupić w aplikacji, a chodzi o shopping list
+- pole 'Add task...' musi być bardziej nowoczesne, aby wyglądało jak w nowoczesnych aplikacjach
+- jak wystawiona jest klawiatura to nie można jej schować
+- jak się wpisuje tekst np w 'Add product' to te przyciski 'Shopping', 'Tasks' itp przeskakują do góry, muszą zostać na swoim miejscu

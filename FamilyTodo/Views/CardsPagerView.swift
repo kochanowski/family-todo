@@ -21,8 +21,6 @@ struct CardsPagerView: View {
 
     @State private var currentKind: CardKind = .todo
     @State private var moreMenuPresented = false
-    @State private var settingsPresented = false
-    @State private var completedPresented = false
 
     // Legacy: keep for backward compatibility with card pager
     private let cardKinds = CardKind.displayOrder
@@ -63,29 +61,27 @@ struct CardsPagerView: View {
             let safeInsets = proxy.safeAreaInsets
             let palette = themeStore.palette
             let theme = palette.theme(for: currentKind)
+            let surfacePalette = AppColors.palette(for: themeStore.preset)
 
             ZStack {
                 // Warm canvas to match the journal-like reference UI
-                AppColors.canvas
+                surfacePalette.canvas
                     .ignoresSafeArea()
 
                 // Main content based on selected tab
                 mainContentView(for: currentKind, theme: theme, safeAreaInsets: safeInsets)
                     .frame(width: size.width, height: size.height)
-                    .padding(.top, safeInsets.top + 60) // Space for header
-                    .padding(.bottom, 90) // Space for tab bar
+                    .padding(.top, safeInsets.top + LayoutConstants.headerHeight + 20) // Space for header
+                    .padding(.bottom, safeInsets.bottom + LayoutConstants.footerHeight + 20) // Space for tab bar
 
                 // Simple Header (not floating, fixed at top)
                 VStack(spacing: 0) {
                     SimpleHeaderView(
                         title: currentKind.title,
-                        subtitle: cardSubtitle(for: currentKind),
-                        onCompletedTap: {
-                            completedPresented = true
-                        }
+                        subtitle: cardSubtitle(for: currentKind)
                     )
-                    .padding(.top, safeInsets.top)
-                    .background(AppColors.canvas)
+                    .padding(.top, safeInsets.top + 16)
+                    .background(surfacePalette.canvas)
 
                     Spacer()
                 }
@@ -106,8 +102,9 @@ struct CardsPagerView: View {
                             moreMenuPresented = true
                         }
                     )
-                    .padding(.bottom, safeInsets.bottom)
+                    .padding(.bottom, safeInsets.bottom + 16)
                 }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
             .frame(width: size.width, height: size.height)
             .sheet(isPresented: $moreMenuPresented) {
@@ -118,13 +115,8 @@ struct CardsPagerView: View {
                     isPresented: $moreMenuPresented
                 )
             }
-            .sheet(isPresented: $settingsPresented) {
-                SettingsView(householdStore: householdStore)
-            }
-            .sheet(isPresented: $completedPresented) {
-                CompletedItemsView(taskStore: taskStore)
-            }
         }
+        .environment(\.colorScheme, themeStore.preset == .night ? .dark : .light)
         .task(id: householdId) {
             await loadAllData()
         }
@@ -745,11 +737,13 @@ struct RestockModalView: View {
     let items: [ShoppingItem]
     let onRestore: (ShoppingItem) -> Void
     let onDismiss: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         GeometryReader { proxy in
             let maxWidth = proxy.size.width * 0.9
             let maxHeight = proxy.size.height * 0.7
+            let palette = AppColors.palette(for: themeStore.preset)
 
             ZStack {
                 Color.black.opacity(0.4)
@@ -820,7 +814,7 @@ struct RestockModalView: View {
                 }
                 .padding(24)
                 .frame(maxWidth: maxWidth, maxHeight: maxHeight)
-                .background(AppColors.surface)
+                .background(palette.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
             }
@@ -1470,8 +1464,12 @@ struct SettingsCardView: View {
 
                 Spacer()
 
+                Text("\(shoppingListSettingsStore.suggestionLimit)")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(theme.secondaryTextColor)
+
                 Stepper(
-                    "\(shoppingListSettingsStore.suggestionLimit)",
+                    "",
                     value: $shoppingListSettingsStore.suggestionLimit,
                     in: ShoppingListSettingsStore.suggestionLimitRange
                 )

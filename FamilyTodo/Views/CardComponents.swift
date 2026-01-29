@@ -91,11 +91,13 @@ struct CardPageView: View {
     @State private var editQuantityUnit = ""
     @State private var editPresented = false
     @FocusState private var inputFocused: Bool
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
+        let palette = AppColors.palette(for: themeStore.preset)
         ZStack {
             // Warm canvas to match the journal-like reference UI
-            AppColors.canvas
+            palette.canvas
                 .ignoresSafeArea()
 
             VStack(spacing: layout.sectionSpacing) {
@@ -116,6 +118,15 @@ struct CardPageView: View {
             if kind == .backlog, items.isEmpty {
                 ConfettiView(isActive: true)
                     .allowsHitTesting(false)
+            }
+        }
+        .simultaneousGesture(TapGesture().onEnded { hideKeyboard() })
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    hideKeyboard()
+                }
             }
         }
         .sheet(isPresented: $editPresented) {
@@ -154,6 +165,7 @@ struct CardPageView: View {
                             CardItemRow(
                                 item: item,
                                 theme: theme,
+                                palette: palette,
                                 layout: layout,
                                 onToggle: toggleAction(for: item),
                                 onDelete: deleteAction(for: item),
@@ -178,16 +190,23 @@ struct CardPageView: View {
     }
 
     private var inputSection: some View {
+        let inputCorner = max(layout.inputCornerRadius, 14)
+        let horizontalPadding = max(layout.inputFieldPadding, 12)
+        let verticalPadding = max(layout.inputFieldPadding - 2, 10)
+
         HStack(spacing: 12) {
             TextField(kind.placeholder, text: $inputText)
                 .font(layout.inputFont)
-                .padding(layout.inputFieldPadding)
+                .textInputAutocapitalization(.sentences)
+                .submitLabel(.done)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, verticalPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
-                        .fill(AppColors.surface)
+                    RoundedRectangle(cornerRadius: inputCorner, style: .continuous)
+                        .fill(palette.surface)
                         .overlay(
-                            RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
-                                .stroke(AppColors.borderLight, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: inputCorner, style: .continuous)
+                                .stroke(palette.borderLight, lineWidth: 1)
                         )
                 )
                 .scaleEffect(inputFocused ? 1.02 : inputScale)
@@ -227,11 +246,11 @@ struct CardPageView: View {
         .padding(layout.inputContainerPadding)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.surfaceElevated)
+                .fill(palette.surfaceElevated)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.borderLight, lineWidth: 1)
+                .stroke(palette.borderLight, lineWidth: 1)
         )
     }
 
@@ -298,6 +317,7 @@ struct CardPageView: View {
 struct CardItemRow: View {
     let item: CardListItem
     let theme: CardTheme
+    let palette: AppColorPalette
     let layout: CardLayout
     let onToggle: (() -> Void)?
     let onDelete: (() -> Void)?
@@ -362,13 +382,13 @@ struct CardItemRow: View {
         .padding(layout.rowPadding)
         .background(
             RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
-                .fill(AppColors.surface)
+                .fill(palette.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
-                        .stroke(AppColors.borderLight, lineWidth: 1)
+                        .stroke(palette.borderLight, lineWidth: 1)
                 )
         )
-        .shadow(color: AppColors.cardShadow, radius: 8, x: 0, y: 4)
+        .shadow(color: palette.cardShadow, radius: 8, x: 0, y: 4)
         .swipeActions(edge: .trailing) {
             if let onDelete {
                 Button(role: .destructive) {
@@ -474,33 +494,28 @@ struct AvatarBadgeView: View {
 struct SimpleHeaderView: View {
     let title: String
     let subtitle: String?
-    let onCompletedTap: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
+        let palette = AppColors.palette(for: themeStore.preset)
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(AppColors.ink)
+                    .foregroundStyle(palette.ink)
 
                 if let subtitle {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(AppColors.inkMuted)
+                        .foregroundStyle(palette.inkMuted)
                 }
             }
 
             Spacer()
-
-            Button(action: onCompletedTap) {
-                Image(systemName: "checkmark.circle")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(AppColors.canvas)
+        .background(palette.canvas)
     }
 }
 
@@ -613,19 +628,22 @@ struct ModernTabBarView: View {
     let badgeProvider: (CardKind) -> Int
     let onSelect: (CardKind) -> Void
     let onMoreTap: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
 
     private var moreBadgeCount: Int {
         CardKind.moreMenuItems.reduce(0) { $0 + badgeProvider($1) }
     }
 
     var body: some View {
+        let palette = AppColors.palette(for: themeStore.preset)
         HStack(spacing: 0) {
             ForEach(CardKind.mainTabs, id: \.self) { kind in
                 TabBarItem(
                     icon: kind.iconName,
                     title: kind.shortTitle,
                     isActive: currentKind == kind,
-                    badgeCount: badgeProvider(kind)
+                    badgeCount: badgeProvider(kind),
+                    palette: palette
                 ) {
                     onSelect(kind)
                 }
@@ -637,6 +655,7 @@ struct ModernTabBarView: View {
                 title: "More",
                 isActive: currentKind.isMoreMenuItem,
                 badgeCount: moreBadgeCount,
+                palette: palette,
                 showsDotForBadge: true
             ) {
                 onMoreTap()
@@ -646,12 +665,12 @@ struct ModernTabBarView: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(AppColors.tabBarBackground)
+                .fill(palette.tabBarBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(AppColors.borderLight, lineWidth: 1)
+                        .stroke(palette.borderLight, lineWidth: 1)
                 )
-                .shadow(color: AppColors.tabBarShadow, radius: 16, x: 0, y: -4)
+                .shadow(color: palette.tabBarShadow, radius: 16, x: 0, y: -4)
         )
         .padding(.horizontal, 16)
     }
@@ -662,6 +681,7 @@ struct TabBarItem: View {
     let title: String
     let isActive: Bool
     let badgeCount: Int
+    let palette: AppColorPalette
     var showsDotForBadge: Bool = false
     let action: () -> Void
 
@@ -671,17 +691,17 @@ struct TabBarItem: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: icon)
                         .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                        .foregroundStyle(isActive ? AppColors.ink : AppColors.inkMuted)
+                        .foregroundStyle(isActive ? palette.ink : palette.inkMuted)
                         .frame(height: 28)
 
                     if badgeCount > 0 {
                         if showsDotForBadge {
                             Circle()
-                                .fill(AppColors.accent)
+                                .fill(palette.accent)
                                 .frame(width: 8, height: 8)
                                 .offset(x: 8, y: -4)
                         } else {
-                            TabBadgeView(count: badgeCount, color: AppColors.accent)
+                            TabBadgeView(count: badgeCount, color: palette.accent)
                                 .offset(x: 8, y: -6)
                         }
                     }
@@ -689,13 +709,13 @@ struct TabBarItem: View {
 
                 Text(title)
                     .font(.system(size: 10, weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive ? AppColors.ink : AppColors.inkMuted)
+                    .foregroundStyle(isActive ? palette.ink : palette.inkMuted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? AppColors.tabBarActivePill : Color.clear)
+                    .fill(isActive ? palette.tabBarActivePill : Color.clear)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -1329,7 +1349,7 @@ enum CardKind: String, CaseIterable {
     var iconName: String {
         switch self {
         case .shoppingList:
-            "cart.fill"
+            "list.bullet.rectangle.fill"
         case .todo:
             "checkmark.circle.fill"
         case .backlog:
@@ -1544,6 +1564,19 @@ struct FlowLayout: Layout {
         }
     }
 }
+
+#if canImport(UIKit)
+    extension View {
+        func hideKeyboard() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
+        }
+    }
+#endif
 
 extension Color {
     init(hex: String) {

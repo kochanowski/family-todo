@@ -249,8 +249,10 @@ struct TaskRowView: View {
     let task: Task
     let areaName: String?
     let accentColor: Color
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
+        let palette = AppColors.palette(for: themeStore.preset)
         HStack(spacing: 12) {
             // Status indicator
             Circle()
@@ -293,7 +295,7 @@ struct TaskRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(AppColors.surface)
+        .background(palette.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -314,4 +316,5 @@ struct TaskRowView: View {
         modelContext: container.mainContext
     )
     .environmentObject(UserSession.shared)
+    .environmentObject(ThemeStore())
 }
