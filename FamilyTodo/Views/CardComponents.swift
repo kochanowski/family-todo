@@ -1541,10 +1541,10 @@ enum LayoutConstants {
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 60
     static let cardCornerRadius: CGFloat = 32
-    static let headerSafePadding: CGFloat = 64
-    static let footerSafePadding: CGFloat = 72
-    static let contentTopPadding: CGFloat = 72
-    static let contentBottomPadding: CGFloat = 88
+    static let headerSafePadding: CGFloat = 8
+    static let footerSafePadding: CGFloat = 16
+    static let contentTopPadding: CGFloat = 16
+    static let contentBottomPadding: CGFloat = 16
 }
 
 struct FlowLayout: Layout {
