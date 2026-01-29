@@ -155,11 +155,8 @@ struct CardPageView: View {
                                 theme: theme,
                                 palette: palette,
                                 layout: layout,
-                                showsQuantity: showsQuantity,
                                 isEditing: isEditing,
                                 editTitle: $editTitle,
-                                editQuantityValue: $editQuantityValue,
-                                editQuantityUnit: $editQuantityUnit,
                                 onEditCommit: isEditing ? {
                                     commitEditing()
                                 } : nil,
@@ -341,11 +338,8 @@ struct CardItemRow: View {
     let theme: CardTheme
     let palette: AppColorPalette
     let layout: CardLayout
-    let showsQuantity: Bool
     let isEditing: Bool
     @Binding var editTitle: String
-    @Binding var editQuantityValue: String
-    @Binding var editQuantityUnit: String
     let onEditCommit: (() -> Void)?
     let onEditCancel: (() -> Void)?
     let onToggle: (() -> Void)?
@@ -385,40 +379,7 @@ struct CardItemRow: View {
                         .strikethrough(item.isCompleted, color: .primary.opacity(0.6))
                 }
 
-                if isEditing {
-                    if showsQuantity {
-                        HStack(spacing: 8) {
-                            TextField("Value", text: $editQuantityValue)
-                                .font(layout.itemDetailFont)
-                                .textFieldStyle(.plain)
-                                .keyboardType(.decimalPad)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(palette.surfaceElevated)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(palette.borderLight, lineWidth: 1)
-                                )
-
-                            TextField("Unit", text: $editQuantityUnit)
-                                .font(layout.itemDetailFont)
-                                .textFieldStyle(.plain)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(palette.surfaceElevated)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(palette.borderLight, lineWidth: 1)
-                                )
-                        }
-                    }
-                } else if let secondaryText = item.secondaryText {
+                if !isEditing, let secondaryText = item.secondaryText {
                     HStack(spacing: 4) {
                         if let detailIconName = item.detailIconName {
                             Image(systemName: detailIconName)
@@ -1580,10 +1541,10 @@ enum LayoutConstants {
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 60
     static let cardCornerRadius: CGFloat = 32
-    static let headerSafePadding: CGFloat = 44
-    static let footerSafePadding: CGFloat = 40
-    static let contentTopPadding: CGFloat = 48
-    static let contentBottomPadding: CGFloat = 48
+    static let headerSafePadding: CGFloat = 64
+    static let footerSafePadding: CGFloat = 72
+    static let contentTopPadding: CGFloat = 72
+    static let contentBottomPadding: CGFloat = 88
 }
 
 struct FlowLayout: Layout {

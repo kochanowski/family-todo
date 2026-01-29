@@ -1,6 +1,7 @@
 // swiftlint:disable file_length
 import SwiftData
 import SwiftUI
+import UIKit
 
 // MARK: - Hybrid Navigation View (Redesign 2026-01-28)
 
@@ -21,6 +22,7 @@ struct CardsPagerView: View {
 
     @State private var currentKind: CardKind = .todo
     @State private var moreMenuPresented = false
+    @State private var keyboardHeight: CGFloat = 0
 
     // Legacy: keep for backward compatibility with card pager
     private let cardKinds = CardKind.displayOrder
@@ -62,6 +64,7 @@ struct CardsPagerView: View {
             let palette = themeStore.palette
             let theme = palette.theme(for: currentKind)
             let surfacePalette = AppColors.palette(for: themeStore.preset)
+            let keyboardPadding = max(0, keyboardHeight - safeInsets.bottom)
 
             ZStack {
                 // Warm canvas to match the journal-like reference UI
@@ -78,7 +81,7 @@ struct CardsPagerView: View {
                     .padding(
                         .bottom,
                         safeInsets.bottom + LayoutConstants.footerHeight
-                            + LayoutConstants.contentBottomPadding
+                            + LayoutConstants.contentBottomPadding + keyboardPadding
                     ) // Space for tab bar
 
                 // Simple Header (not floating, fixed at top)
@@ -121,6 +124,29 @@ struct CardsPagerView: View {
                     badgeProvider: { badgeCount(for: $0) },
                     isPresented: $moreMenuPresented
                 )
+            }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIResponder.keyboardWillShowNotification
+                )
+            ) { notification in
+                guard
+                    let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey]
+                    as? CGRect
+                else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    keyboardHeight = frame.height
+                }
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIResponder.keyboardWillHideNotification
+                )
+            ) { _ in
+                withAnimation(.easeOut(duration: 0.2)) {
+                    keyboardHeight = 0
+                }
             }
         }
         .environment(\.colorScheme, themeStore.preset == .night ? .dark : .light)
