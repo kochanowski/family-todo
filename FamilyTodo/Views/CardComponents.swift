@@ -193,7 +193,7 @@ struct CardPageView: View {
         let horizontalPadding = max(layout.inputFieldPadding, 12)
         let verticalPadding = max(layout.inputFieldPadding - 2, 10)
 
-        HStack(spacing: 12) {
+        return HStack(spacing: 12) {
             TextField(kind.placeholder, text: $inputText)
                 .font(layout.inputFont)
                 .textInputAutocapitalization(.sentences)
