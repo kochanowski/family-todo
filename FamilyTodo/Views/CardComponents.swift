@@ -94,8 +94,8 @@ struct CardPageView: View {
 
     var body: some View {
         ZStack {
-            // White background like in screenshot
-            Color(.systemBackground)
+            // Warm canvas to match the journal-like reference UI
+            AppColors.canvas
                 .ignoresSafeArea()
 
             VStack(spacing: layout.sectionSpacing) {
@@ -184,8 +184,11 @@ struct CardPageView: View {
                 .padding(layout.inputFieldPadding)
                 .background(
                     RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(Color.white.opacity(0.4))
+                        .fill(AppColors.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: layout.inputCornerRadius, style: .continuous)
+                                .stroke(AppColors.borderLight, lineWidth: 1)
+                        )
                 )
                 .scaleEffect(inputFocused ? 1.02 : inputScale)
                 .shadow(
@@ -224,13 +227,11 @@ struct CardPageView: View {
         .padding(layout.inputContainerPadding)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.regularMaterial)
+                .fill(AppColors.surfaceElevated)
         )
         .overlay(
-            Rectangle()
-                .fill(Color.white.opacity(0.2))
-                .frame(height: 0.5),
-            alignment: .top
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.borderLight, lineWidth: 1)
         )
     }
 
@@ -361,10 +362,13 @@ struct CardItemRow: View {
         .padding(layout.rowPadding)
         .background(
             RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(Color.white.opacity(0.3))
+                .fill(AppColors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: layout.rowCornerRadius, style: .continuous)
+                        .stroke(AppColors.borderLight, lineWidth: 1)
+                )
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+        .shadow(color: AppColors.cardShadow, radius: 8, x: 0, y: 4)
         .swipeActions(edge: .trailing) {
             if let onDelete {
                 Button(role: .destructive) {
@@ -477,12 +481,12 @@ struct SimpleHeaderView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColors.ink)
 
                 if let subtitle {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.inkMuted)
                 }
             }
 
@@ -496,7 +500,7 @@ struct SimpleHeaderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Color(.systemBackground))
+        .background(AppColors.canvas)
     }
 }
 
@@ -651,8 +655,12 @@ struct ModernTabBarView: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: -4)
+                .fill(AppColors.tabBarBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(AppColors.borderLight, lineWidth: 1)
+                )
+                .shadow(color: AppColors.tabBarShadow, radius: 16, x: 0, y: -4)
         )
         .padding(.horizontal, 16)
     }
@@ -669,18 +677,18 @@ struct TabBarItem: View {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? Color.blue : Color.secondary)
+                    .foregroundStyle(isActive ? AppColors.ink : AppColors.inkMuted)
                     .frame(height: 28)
 
                 Text(title)
                     .font(.system(size: 10, weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive ? Color.blue : Color.secondary)
+                    .foregroundStyle(isActive ? AppColors.ink : AppColors.inkMuted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? Color.blue.opacity(0.12) : Color.clear)
+                    .fill(isActive ? AppColors.tabBarActivePill : Color.clear)
             )
         }
         .buttonStyle(PlainButtonStyle())

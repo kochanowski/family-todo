@@ -65,8 +65,8 @@ struct CardsPagerView: View {
             let theme = palette.theme(for: currentKind)
 
             ZStack {
-                // White background like in screenshot
-                Color(.systemBackground)
+                // Warm canvas to match the journal-like reference UI
+                AppColors.canvas
                     .ignoresSafeArea()
 
                 // Main content based on selected tab
@@ -85,7 +85,7 @@ struct CardsPagerView: View {
                         }
                     )
                     .padding(.top, safeInsets.top)
-                    .background(Color(.systemBackground))
+                    .background(AppColors.canvas)
 
                     Spacer()
                 }
@@ -819,7 +819,7 @@ struct RestockModalView: View {
                 }
                 .padding(24)
                 .frame(maxWidth: maxWidth, maxHeight: maxHeight)
-                .background(Color(.systemBackground))
+                .background(AppColors.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 10)
             }

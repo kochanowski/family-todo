@@ -293,7 +293,7 @@ struct TaskRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(Color(.systemBackground))
+        .background(AppColors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
