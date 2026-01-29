@@ -1409,7 +1409,7 @@ struct RecurringCardView: View {
     }
 
     private func polishTiming(for chore: RecurringChore) -> String {
-        guard let nextDue = chore.nextDueDate else { return "—" }
+        guard let nextDue = chore.nextScheduledDate else { return "—" }
         let calendar = Calendar.current
         let now = Date()
 
@@ -1424,7 +1424,7 @@ struct RecurringCardView: View {
     }
 
     private func isDue(chore: RecurringChore) -> Bool {
-        guard let nextDue = chore.nextDueDate else { return false }
+        guard let nextDue = chore.nextScheduledDate else { return false }
         return Calendar.current.isDateInToday(nextDue) || nextDue < Date()
     }
 
