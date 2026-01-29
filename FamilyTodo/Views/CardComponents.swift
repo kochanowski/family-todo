@@ -89,7 +89,6 @@ struct CardPageView: View {
     @State private var editTitle = ""
     @State private var editQuantityValue = ""
     @State private var editQuantityUnit = ""
-    @State private var editPresented = false
     @FocusState private var inputFocused: Bool
     @EnvironmentObject private var themeStore: ThemeStore
 
@@ -128,17 +127,6 @@ struct CardPageView: View {
                 }
             }
         }
-        .sheet(isPresented: $editPresented) {
-            EditItemView(
-                title: editTitle,
-                quantityValue: editQuantityValue,
-                quantityUnit: editQuantityUnit,
-                showsQuantity: showsQuantity,
-                onSave: { newTitle, newValue, newUnit in
-                    updateItem(title: newTitle, quantityValue: newValue, quantityUnit: newUnit)
-                }
-            )
-        }
     }
 
     private var header: some View {
@@ -161,11 +149,23 @@ struct CardPageView: View {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: layout.rowSpacing) {
                         ForEach(items) { item in
+                            let isEditing = editingItem?.id == item.id
                             CardItemRow(
                                 item: item,
                                 theme: theme,
                                 palette: palette,
                                 layout: layout,
+                                showsQuantity: showsQuantity,
+                                isEditing: isEditing,
+                                editTitle: $editTitle,
+                                editQuantityValue: $editQuantityValue,
+                                editQuantityUnit: $editQuantityUnit,
+                                onEditCommit: isEditing ? {
+                                    commitEditing()
+                                } : nil,
+                                onEditCancel: isEditing ? {
+                                    cancelEditing()
+                                } : nil,
                                 onToggle: toggleAction(for: item),
                                 onDelete: deleteAction(for: item),
                                 onEdit: editAction(for: item)
@@ -275,7 +275,9 @@ struct CardPageView: View {
     private func editAction(for item: CardListItem) -> (() -> Void)? {
         guard item.allowsEdit, onUpdate != nil else { return nil }
         return {
-            startEditing(item)
+            withAnimation(CardAnimations.microInteraction) {
+                startEditing(item)
+            }
         }
     }
 
@@ -299,7 +301,7 @@ struct CardPageView: View {
         editTitle = item.title
         editQuantityValue = item.quantityValue ?? ""
         editQuantityUnit = item.quantityUnit ?? ""
-        editPresented = true
+        inputFocused = false
     }
 
     private func updateItem(title: String, quantityValue: String, quantityUnit: String) {
@@ -315,6 +317,23 @@ struct CardPageView: View {
             normalizedUnit.isEmpty ? nil : normalizedUnit
         )
     }
+
+    private func commitEditing() {
+        updateItem(title: editTitle, quantityValue: editQuantityValue, quantityUnit: editQuantityUnit)
+        clearEditingState()
+    }
+
+    private func cancelEditing() {
+        clearEditingState()
+    }
+
+    private func clearEditingState() {
+        editingItem = nil
+        editTitle = ""
+        editQuantityValue = ""
+        editQuantityUnit = ""
+        hideKeyboard()
+    }
 }
 
 struct CardItemRow: View {
@@ -322,24 +341,84 @@ struct CardItemRow: View {
     let theme: CardTheme
     let palette: AppColorPalette
     let layout: CardLayout
+    let showsQuantity: Bool
+    let isEditing: Bool
+    @Binding var editTitle: String
+    @Binding var editQuantityValue: String
+    @Binding var editQuantityUnit: String
+    let onEditCommit: (() -> Void)?
+    let onEditCancel: (() -> Void)?
     let onToggle: (() -> Void)?
     let onDelete: (() -> Void)?
     let onEdit: (() -> Void)?
 
     @State private var pulse: CGFloat = 1
     @State private var checkmarkRotation: Angle = .zero
+    @FocusState private var editTitleFocused: Bool
+
+    private var editTitleIsValid: Bool {
+        !editTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             leadingView
+                .opacity(isEditing ? 0.6 : 1)
+                .allowsHitTesting(!isEditing)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(layout.itemTitleFont)
-                    .foregroundStyle(.primary)
-                    .strikethrough(item.isCompleted, color: .primary.opacity(0.6))
+                if isEditing {
+                    TextField("Item name", text: $editTitle)
+                        .font(layout.itemTitleFont)
+                        .foregroundStyle(.primary)
+                        .textFieldStyle(.plain)
+                        .submitLabel(.done)
+                        .focused($editTitleFocused)
+                        .onSubmit {
+                            guard editTitleIsValid else { return }
+                            onEditCommit?()
+                        }
+                } else {
+                    Text(item.title)
+                        .font(layout.itemTitleFont)
+                        .foregroundStyle(.primary)
+                        .strikethrough(item.isCompleted, color: .primary.opacity(0.6))
+                }
 
-                if let secondaryText = item.secondaryText {
+                if isEditing {
+                    if showsQuantity {
+                        HStack(spacing: 8) {
+                            TextField("Value", text: $editQuantityValue)
+                                .font(layout.itemDetailFont)
+                                .textFieldStyle(.plain)
+                                .keyboardType(.decimalPad)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(palette.surfaceElevated)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(palette.borderLight, lineWidth: 1)
+                                )
+
+                            TextField("Unit", text: $editQuantityUnit)
+                                .font(layout.itemDetailFont)
+                                .textFieldStyle(.plain)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(palette.surfaceElevated)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(palette.borderLight, lineWidth: 1)
+                                )
+                        }
+                    }
+                } else if let secondaryText = item.secondaryText {
                     HStack(spacing: 4) {
                         if let detailIconName = item.detailIconName {
                             Image(systemName: detailIconName)
@@ -359,27 +438,53 @@ struct CardItemRow: View {
                 AvatarStackView(initials: assigneeInitials, accentColor: theme.accentColor)
             }
 
-            if let onEdit {
-                Button {
-                    onEdit()
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(theme.accentColor)
+            if isEditing {
+                if let onEditCommit {
+                    Button {
+                        guard editTitleIsValid else { return }
+                        onEditCommit()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(editTitleIsValid ? theme.accentColor : .secondary)
+                    }
+                    .buttonStyle(PressableIconButtonStyle())
+                    .disabled(!editTitleIsValid)
                 }
-                .buttonStyle(PressableIconButtonStyle())
-            }
 
-            if let onDelete {
-                Button {
-                    Haptics.medium()
-                    onDelete()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.red)
+                if let onEditCancel {
+                    Button {
+                        onEditCancel()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(DeleteButtonStyle())
                 }
-                .buttonStyle(DeleteButtonStyle())
+            } else {
+                if let onEdit {
+                    Button {
+                        onEdit()
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(theme.accentColor)
+                    }
+                    .buttonStyle(PressableIconButtonStyle())
+                }
+
+                if let onDelete {
+                    Button {
+                        Haptics.medium()
+                        onDelete()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(DeleteButtonStyle())
+                }
             }
         }
         .padding(layout.rowPadding)
@@ -392,6 +497,11 @@ struct CardItemRow: View {
                 )
         )
         .shadow(color: palette.cardShadow, radius: 8, x: 0, y: 4)
+        .onChange(of: isEditing) { _, newValue in
+            if newValue {
+                editTitleFocused = true
+            }
+        }
         .swipeActions(edge: .trailing) {
             if let onDelete {
                 Button(role: .destructive) {
@@ -945,49 +1055,6 @@ struct AddItemButton: View {
     }
 }
 
-struct EditItemView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @State var title: String
-    @State var quantityValue: String
-    @State var quantityUnit: String
-    let showsQuantity: Bool
-    let onSave: (String, String, String) -> Void
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Name") {
-                    TextField("Item name", text: $title)
-                }
-
-                if showsQuantity {
-                    Section("Quantity") {
-                        TextField("Value", text: $quantityValue)
-                            .keyboardType(.decimalPad)
-                        TextField("Unit", text: $quantityUnit)
-                    }
-                }
-            }
-            .navigationTitle("Edit Item")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        onSave(title, quantityValue, quantityUnit)
-                        dismiss()
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Smart Empty State View (Redesign 2026-01-28)
 
 struct SmartEmptyStateView: View {
@@ -1513,6 +1580,10 @@ enum LayoutConstants {
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 60
     static let cardCornerRadius: CGFloat = 32
+    static let headerSafePadding: CGFloat = 44
+    static let footerSafePadding: CGFloat = 40
+    static let contentTopPadding: CGFloat = 48
+    static let contentBottomPadding: CGFloat = 48
 }
 
 struct FlowLayout: Layout {

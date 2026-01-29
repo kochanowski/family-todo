@@ -71,8 +71,15 @@ struct CardsPagerView: View {
                 // Main content based on selected tab
                 mainContentView(for: currentKind, theme: theme, safeAreaInsets: safeInsets)
                     .frame(width: size.width, height: size.height)
-                    .padding(.top, safeInsets.top + LayoutConstants.headerHeight + 28) // Space for header
-                    .padding(.bottom, safeInsets.bottom + LayoutConstants.footerHeight + 28) // Space for tab bar
+                    .padding(
+                        .top,
+                        safeInsets.top + LayoutConstants.headerHeight + LayoutConstants.contentTopPadding
+                    ) // Space for header
+                    .padding(
+                        .bottom,
+                        safeInsets.bottom + LayoutConstants.footerHeight
+                            + LayoutConstants.contentBottomPadding
+                    ) // Space for tab bar
 
                 // Simple Header (not floating, fixed at top)
                 VStack(spacing: 0) {
@@ -80,7 +87,7 @@ struct CardsPagerView: View {
                         title: currentKind.title,
                         subtitle: cardSubtitle(for: currentKind)
                     )
-                    .padding(.top, safeInsets.top + 24)
+                    .padding(.top, safeInsets.top + LayoutConstants.headerSafePadding)
                     .background(surfacePalette.canvas)
 
                     Spacer()
@@ -102,7 +109,7 @@ struct CardsPagerView: View {
                             moreMenuPresented = true
                         }
                     )
-                    .padding(.bottom, safeInsets.bottom + 28)
+                    .padding(.bottom, safeInsets.bottom + LayoutConstants.footerSafePadding)
                 }
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
@@ -1192,6 +1199,7 @@ struct HouseholdCardView: View {
     @ObservedObject var householdStore: HouseholdStore
     @ObservedObject var memberStore: MemberStore
     @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     let safeAreaInsets: EdgeInsets
 
     private var subtitle: String {
@@ -1199,6 +1207,7 @@ struct HouseholdCardView: View {
     }
 
     var body: some View {
+        let surfacePalette = AppColors.palette(for: themeStore.preset)
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
@@ -1213,7 +1222,7 @@ struct HouseholdCardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + 16)
+                .padding(.top, LayoutConstants.contentTopPadding)
 
                 // Navigation to Member Management
                 NavigationLink {
@@ -1265,12 +1274,11 @@ struct HouseholdCardView: View {
                                 .padding(.horizontal, 16)
                                 .background(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                        .overlay(Color.white.opacity(0.4))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
+                                        .fill(surfacePalette.surfaceElevated)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .stroke(surfacePalette.borderLight, lineWidth: 1)
+                                        )
                                 )
                             }
 
@@ -1375,6 +1383,10 @@ struct SettingsCardView: View {
     @EnvironmentObject private var notificationSettingsStore: NotificationSettingsStore
     @EnvironmentObject private var shoppingListSettingsStore: ShoppingListSettingsStore
 
+    private var surfacePalette: AppColorPalette {
+        AppColors.palette(for: themeStore.preset)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -1395,8 +1407,8 @@ struct SettingsCardView: View {
                     aboutSection
                 }
                 .padding(.horizontal, 24)
-                .padding(.top, LayoutConstants.headerHeight + safeAreaInsets.top + 16)
-                .padding(.bottom, LayoutConstants.footerHeight + safeAreaInsets.bottom + 16)
+                .padding(.top, LayoutConstants.contentTopPadding)
+                .padding(.bottom, LayoutConstants.contentBottomPadding)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -1479,8 +1491,11 @@ struct SettingsCardView: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(Color.white.opacity(0.4))
+                    .fill(surfacePalette.surfaceElevated)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(surfacePalette.borderLight, lineWidth: 1)
+                    )
             )
         }
     }
@@ -1502,8 +1517,11 @@ struct SettingsCardView: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(Color.white.opacity(0.4))
+                    .fill(surfacePalette.surfaceElevated)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(surfacePalette.borderLight, lineWidth: 1)
+                    )
             )
         }
     }
@@ -1532,6 +1550,7 @@ struct SettingsToggleRow: View {
     @Binding var isOn: Bool
     let theme: CardTheme
     var onToggle: (() -> Void)?
+    @EnvironmentObject private var themeStore: ThemeStore
 
     init(title: String, isOn: Binding<Bool>, theme: CardTheme, onToggle: (() -> Void)? = nil) {
         self.title = title
@@ -1548,6 +1567,7 @@ struct SettingsToggleRow: View {
     }
 
     var body: some View {
+        let surfacePalette = AppColors.palette(for: themeStore.preset)
         HStack {
             Text(title)
                 .font(.system(size: 15, weight: .medium))
@@ -1579,8 +1599,11 @@ struct SettingsToggleRow: View {
         .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(Color.white.opacity(0.4))
+                .fill(surfacePalette.surfaceElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(surfacePalette.borderLight, lineWidth: 1)
+                )
         )
     }
 }
