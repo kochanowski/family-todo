@@ -124,17 +124,7 @@ jobs:
     name: Deploy to TestFlight
     runs-on: macos-15
     needs: [build-and-test, swiftlint]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' &&
-      secrets.BUILD_CERTIFICATE_BASE64 != '' &&
-      secrets.P12_PASSWORD != '' &&
-      secrets.KEYCHAIN_PASSWORD != '' &&
-      secrets.PROVISIONING_PROFILE_BASE64 != '' &&
-      secrets.APP_STORE_CONNECT_API_KEY_ID != '' &&
-      secrets.APP_STORE_CONNECT_API_ISSUER_ID != '' &&
-      secrets.APP_STORE_CONNECT_API_KEY_CONTENT != '' &&
-      secrets.APP_IDENTIFIER != '' &&
-      secrets.TEAM_ID != '' &&
-      secrets.PROVISIONING_PROFILE_NAME != ''
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout
