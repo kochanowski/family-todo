@@ -94,7 +94,6 @@ struct CardPageView: View {
     @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
-        let palette = AppColors.palette(for: themeStore.preset)
         ZStack {
             // Warm canvas to match the journal-like reference UI
             palette.canvas
@@ -252,6 +251,10 @@ struct CardPageView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(palette.borderLight, lineWidth: 1)
         )
+    }
+
+    private var palette: AppColorPalette {
+        AppColors.palette(for: themeStore.preset)
     }
 
     private func toggleAction(for item: CardListItem) -> (() -> Void)? {
