@@ -85,6 +85,7 @@ struct CardPageView: View {
     @State private var inputText = ""
     @State private var inputScale: CGFloat = 1
     @State private var addButtonRotation: Angle = .zero
+    @State private var shakeOffset: CGFloat = 0
     @State private var editingItem: CardListItem?
     @State private var editTitle = ""
     @State private var editQuantityValue = ""
@@ -111,7 +112,7 @@ struct CardPageView: View {
             }
             .padding(.horizontal, layout.horizontalPadding)
             .padding(.top, 16)
-            .padding(.bottom, 16)
+            .padding(.bottom, 24)
 
             if kind == .backlog, items.isEmpty {
                 ConfettiView(isActive: true)
@@ -125,6 +126,8 @@ struct CardPageView: View {
                 Button("Done") {
                     hideKeyboard()
                 }
+                .padding(.trailing, 8)
+                .padding(.vertical, 4)
             }
         }
     }
@@ -248,6 +251,7 @@ struct CardPageView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(palette.borderLight, lineWidth: 1)
         )
+        .offset(x: shakeOffset)
     }
 
     private var palette: AppColorPalette {
@@ -280,7 +284,30 @@ struct CardPageView: View {
 
     private func addItem() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            // Shake animation for empty input
+            withAnimation(.default) {
+                shakeOffset = 10
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.default) {
+                    shakeOffset = -8
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.default) {
+                    shakeOffset = 5
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.default) {
+                    shakeOffset = 0
+                }
+            }
+            Haptics.light()
+            inputFocused = true
+            return
+        }
 
         onAdd(trimmed)
 
@@ -1542,9 +1569,9 @@ enum LayoutConstants {
     static let footerHeight: CGFloat = 60
     static let cardCornerRadius: CGFloat = 32
     static let headerSafePadding: CGFloat = 60
-    static let footerSafePadding: CGFloat = 32
+    static let footerSafePadding: CGFloat = 40
     static let contentTopPadding: CGFloat = 28
-    static let contentBottomPadding: CGFloat = 32
+    static let contentBottomPadding: CGFloat = 40
 }
 
 struct FlowLayout: Layout {

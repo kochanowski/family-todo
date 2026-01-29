@@ -81,8 +81,8 @@ struct CardsPagerView: View {
                     .padding(
                         .bottom,
                         safeInsets.bottom + LayoutConstants.footerHeight
-                            + LayoutConstants.contentBottomPadding + keyboardPadding
-                    ) // Space for tab bar
+                            + LayoutConstants.contentBottomPadding
+                    ) // Space for tab bar - no keyboard padding here to keep tab bar at bottom
 
                 // Simple Header (not floating, fixed at top)
                 VStack(spacing: 0) {
