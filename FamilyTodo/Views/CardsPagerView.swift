@@ -1564,174 +1564,118 @@ struct HouseholdCardView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     let safeAreaInsets: EdgeInsets
 
-    private var subtitle: String {
-        householdStore.currentHousehold?.name ?? kind.subtitle(for: memberStore.members.count)
-    }
-
     var body: some View {
-        let surfacePalette = AppColors.palette(for: themeStore.preset)
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
+        let palette = AppColors.palette(for: themeStore.preset)
+
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 32) {
                 // Header
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(kind.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(theme.primaryTextColor)
+                Text(kind.title)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(palette.ink)
 
-                    Text(subtitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(theme.secondaryTextColor)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, LayoutConstants.contentTopPadding)
+                // Household Name Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Nazwa domu")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(palette.inkMuted)
 
-                // Navigation to Member Management
-                NavigationLink {
-                    MemberManagementView(
-                        memberStore: memberStore,
-                        householdStore: householdStore
-                    )
-                    .environmentObject(userSession)
-                } label: {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Members (\(memberStore.members.count))")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(theme.primaryTextColor)
+                    HStack(spacing: 12) {
+                        Image(systemName: "house")
+                            .font(.system(size: 20))
+                            .foregroundStyle(palette.inkMuted)
 
-                        if memberStore.isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else if memberStore.members.isEmpty {
-                            Text("Invite your first member")
-                                .font(.body)
-                                .foregroundStyle(theme.secondaryTextColor)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding()
-                        } else {
-                            ForEach(memberStore.members.prefix(3)) { member in
-                                HStack(spacing: 12) {
-                                    Image(
-                                        systemName: member.role == .owner
-                                            ? "star.fill" : "person.fill"
-                                    )
-                                    .font(.caption)
-                                    .foregroundStyle(
-                                        member.role == .owner ? .yellow : theme.secondaryTextColor
-                                    )
+                        Text("Dom Kowalskich")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(palette.ink)
 
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(member.displayName)
-                                            .font(.body.weight(.semibold))
-                                            .foregroundStyle(theme.primaryTextColor)
-                                        Text(member.role == .owner ? "Owner" : "Member")
-                                            .font(.caption)
-                                            .foregroundStyle(theme.secondaryTextColor)
-                                    }
-
-                                    Spacer()
-                                }
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(surfacePalette.surfaceElevated)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                .stroke(surfacePalette.borderLight, lineWidth: 1)
-                                        )
-                                )
-                            }
-
-                            if memberStore.members.count > 3 {
-                                Text("+ \(memberStore.members.count - 3) more")
-                                    .font(.caption)
-                                    .foregroundStyle(theme.secondaryTextColor.opacity(0.7))
-                                    .padding(.top, 4)
-                            }
-                        }
-
-                        // Tap to manage hint
-                        HStack {
-                            Spacer()
-                            Text("Tap to manage members")
-                                .font(.caption)
-                                .foregroundStyle(.blue)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.blue)
-                        }
-                        .padding(.top, 8)
+                        Spacer()
                     }
-                    .padding(.horizontal, 24)
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(palette.surface)
+                    )
                 }
-                .buttonStyle(.plain)
 
-                Spacer()
+                // Members Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Członkowie (\(memberStore.members.count))")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(palette.inkMuted)
+
+                        Spacer()
+
+                        Button {
+                            // Add member action
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 28, height: 28)
+                                .background(palette.ink)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+
+                    VStack(spacing: 8) {
+                        ForEach(memberStore.members) { member in
+                            MemberRow(member: member, palette: palette) {
+                                // Delete action
+                            }
+                        }
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 24)
         }
+        .background(palette.canvas)
     }
 }
 
-struct AreasCardView: View {
-    let kind: CardKind
-    let theme: CardTheme
-    @ObservedObject var areaStore: AreaStore
-    let safeAreaInsets: EdgeInsets
+struct MemberRow: View {
+    let member: Member
+    let palette: AppColorPalette
+    let onDelete: () -> Void
 
-    private var areaLookup: [UUID: Area] {
-        Dictionary(uniqueKeysWithValues: areaStore.areas.map { ($0.id, $0) })
-    }
-
-    private var cardItems: [CardListItem] {
-        areaStore.areas.map { area in
-            CardListItem(
-                id: area.id,
-                title: area.name,
-                secondaryText: "Area",
-                allowsToggle: false
-            )
-        }
-    }
-
-    private var subtitle: String {
-        kind.subtitle(for: areaStore.areas.count)
+    private var avatarColor: Color {
+        // Fallback colors matching screenshot
+        if member.displayName.starts(with: "A") { return Color(hex: "E59A9A") } // Pinkish
+        if member.displayName.starts(with: "T") { return Color(hex: "81C784") } // Greenish
+        return Color(hex: "90CAF9") // Blue
     }
 
     var body: some View {
-        CardPageView(
-            kind: kind,
-            theme: theme,
-            layout: .standard,
-            subtitle: subtitle,
-            items: cardItems,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: areaStore.isLoading,
-            showsQuantity: false,
-            emptyMessage: "Add your first area",
-            showsInput: true,
-            accessoryView: nil,
-            onAdd: { title in
-                _Concurrency.Task {
-                    await areaStore.createArea(name: title, icon: "folder")
-                }
-            },
-            onToggle: nil,
-            onDelete: { item in
-                guard let area = areaLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await areaStore.deleteArea(area)
-                }
-            },
-            onUpdate: { item, title, _, _ in
-                guard var area = areaLookup[item.id] else { return }
-                area.name = title
-                _Concurrency.Task {
-                    await areaStore.updateArea(area)
-                }
+        HStack(spacing: 16) {
+            // Avatar
+            Text(member.displayName.initials)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(avatarColor)
+                .clipShape(Circle())
+
+            Text(member.displayName)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(palette.ink)
+
+            Spacer()
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(hex: "E57373")) // Red
             }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(palette.surface)
         )
     }
 }
@@ -1745,228 +1689,152 @@ struct SettingsCardView: View {
     @EnvironmentObject private var notificationSettingsStore: NotificationSettingsStore
     @EnvironmentObject private var shoppingListSettingsStore: ShoppingListSettingsStore
 
-    private var surfacePalette: AppColorPalette {
-        AppColors.palette(for: themeStore.preset)
-    }
-
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header
-                    headerSection
+        let palette = AppColors.palette(for: themeStore.preset)
 
-                    // Theme Section
-                    themeSection
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 32) {
+                // Header
+                Text(kind.title)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(palette.ink)
 
-                    // Notifications Section
-                    notificationsSection
+                // Appearance Section
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Wygląd")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(palette.inkMuted)
 
-                    // Shopping List Section
-                    shoppingListSection
+                    HStack(spacing: 12) {
+                        AppearanceButton(
+                            title: "Jasny",
+                            icon: "sun.max.fill",
+                            isSelected: themeStore.preset == .light,
+                            palette: palette
+                        ) {
+                            themeStore.preset = .light
+                        }
 
-                    // About Section
-                    aboutSection
+                        AppearanceButton(
+                            title: "Ciemny",
+                            icon: "moon.fill",
+                            isSelected: themeStore.preset == .night,
+                            palette: palette
+                        ) {
+                            themeStore.preset = .night
+                        }
+
+                        AppearanceButton(
+                            title: "Systemowy",
+                            icon: "iphone",
+                            isSelected: false, // System theme not implemented yet
+                            palette: palette
+                        ) {
+                            // No-op for now as per current ThemeStore capabilities
+                        }
+                    }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, LayoutConstants.contentTopPadding)
-                .padding(.bottom, LayoutConstants.contentBottomPadding)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
 
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(kind.title)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(theme.primaryTextColor)
+                // Toggles Section
+                VStack(spacing: 1) {
+                    SettingsToggleRow(
+                        title: "Powiadomienia",
+                        icon: "bell",
+                        isOn: $notificationSettingsStore.taskRemindersEnabled,
+                        palette: palette
+                    )
 
-            Text("App configuration")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(theme.secondaryTextColor)
-        }
-    }
+                    Divider()
+                        .padding(.leading, 56)
 
-    private var themeSection: some View {
-        SettingsSectionView(title: "Appearance", theme: theme) {
-            ForEach(ThemePreset.allCases) { preset in
-                SettingsToggleRow(
-                    title: preset.displayName,
-                    isOn: themeStore.preset == preset,
-                    theme: theme,
-                    onToggle: { themeStore.preset = preset }
+                    SettingsToggleRow(
+                        title: "Celebracje",
+                        icon: "party.popper",
+                        isOn: $notificationSettingsStore.celebrationsEnabled,
+                        palette: palette
+                    )
+
+                    Divider()
+                        .padding(.leading, 56)
+
+                    SettingsToggleRow(
+                        title: "Sugestie zakupów",
+                        icon: "bag",
+                        isOn: .constant(true), // Assuming always on for now or need store update
+                        palette: palette
+                    )
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(palette.surface)
                 )
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 24)
         }
-    }
-
-    private var notificationsSection: some View {
-        SettingsSectionView(title: "Notifications", theme: theme) {
-            SettingsToggleRow(
-                title: "Task Reminders",
-                isOn: $notificationSettingsStore.taskRemindersEnabled,
-                theme: theme
-            )
-
-            SettingsToggleRow(
-                title: "Daily Digest",
-                isOn: $notificationSettingsStore.dailyDigestEnabled,
-                theme: theme
-            )
-
-            SettingsToggleRow(
-                title: "Celebrations",
-                isOn: $notificationSettingsStore.celebrationsEnabled,
-                theme: theme
-            )
-
-            SettingsToggleRow(
-                title: "Sound",
-                isOn: $notificationSettingsStore.soundEnabled,
-                theme: theme
-            )
-        }
-    }
-
-    private var shoppingListSection: some View {
-        SettingsSectionView(title: "Shopping List", theme: theme) {
-            HStack {
-                Text("Suggestions")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(theme.primaryTextColor)
-
-                Spacer()
-
-                Text("\(shoppingListSettingsStore.suggestionLimit)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.secondaryTextColor)
-
-                Stepper(
-                    "",
-                    value: $shoppingListSettingsStore.suggestionLimit,
-                    in: ShoppingListSettingsStore.suggestionLimitRange
-                )
-                .labelsHidden()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(surfacePalette.surfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(surfacePalette.borderLight, lineWidth: 1)
-                    )
-            )
-        }
-    }
-
-    private var aboutSection: some View {
-        SettingsSectionView(title: "About", theme: theme) {
-            HStack {
-                Text("Version")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(theme.primaryTextColor)
-
-                Spacer()
-
-                Text("1.0.0")
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.secondaryTextColor)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(surfacePalette.surfaceElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(surfacePalette.borderLight, lineWidth: 1)
-                    )
-            )
-        }
+        .background(palette.canvas)
     }
 }
 
-struct SettingsSectionView<Content: View>: View {
+struct AppearanceButton: View {
     let title: String
-    let theme: CardTheme
-    @ViewBuilder let content: Content
+    let icon: String
+    let isSelected: Bool
+    let palette: AppColorPalette
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.subheadline.bold())
-                .foregroundStyle(theme.primaryTextColor)
+        Button(action: action) {
+            VStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 24))
+                    .foregroundStyle(isSelected ? palette.ink : palette.inkMuted)
 
-            VStack(spacing: 8) {
-                content
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isSelected ? palette.ink : palette.inkMuted)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? palette.surface : palette.canvas)
+                    .shadow(color: isSelected ? Color.black.opacity(0.1) : Color.clear, radius: 4, x: 0, y: 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? Color.clear : palette.surface, lineWidth: 1)
+            )
         }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
 struct SettingsToggleRow: View {
     let title: String
+    let icon: String
     @Binding var isOn: Bool
-    let theme: CardTheme
-    var onToggle: (() -> Void)?
-    @EnvironmentObject private var themeStore: ThemeStore
-
-    init(title: String, isOn: Binding<Bool>, theme: CardTheme, onToggle: (() -> Void)? = nil) {
-        self.title = title
-        _isOn = isOn
-        self.theme = theme
-        self.onToggle = onToggle
-    }
-
-    init(title: String, isOn: Bool, theme: CardTheme, onToggle: @escaping () -> Void) {
-        self.title = title
-        _isOn = .constant(isOn)
-        self.theme = theme
-        self.onToggle = onToggle
-    }
+    let palette: AppColorPalette
 
     var body: some View {
-        let surfacePalette = AppColors.palette(for: themeStore.preset)
-        HStack {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundStyle(palette.inkMuted)
+                .frame(width: 24, height: 24)
+
             Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(theme.primaryTextColor)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(palette.ink)
 
             Spacer()
 
-            if let onToggle {
-                Button(action: {
-                    Haptics.light()
-                    onToggle()
-                }) {
-                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 24))
-                        .foregroundStyle(
-                            isOn ? theme.accentColor : theme.secondaryTextColor.opacity(0.4)
-                        )
-                }
-            } else {
-                Toggle("", isOn: $isOn)
-                    .labelsHidden()
-                    .tint(theme.accentColor)
-                    .onChange(of: isOn) { _, _ in
-                        Haptics.light()
-                    }
-            }
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(Color(hex: "009688")) // Teal color from screenshot
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(surfacePalette.surfaceElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(surfacePalette.borderLight, lineWidth: 1)
-                )
-        )
+        .padding(16)
     }
 }
 
