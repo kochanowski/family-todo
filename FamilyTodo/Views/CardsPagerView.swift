@@ -1022,7 +1022,7 @@ struct TodoCardView: View {
                 EnhancedHaptics.taskCompleted()
             } label: {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(palette.border, lineWidth: 1.5)
+                    .stroke(palette.borderLight, lineWidth: 1.5)
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(PlainButtonStyle())
