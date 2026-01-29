@@ -722,34 +722,33 @@ struct ShoppingListCardView: View {
             HStack(spacing: 12) {
                 Image(systemName: "bag.fill")
                     .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color(hex: "FFB74D"))
                     .frame(width: 40, height: 40)
-                    .background(Color.secondary.opacity(0.2))
+                    .background(Color(hex: "FFF8E1"))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Restock List (\(restockItems.count))")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    Text("Do uzupełnienia (\(restockItems.count))")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
 
                     Text(restockPreview)
-                        .font(.caption2)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
-            .padding(8)
+            .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.thinMaterial)
-                    .overlay(Color.gray.opacity(0.1))
-            )
-            .overlay(
-                Rectangle()
-                    .fill(theme.accentColor.opacity(0.15))
-                    .frame(height: 0.5),
-                alignment: .top
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
             )
         }
         .buttonStyle(PressableCardButtonStyle())
@@ -886,77 +885,220 @@ struct TodoCardView: View {
     let currentMemberId: UUID?
     let safeAreaInsets: EdgeInsets
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var wipAlertPresented = false
+    @State private var showingAddTask = false
+    @State private var inputText = ""
+    @FocusState private var inputFocused: Bool
 
-    private var taskLookup: [UUID: Task] {
-        Dictionary(uniqueKeysWithValues: taskStore.nextTasks.map { ($0.id, $0) })
-    }
+    /// Group tasks by member
+    private struct MemberTaskGroup: Identifiable {
+        let id: UUID
+        let member: Member
+        let tasks: [Task]
 
-    private var cardItems: [CardListItem] {
-        taskStore.nextTasks.map { task in
-            CardListItem(
-                id: task.id,
-                title: task.title,
-                assigneeInitials: assigneeInitials(for: task)
-            )
+        var taskCount: Int {
+            tasks.count
+        }
+
+        var isAtLimit: Bool {
+            taskCount >= TaskStore.wipLimit
         }
     }
 
-    private var subtitle: String {
-        kind.subtitle(for: taskStore.nextTasks.count)
+    private var taskGroups: [MemberTaskGroup] {
+        let members = memberStore.members
+        var groups: [MemberTaskGroup] = []
+
+        for member in members {
+            let memberTasks = taskStore.nextTasks.filter { task in
+                task.assigneeIds.contains(member.id) || task.assigneeId == member.id
+            }
+            if !memberTasks.isEmpty {
+                groups.append(MemberTaskGroup(id: member.id, member: member, tasks: memberTasks))
+            }
+        }
+
+        return groups.sorted { $0.member.displayName < $1.member.displayName }
+    }
+
+    private var totalActiveCount: Int {
+        taskStore.nextTasks.count
     }
 
     var body: some View {
-        CardPageView(
-            kind: kind,
-            theme: theme,
-            layout: .standard,
-            subtitle: subtitle,
-            items: cardItems,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: taskStore.isLoading,
-            showsQuantity: false,
-            emptyMessage: nil,
-            showsInput: true,
-            accessoryView: nil,
-            onAdd: { title in
-                guard canAddToNext() else {
-                    wipAlertPresented = true
-                    return
+        let palette = AppColors.palette(for: themeStore.preset)
+
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                // Info banner
+                infoBanner(palette: palette)
+
+                // Groups by person
+                ForEach(taskGroups) { group in
+                    personSection(group: group, palette: palette)
                 }
-                let assigneeIds = currentMemberId.map { [$0] } ?? []
-                _Concurrency.Task {
-                    await taskStore.createTask(
-                        title: title, status: .next, assigneeId: currentMemberId,
-                        assigneeIds: assigneeIds
-                    )
+
+                // Input section at bottom
+                inputSection(palette: palette)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+        .alert("Limit zadań", isPresented: $wipAlertPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Maksymalnie 3 zadania na osobę. Ukończ lub przenieś zadania.")
+        }
+    }
+
+    private func infoBanner(palette: AppColorPalette) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.2.circle")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(Color(hex: "C49B8A"))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Maksymalnie 3 zadania na osobę")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(palette.ink)
+
+                Text("Pomysły na więcej? Dodaj do Backlogu")
+                    .font(.system(size: 13))
+                    .foregroundStyle(palette.inkMuted)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(hex: "F5E6E0"))
+        )
+    }
+
+    private func personSection(group: MemberTaskGroup, palette: AppColorPalette) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Person header with avatar
+            HStack(spacing: 12) {
+                // Avatar circle
+                Text(group.member.displayName.initials)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(avatarColor(for: group.member.displayName))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.member.displayName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(palette.ink)
+
+                    Text("\(group.taskCount)/\(TaskStore.wipLimit) aktywnych zadań")
+                        .font(.system(size: 13))
+                        .foregroundStyle(palette.inkMuted)
                 }
-            },
-            onToggle: { item in
-                guard let task = taskLookup[item.id] else { return }
+
+                Spacer()
+            }
+
+            // Tasks list
+            VStack(spacing: 8) {
+                ForEach(group.tasks) { task in
+                    taskRow(task: task, member: group.member, palette: palette)
+                }
+            }
+        }
+    }
+
+    private func taskRow(task: Task, member: Member, palette: AppColorPalette) -> some View {
+        HStack(spacing: 12) {
+            // Checkbox
+            Button {
                 _Concurrency.Task {
                     await taskStore.moveTask(task, to: .done)
                 }
-            },
-            onDelete: { item in
-                guard let task = taskLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await taskStore.deleteTask(task)
-                }
-            },
-            onUpdate: { item, title, _, _ in
-                guard var task = taskLookup[item.id] else { return }
-                task.title = title
-                _Concurrency.Task {
-                    await taskStore.updateTask(task)
-                }
+                EnhancedHaptics.taskCompleted()
+            } label: {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(palette.border, lineWidth: 1.5)
+                    .frame(width: 24, height: 24)
             }
-        )
-        .alert("WIP limit reached", isPresented: $wipAlertPresented) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Complete or move tasks before adding more to Next.")
+            .buttonStyle(PlainButtonStyle())
+
+            // Title
+            Text(task.title)
+                .font(.system(size: 16))
+                .foregroundStyle(palette.ink)
+
+            Spacer()
+
+            // Assignee badge
+            Text(member.displayName.initials)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(avatarColor(for: member.displayName))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(avatarColor(for: member.displayName).opacity(0.15))
+                .clipShape(Capsule())
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(palette.surface)
+                .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+        )
+    }
+
+    private func inputSection(palette: AppColorPalette) -> some View {
+        HStack(spacing: 12) {
+            TextField("Dodaj zadanie...", text: $inputText)
+                .font(.system(size: 16))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(palette.surface)
+                )
+                .focused($inputFocused)
+                .submitLabel(.done)
+                .onSubmit {
+                    addTask()
+                }
+
+            Button {
+                addTask()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(palette.ink)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+
+    private func addTask() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        guard canAddToNext() else {
+            wipAlertPresented = true
+            return
+        }
+
+        let assigneeIds = currentMemberId.map { [$0] } ?? []
+        _Concurrency.Task {
+            await taskStore.createTask(
+                title: trimmed, status: .next, assigneeId: currentMemberId,
+                assigneeIds: assigneeIds
+            )
+        }
+        inputText = ""
+        EnhancedHaptics.addedItem()
     }
 
     private func canAddToNext() -> Bool {
@@ -964,22 +1106,17 @@ struct TodoCardView: View {
         return taskStore.canMoveToNext(assigneeId: currentMemberId)
     }
 
-    private func assigneeInitials(for task: Task) -> [String] {
-        let ids = resolvedAssigneeIds(for: task)
-        let members = memberStore.members
-        return ids.compactMap { id in
-            members.first { $0.id == id }?.displayName.initials
-        }
-    }
-
-    private func resolvedAssigneeIds(for task: Task) -> [UUID] {
-        if !task.assigneeIds.isEmpty {
-            return task.assigneeIds
-        }
-        if let assigneeId = task.assigneeId {
-            return [assigneeId]
-        }
-        return memberStore.members.map(\.id)
+    private func avatarColor(for name: String) -> Color {
+        // Generate consistent color based on name
+        let colors: [Color] = [
+            Color(hex: "C49B8A"), // dusty rose (Anna)
+            Color(hex: "6B9B8A"), // teal (Tomek)
+            Color(hex: "9B8AC4"), // purple
+            Color(hex: "8AC4B8"), // mint
+            Color(hex: "C48A8A"), // coral
+        ]
+        let hash = abs(name.hashValue)
+        return colors[hash % colors.count]
     }
 }
 
@@ -991,67 +1128,188 @@ struct BacklogCardView: View {
     let currentMemberId: UUID?
     let safeAreaInsets: EdgeInsets
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var wipAlertPresented = false
+    @State private var inputText = ""
+    @FocusState private var inputFocused: Bool
 
-    private var taskLookup: [UUID: Task] {
-        Dictionary(uniqueKeysWithValues: taskStore.backlogTasks.map { ($0.id, $0) })
-    }
+    /// Priority levels for visual display
+    private enum Priority: CaseIterable {
+        case high, medium, low
 
-    private var cardItems: [CardListItem] {
-        taskStore.backlogTasks.map { task in
-            CardListItem(
-                id: task.id,
-                title: task.title,
-                assigneeInitials: assigneeInitials(for: task)
-            )
+        var title: String {
+            switch self {
+            case .high: "Wysoka"
+            case .medium: "Średnia"
+            case .low: "Niska"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .high: Color(hex: "E57373") // soft red
+            case .medium: Color(hex: "FFB74D") // orange
+            case .low: Color(hex: "81C784") // green
+            }
         }
     }
 
-    private var subtitle: String {
-        kind.subtitle(for: taskStore.backlogTasks.count)
+    private func priority(for task: Task) -> Priority {
+        // Assign priority based on task position or some other logic
+        // For now, cycle through based on position
+        let index = taskStore.backlogTasks.firstIndex { $0.id == task.id } ?? 0
+        let priorities = Priority.allCases
+        return priorities[index % priorities.count]
+    }
+
+    private func creatorName(for task: Task) -> String {
+        // Get creator name from member store
+        if let assigneeId = task.assigneeId,
+           let member = memberStore.members.first(where: { $0.id == assigneeId })
+        {
+            return member.displayName
+        }
+        return memberStore.members.first?.displayName ?? "Anna"
     }
 
     var body: some View {
-        CardPageView(
-            kind: kind,
-            theme: theme,
-            layout: .standard,
-            subtitle: subtitle,
-            items: cardItems,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: taskStore.isLoading,
-            showsQuantity: false,
-            emptyMessage: "Everything is done!",
-            showsInput: true,
-            accessoryView: nil,
-            onAdd: { title in
-                _Concurrency.Task {
-                    await taskStore.createTask(title: title, status: .backlog)
+        let palette = AppColors.palette(for: themeStore.preset)
+
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Info banner
+                infoBanner(palette: palette)
+
+                // Backlog items
+                ForEach(taskStore.backlogTasks) { task in
+                    backlogCard(task: task, palette: palette)
                 }
-            },
-            onToggle: { item in
-                guard let task = taskLookup[item.id] else { return }
-                promoteToNext(task)
-            },
-            onDelete: { item in
-                guard let task = taskLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await taskStore.deleteTask(task)
-                }
-            },
-            onUpdate: { item, title, _, _ in
-                guard var task = taskLookup[item.id] else { return }
-                task.title = title
-                _Concurrency.Task {
-                    await taskStore.updateTask(task)
-                }
+
+                // Input section
+                inputSection(palette: palette)
             }
-        )
-        .alert("WIP limit reached", isPresented: $wipAlertPresented) {
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+        .alert("Limit zadań", isPresented: $wipAlertPresented) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Complete or move tasks before adding more to Next.")
+            Text("Maksymalnie 3 zadania na osobę. Ukończ lub przenieś zadania.")
         }
+    }
+
+    private func infoBanner(palette: AppColorPalette) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(Color(hex: "FFB74D"))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Pomysły na przyszłość")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(palette.ink)
+
+                Text("Stuknij aby przenieść do zadań")
+                    .font(.system(size: 13))
+                    .foregroundStyle(palette.inkMuted)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(hex: "FFF8E1"))
+        )
+    }
+
+    private func backlogCard(task: Task, palette: AppColorPalette) -> some View {
+        Button {
+            promoteToNext(task)
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Title
+                    Text(task.title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(palette.ink)
+                        .multilineTextAlignment(.leading)
+
+                    HStack(spacing: 12) {
+                        // Priority badge
+                        let taskPriority = priority(for: task)
+                        Text(taskPriority.title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(taskPriority.color)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(taskPriority.color.opacity(0.15))
+                            .clipShape(Capsule())
+
+                        // Creator
+                        Text("od \(creatorName(for: task))")
+                            .font(.system(size: 13))
+                            .foregroundStyle(palette.inkMuted)
+                    }
+                }
+
+                Spacer()
+
+                // Arrow icon
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(palette.inkMuted)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(palette.surface)
+                    .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private func inputSection(palette: AppColorPalette) -> some View {
+        HStack(spacing: 12) {
+            TextField("Dodaj pomysł...", text: $inputText)
+                .font(.system(size: 16))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(palette.surface)
+                )
+                .focused($inputFocused)
+                .submitLabel(.done)
+                .onSubmit {
+                    addIdea()
+                }
+
+            Button {
+                addIdea()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(palette.ink)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+
+    private func addIdea() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        _Concurrency.Task {
+            await taskStore.createTask(title: trimmed, status: .backlog)
+        }
+        inputText = ""
+        EnhancedHaptics.addedItem()
     }
 
     private func promoteToNext(_ task: Task) {
@@ -1070,24 +1328,7 @@ struct BacklogCardView: View {
         _Concurrency.Task {
             await taskStore.updateTask(updatedTask)
         }
-    }
-
-    private func assigneeInitials(for task: Task) -> [String] {
-        let ids = resolvedAssigneeIds(for: task)
-        let members = memberStore.members
-        return ids.compactMap { id in
-            members.first { $0.id == id }?.displayName.initials
-        }
-    }
-
-    private func resolvedAssigneeIds(for task: Task) -> [UUID] {
-        if !task.assigneeIds.isEmpty {
-            return task.assigneeIds
-        }
-        if let assigneeId = task.assigneeId {
-            return [assigneeId]
-        }
-        return memberStore.members.map(\.id)
+        EnhancedHaptics.taskCompleted()
     }
 }
 
@@ -1100,122 +1341,217 @@ struct RecurringCardView: View {
     let currentMemberId: UUID?
     let safeAreaInsets: EdgeInsets
 
-    private var choreLookup: [UUID: RecurringChore] {
-        Dictionary(uniqueKeysWithValues: choreStore.chores.map { ($0.id, $0) })
+    @EnvironmentObject private var themeStore: ThemeStore
+    @State private var inputText = ""
+    @FocusState private var inputFocused: Bool
+
+    /// Category icons for visual display
+    private func categoryIcon(for title: String) -> String {
+        let lowercased = title.lowercased()
+        if lowercased.contains("kwiat") || lowercased.contains("rośliny") || lowercased.contains("podlew") {
+            return "leaf.fill"
+        } else if lowercased.contains("ręcznik") || lowercased.contains("pranie") {
+            return "washer.fill"
+        } else if lowercased.contains("odkurzanie") || lowercased.contains("sprzątanie") {
+            return "sparkles"
+        } else if lowercased.contains("lodówk") {
+            return "refrigerator.fill"
+        } else if lowercased.contains("pościel") || lowercased.contains("łóżk") {
+            return "bed.double.fill"
+        } else if lowercased.contains("śmieci") {
+            return "trash.fill"
+        }
+        return "arrow.trianglehead.2.clockwise.rotate.90"
     }
 
-    private var orderedChores: [RecurringChore] {
-        let active = choreStore.chores.filter(\.isActive).sorted { $0.title < $1.title }
-        let paused = choreStore.chores.filter { !$0.isActive }.sorted { $0.title < $1.title }
-        return active + paused
+    private func categoryColor(for title: String) -> Color {
+        let lowercased = title.lowercased()
+        if lowercased.contains("kwiat") || lowercased.contains("rośliny") || lowercased.contains("podlew") {
+            return Color(hex: "81C784") // green
+        } else if lowercased.contains("ręcznik") || lowercased.contains("pranie") {
+            return Color(hex: "64B5F6") // blue
+        } else if lowercased.contains("odkurzanie") || lowercased.contains("sprzątanie") {
+            return Color(hex: "FFB74D") // orange
+        } else if lowercased.contains("lodówk") {
+            return Color(hex: "90CAF9") // light blue
+        } else if lowercased.contains("pościel") || lowercased.contains("łóżk") {
+            return Color(hex: "CE93D8") // purple
+        }
+        return Color(hex: "9E9E9E") // gray
     }
 
-    private var cardItems: [CardListItem] {
-        orderedChores.map { chore in
-            CardListItem(
-                id: chore.id,
-                title: chore.title,
-                secondaryText: recurrenceDescription(for: chore),
-                detailIconName: "calendar.badge.clock",
-                assigneeInitials: assigneeInitials(for: chore),
-                allowsToggle: chore.isActive
-            )
+    private func scheduleText(for chore: RecurringChore) -> String {
+        let frequency = polishFrequency(for: chore)
+        let timing = polishTiming(for: chore)
+        return "\(frequency) · \(timing)"
+    }
+
+    private func polishFrequency(for chore: RecurringChore) -> String {
+        switch chore.recurrenceType {
+        case .daily:
+            return "Codziennie"
+        case .weekly:
+            return "Co tydzień"
+        case .biweekly:
+            return "Co 2 tygodnie"
+        case .monthly:
+            return "Co miesiąc"
+        case .everyNDays:
+            let interval = chore.recurrenceInterval ?? 1
+            return "Co \(interval) dni"
+        case .everyNWeeks:
+            let interval = chore.recurrenceInterval ?? 1
+            return interval == 1 ? "Co tydzień" : "Co \(interval) tygodnie"
+        case .everyNMonths:
+            let interval = chore.recurrenceInterval ?? 1
+            return interval == 1 ? "Co miesiąc" : "Co \(interval) miesiące"
         }
     }
 
-    private var subtitle: String {
-        kind.subtitle(for: choreStore.chores.count)
+    private func polishTiming(for chore: RecurringChore) -> String {
+        guard let nextDue = chore.nextDueDate else { return "—" }
+        let calendar = Calendar.current
+        let now = Date()
+
+        if calendar.isDateInToday(nextDue) {
+            return "Teraz"
+        } else if calendar.isDateInTomorrow(nextDue) {
+            return "Jutro"
+        } else {
+            let days = calendar.dateComponents([.day], from: now, to: nextDue).day ?? 0
+            return "Za \(days) dni"
+        }
+    }
+
+    private func isDue(chore: RecurringChore) -> Bool {
+        guard let nextDue = chore.nextDueDate else { return false }
+        return Calendar.current.isDateInToday(nextDue) || nextDue < Date()
     }
 
     var body: some View {
-        CardPageView(
-            kind: kind,
-            theme: theme,
-            layout: .standard,
-            subtitle: subtitle,
-            items: cardItems,
-            safeAreaInsets: safeAreaInsets,
-            isLoading: choreStore.isLoading,
-            showsQuantity: false,
-            emptyMessage: "Add a recurring task",
-            showsInput: true,
-            accessoryView: nil,
-            onAdd: { title in
-                let assigneeIds = currentMemberId.map { [$0] } ?? []
-                _Concurrency.Task {
-                    await choreStore.createChore(
-                        title: title,
-                        recurrenceType: .everyNWeeks,
-                        recurrenceInterval: 2,
-                        defaultAssigneeIds: assigneeIds
-                    )
+        let palette = AppColors.palette(for: themeStore.preset)
+
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Chore cards
+                ForEach(choreStore.chores.filter(\.isActive)) { chore in
+                    choreCard(chore: chore, palette: palette)
                 }
-            },
-            onToggle: { item in
-                guard let chore = choreLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await choreStore.generateTask(from: chore, taskStore: taskStore)
-                }
-            },
-            onDelete: { item in
-                guard let chore = choreLookup[item.id] else { return }
-                _Concurrency.Task {
-                    await choreStore.deleteChore(chore)
-                }
-            },
-            onUpdate: { item, title, _, _ in
-                guard var chore = choreLookup[item.id] else { return }
-                chore.title = title
-                _Concurrency.Task {
-                    await choreStore.updateChore(chore)
-                }
+
+                // Input section
+                inputSection(palette: palette)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+    }
+
+    private func choreCard(chore: RecurringChore, palette: AppColorPalette) -> some View {
+        HStack(spacing: 16) {
+            // Category icon
+            let iconColor = categoryColor(for: chore.title)
+            Image(systemName: categoryIcon(for: chore.title))
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: 48, height: 48)
+                .background(iconColor.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(chore.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(palette.ink)
+
+                Text(scheduleText(for: chore))
+                    .font(.system(size: 14))
+                    .foregroundStyle(palette.inkMuted)
+            }
+
+            Spacer()
+
+            // Action button
+            if isDue(chore: chore) {
+                Button {
+                    _Concurrency.Task {
+                        await choreStore.generateTask(from: chore, taskStore: taskStore)
+                    }
+                    EnhancedHaptics.taskCompleted()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color(hex: "81C784"))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+            } else {
+                Button {
+                    _Concurrency.Task {
+                        await choreStore.deleteChore(chore)
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(hex: "E57373"))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(palette.surface)
+                .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
         )
     }
 
-    private func recurrenceDescription(for chore: RecurringChore) -> String {
-        switch chore.recurrenceType {
-        case .daily:
-            return "Every day"
-        case .weekly:
-            if let weekday = chore.recurrenceDay {
-                let formatter = DateFormatter()
-                let name = formatter.weekdaySymbols[weekday - 1]
-                return "Every \(name)"
+    private func inputSection(palette: AppColorPalette) -> some View {
+        HStack(spacing: 12) {
+            TextField("Dodaj powtarzające...", text: $inputText)
+                .font(.system(size: 16))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(palette.surface)
+                )
+                .focused($inputFocused)
+                .submitLabel(.done)
+                .onSubmit {
+                    addChore()
+                }
+
+            Button {
+                addChore()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(palette.ink)
+                    .clipShape(Circle())
             }
-            return "Every week"
-        case .biweekly:
-            return "Every 2 weeks"
-        case .monthly:
-            if let day = chore.recurrenceDayOfMonth {
-                return "Every month on day \(day)"
-            }
-            return "Every month"
-        case .everyNDays:
-            let interval = chore.recurrenceInterval ?? 1
-            return "Every \(interval) day\(interval == 1 ? "" : "s")"
-        case .everyNWeeks:
-            let interval = chore.recurrenceInterval ?? 1
-            return "Every \(interval) week\(interval == 1 ? "" : "s")"
-        case .everyNMonths:
-            let interval = chore.recurrenceInterval ?? 1
-            return "Every \(interval) month\(interval == 1 ? "" : "s")"
+            .buttonStyle(PlainButtonStyle())
         }
     }
 
-    private func assigneeInitials(for chore: RecurringChore) -> [String] {
-        let ids = resolvedAssigneeIds(for: chore)
-        let members = memberStore.members
-        return ids.compactMap { id in
-            members.first { $0.id == id }?.displayName.initials
-        }
-    }
+    private func addChore() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
 
-    private func resolvedAssigneeIds(for chore: RecurringChore) -> [UUID] {
-        if !chore.defaultAssigneeIds.isEmpty {
-            return chore.defaultAssigneeIds
+        let assigneeIds = currentMemberId.map { [$0] } ?? []
+        _Concurrency.Task {
+            await choreStore.createChore(
+                title: trimmed,
+                recurrenceType: .everyNWeeks,
+                recurrenceInterval: 2,
+                defaultAssigneeIds: assigneeIds
+            )
         }
-        return memberStore.members.map(\.id)
+        inputText = ""
+        EnhancedHaptics.addedItem()
     }
 }
 
@@ -1641,15 +1977,68 @@ struct MoreMenuView: View {
     let themeProvider: (CardKind) -> CardTheme
     let badgeProvider: (CardKind) -> Int
     @Binding var isPresented: Bool
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    /// Descriptions for each menu item matching the screenshot
+    private func subtitle(for kind: CardKind) -> String {
+        switch kind {
+        case .recurring:
+            let count = badgeProvider(kind)
+            return count == 1 ? "1 zadań" : "\(count) zadań"
+        case .household:
+            return "Dom Kowalskich"
+        case .settings:
+            return "Wygląd, powiadomienia"
+        default:
+            return kind.subtitle(for: badgeProvider(kind))
+        }
+    }
+
+    private func iconBackgroundColor(for kind: CardKind) -> Color {
+        switch kind {
+        case .recurring:
+            Color(hex: "E8F5F0") // mint green
+        case .household:
+            Color(hex: "F5E6E0") // light pink
+        case .settings:
+            Color(hex: "F0F0F5") // light gray
+        default:
+            Color(.systemGray6)
+        }
+    }
+
+    private func iconColor(for kind: CardKind) -> Color {
+        switch kind {
+        case .recurring:
+            Color(hex: "6B9B8A") // teal
+        case .household:
+            Color(hex: "C49B8A") // dusty rose
+        case .settings:
+            Color(hex: "8A8A9A") // gray
+        default:
+            themeProvider(kind).accentColor
+        }
+    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("More Options") {
-                    ForEach(CardKind.moreMenuItems, id: \.self) { kind in
-                        let theme = themeProvider(kind)
-                        let badge = badgeProvider(kind)
+        let palette = AppColors.palette(for: themeStore.preset)
 
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Header matching screenshot style
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Więcej")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundStyle(palette.ink)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+
+                // Menu items
+                VStack(spacing: 12) {
+                    ForEach(CardKind.moreMenuItems, id: \.self) { kind in
                         Button {
                             withAnimation(CardAnimations.cardSwitch) {
                                 currentKind = kind
@@ -1658,46 +2047,46 @@ struct MoreMenuView: View {
                             EnhancedHaptics.cardChanged()
                         } label: {
                             HStack(spacing: 16) {
+                                // Icon with colored background
                                 Image(systemName: kind.iconName)
-                                    .font(.title2)
-                                    .foregroundStyle(theme.accentColor)
-                                    .frame(width: 32)
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundStyle(iconColor(for: kind))
+                                    .frame(width: 48, height: 48)
+                                    .background(iconBackgroundColor(for: kind))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(kind.title)
-                                        .font(.headline)
-                                        .foregroundStyle(.primary)
+                                        .font(.system(size: 17, weight: .semibold))
+                                        .foregroundStyle(palette.ink)
 
-                                    Text(kind.subtitle(for: badge))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    Text(subtitle(for: kind))
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(palette.inkMuted)
                                 }
 
                                 Spacer()
 
-                                if badge > 0 {
-                                    TabBadgeView(count: badge, color: theme.accentColor)
-                                }
-
-                                if currentKind == kind {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(theme.accentColor)
-                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(palette.inkMuted)
                             }
-                            .padding(.vertical, 4)
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(palette.surface)
+                                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                            )
                         }
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
+                .padding(.horizontal, 20)
+
+                Spacer()
             }
-            .navigationTitle("More")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        isPresented = false
-                    }
-                }
-            }
+            .background(palette.canvas)
+            .navigationBarHidden(true)
         }
     }
 }

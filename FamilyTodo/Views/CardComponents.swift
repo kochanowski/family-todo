@@ -750,10 +750,10 @@ struct ModernTabBarView: View {
                 }
             }
 
-            // More
+            // More (Więcej)
             TabBarItem(
                 icon: "ellipsis",
-                title: "More",
+                title: "Więcej",
                 isActive: currentKind.isMoreMenuItem,
                 badgeCount: moreBadgeCount,
                 palette: palette,
@@ -1333,10 +1333,10 @@ enum CardKind: String, CaseIterable {
     case areas
     case settings
 
-    // MARK: - Hybrid Navigation (3+1) - Redesign 2026-01-28
+    // MARK: - Hybrid Navigation (3+1) - Redesign 2026-01-29
 
-    // Main tabs: Shopping, Tasks (Todo), Backlog
-    // More menu: Recurring, Household, Areas, Settings
+    // Main tabs: Shopping (Lista), Tasks (Zadania), Backlog
+    // More menu: Recurring (Powtarzające się), Household (Dom), Settings (Ustawienia)
 
     static let mainTabs: [CardKind] = [
         .shoppingList,
@@ -1347,7 +1347,6 @@ enum CardKind: String, CaseIterable {
     static let moreMenuItems: [CardKind] = [
         .recurring,
         .household,
-        .areas,
         .settings,
     ]
 
@@ -1369,19 +1368,19 @@ enum CardKind: String, CaseIterable {
     var title: String {
         switch self {
         case .shoppingList:
-            "Shopping List"
+            "Lista"
         case .todo:
-            "Tasks"
+            "Zadania"
         case .backlog:
             "Backlog"
         case .recurring:
-            "Recurring"
+            "Powtarzające się"
         case .household:
-            "Household"
+            "Dom"
         case .areas:
             "Areas"
         case .settings:
-            "Settings"
+            "Ustawienia"
         }
     }
 
@@ -1394,32 +1393,32 @@ enum CardKind: String, CaseIterable {
         case .backlog:
             "Backlog"
         case .recurring:
-            "Recurring"
+            "Powtarzające"
         case .household:
-            "Family"
+            "Dom"
         case .areas:
             "Areas"
         case .settings:
-            "Settings"
+            "Ustawienia"
         }
     }
 
     var iconName: String {
         switch self {
         case .shoppingList:
-            "list.bullet.rectangle.fill"
+            "cart"
         case .todo:
-            "checkmark.circle.fill"
+            "checkmark.square"
         case .backlog:
-            "archivebox.fill"
+            "archivebox"
         case .recurring:
-            "arrow.clockwise.circle.fill"
+            "arrow.trianglehead.2.clockwise.rotate.90"
         case .household:
-            "person.3.fill"
+            "house"
         case .areas:
-            "folder.fill"
+            "folder"
         case .settings:
-            "gearshape.fill"
+            "gearshape"
         }
     }
 
