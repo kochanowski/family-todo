@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, rebuild/swiftui-clean-impl]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
