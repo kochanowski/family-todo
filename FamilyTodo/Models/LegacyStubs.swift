@@ -34,7 +34,7 @@ struct Area: Identifiable, Codable {
     let id: UUID
     let householdId: UUID
     var name: String
-    var icon: String
+    var icon: String?
     var colorHex: String
     var sortOrder: Int
     let createdAt: Date
@@ -44,7 +44,7 @@ struct Area: Identifiable, Codable {
         id: UUID = UUID(),
         householdId: UUID = UUID(),
         name: String = "",
-        icon: String = "folder",
+        icon: String? = "folder",
         colorHex: String = "#808080",
         sortOrder: Int = 0,
         createdAt: Date = Date(),
@@ -61,21 +61,21 @@ struct Area: Identifiable, Codable {
     }
 }
 
-enum RecurrenceType: String, Codable, CaseIterable {
-    case daily
-    case weekly
-    case monthly
-    case custom
-}
-
 struct RecurringChore: Identifiable, Codable {
+    enum RecurrenceType: String, Codable, CaseIterable {
+        case daily
+        case weekly
+        case monthly
+        case custom
+    }
+
     let id: UUID
     let householdId: UUID
     var title: String
     var recurrenceType: RecurrenceType
     var recurrenceDay: Int?
     var recurrenceDayOfMonth: Int?
-    var recurrenceInterval: Int
+    var recurrenceInterval: Int?
     var defaultAssigneeIds: [UUID]
     var areaId: UUID?
     var isActive: Bool
@@ -84,7 +84,7 @@ struct RecurringChore: Identifiable, Codable {
     var notes: String?
     let createdAt: Date
     var updatedAt: Date
-    // Legacy/Unused fields kept for potential compatibility or if I missed something
+    // Legacy/Unused fields kept for defaults
     var frequencyDays: Int
     var assigneeIds: [UUID]
     var rotationEnabled: Bool
@@ -96,7 +96,7 @@ struct RecurringChore: Identifiable, Codable {
         recurrenceType: RecurrenceType = .weekly,
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
-        recurrenceInterval: Int = 1,
+        recurrenceInterval: Int? = 1,
         defaultAssigneeIds: [UUID] = [],
         areaId: UUID? = nil,
         isActive: Bool = true,
@@ -210,11 +210,11 @@ class HouseholdStore: ObservableObject {
         isLoading = false
     }
 
-    func createHousehold(name _: String, ownerId _: String) async throws -> Household {
-        Household()
+    func createHousehold(name _: String, userId: String, displayName: String) async throws -> Household {
+        Household(name: name, ownerId: userId)
     }
 
-    func joinHousehold(householdId _: UUID, userId _: String, displayName _: String) async throws {}
+    func joinHousehold(inviteCode: String, userId _: String, displayName _: String) async throws {}
 }
 
 @MainActor
@@ -222,7 +222,13 @@ class AreaStore: ObservableObject {
     @Published var areas: [Area] = []
     @Published var isLoading = false
 
-    func loadAreas(householdId _: UUID) async {}
+    init(householdId: UUID? = nil, modelContext: ModelContext? = nil) {
+        // Stub init
+    }
+
+    func setSyncMode(_: SyncMode) {}
+
+    func loadAreas(householdId _: UUID? = nil) async {}
 }
 
 @MainActor
