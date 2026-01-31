@@ -146,12 +146,6 @@ enum CardKind: String, CaseIterable, Codable {
 // MARK: - Stub Views
 
 struct ShareInviteView: View {
-    let householdId: UUID
-
-    init(householdId: UUID) {
-        self.householdId = householdId
-    }
-
     var body: some View {
         Text("Share Invite - Coming Soon")
             .font(.headline)
@@ -237,6 +231,12 @@ class MemberStore: ObservableObject {
     @Published var isLoading = false
 
     func loadMembers(householdId _: UUID) async {}
+
+    func updateMember(id: UUID, displayName: String, currentUserId: String?) async throws {}
+
+    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {}
+
+    func deleteMember(id: UUID, currentUserId: String?) async throws {}
 }
 
 @MainActor
