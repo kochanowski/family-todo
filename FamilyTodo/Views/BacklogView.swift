@@ -53,13 +53,13 @@ private struct BacklogContent: View {
                                 category: category,
                                 items: store.items(for: category.id),
                                 onAddItem: { title in
-                                    Task { await store.addItem(to: category.id, title: title) }
+                                    _ = Task { await store.addItem(to: category.id, title: title) }
                                 },
                                 onDeleteItem: { item in
-                                    Task { await store.deleteItem(item) }
+                                    _ = Task { await store.deleteItem(item) }
                                 },
                                 onDeleteCategory: {
-                                    Task { await store.deleteCategory(category) }
+                                    _ = Task { await store.deleteCategory(category) }
                                 }
                             )
                         }
@@ -84,7 +84,7 @@ private struct BacklogContent: View {
             Button("Create") {
                 let name = newCategoryName
                 newCategoryName = ""
-                Task { await store.addCategory(name) }
+                _ = Task { await store.addCategory(name) }
             }
         }
     }

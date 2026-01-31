@@ -60,12 +60,12 @@ final class BacklogStore: ObservableObject {
         do {
             async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: householdId)
             async let fetchedItems = cloudKit.fetchBacklogItems(householdId: householdId)
-            
+
             let (categoriesResult, itemsResult) = try await (fetchedCategories, fetchedItems)
-            
+
             categories = categoriesResult
             items = itemsResult
-            
+
             // 3. Update cache
             syncToCache(categories: categoriesResult, items: itemsResult)
         } catch {
@@ -132,18 +132,18 @@ final class BacklogStore: ObservableObject {
 
     func addCategory(_ title: String) async {
         guard let householdId else { return }
-        
+
         let category = BacklogCategory(
             householdId: householdId,
             title: title,
             sortOrder: categories.count
         )
-        
+
         // Optimistic UI
         withAnimation {
             categories.append(category)
         }
-        
+
         // Cache
         if let context = modelContext {
             let cached = CachedBacklogCategory(from: category)
@@ -152,12 +152,12 @@ final class BacklogStore: ObservableObject {
             context.insert(cached)
             try? context.save()
         }
-        
+
         if !isCloudSyncEnabled { return }
-        
+
         do {
             _ = try await cloudKit.saveBacklogCategory(category)
-            
+
             // Mark synced
             if let context = modelContext {
                 let descriptor = FetchDescriptor<CachedBacklogCategory>(
@@ -174,7 +174,7 @@ final class BacklogStore: ObservableObject {
             // Revert UI if needed, or keep as pending
         }
     }
-    
+
     func deleteCategory(_ category: BacklogCategory) async {
         // Optimistic UI
         withAnimation {
@@ -182,7 +182,7 @@ final class BacklogStore: ObservableObject {
             // Also remove items in this category visually
             items.removeAll { $0.categoryId == category.id }
         }
-        
+
         // Cache
         if let context = modelContext {
             // Delete category
@@ -192,7 +192,7 @@ final class BacklogStore: ObservableObject {
             if let cached = try? context.fetch(catDescriptor).first {
                 context.delete(cached)
             }
-            
+
             // Delete items in category
             let categoryId = category.id
             let itemDescriptor = FetchDescriptor<CachedBacklogItem>(
@@ -205,9 +205,9 @@ final class BacklogStore: ObservableObject {
             }
             try? context.save()
         }
-        
+
         if !isCloudSyncEnabled { return }
-        
+
         do {
             try await cloudKit.deleteBacklogCategory(id: category.id)
             // CloudKit should cascade delete items optionally, or we delete them explicitly?
@@ -225,18 +225,18 @@ final class BacklogStore: ObservableObject {
 
     func addItem(to categoryId: UUID, title: String) async {
         guard let householdId else { return }
-        
+
         let item = BacklogItem(
             categoryId: categoryId,
             householdId: householdId,
             title: title
         )
-        
+
         // Optimistic UI
         withAnimation {
             items.insert(item, at: 0)
         }
-        
+
         // Cache
         if let context = modelContext {
             let cached = CachedBacklogItem(from: item)
@@ -245,12 +245,12 @@ final class BacklogStore: ObservableObject {
             context.insert(cached)
             try? context.save()
         }
-        
+
         if !isCloudSyncEnabled { return }
-        
+
         do {
             _ = try await cloudKit.saveBacklogItem(item)
-            
+
             // Mark synced
             if let context = modelContext {
                 let descriptor = FetchDescriptor<CachedBacklogItem>(
@@ -264,18 +264,18 @@ final class BacklogStore: ObservableObject {
             }
         } catch {
             self.error = error
-             withAnimation {
+            withAnimation {
                 items.removeAll { $0.id == item.id }
             }
         }
     }
-    
+
     func deleteItem(_ item: BacklogItem) async {
         // Optimistic UI
         withAnimation {
             items.removeAll { $0.id == item.id }
         }
-        
+
         // Cache
         if let context = modelContext {
             let descriptor = FetchDescriptor<CachedBacklogItem>(
@@ -286,9 +286,9 @@ final class BacklogStore: ObservableObject {
                 try? context.save()
             }
         }
-        
+
         if !isCloudSyncEnabled { return }
-        
+
         do {
             try await cloudKit.deleteBacklogItem(id: item.id)
         } catch {
