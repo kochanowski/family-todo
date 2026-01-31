@@ -276,6 +276,86 @@ actor CloudKitManager {
         }
     }
 
+    // MARK: - Backlog Category
+
+    func saveBacklogCategory(_ category: BacklogCategory) async throws -> CKRecord {
+        let record = backlogCategoryRecord(from: category)
+        return try await sharedDatabase.save(record)
+    }
+
+    func fetchBacklogCategory(id: UUID) async throws -> BacklogCategory {
+        let record = try await sharedDatabase.record(for: recordID(for: id))
+        return try backlogCategory(from: record)
+    }
+
+    func deleteBacklogCategory(id: UUID) async throws {
+        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+    }
+
+    /// Fetch all backlog categories for a household
+    func fetchBacklogCategories(householdId: UUID) async throws -> [BacklogCategory] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "BacklogCategory", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try backlogCategory(from: record)
+        }
+    }
+
+    // MARK: - Backlog Item
+
+    func saveBacklogItem(_ item: BacklogItem) async throws -> CKRecord {
+        let record = backlogItemRecord(from: item)
+        return try await sharedDatabase.save(record)
+    }
+
+    func fetchBacklogItem(id: UUID) async throws -> BacklogItem {
+        let record = try await sharedDatabase.record(for: recordID(for: id))
+        return try backlogItem(from: record)
+    }
+
+    func deleteBacklogItem(id: UUID) async throws {
+        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+    }
+
+    /// Fetch all backlog items for a category
+    func fetchBacklogItems(categoryId: UUID) async throws -> [BacklogItem] {
+        let predicate = NSPredicate(
+            format: "categoryId == %@",
+            CKRecord.Reference(recordID: recordID(for: categoryId), action: .none)
+        )
+        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try backlogItem(from: record)
+        }
+    }
+
+    /// Fetch all backlog items for a household
+    func fetchBacklogItems(householdId: UUID) async throws -> [BacklogItem] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try backlogItem(from: record)
+        }
+    }
+
     // MARK: - Mapping
 
     // MARK: - Sharing
