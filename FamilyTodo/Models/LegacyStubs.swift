@@ -256,6 +256,9 @@ class MemberStore: ObservableObject {
 class NotificationSettingsStore: ObservableObject {
     @Published var isEnabled = true
     @Published var reminderTime = Date()
+    @Published var taskRemindersEnabled = true
+    @Published var dailyDigestEnabled = true
+    @Published var soundEnabled = true
 }
 
 // MARK: - Cached Models
