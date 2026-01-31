@@ -275,7 +275,7 @@ final class TaskStore: ObservableObject {
     }
 }
 
-enum TaskStoreError: LocalizedError {
+enum TaskStoreError: LocalizedError, Equatable {
     case wipLimitReached
 
     var errorDescription: String? {

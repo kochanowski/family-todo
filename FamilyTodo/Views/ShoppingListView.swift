@@ -66,7 +66,7 @@ private struct ShoppingListContent: View {
             // store.setModelContext(modelContext) // managed by init
             await store.loadItems()
         }
-        .onChange(of: store.error as? Error) { _, _ in
+        .onChange(of: store.error as NSError?) { _, _ in
             // Handle error (e.g. toast)
         }
     }
