@@ -89,6 +89,8 @@ struct MoreView: View {
 
 struct ProfileCard: View {
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var userSession: UserSession
 
     var body: some View {
         HStack(spacing: 16) {
@@ -98,29 +100,19 @@ struct ProfileCard: View {
                     .fill(.blue)
                     .frame(width: 44, height: 44)
                     .overlay {
-                        Text("A")
+                        Text(String(userSession.displayName?.prefix(1) ?? "U"))
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
                     }
-                    .offset(x: -10)
-
-                Circle()
-                    .fill(.green)
-                    .frame(width: 44, height: 44)
-                    .overlay {
-                        Text("T")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .offset(x: 10)
+                // .offset(x: -10) // TODO: Multi-avatar logic
             }
-            .frame(width: 70)
+            .frame(width: 44)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Anna & Tom")
+                Text(userSession.displayName ?? "User")
                     .font(.system(size: 17, weight: .semibold))
 
-                Text("Family Household")
+                Text(householdStore.currentHousehold?.name ?? "No Household")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
@@ -175,16 +167,28 @@ struct MenuRow: View {
 
 struct ProfileView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var householdStore: HouseholdStore
 
     var body: some View {
         List {
             Section("Household") {
-                LabeledContent("Name", value: "Smith Family Home")
+                if let household = householdStore.currentHousehold {
+                    LabeledContent("Name", value: household.name)
+                } else {
+                    Text("No Household Selected")
+                }
             }
 
             Section("Members") {
-                MemberRow(name: "Anna", initials: "A", color: .blue)
-                MemberRow(name: "Tom", initials: "T", color: .green)
+                if let household = householdStore.currentHousehold {
+                    NavigationLink {
+                        MemberManagementView(householdId: household.id)
+                    } label: {
+                        Text("Manage Members")
+                    }
+                } else {
+                    Text("Select a household first")
+                }
             }
         }
         .navigationTitle("Profile")

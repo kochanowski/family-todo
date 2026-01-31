@@ -6,6 +6,7 @@ import SwiftUI
 struct FamilyTodoApp: App {
     @StateObject private var userSession = UserSession.shared
     @StateObject private var themeStore = ThemeStore()
+    @StateObject private var householdStore = HouseholdStore()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -14,6 +15,7 @@ struct FamilyTodoApp: App {
             CachedShoppingItem.self,
             CachedBacklogCategory.self,
             CachedBacklogItem.self,
+            CachedHousehold.self,
         ])
         #if CI
             let modelConfiguration = ModelConfiguration(
@@ -50,9 +52,11 @@ struct FamilyTodoApp: App {
             ContentView()
                 .environmentObject(userSession)
                 .environmentObject(themeStore)
+                .environmentObject(householdStore)
                 .modelContainer(sharedModelContainer)
                 .preferredColorScheme(themeStore.colorScheme)
                 .task {
+                    householdStore.setModelContext(sharedModelContainer.mainContext)
                     #if !CI
                         await userSession.checkAuthenticationStatus()
                     #endif

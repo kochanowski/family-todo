@@ -9,31 +9,6 @@ import SwiftUI
 
 // MARK: - Models
 
-struct Household: Identifiable, Codable {
-    let id: UUID
-    var name: String
-    let ownerId: String
-    let createdAt: Date
-    var updatedAt: Date
-    // Legacy/Test helper properties
-    var members: [Member] = []
-    var areas: [Area] = []
-
-    init(
-        id: UUID = UUID(),
-        name: String = "",
-        ownerId: String = "",
-        createdAt: Date = Date(),
-        updatedAt: Date = Date()
-    ) {
-        self.id = id
-        self.name = name
-        self.ownerId = ownerId
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-    }
-}
-
 struct Area: Identifiable, Codable {
     let id: UUID
     let householdId: UUID
@@ -157,13 +132,6 @@ enum CardKind: String, CaseIterable, Codable {
 
 // MARK: - Stub Views
 
-struct ShareInviteView: View {
-    var body: some View {
-        Text("Share Invite - Coming Soon")
-            .font(.headline)
-    }
-}
-
 struct TaskDetailView: View {
     let store: TaskStore
     let householdId: UUID
@@ -196,36 +164,6 @@ enum HouseholdError: Error {
 }
 
 @MainActor
-class HouseholdStore: ObservableObject {
-    @Published var currentHousehold: Household?
-    @Published var isLoading = false
-    @Published var hasHousehold: Bool = false
-    @Published var inviteCode: String?
-    @Published var currentMember: Member?
-    @Published var error: Error?
-
-    private var modelContext: ModelContext?
-
-    func setModelContext(_ context: ModelContext) {
-        modelContext = context
-    }
-
-    func setSyncMode(_: SyncMode) {}
-
-    func loadHousehold(userId _: String) async {
-        isLoading = true
-        // Stub - will load from CloudKit
-        isLoading = false
-    }
-
-    func createHousehold(name: String, userId: String, displayName _: String) async throws -> Household {
-        Household(name: name, ownerId: userId)
-    }
-
-    func joinHousehold(inviteCode _: String, userId _: String, displayName _: String) async throws {}
-}
-
-@MainActor
 class AreaStore: ObservableObject {
     @Published var areas: [Area] = []
     @Published var isLoading = false
@@ -240,20 +178,6 @@ class AreaStore: ObservableObject {
 }
 
 @MainActor
-class MemberStore: ObservableObject {
-    @Published var members: [Member] = []
-    @Published var isLoading = false
-
-    func loadMembers(householdId _: UUID) async {}
-
-    func updateMember(id _: UUID, displayName _: String, currentUserId _: String?) async throws {}
-
-    func updateRole(id _: UUID, newRole _: Member.MemberRole, currentUserId _: String?) async throws {}
-
-    func deleteMember(id _: UUID, currentUserId _: String?) async throws {}
-}
-
-@MainActor
 class NotificationSettingsStore: ObservableObject {
     @Published var isEnabled = true
     @Published var reminderTime = Date()
@@ -263,29 +187,6 @@ class NotificationSettingsStore: ObservableObject {
 }
 
 // MARK: - Cached Models
-
-@Model
-final class CachedHousehold {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var ownerId: String
-    var createdAt: Date
-    var updatedAt: Date
-
-    init(
-        id: UUID = UUID(),
-        name: String = "",
-        ownerId: String = "",
-        createdAt: Date = Date(),
-        updatedAt: Date = Date()
-    ) {
-        self.id = id
-        self.name = name
-        self.ownerId = ownerId
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-    }
-}
 
 @Model
 final class CachedArea {

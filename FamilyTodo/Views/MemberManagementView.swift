@@ -1,9 +1,15 @@
+import SwiftData
 import SwiftUI
 
 struct MemberManagementView: View {
-    @ObservedObject var memberStore: MemberStore
-    @ObservedObject var householdStore: HouseholdStore
+    @StateObject private var memberStore: MemberStore
+    @EnvironmentObject var householdStore: HouseholdStore
     @EnvironmentObject var userSession: UserSession
+    @Environment(\.modelContext) private var modelContext
+
+    init(householdId: UUID) {
+        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId))
+    }
 
     @State private var editingMember: Member?
     @State private var newDisplayName = ""
@@ -120,6 +126,10 @@ struct MemberManagementView: View {
                     Text(message)
                 }
             }
+        }
+        .task {
+            memberStore.setModelContext(modelContext)
+            await memberStore.loadMembers()
         }
     }
 
