@@ -14,6 +14,9 @@ struct Household: Identifiable, Codable {
     let ownerId: String
     let createdAt: Date
     var updatedAt: Date
+    // Legacy/Test helper properties
+    var members: [Member] = []
+    var areas: [Area] = []
 
     init(
         id: UUID = UUID(),
@@ -39,6 +42,14 @@ struct Area: Identifiable, Codable {
     var sortOrder: Int
     let createdAt: Date
     var updatedAt: Date
+
+    static var defaults: [Area] {
+        [
+            Area(name: "Kitchen", icon: "refrigerator", colorHex: "#FF5733"),
+            Area(name: "Living Room", icon: "sofa", colorHex: "#33FF57"),
+            Area(name: "Bathroom", icon: "shower", colorHex: "#3357FF")
+        ]
+    }
 
     init(
         id: UUID = UUID(),
@@ -153,27 +164,21 @@ struct ShareInviteView: View {
 }
 
 struct TaskDetailView: View {
-    @Binding var task: Task
+    let store: TaskStore
     let householdId: UUID
-    let members: [Member]
+    let task: Task?
     let areas: [Area]
-    let onSave: (Task) -> Void
-    let onDelete: () -> Void
 
     init(
-        task: Binding<Task>,
+        store: TaskStore,
         householdId: UUID,
-        members: [Member] = [],
-        areas: [Area] = [],
-        onSave: @escaping (Task) -> Void = { _ in },
-        onDelete: @escaping () -> Void = {}
+        task: Task? = nil,
+        areas: [Area] = []
     ) {
-        self._task = task
+        self.store = store
         self.householdId = householdId
-        self.members = members
+        self.task = task
         self.areas = areas
-        self.onSave = onSave
-        self.onDelete = onDelete
     }
 
     var body: some View {
@@ -184,11 +189,19 @@ struct TaskDetailView: View {
 
 // MARK: - Stores
 
+enum HouseholdError: Error {
+    case memberNotFound
+    case householdNotFound
+}
+
 @MainActor
 class HouseholdStore: ObservableObject {
     @Published var currentHousehold: Household?
     @Published var isLoading = false
     @Published var hasHousehold: Bool = false
+    @Published var inviteCode: String?
+    @Published var currentMember: Member?
+    @Published var error: Error?
 
     private var modelContext: ModelContext?
 
