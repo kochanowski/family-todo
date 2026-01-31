@@ -104,9 +104,58 @@ struct RecurringChore: Identifiable, Codable {
 // MARK: - CardKind for ThemeStore
 
 enum CardKind: String, CaseIterable, Codable {
-    case shopping
-    case tasks
+    case shoppingList
+    case todo
+    case backlog
     case recurring
+    case household
+    case areas
+    case settings
+}
+
+// MARK: - Stub Views
+
+struct ShareInviteView: View {
+    let householdId: UUID
+
+    init(householdId: UUID) {
+        self.householdId = householdId
+    }
+
+    var body: some View {
+        Text("Share Invite - Coming Soon")
+            .font(.headline)
+    }
+}
+
+struct TaskDetailView: View {
+    @Binding var task: Task
+    let householdId: UUID
+    let members: [Member]
+    let areas: [Area]
+    let onSave: (Task) -> Void
+    let onDelete: () -> Void
+
+    init(
+        task: Binding<Task>,
+        householdId: UUID,
+        members: [Member] = [],
+        areas: [Area] = [],
+        onSave: @escaping (Task) -> Void = { _ in },
+        onDelete: @escaping () -> Void = {}
+    ) {
+        self._task = task
+        self.householdId = householdId
+        self.members = members
+        self.areas = areas
+        self.onSave = onSave
+        self.onDelete = onDelete
+    }
+
+    var body: some View {
+        Text("Task Detail - Coming Soon")
+            .font(.headline)
+    }
 }
 
 // MARK: - Stores

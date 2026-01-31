@@ -247,4 +247,13 @@ final class ThemeStore: ObservableObject {
     var palette: ThemePalette {
         preset.palette
     }
+
+    var colorScheme: ColorScheme? {
+        switch preset {
+        case .night:
+            return .dark
+        default:
+            return nil // Use system default
+        }
+    }
 }
