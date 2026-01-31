@@ -210,7 +210,7 @@ class HouseholdStore: ObservableObject {
         isLoading = false
     }
 
-    func createHousehold(name _: String, userId: String, displayName: String) async throws -> Household {
+    func createHousehold(name: String, userId: String, displayName: String) async throws -> Household {
         Household(name: name, ownerId: userId)
     }
 
