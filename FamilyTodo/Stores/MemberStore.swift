@@ -18,19 +18,19 @@ class MemberStore: ObservableObject {
         self.householdId = householdId
         self.modelContext = modelContext
     }
-    
+
     func setModelContext(_ context: ModelContext) {
-        self.modelContext = context
+        modelContext = context
     }
-    
+
     func setSyncMode(_ mode: SyncMode) {
-        self.syncMode = mode
+        syncMode = mode
     }
 
     // MARK: - Data Loading
 
     func loadMembers() async {
-        guard let householdId = householdId else { return }
+        guard let householdId else { return }
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
@@ -43,12 +43,12 @@ class MemberStore: ObservableObject {
         // 2. Load from CloudKit
         do {
             let fetchedMembers = try await cloudKit.fetchMembers(householdId: householdId)
-            
+
             // Update cache
             updateCache(with: fetchedMembers, for: householdId)
-            
+
             // Update UI
-            self.members = fetchedMembers
+            members = fetchedMembers
         } catch {
             print("Error loading members: \(error)")
             self.error = error
@@ -57,18 +57,18 @@ class MemberStore: ObservableObject {
 
     // MARK: - Operations
 
-    func updateMember(id: UUID, displayName: String, currentUserId: String?) async throws {
+    func updateMember(id: UUID, displayName: String, currentUserId _: String?) async throws {
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         var member = members[index]
-        
+
         // Optimistic Update
         let oldName = member.displayName
         member.displayName = displayName
         members[index] = member
-        
+
         // Update Cache
         updateCachedMember(member)
-        
+
         if syncMode == .cloud {
             do {
                 _ = try await cloudKit.saveMember(member)
@@ -82,14 +82,14 @@ class MemberStore: ObservableObject {
         }
     }
 
-    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {
+    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId _: String?) async throws {
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         var member = members[index]
-        
+
         let oldRole = member.role
-        
+
         // TODO: Validate only owner can change roles (should be enforced by UI/CloudKit rules)
-        
+
         // Optimistic
         // Since 'role' is let in Member struct (immutable), we need to create a new Member
         let updatedMember = Member(
@@ -101,10 +101,10 @@ class MemberStore: ObservableObject {
             joinedAt: member.joinedAt,
             isActive: member.isActive
         )
-        
+
         members[index] = updatedMember
         updateCachedMember(updatedMember)
-        
+
         if syncMode == .cloud {
             do {
                 _ = try await cloudKit.saveMember(updatedMember)
@@ -116,14 +116,14 @@ class MemberStore: ObservableObject {
         }
     }
 
-    func deleteMember(id: UUID, currentUserId: String?) async throws {
+    func deleteMember(id: UUID, currentUserId _: String?) async throws {
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         let member = members[index]
-        
+
         // Optimistic
         members.remove(at: index)
         deleteCachedMember(id: id)
-        
+
         if syncMode == .cloud {
             do {
                 try await cloudKit.deleteMember(id: id)
@@ -140,12 +140,12 @@ class MemberStore: ObservableObject {
 
     private func fetchCachedMembers(householdId: UUID) -> [Member] {
         guard let context = modelContext else { return [] }
-        
+
         let descriptor = FetchDescriptor<CachedMember>(
             predicate: #Predicate { $0.householdId == householdId },
             sortBy: [SortDescriptor(\.joinedAt)]
         )
-        
+
         do {
             return try context.fetch(descriptor).map { $0.toMember() }
         } catch {
@@ -154,27 +154,27 @@ class MemberStore: ObservableObject {
         }
     }
 
-    private func updateCache(with members: [Member], for householdId: UUID) {
+    private func updateCache(with members: [Member], for _: UUID) {
         guard let context = modelContext else { return }
-        
+
         // Simple strategy: Delete all for household and regarding (inefficient but safe for now)
         // Better: diffing. For now, let's just update existing and add new.
-        
+
         for member in members {
             updateCachedMember(member)
         }
-        
+
         // TODO: Handle deletions (members in cache but not in fetch)
     }
 
     private func updateCachedMember(_ member: Member) {
         guard let context = modelContext else { return }
-        
+
         let memberId = member.id
         let descriptor = FetchDescriptor<CachedMember>(
             predicate: #Predicate { $0.id == memberId }
         )
-        
+
         do {
             if let cached = try context.fetch(descriptor).first {
                 cached.update(from: member)
@@ -183,16 +183,16 @@ class MemberStore: ObservableObject {
             }
             try context.save()
         } catch {
-             print("Cache save error: \(error)")
+            print("Cache save error: \(error)")
         }
     }
-    
+
     private func deleteCachedMember(id: UUID) {
         guard let context = modelContext else { return }
         let descriptor = FetchDescriptor<CachedMember>(
             predicate: #Predicate { $0.id == id }
         )
-        
+
         do {
             if let cached = try context.fetch(descriptor).first {
                 context.delete(cached)

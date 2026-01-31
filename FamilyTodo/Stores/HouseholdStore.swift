@@ -14,7 +14,7 @@ class HouseholdStore: ObservableObject {
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
     private var syncMode: SyncMode = .cloud
-    
+
     // Cache for sharing controller
     private var activeShare: CKShare?
     private var activeContainer: CKContainer?
@@ -24,11 +24,11 @@ class HouseholdStore: ObservableObject {
     }
 
     func setModelContext(_ context: ModelContext) {
-        self.modelContext = context
+        modelContext = context
     }
-    
+
     func setSyncMode(_ mode: SyncMode) {
-        self.syncMode = mode
+        syncMode = mode
     }
 
     // MARK: - Lifecycle
@@ -40,28 +40,28 @@ class HouseholdStore: ObservableObject {
 
         // 1. Try to load from cache first
         if let cached = fetchCachedHousehold(userId: userId) {
-            self.currentHousehold = cached.toHousehold()
+            currentHousehold = cached.toHousehold()
         }
 
         guard syncMode == .cloud else { return }
 
         // 2. Load from CloudKit
         do {
-            // In a real app with private DB + sharing, finding the "current" household 
+            // In a real app with private DB + sharing, finding the "current" household
             // often involves querying for the one owned by user or shared with them.
-            // For MVP/HousePulse, we check if we have one locally, otherwise we might look 
+            // For MVP/HousePulse, we check if we have one locally, otherwise we might look
             // for the one where we are a member.
-            
+
             // NOTE: This logic assumes 1 household per user for simplicity in this iteration.
             // If we have a cached one, refresh it.
             if let current = currentHousehold {
                 let fresh = try await cloudKit.fetchHousehold(id: current.id)
                 updateCache(with: fresh)
-                self.currentHousehold = fresh
-                
+                currentHousehold = fresh
+
                 // Also fetch share if owner
                 if fresh.ownerId == userId {
-                   // We might want to fetch share metadata here if needed
+                    // We might want to fetch share metadata here if needed
                 }
             }
         } catch {
@@ -78,11 +78,11 @@ class HouseholdStore: ObservableObject {
         defer { isLoading = false }
 
         let newHousehold = Household(name: name, ownerId: userId)
-        
+
         // 1. Save to CloudKit
         if syncMode == .cloud {
             _ = try await cloudKit.saveHousehold(newHousehold)
-            
+
             // Create initial member (owner)
             let owner = Member(
                 householdId: newHousehold.id,
@@ -95,18 +95,18 @@ class HouseholdStore: ObservableObject {
 
         // 2. Update Cache
         updateCache(with: newHousehold)
-        self.currentHousehold = newHousehold
-        
+        currentHousehold = newHousehold
+
         return newHousehold
     }
-    
+
     // MARK: - Sharing
-    
+
     func createShare() async throws -> (CKShare, CKContainer) {
         guard let household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
-        
+
         let share = try await cloudKit.createShare(for: household)
         self.share = share
         return (share, CKContainer.default())
@@ -114,9 +114,9 @@ class HouseholdStore: ObservableObject {
 
     // MARK: - SwiftData Helpers
 
-    private func fetchCachedHousehold(userId: String) -> CachedHousehold? {
+    private func fetchCachedHousehold(userId _: String) -> CachedHousehold? {
         guard let context = modelContext else { return nil }
-        
+
         // Logic: Find household where ownerId == userId OR (TODO: handle shared households)
         // For now, simple fetch
         let descriptor = FetchDescriptor<CachedHousehold>()
@@ -130,11 +130,11 @@ class HouseholdStore: ObservableObject {
 
     private func updateCache(with household: Household) {
         guard let context = modelContext else { return }
-        
+
         let descriptor = FetchDescriptor<CachedHousehold>(
             predicate: #Predicate { $0.id == household.id }
         )
-        
+
         do {
             let results = try context.fetch(descriptor)
             if let existing = results.first {

@@ -22,15 +22,15 @@ final class CachedHousehold {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
-    
+
     init(from household: Household) {
-        self.id = household.id
-        self.name = household.name
-        self.ownerId = household.ownerId
-        self.createdAt = household.createdAt
-        self.updatedAt = household.updatedAt
+        id = household.id
+        name = household.name
+        ownerId = household.ownerId
+        createdAt = household.createdAt
+        updatedAt = household.updatedAt
     }
-    
+
     func toHousehold() -> Household {
         Household(
             id: id,
@@ -40,10 +40,10 @@ final class CachedHousehold {
             updatedAt: updatedAt
         )
     }
-    
+
     func update(from household: Household) {
-        self.name = household.name
-        self.ownerId = household.ownerId
-        self.updatedAt = household.updatedAt
+        name = household.name
+        ownerId = household.ownerId
+        updatedAt = household.updatedAt
     }
 }
