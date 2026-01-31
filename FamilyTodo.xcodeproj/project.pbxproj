@@ -6,6 +6,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0361DF1A50DB4C8E84281CF1 /* CachedBacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B943208162D40CC83A90412 /* CachedBacklogCategory.swift */; };
+		92DC27B1D58F47828A1672F0 /* CachedBacklogItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1590E14261EB4996992A7F56 /* CachedBacklogItem.swift */; };
+		CA4CB8EAC00047E6B4BEDF34 /* BacklogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CD19CBC26F4EA28F7461BB /* BacklogStore.swift */; };
 		A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B71 /* FamilyTodoApp.swift */; };
 		A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B72 /* ContentView.swift */; };
 		A1B2C3D4E5F60718293A4B7C /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */; };
@@ -67,6 +70,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		8B943208162D40CC83A90412 /* CachedBacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedBacklogCategory.swift; sourceTree = "<group>"; };
+		1590E14261EB4996992A7F56 /* CachedBacklogItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedBacklogItem.swift; sourceTree = "<group>"; };
+		59CD19CBC26F4EA28F7461BB /* BacklogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStore.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B71 /* FamilyTodoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoApp.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B72 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -171,6 +177,8 @@
 		A1B2C3D4E5F60718293A4B9A /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				8B943208162D40CC83A90412 /* CachedBacklogCategory.swift */,
+				1590E14261EB4996992A7F56 /* CachedBacklogItem.swift */,
 				D5698A6FED3C457788B6A60C /* CachedMember.swift */,
 				1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */,
 				86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */,
@@ -301,6 +309,7 @@
 		FA1C0439FFD449E092083889 /* Stores */ = {
 			isa = PBXGroup;
 			children = (
+				59CD19CBC26F4EA28F7461BB /* BacklogStore.swift */,
 				C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */,
 				F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */,
 			);
@@ -419,6 +428,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0361DF1A50DB4C8E84281CF1 /* CachedBacklogCategory.swift in Sources */,
+				92DC27B1D58F47828A1672F0 /* CachedBacklogItem.swift in Sources */,
+				CA4CB8EAC00047E6B4BEDF34 /* BacklogStore.swift in Sources */,
 				310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */,
 				DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */,
 				004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */,
