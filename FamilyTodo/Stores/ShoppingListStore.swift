@@ -230,6 +230,32 @@ final class ShoppingListStore: ObservableObject {
         await updateItem(updatedItem)
     }
 
+    // MARK: - Bulk Operations
+
+    func markAllAsBought() async {
+        let activeItems = items.filter { !$0.isBought }
+        guard !activeItems.isEmpty else { return }
+
+        // Optimistic UI
+        for item in activeItems {
+            if let index = items.firstIndex(where: { $0.id == item.id }) {
+                withAnimation {
+                    items[index].isBought = true
+                    items[index].boughtAt = Date()
+                }
+            }
+        }
+
+        // Update cache/cloud
+        // Note: Ideally allow batch update, but for now we iterate
+        for item in activeItems {
+            var updated = item
+            updated.isBought = true
+            updated.boughtAt = Date()
+            await updateItem(updated)
+        }
+    }
+
     // MARK: - Clear To Buy
 
     func clearToBuy() async {

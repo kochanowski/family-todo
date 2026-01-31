@@ -1,11 +1,36 @@
+import SwiftData
 import SwiftUI
 
 /// Tasks screen - daily chores and immediate to-dos
 struct TasksView: View {
-    @State private var tasks: [TaskItem] = []
+    @EnvironmentObject private var userSession: UserSession
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Group {
+            if let householdId = userSession.currentHouseholdID {
+                TasksContent(householdId: householdId, modelContext: modelContext)
+            } else {
+                ContentUnavailableView(
+                    "No Household Selected",
+                    systemImage: "house.slash",
+                    description: Text("Please select or create a household in the More tab.")
+                )
+            }
+        }
+    }
+}
+
+private struct TasksContent: View {
+    @StateObject private var store: TaskStore
     @State private var newTaskTitle = ""
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+
+    init(householdId: UUID, modelContext: ModelContext) {
+        _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
+        _store.wrappedValue.setHousehold(householdId)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,20 +48,23 @@ struct TasksView: View {
             // Tasks list
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    // Active tasks
-                    if !activeTasks.isEmpty {
-                        ForEach(activeTasks) { task in
+                    // Active tasks (Next)
+                    if !store.nextTasks.isEmpty {
+                        ForEach(store.nextTasks) { task in
                             TaskRow(task: task, onToggle: { toggleTask(task) })
                         }
                     }
 
                     // Completed section
-                    if !completedTasks.isEmpty {
+                    if !store.doneTasks.isEmpty {
                         completedSection
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 120) // Space for input and tab bar
+            }
+            .refreshable {
+                await store.loadTasks()
             }
 
             Spacer()
@@ -47,6 +75,17 @@ struct TasksView: View {
                 .padding(.bottom, 100)
         }
         .background(backgroundColor.ignoresSafeArea())
+        .task {
+            await store.loadTasks()
+        }
+        .onChange(of: store.error as? TaskStoreError) { _, error in
+            if let error {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.warning)
+                // In a real app we might show a toast here
+                print("Task Error: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Header
@@ -92,7 +131,7 @@ struct TasksView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 8)
 
-            ForEach(completedTasks) { task in
+            ForEach(store.doneTasks) { task in
                 TaskRow(task: task, onToggle: { toggleTask(task) })
             }
         }
@@ -121,47 +160,43 @@ struct TasksView: View {
         }
     }
 
-    // MARK: - Data
-
-    private var activeTasks: [TaskItem] {
-        tasks.filter { !$0.isCompleted }
-    }
-
-    private var completedTasks: [TaskItem] {
-        tasks.filter(\.isCompleted)
-    }
+    // MARK: - Data Actions
 
     private func addTask() {
         guard !newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty else { return }
 
-        // Check WIP limit
-        if activeTasks.count >= 3 {
+        let title = newTaskTitle.trimmingCharacters(in: .whitespaces)
+
+        // Optimistic check for WIP limit
+        if !store.canMoveToNext(assigneeId: nil) { // Assuming unassigned or current user
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)
             return
         }
 
-        let task = TaskItem(
-            id: UUID(),
-            title: newTaskTitle.trimmingCharacters(in: .whitespaces),
-            isCompleted: false,
-            assignee: nil,
-            dueDate: nil
-        )
-        tasks.append(task)
-        newTaskTitle = ""
+        Task {
+            await store.createTask(title: title, status: .next)
+        }
 
+        newTaskTitle = ""
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
     }
 
-    private func toggleTask(_ task: TaskItem) {
-        if let index = tasks.firstIndex(where: { $0.id == task.id }) {
-            tasks[index].isCompleted.toggle()
+    private func toggleTask(_ task: Task) {
+        let newStatus: Task.TaskStatus = task.status == .done ? .next : .done
 
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
+        if newStatus == .next, !store.canMoveToNext(assigneeId: task.assigneeId) {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+            return
         }
+
+        Task {
+            await store.moveTask(task, to: newStatus)
+        }
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
     }
 
     private var backgroundColor: Color {
@@ -173,20 +208,10 @@ struct TasksView: View {
     }
 }
 
-// MARK: - Task Item (Local Model)
-
-struct TaskItem: Identifiable {
-    let id: UUID
-    var title: String
-    var isCompleted: Bool
-    var assignee: String?
-    var dueDate: Date?
-}
-
 // MARK: - Task Row
 
 struct TaskRow: View {
-    let task: TaskItem
+    let task: Task
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -196,10 +221,10 @@ struct TaskRow: View {
             HStack(spacing: 12) {
                 // Square checkbox
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(task.isCompleted ? Color.green : Color.secondary.opacity(0.3), lineWidth: 2)
+                    .stroke(isCompleted ? Color.green : Color.secondary.opacity(0.3), lineWidth: 2)
                     .frame(width: 22, height: 22)
                     .overlay {
-                        if task.isCompleted {
+                        if isCompleted {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(.green)
@@ -209,18 +234,16 @@ struct TaskRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(task.title)
                         .font(.system(size: 15))
-                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                        .strikethrough(task.isCompleted)
+                        .foregroundStyle(isCompleted ? .secondary : .primary)
+                        .strikethrough(isCompleted)
 
                     // Metadata row
-                    if task.dueDate != nil || task.assignee != nil {
+                    if task.dueDate != nil {
                         HStack(spacing: 8) {
                             if let dueDate = task.dueDate {
                                 dueDateLabel(dueDate)
                             }
-                            if let assignee = task.assignee {
-                                assigneePill(assignee)
-                            }
+                            // Assignee support coming later with MemberStore
                         }
                     }
                 }
@@ -232,24 +255,16 @@ struct TaskRow: View {
         .buttonStyle(.plain)
     }
 
+    private var isCompleted: Bool {
+        task.status == .done
+    }
+
     @ViewBuilder
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
         Text(dateFormatter.string(from: date))
             .font(.system(size: 12))
             .foregroundStyle(isToday ? .orange : .secondary)
-    }
-
-    private func assigneePill(_ name: String) -> some View {
-        Text(name)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background {
-                Capsule()
-                    .fill(Color.secondary.opacity(0.15))
-            }
     }
 
     private var dateFormatter: DateFormatter {
@@ -261,4 +276,5 @@ struct TaskRow: View {
 
 #Preview {
     TasksView()
+        .environmentObject(UserSession.shared)
 }

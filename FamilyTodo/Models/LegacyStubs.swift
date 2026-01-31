@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 // MARK: - Legacy Stubs
+
 // These types existed in the old implementation but are being refactored.
 // Stubs allow existing code to compile while we migrate to new architecture.
 
@@ -47,7 +48,7 @@ struct Area: Identifiable, Codable {
         [
             Area(name: "Kitchen", icon: "refrigerator", colorHex: "#FF5733"),
             Area(name: "Living Room", icon: "sofa", colorHex: "#33FF57"),
-            Area(name: "Bathroom", icon: "shower", colorHex: "#3357FF")
+            Area(name: "Bathroom", icon: "shower", colorHex: "#3357FF"),
         ]
     }
 
@@ -206,7 +207,7 @@ class HouseholdStore: ObservableObject {
     private var modelContext: ModelContext?
 
     func setModelContext(_ context: ModelContext) {
-        self.modelContext = context
+        modelContext = context
     }
 
     func setSyncMode(_: SyncMode) {}
@@ -217,11 +218,11 @@ class HouseholdStore: ObservableObject {
         isLoading = false
     }
 
-    func createHousehold(name: String, userId: String, displayName: String) async throws -> Household {
+    func createHousehold(name: String, userId: String, displayName _: String) async throws -> Household {
         Household(name: name, ownerId: userId)
     }
 
-    func joinHousehold(inviteCode: String, userId _: String, displayName _: String) async throws {}
+    func joinHousehold(inviteCode _: String, userId _: String, displayName _: String) async throws {}
 }
 
 @MainActor
@@ -229,7 +230,7 @@ class AreaStore: ObservableObject {
     @Published var areas: [Area] = []
     @Published var isLoading = false
 
-    init(householdId: UUID? = nil, modelContext: ModelContext? = nil) {
+    init(householdId _: UUID? = nil, modelContext _: ModelContext? = nil) {
         // Stub init
     }
 
@@ -245,11 +246,11 @@ class MemberStore: ObservableObject {
 
     func loadMembers(householdId _: UUID) async {}
 
-    func updateMember(id: UUID, displayName: String, currentUserId: String?) async throws {}
+    func updateMember(id _: UUID, displayName _: String, currentUserId _: String?) async throws {}
 
-    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {}
+    func updateRole(id _: UUID, newRole _: Member.MemberRole, currentUserId _: String?) async throws {}
 
-    func deleteMember(id: UUID, currentUserId: String?) async throws {}
+    func deleteMember(id _: UUID, currentUserId _: String?) async throws {}
 }
 
 @MainActor

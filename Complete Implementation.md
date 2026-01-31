@@ -1,8 +1,8 @@
 # House Pulse - Complete Implementation Guide
 
-**App Name:** House Pulse  
-**Data utworzenia:** 2026-01-31  
-**Wersja:** Pre-release (MVP)  
+**App Name:** House Pulse
+**Data utworzenia:** 2026-01-31
+**Wersja:** Pre-release (MVP)
 **Platforma:** iOS 17+
 
 ---
@@ -407,7 +407,7 @@ class ThemeStore {
 ```swift
 struct ContentView: View {
     @State private var activeTab: Tab = .shopping
-    
+
     var body: some View {
         ZStack {
             // Content views
@@ -421,7 +421,7 @@ struct ContentView: View {
             }
             .transition(.opacity.combined(with: .scale(scale: 0.99)))
             .animation(.easeInOut(duration: 0.3), value: activeTab)
-            
+
             // Floating Tab Bar overlay
             VStack {
                 Spacer()
@@ -600,6 +600,6 @@ LazyVStack {
 
 ---
 
-**Utworzono:** 2026-01-31  
-**Źródła:** Product Specification: House Pulse.md (UI/UX) + NEW_VERSION.md (Technical)  
+**Utworzono:** 2026-01-31
+**Źródła:** Product Specification: House Pulse.md (UI/UX) + NEW_VERSION.md (Technical)
 **Ostatnia aktualizacja:** 2026-01-31

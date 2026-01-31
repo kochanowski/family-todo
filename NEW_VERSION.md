@@ -1,7 +1,7 @@
 # Family To-Do App - Kompletna Dokumentacja Techniczna
 
-**Data utworzenia:** 2026-01-29  
-**Wersja aplikacji:** Pre-release (MVP)  
+**Data utworzenia:** 2026-01-29
+**Wersja aplikacji:** Pre-release (MVP)
 **Platforma:** iOS 17+
 
 ---
@@ -675,6 +675,6 @@ BGAppRefreshTaskRequest(identifier: "sync")
 
 ---
 
-**Utworzono:** 2026-01-29  
-**Autor:** Gemini Agent  
+**Utworzono:** 2026-01-29
+**Autor:** Gemini Agent
 **Ostatnia aktualizacja:** 2026-01-29

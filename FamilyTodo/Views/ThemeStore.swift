@@ -251,9 +251,9 @@ final class ThemeStore: ObservableObject {
     var colorScheme: ColorScheme? {
         switch preset {
         case .night:
-            return .dark
+            .dark
         default:
-            return nil // Use system default
+            nil // Use system default
         }
     }
 }

@@ -12,6 +12,8 @@ struct FamilyTodoApp: App {
             CachedTask.self,
             CachedMember.self,
             CachedShoppingItem.self,
+            CachedBacklogCategory.self,
+            CachedBacklogItem.self,
         ])
         #if CI
             let modelConfiguration = ModelConfiguration(

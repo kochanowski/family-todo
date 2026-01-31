@@ -1,12 +1,36 @@
+import SwiftData
 import SwiftUI
 
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
-    @State private var items: [ShoppingItem] = []
+    @EnvironmentObject private var userSession: UserSession
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Group {
+            if let householdId = userSession.currentHouseholdID {
+                ShoppingListContent(householdId: householdId, modelContext: modelContext)
+            } else {
+                ContentUnavailableView(
+                    "No Household Selected",
+                    systemImage: "house.slash",
+                    description: Text("Please select or create a household in the More tab.")
+                )
+            }
+        }
+    }
+}
+
+private struct ShoppingListContent: View {
+    @StateObject private var store: ShoppingListStore
     @State private var newItemText = ""
     @State private var showRestock = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+
+    init(householdId: UUID, modelContext: ModelContext) {
+        _store = StateObject(wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,11 +43,14 @@ struct ShoppingListView: View {
             // Items list
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(activeItems) { item in
+                    ForEach(store.toBuyItems) { item in
                         ShoppingItemRow(item: item, onToggle: { toggleItem(item) })
                     }
                 }
                 .padding(.horizontal, 20)
+            }
+            .refreshable {
+                await store.loadItems()
             }
 
             Spacer()
@@ -34,6 +61,14 @@ struct ShoppingListView: View {
                 .padding(.bottom, 100) // Space for tab bar
         }
         .background(backgroundColor.ignoresSafeArea())
+        .task {
+            // Set context for offline support if not already set by init
+            // store.setModelContext(modelContext) // managed by init
+            await store.loadItems()
+        }
+        .onChange(of: store.error as? Error) { _, _ in
+            // Handle error (e.g. toast)
+        }
     }
 
     // MARK: - Header
@@ -44,8 +79,8 @@ struct ShoppingListView: View {
                 .font(.system(size: 28, weight: .bold))
 
             // Item count badge
-            if !activeItems.isEmpty {
-                Text("\(activeItems.count)")
+            if !store.toBuyItems.isEmpty {
+                Text("\(store.toBuyItems.count)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
@@ -56,7 +91,7 @@ struct ShoppingListView: View {
             Spacer()
 
             // Clear all button
-            if !activeItems.isEmpty {
+            if !store.toBuyItems.isEmpty {
                 Button {
                     clearAll()
                 } label: {
@@ -75,7 +110,7 @@ struct ShoppingListView: View {
                     .foregroundStyle(.secondary)
             }
             .sheet(isPresented: $showRestock) {
-                RestockSheet(restockItems: restockItems, onRestock: restockItem)
+                RestockSheet(restockItems: store.boughtItems, onRestock: toggleItem)
             }
         }
     }
@@ -104,57 +139,34 @@ struct ShoppingListView: View {
         }
     }
 
-    // MARK: - Data
-
-    private var activeItems: [ShoppingItem] {
-        items.filter { !$0.isBought }
-    }
-
-    private var restockItems: [ShoppingItem] {
-        items.filter(\.isBought)
-    }
+    // MARK: - Data Actions
 
     private func addItem() {
         guard !newItemText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        let item = ShoppingItem(
-            id: UUID(),
-            householdId: UUID(), // TODO: Get from context
-            title: newItemText.trimmingCharacters(in: .whitespaces)
-        )
-        items.append(item)
-        newItemText = ""
 
+        Task {
+            await store.createItem(title: newItemText.trimmingCharacters(in: .whitespaces))
+        }
+
+        newItemText = ""
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
     }
 
     private func toggleItem(_ item: ShoppingItem) {
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
-            items[index].isBought.toggle()
-            items[index].boughtAt = items[index].isBought ? Date() : nil
-
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
+        Task {
+            await store.toggleBought(item)
         }
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
     }
 
     private func clearAll() {
-        // Mark all as bought
-        for index in items.indices where !items[index].isBought {
-            items[index].isBought = true
-            items[index].boughtAt = Date()
+        Task {
+            await store.markAllAsBought()
         }
-
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
-    }
-
-    private func restockItem(_ item: ShoppingItem) {
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
-            items[index].isBought = false
-            items[index].boughtAt = nil
-            items[index].restockCount += 1
-        }
     }
 
     private var backgroundColor: Color {
@@ -253,4 +265,5 @@ struct RestockSheet: View {
 
 #Preview {
     ShoppingListView()
+        .environmentObject(UserSession.shared)
 }
