@@ -174,7 +174,7 @@ private struct TasksContent: View {
             return
         }
 
-        Task {
+        _Concurrency.Task {
             await store.createTask(title: title, status: .next)
         }
 
@@ -192,7 +192,7 @@ private struct TasksContent: View {
             return
         }
 
-        Task {
+        _Concurrency.Task {
             await store.moveTask(task, to: newStatus)
         }
         let generator = UIImpactFeedbackGenerator(style: .medium)

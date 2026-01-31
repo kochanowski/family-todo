@@ -53,13 +53,13 @@ private struct BacklogContent: View {
                                 category: category,
                                 items: store.items(for: category.id),
                                 onAddItem: { title in
-                                    _ = Task { await store.addItem(to: category.id, title: title) }
+                                    _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
                                 },
                                 onDeleteItem: { item in
-                                    _ = Task { await store.deleteItem(item) }
+                                    _ = _Concurrency.Task { await store.deleteItem(item) }
                                 },
                                 onDeleteCategory: {
-                                    _ = Task { await store.deleteCategory(category) }
+                                    _ = _Concurrency.Task { await store.deleteCategory(category) }
                                 }
                             )
                         }
@@ -84,7 +84,7 @@ private struct BacklogContent: View {
             Button("Create") {
                 let name = newCategoryName
                 newCategoryName = ""
-                _ = Task { await store.addCategory(name) }
+                _ = _Concurrency.Task { await store.addCategory(name) }
             }
         }
     }

@@ -144,7 +144,7 @@ private struct ShoppingListContent: View {
     private func addItem() {
         guard !newItemText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
 
-        Task {
+        _Concurrency.Task {
             await store.createItem(title: newItemText.trimmingCharacters(in: .whitespaces))
         }
 
@@ -154,7 +154,7 @@ private struct ShoppingListContent: View {
     }
 
     private func toggleItem(_ item: ShoppingItem) {
-        Task {
+        _Concurrency.Task {
             await store.toggleBought(item)
         }
         let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -162,7 +162,7 @@ private struct ShoppingListContent: View {
     }
 
     private func clearAll() {
-        Task {
+        _Concurrency.Task {
             await store.markAllAsBought()
         }
         let generator = UINotificationFeedbackGenerator()
