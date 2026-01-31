@@ -34,6 +34,7 @@ struct Area: Identifiable, Codable {
     let id: UUID
     let householdId: UUID
     var name: String
+    var icon: String
     var colorHex: String
     var sortOrder: Int
     let createdAt: Date
@@ -43,6 +44,7 @@ struct Area: Identifiable, Codable {
         id: UUID = UUID(),
         householdId: UUID = UUID(),
         name: String = "",
+        icon: String = "folder",
         colorHex: String = "#808080",
         sortOrder: Int = 0,
         createdAt: Date = Date(),
@@ -51,11 +53,19 @@ struct Area: Identifiable, Codable {
         self.id = id
         self.householdId = householdId
         self.name = name
+        self.icon = icon
         self.colorHex = colorHex
         self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+}
+
+enum RecurrenceType: String, Codable, CaseIterable {
+    case daily
+    case weekly
+    case monthly
+    case custom
 }
 
 struct RecurringChore: Identifiable, Codable {
@@ -69,6 +79,12 @@ struct RecurringChore: Identifiable, Codable {
     var lastGeneratedDate: Date?
     var nextScheduledDate: Date?
     var notes: String?
+    var recurrenceType: RecurrenceType
+    var recurrenceDay: Int?
+    var recurrenceDayOfMonth: Int?
+    var recurrenceInterval: Int
+    var defaultAssigneeIds: [UUID]
+    var isActive: Bool
     let createdAt: Date
     var updatedAt: Date
 
@@ -83,6 +99,12 @@ struct RecurringChore: Identifiable, Codable {
         lastGeneratedDate: Date? = nil,
         nextScheduledDate: Date? = nil,
         notes: String? = nil,
+        recurrenceType: RecurrenceType = .weekly,
+        recurrenceDay: Int? = nil,
+        recurrenceDayOfMonth: Int? = nil,
+        recurrenceInterval: Int = 1,
+        defaultAssigneeIds: [UUID] = [],
+        isActive: Bool = true,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -96,6 +118,12 @@ struct RecurringChore: Identifiable, Codable {
         self.lastGeneratedDate = lastGeneratedDate
         self.nextScheduledDate = nextScheduledDate
         self.notes = notes
+        self.recurrenceType = recurrenceType
+        self.recurrenceDay = recurrenceDay
+        self.recurrenceDayOfMonth = recurrenceDayOfMonth
+        self.recurrenceInterval = recurrenceInterval
+        self.defaultAssigneeIds = defaultAssigneeIds
+        self.isActive = isActive
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
