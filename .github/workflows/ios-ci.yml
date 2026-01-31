@@ -124,7 +124,7 @@ jobs:
     name: Deploy to TestFlight
     runs-on: macos-15
     needs: [build-and-test, swiftlint]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rebuild/swiftui-clean-impl') && github.event_name == 'push'
 
     steps:
       - name: Checkout
