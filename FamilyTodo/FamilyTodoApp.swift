@@ -5,21 +5,12 @@ import SwiftUI
 @main
 struct FamilyTodoApp: App {
     @StateObject private var userSession = UserSession.shared
-    @StateObject private var householdStore = HouseholdStore()
     @StateObject private var themeStore = ThemeStore()
-    @StateObject private var notificationSettingsStore = NotificationSettingsStore()
-    @StateObject private var shoppingListSettingsStore = ShoppingListSettingsStore()
-
-    /// Pending share metadata to be processed after authentication
-    @State private var pendingShareMetadata: CKShare.Metadata?
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             CachedTask.self,
-            CachedHousehold.self,
             CachedMember.self,
-            CachedArea.self,
-            CachedRecurringChore.self,
             CachedShoppingItem.self,
         ])
         #if CI
@@ -37,7 +28,7 @@ struct FamilyTodoApp: App {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
             #if CI
-                // In CI, return a minimal container - tests don't need persistence
+                // In CI, return a minimal container
                 do {
                     return try ModelContainer(
                         for: schema,
@@ -56,66 +47,14 @@ struct FamilyTodoApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(userSession)
-                .environmentObject(householdStore)
                 .environmentObject(themeStore)
-                .environmentObject(notificationSettingsStore)
-                .environmentObject(shoppingListSettingsStore)
                 .modelContainer(sharedModelContainer)
+                .preferredColorScheme(themeStore.colorScheme)
                 .task {
                     #if !CI
-                        // Check authentication status on app launch
                         await userSession.checkAuthenticationStatus()
-                        await NotificationService.shared.checkAuthorizationStatus()
-
-                        // Wire settings store to notification service
-                        NotificationService.shared.setSettingsStore(notificationSettingsStore)
                     #endif
                 }
-                .onChange(of: userSession.isAuthenticated) { _, isAuthenticated in
-                    // Process pending share when user becomes authenticated
-                    if isAuthenticated, let metadata = pendingShareMetadata {
-                        processPendingShare(metadata)
-                        pendingShareMetadata = nil
-                    }
-                }
-        }
-    }
-
-    // MARK: - Share Acceptance
-
-    /// Process a pending share metadata
-    private func processPendingShare(_ metadata: CKShare.Metadata) {
-        _Concurrency.Task {
-            guard let userId = userSession.userId,
-                  let displayName = userSession.displayName
-            else {
-                return
-            }
-
-            do {
-                try await householdStore.acceptShareInvitation(
-                    metadata: metadata,
-                    userId: userId,
-                    displayName: displayName
-                )
-            } catch {
-                print("Failed to accept share: \(error)")
-            }
-        }
-    }
-}
-
-// MARK: - CloudKit Sharing Support
-
-extension FamilyTodoApp {
-    /// Handle CloudKit share acceptance via scene delegate
-    /// This is called when user taps a CKShare URL
-    func userDidAcceptCloudKitShare(with metadata: CKShare.Metadata) {
-        if userSession.isAuthenticated {
-            processPendingShare(metadata)
-        } else {
-            // Store for later processing after authentication
-            pendingShareMetadata = metadata
         }
     }
 }
