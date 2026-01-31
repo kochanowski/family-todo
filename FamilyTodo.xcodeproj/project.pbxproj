@@ -276,8 +276,7 @@
 				NEWFILE0000000000000012 /* TasksView.swift */,
 				NEWFILE0000000000000013 /* BacklogView.swift */,
 				NEWFILE0000000000000014 /* MoreView.swift */,
-				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
-				NEWFILE0000000000000016 /* ToastView.swift */,
+				NEWGROUP000000000000001 /* Components */,
 				AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
 				8002B6BF847E4BEEB264BCCE /* TaskListView.swift */,
@@ -285,6 +284,15 @@
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
 );
 			path = Views;
+			sourceTree = "<group>";
+		};
+		NEWGROUP000000000000001 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
+				NEWFILE0000000000000016 /* ToastView.swift */,
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 		FA1C0439FFD449E092083889 /* Stores */ = {
