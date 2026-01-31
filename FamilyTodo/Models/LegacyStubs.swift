@@ -72,60 +72,62 @@ struct RecurringChore: Identifiable, Codable {
     let id: UUID
     let householdId: UUID
     var title: String
-    var areaId: UUID?
-    var frequencyDays: Int
-    var assigneeIds: [UUID]
-    var rotationEnabled: Bool
-    var lastGeneratedDate: Date?
-    var nextScheduledDate: Date?
-    var notes: String?
     var recurrenceType: RecurrenceType
     var recurrenceDay: Int?
     var recurrenceDayOfMonth: Int?
     var recurrenceInterval: Int
     var defaultAssigneeIds: [UUID]
+    var areaId: UUID?
     var isActive: Bool
+    var lastGeneratedDate: Date?
+    var nextScheduledDate: Date?
+    var notes: String?
     let createdAt: Date
     var updatedAt: Date
+    // Legacy/Unused fields kept for potential compatibility or if I missed something
+    var frequencyDays: Int
+    var assigneeIds: [UUID]
+    var rotationEnabled: Bool
 
     init(
         id: UUID = UUID(),
         householdId: UUID = UUID(),
         title: String = "",
-        areaId: UUID? = nil,
-        frequencyDays: Int = 7,
-        assigneeIds: [UUID] = [],
-        rotationEnabled: Bool = false,
-        lastGeneratedDate: Date? = nil,
-        nextScheduledDate: Date? = nil,
-        notes: String? = nil,
         recurrenceType: RecurrenceType = .weekly,
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
         recurrenceInterval: Int = 1,
         defaultAssigneeIds: [UUID] = [],
+        areaId: UUID? = nil,
         isActive: Bool = true,
+        lastGeneratedDate: Date? = nil,
+        nextScheduledDate: Date? = nil,
+        notes: String? = nil,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        // Defaults for legacy fields
+        frequencyDays: Int = 7,
+        assigneeIds: [UUID] = [],
+        rotationEnabled: Bool = false
     ) {
         self.id = id
         self.householdId = householdId
         self.title = title
-        self.areaId = areaId
-        self.frequencyDays = frequencyDays
-        self.assigneeIds = assigneeIds
-        self.rotationEnabled = rotationEnabled
-        self.lastGeneratedDate = lastGeneratedDate
-        self.nextScheduledDate = nextScheduledDate
-        self.notes = notes
         self.recurrenceType = recurrenceType
         self.recurrenceDay = recurrenceDay
         self.recurrenceDayOfMonth = recurrenceDayOfMonth
         self.recurrenceInterval = recurrenceInterval
         self.defaultAssigneeIds = defaultAssigneeIds
+        self.areaId = areaId
         self.isActive = isActive
+        self.lastGeneratedDate = lastGeneratedDate
+        self.nextScheduledDate = nextScheduledDate
+        self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.frequencyDays = frequencyDays
+        self.assigneeIds = assigneeIds
+        self.rotationEnabled = rotationEnabled
     }
 }
 
