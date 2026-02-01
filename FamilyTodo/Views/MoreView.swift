@@ -161,6 +161,7 @@ struct MenuRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .contentShape(Rectangle())
+        .accessibilityIdentifier("menuRow_\(title)")
     }
 }
 
@@ -306,6 +307,7 @@ struct SettingsView: View {
                     Label("Celebrations", systemImage: "party.popper.fill")
                         .foregroundStyle(.primary)
                 }
+                .accessibilityIdentifier("settingsToggle_celebrations")
 
                 Toggle(isOn: Binding(
                     get: { themeStore.suggestionsEnabled },
@@ -314,6 +316,7 @@ struct SettingsView: View {
                     Label("Shopping suggestions", systemImage: "lightbulb.fill")
                         .foregroundStyle(.primary)
                 }
+                .accessibilityIdentifier("settingsToggle_suggestions")
             }
 
             // MARK: - Sign Out
@@ -379,7 +382,9 @@ private struct AppearanceCard: View {
                     .fill(isSelected ? Color.primary : secondaryBackground)
             )
         }
+        }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("appearanceCard_\(mode.displayName)")
     }
 
     private var secondaryBackground: Color {

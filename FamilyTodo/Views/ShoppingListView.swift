@@ -72,6 +72,8 @@ private struct ShoppingListContent: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
                         ForEach(store.toBuyItems) { item in
                             if itemBeingRemoved != item.id {
                                 ShoppingItemRow(
@@ -79,6 +81,7 @@ private struct ShoppingListContent: View {
                                     onToggle: { toggleItem(item) }
                                 )
                                 .rowInsertAnimation()
+                                .accessibilityIdentifier("shoppingItem_\(item.title)")
                             }
                         }
 
@@ -359,6 +362,7 @@ struct ShoppingItemRow: View {
             .padding(.vertical, 10) // Compact height
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("shoppingItemRow_\(item.title)")
     }
 }
 

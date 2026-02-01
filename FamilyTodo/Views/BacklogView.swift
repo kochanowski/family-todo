@@ -111,6 +111,7 @@ private struct BacklogContent: View {
                     .font(.system(size: 20))
                     .foregroundStyle(.blue)
             }
+            .accessibilityIdentifier("backlogAddCategoryButton")
         }
     }
 
@@ -180,6 +181,7 @@ struct CategoryCard: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
             .padding(.bottom, 12)
+            .accessibilityIdentifier("backlogCategoryHeader_\(category.title)")
 
             // Items
             ForEach(items) { item in
@@ -239,6 +241,7 @@ struct CategoryCard: View {
                     .padding(.vertical, 12)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("backlogAddItemButton_\(category.title)")
             }
         }
         .background {

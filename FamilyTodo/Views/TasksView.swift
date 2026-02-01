@@ -57,6 +57,8 @@ private struct TasksContent: View {
                             if taskBeingCompleted != task.id {
                                 TaskRow(task: task, onToggle: { toggleTask(task) })
                                     .rowInsertAnimation()
+                                    .accessibilityIdentifier("taskRow_\(task.title)")
+                            }
                             }
                         }
                     }
@@ -151,6 +153,7 @@ private struct TasksContent: View {
             ForEach(store.doneTasks) { task in
                 TaskRow(task: task, onToggle: { toggleTask(task) })
                     .rowInsertAnimation()
+                    .accessibilityIdentifier("taskRowCompleted_\(task.title)")
             }
         }
     }

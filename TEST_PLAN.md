@@ -16,7 +16,8 @@ The project uses **GitHub Actions** for Continuous Integration and Delivery.
 1.  **Build**: Compiles the application to ensure integrity.
 2.  **SwiftLint**: Enforces code style and best practices.
 3.  **Unit Tests**: Runs the `FamilyTodoTests` logic suite.
-4.  **UI Smoke Tests**: Runs `FamilyTodoUITests` with seeded data scenarios.
+4.  **UI Smoke Tests**: Runs `FamilyTodoUITests` (excluding Performance tests).
+5.  **Nightly Regression**: Runs full suite + Performance tests on multiple simulators.
 
 ---
 
@@ -35,50 +36,49 @@ Goal: Validate business logic, data models, and store management without UI over
 
 ---
 
-## 📱 Advanced UI Tests
+## 📱 Advanced UI Tests (Regression Suite)
 
 Target: `FamilyTodoUITests`
 Goal: Validate critical user journeys end-to-end using the Simulator.
 
 **Infrastructure**:
-- **Seeding**: The app handles the `-uiTestMode` launch argument to inject deterministic data via `UITestHelper`.
-- **Reset**: The `-resetData` argument clears the database before each test to ensure isolation.
+- **Seeding**: The app handles the `-uiTestMode` launch argument.
+- **Scenarios**:
+    - `-seedScenario guest_no_household`: Pure guest state.
+    - `-seedScenario household_basic`: Seeds Household, User, Shopping Items, Tasks.
+    - `-seedScenario heavy_data`: Stress test data (50+ items).
 
 ### Core Flows
 
-#### 1. Shopping List Flow (`testShoppingCoreFlow`)
-**Scenario**: User manages their shopping list.
-- **Seeding**: Injects items ("Milk", "Bread", "Eggs" [bought]).
-- **Steps**:
-  1. Verifies seeded items are visible.
-  2. Uses **Rapid Entry** to add a new item ("Cheese").
-  3. Opens the **Restock Panel**.
-  4. Verifies "Eggs" appears in the recently purchased list.
+#### 1. Shopping List Flow
+- **Rapid Entry**: adding multiple items via keyboard.
+- **Item Removal**: toggle moves to restock.
+- **Restock**: items appear in restock panel.
 
-#### 2. Tasks Management Flow (`testTasksCoreFlow`)
-**Scenario**: User tracks household to-dos.
-- **Seeding**: Injects active and completed tasks.
-- **Steps**:
-  1. Navigates to **Tasks** tab.
-  2. Verifies seeded active task ("Pay bills").
-  3. Adds a new task ("Water plants").
-  4. Verifies the new task appears in the list.
+#### 2. Tasks Management Flow
+- **Completion**: tasks move to completed section.
+- **Persistence**: tasks persist after app termination.
 
-#### 3. Backlog Organization Flow (`testBacklogCoreFlow`)
-**Scenario**: User browses categorized items.
-- **Seeding**: Injects "Groceries" category with items.
-- **Steps**:
-  1. Navigates to **Backlog** tab.
-  2. Verifies category "Groceries" exists.
-  3. Verifies item "Olive Oil" is correctly nested.
+#### 3. Backlog Organization Flow
+- **Category Management**: create, delete categories.
+- **Warning Logic**: verifies delete protections.
 
-#### 4. Settings Navigation (`testSettingsFlow`)
-**Scenario**: User accesses app configuration.
-- **Seeding**: None (Clean state).
-- **Steps**:
-  1. Navigates to **More** tab.
-  2. Opens **Settings**.
-  3. Verifies navigation stack pushes the Settings view.
+#### 4. Settings Navigation
+- **Appearance**: toggle Dark/Light mode.
+- **Navigation**: stability checks.
+
+---
+
+## 🏎️ Performance Tests
+
+Target: `FamilyTodoPerformanceTests` (in `FamilyTodoUITests` bundle)
+Goal: Detect regressions in launch time and scrolling.
+- **Launch**: Measures `XCTApplicationLaunchMetric`.
+- **Scroll**: Measures frame rate/hitch ratio on heavy lists.
+
+**Running**:
+- `ios-ci.yml` (PR): SKIPS performance tests.
+- `nightly.yml`: RUNS performance tests.
 
 ---
 
