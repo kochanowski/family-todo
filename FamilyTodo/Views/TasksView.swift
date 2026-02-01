@@ -24,6 +24,8 @@ struct TasksView: View {
 private struct TasksContent: View {
     @StateObject private var store: TaskStore
     @State private var newTaskTitle = ""
+    @State private var taskBeingCompleted: UUID?
+    @State private var showAllCompleteAnimation = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
 
@@ -51,7 +53,10 @@ private struct TasksContent: View {
                     // Active tasks (Next)
                     if !store.nextTasks.isEmpty {
                         ForEach(store.nextTasks) { task in
-                            TaskRow(task: task, onToggle: { toggleTask(task) })
+                            if taskBeingCompleted != task.id {
+                                TaskRow(task: task, onToggle: { toggleTask(task) })
+                                    .rowInsertAnimation()
+                            }
                         }
                     }
 
@@ -95,6 +100,15 @@ private struct TasksContent: View {
             Text("Tasks")
                 .font(.system(size: 28, weight: .bold))
 
+            // All complete indicator
+            if store.nextTasks.isEmpty, !store.doneTasks.isEmpty {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.green)
+                    .scaleEffect(showAllCompleteAnimation ? 1.2 : 1.0)
+                    .animation(WowAnimation.spring, value: showAllCompleteAnimation)
+            }
+
             Spacer()
         }
     }
@@ -133,6 +147,7 @@ private struct TasksContent: View {
 
             ForEach(store.doneTasks) { task in
                 TaskRow(task: task, onToggle: { toggleTask(task) })
+                    .rowInsertAnimation()
             }
         }
     }
@@ -190,10 +205,40 @@ private struct TasksContent: View {
             return
         }
 
-        _Concurrency.Task {
-            await store.moveTask(task, to: newStatus)
+        // Check if this completes all tasks
+        let willCompleteAll = newStatus == .done && store.nextTasks.count == 1
+
+        if newStatus == .done {
+            // Animate completion
+            HapticManager.lightTap()
+            withAnimation(WowAnimation.easeOut) {
+                taskBeingCompleted = task.id
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                _Concurrency.Task {
+                    await store.moveTask(task, to: newStatus)
+                    taskBeingCompleted = nil
+
+                    if willCompleteAll {
+                        // Celebrate!
+                        HapticManager.success()
+                        showAllCompleteAnimation = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            showAllCompleteAnimation = false
+                        }
+                    } else {
+                        HapticManager.mediumTap()
+                    }
+                }
+            }
+        } else {
+            // Un-completing: no special animation
+            _Concurrency.Task {
+                await store.moveTask(task, to: newStatus)
+            }
+            HapticManager.lightTap()
         }
-        HapticManager.mediumTap()
     }
 
     private var backgroundColor: Color {

@@ -8,6 +8,7 @@ struct FamilyTodoApp: App {
     @StateObject private var themeStore = ThemeStore()
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var onboardingState = OnboardingState()
+    @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -55,12 +56,19 @@ struct FamilyTodoApp: App {
                 .environmentObject(themeStore)
                 .environmentObject(householdStore)
                 .environmentObject(onboardingState)
+                .environmentObject(subscriptionManager)
                 .modelContainer(sharedModelContainer)
                 .preferredColorScheme(themeStore.colorScheme)
                 .task {
                     householdStore.setModelContext(sharedModelContainer.mainContext)
                     #if !CI
                         await userSession.checkAuthenticationStatus()
+                        // Configure subscriptions if user has household
+                        if let userId = userSession.userId,
+                           let householdId = userSession.currentHouseholdID
+                        {
+                            subscriptionManager.configure(userId: userId, householdId: householdId)
+                        }
                     #endif
                 }
         }

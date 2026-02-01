@@ -23,9 +23,17 @@ struct ShoppingListView: View {
 
 private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
-    @State private var newItemText = ""
+    @StateObject private var restockPulse = RestockPulseState()
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+
+    // Rapid entry state
+    @State private var isRapidEntryActive = false
+    @State private var rapidEntryText = ""
+    @FocusState private var rapidEntryFocused: Bool
+
     @State private var showRestock = false
-    @FocusState private var isInputFocused: Bool
+    @State private var itemBeingRemoved: UUID?
+
     @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -40,35 +48,64 @@ private struct ShoppingListContent: View {
                 .padding(.top, 16)
                 .padding(.bottom, 12)
 
-            // Items list
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(store.toBuyItems) { item in
-                        ShoppingItemRow(item: item, onToggle: { toggleItem(item) })
+            // Items list with rapid entry
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(store.toBuyItems) { item in
+                            if itemBeingRemoved != item.id {
+                                ShoppingItemRow(
+                                    item: item,
+                                    onToggle: { toggleItem(item) }
+                                )
+                                .rowInsertAnimation()
+                            }
+                        }
+
+                        // Rapid entry row (always at bottom)
+                        if isRapidEntryActive {
+                            rapidEntryRow
+                                .id("rapidEntry")
+                                .rowInsertAnimation()
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 120) // Space for tab bar + add button
+                }
+                .refreshable {
+                    await store.loadItems()
+                }
+                .onChange(of: rapidEntryFocused) { _, focused in
+                    if focused {
+                        withAnimation(WowAnimation.spring) {
+                            proxy.scrollTo("rapidEntry", anchor: .bottom)
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
-            }
-            .refreshable {
-                await store.loadItems()
             }
 
             Spacer()
 
-            // Floating input row
-            inputRow
-                .padding(.horizontal, 20)
-                .padding(.bottom, 100) // Space for tab bar
+            // Add item button (compact, bottom)
+            if !isRapidEntryActive {
+                addItemButton
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 100)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .background(backgroundColor.ignoresSafeArea())
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Tap outside: commit or dismiss rapid entry
+            if isRapidEntryActive {
+                commitOrDismissRapidEntry()
+            }
+        }
         .task {
-            // Set context for offline support if not already set by init
-            // store.setModelContext(modelContext) // managed by init
             await store.loadItems()
         }
-        .onChange(of: store.error as NSError?) { _, _ in
-            // Handle error (e.g. toast)
-        }
+        .newItemsBanner(manager: subscriptionManager)
     }
 
     // MARK: - Header
@@ -101,62 +138,152 @@ private struct ShoppingListContent: View {
                 }
             }
 
-            // Restock button
+            // Restock button with pulse animation
             Button {
+                HapticManager.lightTap()
                 showRestock = true
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 16))
                     .foregroundStyle(.secondary)
             }
+            .pulseAnimation(restockPulse.isPulsing)
             .sheet(isPresented: $showRestock) {
-                RestockSheet(restockItems: store.boughtItems, onRestock: toggleItem)
+                RestockSheet(restockItems: store.boughtItems, onRestock: restockItem)
             }
         }
     }
 
-    // MARK: - Input Row
+    // MARK: - Add Item Button
 
-    private var inputRow: some View {
+    private var addItemButton: some View {
+        Button {
+            startRapidEntry()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.blue)
+
+                Text("Add item")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(cardBackground)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Rapid Entry Row
+
+    private var rapidEntryRow: some View {
         HStack(spacing: 12) {
             Circle()
                 .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
                 .frame(width: 24, height: 24)
 
-            TextField("Add item", text: $newItemText)
+            TextField("Add item", text: $rapidEntryText)
                 .font(.system(size: 15))
-                .focused($isInputFocused)
+                .focused($rapidEntryFocused)
+                .submitLabel(.done)
                 .onSubmit {
-                    addItem()
-                    isInputFocused = true // Keep focus for rapid entry
+                    handleRapidEntrySubmit()
                 }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(cardBackground)
+        .padding(.vertical, 12)
+        .background(cardBackground.opacity(0.01)) // Tap target
+    }
+
+    // MARK: - Rapid Entry Logic
+
+    private func startRapidEntry() {
+        HapticManager.lightTap()
+        withAnimation(WowAnimation.spring) {
+            isRapidEntryActive = true
+        }
+        // Delay focus to allow animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            rapidEntryFocused = true
+        }
+    }
+
+    private func handleRapidEntrySubmit() {
+        let trimmedText = rapidEntryText.trimmingCharacters(in: .whitespaces)
+
+        if trimmedText.isEmpty {
+            // Empty submit: exit rapid entry
+            dismissRapidEntry()
+        } else {
+            // Commit item and continue
+            commitRapidEntryItem(trimmedText)
+            rapidEntryText = ""
+            HapticManager.selection()
+            // Keep focus for next item
+            rapidEntryFocused = true
+        }
+    }
+
+    private func commitOrDismissRapidEntry() {
+        let trimmedText = rapidEntryText.trimmingCharacters(in: .whitespaces)
+
+        if !trimmedText.isEmpty {
+            commitRapidEntryItem(trimmedText)
+        }
+
+        dismissRapidEntry()
+    }
+
+    private func commitRapidEntryItem(_ text: String) {
+        _Concurrency.Task {
+            await store.createItem(title: text)
+        }
+    }
+
+    private func dismissRapidEntry() {
+        rapidEntryFocused = false
+        rapidEntryText = ""
+        withAnimation(WowAnimation.spring) {
+            isRapidEntryActive = false
         }
     }
 
     // MARK: - Data Actions
 
-    private func addItem() {
-        guard !newItemText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    private func toggleItem(_ item: ShoppingItem) {
+        HapticManager.lightTap()
 
-        _Concurrency.Task {
-            await store.createItem(title: newItemText.trimmingCharacters(in: .whitespaces))
+        // Animate item removal
+        withAnimation(WowAnimation.easeOut) {
+            itemBeingRemoved = item.id
         }
 
-        newItemText = ""
-        HapticManager.lightTap()
+        // Pulse restock icon
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            restockPulse.pulse()
+            HapticManager.selection()
+        }
+
+        // Actually toggle after animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            _Concurrency.Task {
+                await store.toggleBought(item)
+                itemBeingRemoved = nil
+            }
+        }
     }
 
-    private func toggleItem(_ item: ShoppingItem) {
+    private func restockItem(_ item: ShoppingItem) {
         _Concurrency.Task {
             await store.toggleBought(item)
         }
-        HapticManager.mediumTap()
+        HapticManager.lightTap()
     }
 
     private func clearAll() {
@@ -202,10 +329,11 @@ struct ShoppingItemRow: View {
                     .font(.system(size: 15))
                     .foregroundStyle(item.isBought ? .secondary : .primary)
                     .strikethrough(item.isBought)
+                    .lineLimit(1)
 
                 Spacer()
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, 10) // Compact height
         }
         .buttonStyle(.plain)
     }
@@ -217,35 +345,34 @@ struct RestockSheet: View {
     let restockItems: [ShoppingItem]
     let onRestock: (ShoppingItem) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         NavigationStack {
-            List {
+            ScrollView {
                 if restockItems.isEmpty {
                     ContentUnavailableView(
                         "No Recent Purchases",
                         systemImage: "cart",
                         description: Text("Items you check off will appear here for easy restocking.")
                     )
+                    .padding(.top, 60)
                 } else {
-                    ForEach(restockItems) { item in
-                        HStack {
-                            Text(item.title)
-                                .font(.system(size: 15))
-
-                            Spacer()
-
-                            Button {
-                                onRestock(item)
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 22))
-                                    .foregroundStyle(.blue)
-                            }
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(restockItems.enumerated()), id: \.element.id) { index, item in
+                            RestockItemRow(item: item, onRestock: { onRestock(item) })
+                                .opacity(0)
+                                .onAppear {} // Staggered fade handled via animation
+                                .animation(
+                                    .easeOut(duration: 0.2).delay(WowAnimation.staggerDelay(index: index)),
+                                    value: restockItems.count
+                                )
                         }
                     }
+                    .padding(.horizontal, 20)
                 }
             }
+            .background((colorScheme == .dark ? Color.black : Color(hex: "F9F9F9")).ignoresSafeArea())
             .navigationTitle("Recently Purchased")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -257,6 +384,31 @@ struct RestockSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(.ultraThinMaterial)
+    }
+}
+
+private struct RestockItemRow: View {
+    let item: ShoppingItem
+    let onRestock: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(item.title)
+                .font(.system(size: 15))
+                .lineLimit(1)
+
+            Spacer()
+
+            Button {
+                onRestock()
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 12)
     }
 }
 

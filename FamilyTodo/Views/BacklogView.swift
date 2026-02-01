@@ -53,6 +53,7 @@ private struct BacklogContent: View {
                                 category: category,
                                 items: store.items(for: category.id),
                                 onAddItem: { title in
+                                    HapticManager.lightTap()
                                     _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
                                 },
                                 onDeleteItem: { item in
@@ -62,6 +63,7 @@ private struct BacklogContent: View {
                                     _ = _Concurrency.Task { await store.deleteCategory(category) }
                                 }
                             )
+                            .rowInsertAnimation()
                         }
                     }
                     .padding(.horizontal, 20)
@@ -84,6 +86,7 @@ private struct BacklogContent: View {
             Button("Create") {
                 let name = newCategoryName
                 newCategoryName = ""
+                HapticManager.lightTap()
                 _ = _Concurrency.Task { await store.addCategory(name) }
             }
         }
@@ -141,6 +144,7 @@ struct CategoryCard: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isAddingItem = false
     @State private var newItemText = ""
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -153,7 +157,14 @@ struct CategoryCard: View {
                 Spacer()
 
                 Menu {
-                    Button(role: .destructive, action: onDeleteCategory) {
+                    Button(role: .destructive) {
+                        if items.isEmpty {
+                            onDeleteCategory()
+                        } else {
+                            HapticManager.warning()
+                            showDeleteConfirmation = true
+                        }
+                    } label: {
                         Label("Delete Category", systemImage: "trash")
                     }
                 } label: {
@@ -230,6 +241,20 @@ struct CategoryCard: View {
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
+        }
+        .confirmationDialog(
+            "Delete \"\(category.title)\"?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Category and \(items.count) Items", role: .destructive) {
+                withAnimation(WowAnimation.easeOut) {
+                    onDeleteCategory()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently delete the category and all its items.")
         }
     }
 
