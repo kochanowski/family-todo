@@ -7,26 +7,26 @@ on:
 
 jobs:
   nightly-test:
-    name: Regression & Perf (${{ matrix.simulator }})
+    name: Regression & Performance Tests
     runs-on: macos-15
-    strategy:
-      fail-fast: false
-      matrix:
-        simulator: ['iPhone 16', 'iPhone SE (3rd generation)']
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
-
       - name: Run Tests (All)
         run: |
-          set -o pipefail && xcodebuild test \
+          set -o pipefail
+
+          # Find first available iOS simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | \
+            jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+
+          xcodebuild test \
+            -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "platform=iOS Simulator,name=${{ matrix.simulator }}" \
-            -resultBundlePath TestResults-${{ matrix.simulator }}.xcresult \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             | xcpretty
@@ -35,5 +35,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: TestResults-${{ matrix.simulator }}
-          path: TestResults-${{ matrix.simulator }}.xcresult
+          name: TestResults
+          path: TestResults.xcresult

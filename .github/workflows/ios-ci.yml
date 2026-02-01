@@ -39,10 +39,15 @@ jobs:
           set -o pipefail
           # `xcpretty` sometimes omits the underlying compiler error output.
           # Keep a raw log and print its tail on failure for easier debugging in CI.
+
+          # Find first available iOS simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | \
+            jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+
           xcodebuild clean build \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             ARCHS=arm64 \
@@ -59,10 +64,15 @@ jobs:
       - name: Run tests
         run: |
           set -o pipefail
+
+          # Find first available iOS simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | \
+            jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
             -only-testing:FamilyTodoTests \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -80,10 +90,15 @@ jobs:
       - name: Run UI tests (app launch verification)
         run: |
           set -o pipefail
+
+          # Find first available iOS simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | \
+            jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
             -only-testing:FamilyTodoUITests \
             -skip-testing:FamilyTodoUITests/FamilyTodoPerformanceTests \
             -resultBundlePath TestResults.xcresult \
