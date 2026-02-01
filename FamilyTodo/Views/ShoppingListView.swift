@@ -4,12 +4,19 @@ import SwiftUI
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
                 ShoppingListContent(householdId: householdId, modelContext: modelContext)
+            } else if let household = householdStore.currentHousehold {
+                // Failsafe: Sync session if store has household
+                ProgressView()
+                    .onAppear {
+                        userSession.setCurrentHousehold(household.id)
+                    }
             } else {
                 ContentUnavailableView(
                     "No Household Selected",
