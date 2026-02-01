@@ -67,6 +67,7 @@ struct FloatingTabBar: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("tabButton_\(tab.rawValue)")
     }
 }
 

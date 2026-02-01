@@ -1,119 +1,45 @@
-# House Pulse - Implementation Notes
+# CI/CD Reconfiguration Notes
 
-## Architecture Overview
+## Summary
+The TestFlight upload step has been disabled for standard pushes and PRs to avoid hitting Apple's daily upload limits (error 409). A new automated UI smoke test suite has been added to ensure build stability without relying on external deployment validation.
 
-House Pulse is a SwiftUI-based family task management app with CloudKit synchronization and SwiftData offline support.
+## Changes
+1.  **TestFlight Uploads**:
+    - Build step `deploy-testflight` is now **conditional**.
+    - It ONLY runs when:
+        - Triggered manually via GitHub Actions UI (`workflow_dispatch`).
+        - A tag starting with `v` is pushed (e.g., `v1.0.1`).
+    - It DOES NOT run on standard pushes to `main` or pull requests.
 
-### Layer Structure
+2.  **Automated Testing**:
+    - **Unit Tests**: Continue to run on every push/PR.
+    - **UI Smoke Tests**: Enabled in `build-and-test` job.
+        - Verifies app launch.
+        - Verifies tab navigation (Shopping, Tasks, Backlog, More).
+        - Verifies critical flows: Rapid Entry (Shopping), Restock Panel.
 
-```
-┌─────────────────────────────────────────┐
-│                  Views                   │
-│   (SwiftUI screens and components)       │
-├─────────────────────────────────────────┤
-│                 Stores                   │
-│   (ObservableObject state managers)      │
-├─────────────────────────────────────────┤
-│           CloudKitManager                │
-│   (CloudKit CRUD operations)             │
-├─────────────────────────────────────────┤
-│              SwiftData                   │
-│   (Cached* models for offline)           │
-└─────────────────────────────────────────┘
-```
+## How to Deploy to TestFlight
+To trigger a new TestFlight build, choose ONE of the following:
 
-## Key Design Decisions
+### Option A: Manual Trigger (Preferred for ad-hoc)
+1.  Go to the "Actions" tab in GitHub.
+2.  Select "iOS CI" workflow.
+3.  Click "Run workflow".
+4.  Select the branch (e.g., `main`).
+5.  Click "Run workflow".
 
-### 1. Offline-First with CloudKit Sync
-
-Each store follows a consistent pattern:
-1. Load from SwiftData cache first (instant UI)
-2. Fetch from CloudKit in background
-3. Update cache and UI with fresh data
-4. Optimistic updates on user actions
-
-### 2. Theme System
-
-- `ThemeStore`: Observable store for theme selection
-- `ThemePreset`: Enum with `.journal`, `.pastel`, `.soft`, `.night`
-- `AppColors`: Light/Night palettes for canvas, surface, ink colors
-- `CardTheme`: Per-card-type gradient and accent colors
-
-### 3. Haptic Feedback
-
-Centralized `HapticManager` utility provides:
-- `lightTap()` / `mediumTap()` / `heavyTap()` - Impact feedback
-- `success()` / `warning()` / `error()` - Notification feedback
-- `selection()` - Selection feedback for tab switches
-
-### 4. Custom Tab Bar
-
-`FloatingTabBar` uses glassmorphism (`.ultraThinMaterial`) with:
-- Capsule shape with shadow
-- Animated tab switching
-- Haptic feedback on selection
-
-## File Organization
-
-```
-FamilyTodo/
-├── FamilyTodoApp.swift       # App entry, stores injection
-├── ContentView.swift         # Tab container
-├── Models/
-│   ├── Member.swift          # User model
-│   ├── Task.swift            # Task model
-│   ├── ShoppingItem.swift    # Shopping item model
-│   ├── Household.swift       # Household model
-│   ├── Cached*.swift         # SwiftData cache models
-│   └── LegacyStubs.swift     # Temporary stubs
-├── Stores/
-│   ├── ShoppingListStore.swift
-│   ├── TaskStore.swift
-│   ├── BacklogStore.swift
-│   ├── HouseholdStore.swift
-│   └── MemberStore.swift
-├── Managers/
-│   ├── CloudKitManager.swift
-│   └── CloudKitManager+Mapping.swift
-├── Services/
-│   ├── UserSession.swift
-│   ├── AuthenticationService.swift
-│   └── NotificationService.swift
-├── Views/
-│   ├── ShoppingListView.swift
-│   ├── TasksView.swift
-│   ├── BacklogView.swift
-│   ├── MoreView.swift
-│   ├── MemberManagementView.swift
-│   ├── ShareInviteView.swift
-│   └── Components/
-│       ├── FloatingTabBar.swift
-│       └── ToastView.swift
-└── Utilities/
-    ├── AppColors.swift
-    └── HapticManager.swift
+### Option B: Release Tag
+Push a tag starting with `v`:
+```bash
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
-## CloudKit Record Types
+## How to Run Tests Locally
+```bash
+# Unit Tests
+xcodebuild test -scheme HousePulse -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:FamilyTodoTests
 
-| Record Type | Fields |
-|-------------|--------|
-| `Household` | id, name, ownerId, createdAt |
-| `Member` | id, householdId, userId, displayName, role, joinedAt, isActive |
-| `Task` | id, householdId, title, status, priority, dueDate, assigneeId |
-| `ShoppingItem` | id, householdId, name, isBought, quantity, unit |
-| `BacklogCategory` | id, householdId, name, colorHex, iconName |
-| `BacklogItem` | id, categoryId, title, notes |
-
-## Environment Objects
-
-Injected at app root:
-- `UserSession` - Current user state
-- `ThemeStore` - Theme preferences
-- `HouseholdStore` - Household data and sharing
-
-## CI/CD
-
-- GitHub Actions workflow: `.github/workflows/ios-ci.yml`
-- Fastlane for TestFlight deployment
-- Pre-commit hooks: swiftlint, swiftformat, xcodebuild tests
+# UI Tests
+xcodebuild test -scheme HousePulse -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:FamilyTodoUITests
+```

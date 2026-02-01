@@ -166,6 +166,7 @@ private struct TasksContent: View {
             TextField("Add task", text: $newTaskTitle)
                 .font(.system(size: 15))
                 .focused($isInputFocused)
+                .accessibilityIdentifier("taskInputField")
                 .onSubmit {
                     addTask()
                 }

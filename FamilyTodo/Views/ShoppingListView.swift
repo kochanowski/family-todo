@@ -169,6 +169,7 @@ private struct ShoppingListContent: View {
                     .font(.system(size: 16))
                     .foregroundStyle(.secondary)
             }
+            .accessibilityIdentifier("shoppingRestockButton")
             .pulseAnimation(restockPulse.isPulsing)
             .sheet(isPresented: $showRestock) {
                 RestockSheet(restockItems: store.boughtItems, onRestock: restockItem)
@@ -201,9 +202,8 @@ private struct ShoppingListContent: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("shoppingAddItemButton")
     }
-
-    // MARK: - Rapid Entry Row
 
     private var rapidEntryRow: some View {
         HStack(spacing: 12) {
@@ -215,6 +215,7 @@ private struct ShoppingListContent: View {
                 .font(.system(size: 15))
                 .focused($rapidEntryFocused)
                 .submitLabel(.done)
+                .accessibilityIdentifier("shoppingRapidEntryField")
                 .onSubmit {
                     handleRapidEntrySubmit()
                 }
