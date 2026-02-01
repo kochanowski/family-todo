@@ -61,11 +61,11 @@ private struct TasksContent: View {
                             }
                         }
                     }
+                }
 
-                    // Completed section
-                    if !store.doneTasks.isEmpty {
-                        completedSection
-                    }
+                // Completed section
+                if !store.doneTasks.isEmpty {
+                    completedSection
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 120) // Space for input and tab bar
