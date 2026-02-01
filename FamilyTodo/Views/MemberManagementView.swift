@@ -18,6 +18,7 @@ struct MemberManagementView: View {
     @State private var memberToDelete: Member?
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
+    @State private var showShareInvite = false
 
     private var currentUserIsOwner: Bool {
         guard let userId = userSession.userId else { return false }
@@ -80,12 +81,15 @@ struct MemberManagementView: View {
     private var inviteSection: some View {
         if currentUserIsOwner, householdStore.currentHousehold != nil {
             Section("Invite New Members") {
-                NavigationLink {
-                    ShareInviteView()
-                        .environmentObject(householdStore)
+                Button {
+                    showShareInvite = true
                 } label: {
                     Label("Invite Member", systemImage: "person.badge.plus")
                 }
+            }
+            .sheet(isPresented: $showShareInvite) {
+                ShareInviteView(isPresented: $showShareInvite)
+                    .environmentObject(householdStore)
             }
         }
     }
