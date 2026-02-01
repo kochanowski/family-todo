@@ -134,11 +134,12 @@ struct CreateHouseholdView: View {
                 // Ensure sync mode is set based on user session
                 householdStore.setSyncMode(userSession.syncMode)
 
-                _ = try await householdStore.createHousehold(
+                let newHousehold = try await householdStore.createHousehold(
                     name: householdName,
                     userId: userSession.userId ?? "local-user",
                     displayName: userSession.displayName ?? "Me"
                 )
+                userSession.setCurrentHousehold(newHousehold.id)
                 onboardingState.completeHouseholdSetup(withHousehold: true)
             } catch {
                 print("Error creating household: \(error)")
