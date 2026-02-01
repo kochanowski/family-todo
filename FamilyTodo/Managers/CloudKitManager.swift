@@ -4,20 +4,30 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
-    private let container: CKContainer
-    private let privateDatabase: CKDatabase
-    private let sharedDatabase: CKDatabase
+    /// Use nonisolated(unsafe) for lazy container initialization
+    /// This prevents CKContainer.default() from being called during actor init
+    private nonisolated(unsafe) static var _container: CKContainer?
 
-    init(container: CKContainer? = nil) {
+    private var container: CKContainer {
+        if let c = Self._container { return c }
         #if CI
-            // Use a stub container in CI to prevent crashes
-            self.container = CKContainer(identifier: "iCloud.com.example.familytodo")
+            let c = CKContainer(identifier: "iCloud.com.example.familytodo")
         #else
-            self.container = container ?? .default()
+            let c = CKContainer.default()
         #endif
-        privateDatabase = self.container.privateCloudDatabase
-        sharedDatabase = self.container.sharedCloudDatabase
+        Self._container = c
+        return c
     }
+
+    private var privateDatabase: CKDatabase {
+        container.privateCloudDatabase
+    }
+
+    private var sharedDatabase: CKDatabase {
+        container.sharedCloudDatabase
+    }
+
+    init() {}
 
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord
