@@ -64,7 +64,7 @@ struct MemberManagementView: View {
     private var membersSection: some View {
         Section("Members") {
             ForEach(memberStore.members) { member in
-                MemberRow(
+                MemberManagementRow(
                     member: member,
                     isCurrentUser: isCurrentUser(member),
                     currentUserIsOwner: currentUserIsOwner,
@@ -177,7 +177,7 @@ struct MemberManagementView: View {
 
 // MARK: - Member Row
 
-private struct MemberRow: View {
+private struct MemberManagementRow: View {
     let member: Member
     let isCurrentUser: Bool
     let currentUserIsOwner: Bool
