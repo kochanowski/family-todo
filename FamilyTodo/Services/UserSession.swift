@@ -79,6 +79,7 @@ final class UserSession: ObservableObject {
     let authService: any AuthenticationServiceType
     private let userDefaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
+    private let authServicePublisher: AnyPublisher<Void, Never>
 
     // MARK: - Initialization
 
@@ -86,8 +87,14 @@ final class UserSession: ObservableObject {
         authService: (any AuthenticationServiceType)? = nil,
         userDefaults: UserDefaults = .standard
     ) {
-        self.authService = authService ?? AuthenticationService()
+        let service = authService ?? AuthenticationService()
+        self.authService = service
         self.userDefaults = userDefaults
+
+        // Capture the objectWillChange publisher before type erasure
+        self.authServicePublisher = (service as any ObservableObject).objectWillChange
+            .map { _ in () }
+            .eraseToAnyPublisher()
 
         // Observe authentication state changes
         setupAuthObserver()
@@ -158,7 +165,7 @@ final class UserSession: ObservableObject {
 
     private func setupAuthObserver() {
         // Observe authentication service state changes using Combine
-        authService.objectWillChange
+        authServicePublisher
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
                 _Concurrency.Task { [weak self] in
