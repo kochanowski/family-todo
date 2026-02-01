@@ -17,7 +17,7 @@ class HouseholdStore: ObservableObject {
 
     // Cache for sharing controller
     private var activeShare: CKShare?
-    private var activeContainer: CKContainer?
+    private(set) var activeContainer: CKContainer?
 
     init(modelContext: ModelContext? = nil) {
         self.modelContext = modelContext
@@ -79,8 +79,11 @@ class HouseholdStore: ObservableObject {
 
         let newHousehold = Household(name: name, ownerId: userId)
 
-        // 1. Save to CloudKit
+        // 1. Save to CloudKit (if cloud sync is enabled and available)
         if syncMode == .cloud {
+            // Check CloudKit availability first
+            try await cloudKit.checkAvailability()
+
             _ = try await cloudKit.saveHousehold(newHousehold)
 
             // Create initial member (owner)
@@ -107,9 +110,14 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.householdNotFound
         }
 
+        // Check availability and get container from CloudKitManager
+        try await cloudKit.checkAvailability()
+        let container = await cloudKit.getContainer()
+
         let share = try await cloudKit.createShare(for: household)
         self.share = share
-        return (share, CKContainer.default())
+        activeContainer = container
+        return (share, container)
     }
 
     // MARK: - Join Household

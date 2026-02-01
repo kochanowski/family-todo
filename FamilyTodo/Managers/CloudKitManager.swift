@@ -7,6 +7,7 @@ actor CloudKitManager {
     /// Use nonisolated(unsafe) for lazy container initialization
     /// This prevents CKContainer.default() from being called during actor init
     private nonisolated(unsafe) static var _container: CKContainer?
+    private nonisolated(unsafe) static var _isAvailable: Bool?
 
     private var container: CKContainer {
         if let c = Self._container { return c }
@@ -28,6 +29,37 @@ actor CloudKitManager {
     }
 
     init() {}
+
+    // MARK: - Availability Check
+
+    /// Check if CloudKit is available before performing operations
+    func checkAvailability() async throws {
+        // Return cached result if available
+        if let isAvailable = Self._isAvailable {
+            if !isAvailable {
+                throw CloudKitManagerError.notAuthenticated
+            }
+            return
+        }
+
+        let status = try await container.accountStatus()
+        let isAvailable = status == .available
+        Self._isAvailable = isAvailable
+
+        if !isAvailable {
+            throw CloudKitManagerError.notAuthenticated
+        }
+    }
+
+    /// Reset availability cache (call when user signs in/out)
+    func resetAvailabilityCache() {
+        Self._isAvailable = nil
+    }
+
+    /// Get the CloudKit container (for use with UICloudSharingController)
+    func getContainer() -> CKContainer {
+        container
+    }
 
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord

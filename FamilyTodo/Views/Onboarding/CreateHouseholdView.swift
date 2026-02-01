@@ -131,6 +131,9 @@ struct CreateHouseholdView: View {
 
         _Concurrency.Task {
             do {
+                // Ensure sync mode is set based on user session
+                householdStore.setSyncMode(userSession.syncMode)
+
                 _ = try await householdStore.createHousehold(
                     name: householdName,
                     userId: userSession.userId ?? "local-user",

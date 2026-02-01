@@ -18,8 +18,10 @@ struct ShareInviteView: UIViewControllerRepresentable {
         // This view should probably be presented AFTER we have the share/record ready
         // But let's try to handle it.
 
-        if let share = householdStore.share {
-            let controller = UICloudSharingController(share: share, container: CKContainer.default())
+        if let share = householdStore.share,
+           let container = householdStore.activeContainer
+        {
+            let controller = UICloudSharingController(share: share, container: container)
             controller.delegate = context.coordinator
             controller.availablePermissions = [.allowReadWrite, .allowPrivate]
             return controller

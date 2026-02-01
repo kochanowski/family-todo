@@ -1,9 +1,9 @@
 {
-  "id" : "ADKcia3q6UPnFBOD59xGvTo",
-  "timestamp" : "2026-02-01T11:01:27.221Z[UTC]",
+  "id" : "AFKKAoXczlBg0zOISQ8PTYM",
+  "timestamp" : "2026-02-01T11:13:41.444Z[UTC]",
   "appAppleId" : 6758236125,
   "cfBundleShortVersion" : "1.0",
-  "cfBundleVersion" : "160",
+  "cfBundleVersion" : "161",
   "deviceModel" : "iPhone15,4",
   "osVersion" : "26.2.1",
   "locale" : "pl-PL",
@@ -13,12 +13,12 @@
   "connectionStatus" : "WI_FI",
   "pairedAppleWatch" : "",
   "appUptimeMillis" : null,
-  "availableDiskBytes" : 21745688576,
+  "availableDiskBytes" : 21839962112,
   "totalDiskBytes" : 127858397184,
   "networkType" : null,
-  "batteryPercentage" : 30,
+  "batteryPercentage" : 40,
   "screenWidth" : 393,
   "screenHeight" : 852,
   "emailAddress" : "kochanowski.wojtek@icloud.com",
-  "comment" : "Crash "
+  "comment" : "Crash"
 }
