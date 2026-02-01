@@ -1,6 +1,8 @@
 import CloudKit
 import Combine
 import Foundation
+import SwiftUI
+import UIKit
 import UserNotifications
 
 /// Manages CloudKit subscriptions for real-time change notifications
@@ -186,13 +188,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
         let shoppingCount = recentNotifications.filter { $0.recordType == "ShoppingItem" }.count
         let taskCount = recentNotifications.filter { $0.recordType == "Task" }.count
 
-        var message: String
-        if shoppingCount > 0, taskCount > 0 {
-            message = "\(shoppingCount) shopping items and \(taskCount) tasks added"
+        var message: String = if shoppingCount > 0, taskCount > 0 {
+            "\(shoppingCount) shopping items and \(taskCount) tasks added"
         } else if shoppingCount > 0 {
-            message = shoppingCount == 1 ? "New shopping item added" : "\(shoppingCount) new items added to Shopping List"
+            shoppingCount == 1 ? "New shopping item added" : "\(shoppingCount) new items added to Shopping List"
         } else {
-            message = taskCount == 1 ? "New task added" : "\(taskCount) new tasks added"
+            taskCount == 1 ? "New task added" : "\(taskCount) new tasks added"
         }
 
         // Send local notification (app is in background)
