@@ -50,8 +50,7 @@ struct FloatingTabBar: View {
     private func tabButton(for tab: Tab) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) {
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
+                HapticManager.selection()
                 activeTab = tab
             }
         } label: {

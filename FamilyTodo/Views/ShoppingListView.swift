@@ -149,24 +149,21 @@ private struct ShoppingListContent: View {
         }
 
         newItemText = ""
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
+        HapticManager.lightTap()
     }
 
     private func toggleItem(_ item: ShoppingItem) {
         _Concurrency.Task {
             await store.toggleBought(item)
         }
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        HapticManager.mediumTap()
     }
 
     private func clearAll() {
         _Concurrency.Task {
             await store.markAllAsBought()
         }
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        HapticManager.success()
     }
 
     private var backgroundColor: Color {

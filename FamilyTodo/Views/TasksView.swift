@@ -179,24 +179,21 @@ private struct TasksContent: View {
         }
 
         newTaskTitle = ""
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
+        HapticManager.lightTap()
     }
 
     private func toggleTask(_ task: Task) {
         let newStatus: Task.TaskStatus = task.status == .done ? .next : .done
 
         if newStatus == .next, !store.canMoveToNext(assigneeId: task.assigneeId) {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.warning)
+            HapticManager.warning()
             return
         }
 
         _Concurrency.Task {
             await store.moveTask(task, to: newStatus)
         }
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        HapticManager.mediumTap()
     }
 
     private var backgroundColor: Color {

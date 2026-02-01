@@ -6,6 +6,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		57718B5777DA4E819676A7A2 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA591D77C780445A82FEE9E0 /* HapticManager.swift */; };
 		5BEEEE7F89A8433F92A7D492 /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1674080DA4453DBCD21C18 /* Household.swift */; };
 		6E1645FA58BB4C66A2BE9E5D /* CachedHousehold.swift in Sources */ = {isa = PBXBuildFile; fileRef = E896C65571D94FEE8308FB98 /* CachedHousehold.swift */; };
 		F7C1B9DBB0C84D5E9C893342 /* HouseholdStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF93CA8D49114B14908933E2 /* HouseholdStore.swift */; };
@@ -75,6 +76,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		DA591D77C780445A82FEE9E0 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		5E1674080DA4453DBCD21C18 /* Household.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Household.swift; sourceTree = "<group>"; };
 		E896C65571D94FEE8308FB98 /* CachedHousehold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedHousehold.swift; sourceTree = "<group>"; };
 		AF93CA8D49114B14908933E2 /* HouseholdStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStore.swift; sourceTree = "<group>"; };
@@ -334,6 +336,7 @@
 		E2F3A4B5C6D708192A3B4C5D /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				DA591D77C780445A82FEE9E0 /* HapticManager.swift */,
 				F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */,
 			);
 			path = Utilities;
@@ -443,6 +446,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				57718B5777DA4E819676A7A2 /* HapticManager.swift in Sources */,
 				5BEEEE7F89A8433F92A7D492 /* Household.swift in Sources */,
 				6E1645FA58BB4C66A2BE9E5D /* CachedHousehold.swift in Sources */,
 				F7C1B9DBB0C84D5E9C893342 /* HouseholdStore.swift in Sources */,
