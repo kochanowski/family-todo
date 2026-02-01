@@ -61,10 +61,13 @@ struct FamilyTodoApp: App {
                 .preferredColorScheme(themeStore.colorScheme)
                 .task {
                     householdStore.setModelContext(sharedModelContainer.mainContext)
+                    householdStore.setSyncMode(userSession.syncMode)
                     #if !CI
                         await userSession.checkAuthenticationStatus()
-                        // Configure subscriptions if user has household
-                        if let userId = userSession.userId,
+                        // Configure subscriptions only for cloud users with household
+                        // Skip for guest users (localOnly mode) to avoid CloudKit access
+                        if userSession.syncMode == .cloud,
+                           let userId = userSession.userId,
                            let householdId = userSession.currentHouseholdID
                         {
                             subscriptionManager.configure(userId: userId, householdId: householdId)

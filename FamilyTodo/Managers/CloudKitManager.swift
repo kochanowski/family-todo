@@ -11,36 +11,47 @@ actor CloudKitManager {
         private static let containerIdentifier = "iCloud.com.kochanowski.housepulse"
     #endif
 
-    private var _container: CKContainer?
+    /// Container created on main thread during ensureReady().
+    /// Using MainActor isolation for container to ensure it's created on main thread.
+    @MainActor private static var _sharedContainer: CKContainer?
+
     private var isAvailable: Bool?
     private var isReady = false
 
-    /// Lazily creates the CKContainer to avoid crashes during early app initialization
+    /// Gets the shared container, must call ensureReady() first
     private var container: CKContainer {
-        if let existing = _container {
-            return existing
+        get async {
+            // Container should be created by ensureReady() on main thread
+            await MainActor.run {
+                if Self._sharedContainer == nil {
+                    Self._sharedContainer = CKContainer(identifier: Self.containerIdentifier)
+                }
+                return Self._sharedContainer!
+            }
         }
-        let c = CKContainer(identifier: Self.containerIdentifier)
-        _container = c
-        return c
     }
 
     private var privateDatabase: CKDatabase {
-        container.privateCloudDatabase
+        get async {
+            await container.privateCloudDatabase
+        }
     }
 
     private var sharedDatabase: CKDatabase {
-        container.sharedCloudDatabase
+        get async {
+            await container.sharedCloudDatabase
+        }
     }
 
     init() {
-        // Container is lazily initialized on first use
+        // Container is lazily initialized on first use via ensureReady()
     }
 
     // MARK: - Readiness
 
     /// Call this after app launch to ensure CloudKit is ready.
     /// This prevents crashes when CloudKit is accessed too early during app initialization.
+    /// CKContainer is created on the main thread to avoid crashes.
     func ensureReady() async {
         guard !isReady else { return }
 
@@ -49,7 +60,15 @@ actor CloudKitManager {
 
         // Delay to ensure app is fully launched before accessing CloudKit.
         // CloudKit can crash with SIGTRAP if accessed during early app startup on iOS 26+.
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000) // 500ms
+        try? await _Concurrency.Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+
+        // Create container on main thread to avoid CloudKit crashes.
+        // CKContainer init crashes on background threads during early app startup.
+        await MainActor.run {
+            if Self._sharedContainer == nil {
+                Self._sharedContainer = CKContainer(identifier: Self.containerIdentifier)
+            }
+        }
 
         isReady = true
     }
@@ -69,7 +88,8 @@ actor CloudKitManager {
             return
         }
 
-        let status = try await container.accountStatus()
+        let ckContainer = await container
+        let status = try await ckContainer.accountStatus()
         let isAvailable = status == .available
         self.isAvailable = isAvailable
 
@@ -84,8 +104,8 @@ actor CloudKitManager {
     }
 
     /// Get the CloudKit container (for use with UICloudSharingController)
-    func getContainer() -> CKContainer {
-        container
+    func getContainer() async -> CKContainer {
+        await container
     }
 
     enum CloudKitManagerError: LocalizedError {
@@ -121,32 +141,38 @@ actor CloudKitManager {
 
     func saveHousehold(_ household: Household) async throws -> CKRecord {
         let record = householdRecord(from: household)
-        return try await sharedDatabase.save(record)
+        let db = await sharedDatabase
+        return try await db.save(record)
     }
 
     func fetchHousehold(id: UUID) async throws -> Household {
-        let record = try await sharedDatabase.record(for: recordID(for: id))
+        let db = await sharedDatabase
+        let record = try await db.record(for: recordID(for: id))
         return try household(from: record)
     }
 
     func deleteHousehold(id: UUID) async throws {
-        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+        let db = await sharedDatabase
+        _ = try await db.deleteRecord(withID: recordID(for: id))
     }
 
     // MARK: - Member
 
     func saveMember(_ member: Member) async throws -> CKRecord {
         let record = memberRecord(from: member)
-        return try await sharedDatabase.save(record)
+        let db = await sharedDatabase
+        return try await db.save(record)
     }
 
     func fetchMember(id: UUID) async throws -> Member {
-        let record = try await sharedDatabase.record(for: recordID(for: id))
+        let db = await sharedDatabase
+        let record = try await db.record(for: recordID(for: id))
         return try member(from: record)
     }
 
     func deleteMember(id: UUID) async throws {
-        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+        let db = await sharedDatabase
+        _ = try await db.deleteRecord(withID: recordID(for: id))
     }
 
     /// Find member by Apple user ID
