@@ -44,32 +44,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Subscriptions
 
-    private func setupSubscriptions(householdId: UUID) async {
+    private func setupSubscriptions(householdId _: UUID) async {
         let database = container.sharedCloudDatabase
-        let householdRecordID = CKRecord.ID(recordName: householdId.uuidString)
-        let predicate = NSPredicate(format: "householdId == %@", CKRecord.Reference(recordID: householdRecordID, action: .none))
+        let subscriptionId = "shared-database-changes"
 
-        // Shopping Item subscription
-        await createSubscription(
-            recordType: "ShoppingItem",
-            subscriptionId: "shopping-changes-\(householdId.uuidString)",
-            predicate: predicate,
-            database: database
-        )
-
-        // Task subscription
-        await createSubscription(
-            recordType: "Task",
-            subscriptionId: "task-changes-\(householdId.uuidString)",
-            predicate: predicate,
+        // Create Database Subscription for Shared Database
+        await createDatabaseSubscription(
+            subscriptionId: subscriptionId,
             database: database
         )
     }
 
-    private func createSubscription(
-        recordType: String,
+    private func createDatabaseSubscription(
         subscriptionId: String,
-        predicate: NSPredicate,
         database: CKDatabase
     ) async {
         do {
@@ -81,13 +68,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
             // Subscription doesn't exist, proceed to create
         }
 
-        let subscription = CKQuerySubscription(
-            recordType: recordType,
-            predicate: predicate,
-            subscriptionID: subscriptionId,
-            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
-        )
-
+        let subscription = CKDatabaseSubscription(subscriptionID: subscriptionId)
         let notificationInfo = CKSubscription.NotificationInfo()
         notificationInfo.shouldSendContentAvailable = true // Silent push
         subscription.notificationInfo = notificationInfo
@@ -95,9 +76,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             _ = try await database.save(subscription)
             subscriptionIds.append(subscriptionId)
-            print("✅ Created subscription: \(subscriptionId)")
+            print("✅ Created database subscription: \(subscriptionId)")
         } catch {
-            print("❌ Failed to create subscription: \(error)")
+            print("❌ Failed to create database subscription: \(error)")
         }
     }
 
@@ -121,14 +102,28 @@ final class CloudKitSubscriptionManager: ObservableObject {
     // MARK: - Handle Remote Notification
 
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) {
-        guard let notification = CKNotification(fromRemoteNotificationDictionary: userInfo),
-              let queryNotification = notification as? CKQueryNotification
-        else {
+        guard let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) else {
             return
         }
 
-        let recordType = queryNotification.recordFields?["recordType"] as? String ?? "Unknown"
-        let creatorId = queryNotification.recordFields?["creatorUserId"] as? String
+        if let dbNotification = notification as? CKDatabaseNotification {
+            handleDatabaseNotification(dbNotification)
+        } else if let queryNotification = notification as? CKQueryNotification {
+            handleQueryNotification(queryNotification)
+        }
+    }
+
+    private func handleDatabaseNotification(_: CKDatabaseNotification) {
+        // Shared database changed.
+        // For WOW polish, we'll assume it's relevant and show a generic banner.
+        pendingShoppingChanges.append("Shared Update")
+        scheduleAggregatedNotification()
+        showInAppBanner(for: "Shared Update")
+    }
+
+    private func handleQueryNotification(_ notification: CKQueryNotification) {
+        let recordType = notification.recordFields?["recordType"] as? String ?? "Unknown"
+        let creatorId = notification.recordFields?["creatorUserId"] as? String
 
         // Self-notify OFF: Don't notify if we made the change
         if creatorId == currentUserId {
@@ -136,22 +131,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
 
         // Add to pending notifications for aggregation
-        pendingNotifications.append((recordType: recordType, timestamp: Date()))
-        scheduleAggregatedNotification()
-
-        // Show in-app banner immediately
-        showInAppBanner(for: recordType)
-    }
-
-    // MARK: - In-App Banner
-
-    private func showInAppBanner(for recordType: String) {
         if recordType == "ShoppingItem" {
             pendingShoppingChanges.append(recordType)
         } else if recordType == "Task" {
             pendingTaskChanges.append(recordType)
         }
 
+        scheduleAggregatedNotification()
+        showInAppBanner(for: recordType)
+    }
+
+    // MARK: - In-App Banner
+
+    private func showInAppBanner(for _: String) {
         // Update banner state
         newItemsCount = pendingShoppingChanges.count + pendingTaskChanges.count
         if newItemsCount > 0 {
@@ -183,28 +175,18 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     private func sendAggregatedNotification() {
-        // Filter notifications within the aggregation window
-        let recentNotifications = pendingNotifications.filter {
-            Date().timeIntervalSince($0.timestamp) <= aggregationWindow
-        }
+        // Simple aggregation since we might not have details from Shared DB
+        let count = pendingShoppingChanges.count + pendingTaskChanges.count
+        guard count > 0 else { return }
 
-        guard !recentNotifications.isEmpty else { return }
-
-        let shoppingCount = recentNotifications.filter { $0.recordType == "ShoppingItem" }.count
-        let taskCount = recentNotifications.filter { $0.recordType == "Task" }.count
-
-        var message: String = if shoppingCount > 0, taskCount > 0 {
-            "\(shoppingCount) shopping items and \(taskCount) tasks added"
-        } else if shoppingCount > 0 {
-            shoppingCount == 1 ? "New shopping item added" : "\(shoppingCount) new items added to Shopping List"
-        } else {
-            taskCount == 1 ? "New task added" : "\(taskCount) new tasks added"
-        }
+        let message = count == 1 ? "New shared item added" : "\(count) new shared items added"
 
         // Send local notification (app is in background)
         sendLocalNotification(title: "FamilySync", body: message)
 
-        pendingNotifications.removeAll()
+        pendingShoppingChanges.removeAll()
+        pendingTaskChanges.removeAll()
+        newItemsCount = 0
     }
 
     private func sendLocalNotification(title: String, body: String) {
