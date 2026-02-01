@@ -84,9 +84,7 @@ class MemberStore: ObservableObject {
 
     func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId _: String?) async throws {
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
-        var member = members[index]
-
-        let oldRole = member.role
+        let member = members[index]
 
         // TODO: Validate only owner can change roles (should be enforced by UI/CloudKit rules)
 
@@ -155,7 +153,7 @@ class MemberStore: ObservableObject {
     }
 
     private func updateCache(with members: [Member], for _: UUID) {
-        guard let context = modelContext else { return }
+        guard modelContext != nil else { return }
 
         // Simple strategy: Delete all for household and regarding (inefficient but safe for now)
         // Better: diffing. For now, let's just update existing and add new.

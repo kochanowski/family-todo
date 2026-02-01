@@ -25,10 +25,7 @@ struct ShareInviteView: UIViewControllerRepresentable {
             return controller
         } else {
             // Sharing a new record (the household)
-            // We need the household record. HouseholdStore should provide it.
-            // But UICloudSharingController(preparationHandler:) is async...
-
-            let controller = UICloudSharingController { _, completion in
+            let controller = UICloudSharingController { (_: UICloudSharingController, completion: @escaping (CKShare?, CKContainer?, Error?) -> Void) in
                 Task {
                     do {
                         let (share, container) = try await householdStore.createShare()
@@ -39,7 +36,7 @@ struct ShareInviteView: UIViewControllerRepresentable {
                 }
             }
             controller.delegate = context.coordinator
-            controller.availablePermissions = [.allowReadWrite, .allowPrivate]
+            controller.availablePermissions = [UICloudSharingController.Permission.allowReadWrite, UICloudSharingController.Permission.allowPrivate]
             return controller
         }
     }
