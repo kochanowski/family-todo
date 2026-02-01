@@ -67,9 +67,9 @@ private struct TasksContent: View {
                 if !store.doneTasks.isEmpty {
                     completedSection
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 120) // Space for input and tab bar
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 120) // Space for input and tab bar
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
                 await store.loadTasks()
