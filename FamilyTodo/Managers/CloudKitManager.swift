@@ -432,6 +432,29 @@ actor CloudKitManager {
         }
     }
 
+    /// Accept a share using an invite code (share URL string)
+    /// Returns the shared household after accepting
+    func acceptShare(inviteCode: String) async throws -> Household {
+        guard let shareURL = URL(string: inviteCode) else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        // Fetch share metadata from the URL
+        let metadata = try await container.shareMetadata(for: shareURL)
+
+        // Accept the share
+        try await acceptShare(metadata: metadata)
+
+        // After accepting, the shared records should be available in sharedDatabase
+        // We need to find the household that was shared with us
+        // The rootRecord of the share should be the household
+        let rootRecordID = metadata.rootRecordID
+
+        // Fetch the household from the shared database
+        let record = try await sharedDatabase.record(for: rootRecordID)
+        return try household(from: record)
+    }
+
     // MARK: - Error Handling
 
     /// Categorize CloudKit errors into user-friendly error messages

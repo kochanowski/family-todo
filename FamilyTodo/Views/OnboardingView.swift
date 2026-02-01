@@ -148,7 +148,7 @@ struct CreateHouseholdSheet: View {
 
         _Concurrency.Task {
             do {
-                try await householdStore.createHousehold(
+                _ = try await householdStore.createHousehold(
                     name: name,
                     userId: userId,
                     displayName: displayName

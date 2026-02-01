@@ -26,7 +26,7 @@ struct ShareInviteView: UIViewControllerRepresentable {
         } else {
             // Sharing a new record (the household)
             let controller = UICloudSharingController { (_: UICloudSharingController, completion: @escaping (CKShare?, CKContainer?, Error?) -> Void) in
-                Task {
+                _Concurrency.Task {
                     do {
                         let (share, container) = try await householdStore.createShare()
                         completion(share, container, nil)
@@ -36,7 +36,7 @@ struct ShareInviteView: UIViewControllerRepresentable {
                 }
             }
             controller.delegate = context.coordinator
-            controller.availablePermissions = [UICloudSharingController.Permission.allowReadWrite, UICloudSharingController.Permission.allowPrivate]
+            controller.availablePermissions = [.allowReadWrite, .allowPrivate]
             return controller
         }
     }

@@ -158,9 +158,11 @@ struct TaskDetailView: View {
 
 // MARK: - Stores
 
-enum HouseholdError: Error {
+enum HouseholdError: Error, Equatable {
     case memberNotFound
     case householdNotFound
+    case cloudSyncRequired
+    case invalidInviteCode
 }
 
 @MainActor

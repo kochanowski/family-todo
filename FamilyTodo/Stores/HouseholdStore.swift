@@ -112,6 +112,33 @@ class HouseholdStore: ObservableObject {
         return (share, CKContainer.default())
     }
 
+    // MARK: - Join Household
+
+    func joinHousehold(inviteCode: String, userId: String, displayName: String) async throws {
+        isLoading = true
+        defer { isLoading = false }
+
+        guard syncMode == .cloud else {
+            throw HouseholdError.cloudSyncRequired
+        }
+
+        // Accept the share using the invite code (CloudKit share URL)
+        let household = try await cloudKit.acceptShare(inviteCode: inviteCode)
+
+        // Create member record for the joining user
+        let member = Member(
+            householdId: household.id,
+            userId: userId,
+            displayName: displayName,
+            role: .member
+        )
+        _ = try await cloudKit.saveMember(member)
+
+        // Update local cache
+        updateCache(with: household)
+        currentHousehold = household
+    }
+
     // MARK: - SwiftData Helpers
 
     private func fetchCachedHousehold(userId _: String) -> CachedHousehold? {
