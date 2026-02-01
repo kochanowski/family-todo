@@ -4,19 +4,23 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
+    // CloudKit container identifier - matches the app's iCloud container
+    #if CI
+        private static let containerIdentifier = "iCloud.com.example.familytodo"
+    #else
+        private static let containerIdentifier = "iCloud.com.kochanowski.housepulse"
+    #endif
+
     private var _container: CKContainer?
     private var isAvailable: Bool?
+    private var isReady = false
 
     /// Lazily creates the CKContainer to avoid crashes during early app initialization
     private var container: CKContainer {
         if let existing = _container {
             return existing
         }
-        #if CI
-            let c = CKContainer(identifier: "iCloud.com.example.familytodo")
-        #else
-            let c = CKContainer.default()
-        #endif
+        let c = CKContainer(identifier: Self.containerIdentifier)
         _container = c
         return c
     }
@@ -30,13 +34,28 @@ actor CloudKitManager {
     }
 
     init() {
-        // Container is now lazily initialized on first use
+        // Container is lazily initialized on first use
+    }
+
+    // MARK: - Readiness
+
+    /// Call this after app launch to ensure CloudKit is ready
+    func ensureReady() async {
+        guard !isReady else { return }
+
+        // Small delay to ensure app is fully launched before accessing CloudKit
+        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        isReady = true
     }
 
     // MARK: - Availability Check
 
     /// Check if CloudKit is available before performing operations
     func checkAvailability() async throws {
+        // Ensure we're ready first
+        await ensureReady()
+
         // Return cached result if available
         if let isAvailable = self.isAvailable {
             if !isAvailable {
