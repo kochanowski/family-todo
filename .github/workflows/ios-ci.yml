@@ -48,7 +48,7 @@ jobs:
           xcodebuild clean build \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "generic/platform=iOS Simulator" \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             ARCHS=arm64 \
@@ -68,7 +68,7 @@ jobs:
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "generic/platform=iOS Simulator" \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
             -only-testing:FamilyTodoTests \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -89,7 +89,7 @@ jobs:
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
-            -destination "generic/platform=iOS Simulator" \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
             -only-testing:FamilyTodoUITests \
             -skip-testing:FamilyTodoUITests/FamilyTodoPerformanceTests \
             -resultBundlePath TestResults.xcresult \
