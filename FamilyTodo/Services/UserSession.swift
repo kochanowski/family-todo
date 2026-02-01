@@ -6,7 +6,7 @@ enum SyncMode: Equatable {
     case localOnly
 }
 
-enum SessionMode: String {
+enum SessionMode: String, Equatable {
     case signedOut
     case signedIn
     case guest
@@ -76,14 +76,14 @@ final class UserSession: ObservableObject {
 
     // MARK: - Dependencies
 
-    let authService: AuthenticationService
+    let authService: any AuthenticationServiceType
     private let userDefaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
     init(
-        authService: AuthenticationService? = nil,
+        authService: (any AuthenticationServiceType)? = nil,
         userDefaults: UserDefaults = .standard
     ) {
         self.authService = authService ?? AuthenticationService()
