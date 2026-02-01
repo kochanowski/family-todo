@@ -28,6 +28,7 @@ private struct TasksContent: View {
     @State private var showAllCompleteAnimation = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var userSession: UserSession
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
@@ -69,6 +70,7 @@ private struct TasksContent: View {
                 .padding(.bottom, 120) // Space for input and tab bar
             }
             .refreshable {
+                store.setSyncMode(userSession.syncMode)
                 await store.loadTasks()
             }
 
@@ -81,6 +83,7 @@ private struct TasksContent: View {
         }
         .background(backgroundColor.ignoresSafeArea())
         .task {
+            store.setSyncMode(userSession.syncMode)
             await store.loadTasks()
         }
         .onChange(of: store.error as? TaskStoreError) { _, error in

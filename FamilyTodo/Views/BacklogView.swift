@@ -24,6 +24,7 @@ struct BacklogView: View {
 private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var userSession: UserSession
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
 
@@ -70,6 +71,7 @@ private struct BacklogContent: View {
                     .padding(.bottom, 120)
                 }
                 .refreshable {
+                    store.setSyncMode(userSession.syncMode)
                     await store.loadData()
                 }
             }
@@ -78,6 +80,7 @@ private struct BacklogContent: View {
         }
         .background(backgroundColor.ignoresSafeArea())
         .task {
+            store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
         .alert("New Category", isPresented: $isAddingCategory) {

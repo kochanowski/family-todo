@@ -49,6 +49,7 @@ struct MemberManagementView: View {
         }
         .task {
             memberStore.setModelContext(modelContext)
+            memberStore.setSyncMode(userSession.syncMode)
             await memberStore.loadMembers()
         }
     }

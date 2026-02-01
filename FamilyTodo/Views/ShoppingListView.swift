@@ -44,6 +44,8 @@ private struct ShoppingListContent: View {
     @StateObject private var restockPulse = RestockPulseState()
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
+    @EnvironmentObject private var userSession: UserSession
+
     // Rapid entry state
     @State private var isRapidEntryActive = false
     @State private var rapidEntryText = ""
@@ -91,6 +93,7 @@ private struct ShoppingListContent: View {
                     .padding(.bottom, 120) // Space for tab bar + add button
                 }
                 .refreshable {
+                    store.setSyncMode(userSession.syncMode)
                     await store.loadItems()
                 }
                 .onChange(of: rapidEntryFocused) { _, focused in
@@ -121,6 +124,7 @@ private struct ShoppingListContent: View {
             }
         }
         .task {
+            store.setSyncMode(userSession.syncMode)
             await store.loadItems()
         }
         .newItemsBanner(manager: subscriptionManager)
