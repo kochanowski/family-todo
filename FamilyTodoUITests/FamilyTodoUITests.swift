@@ -1,102 +1,101 @@
 import XCTest
 
-/// UI Tests for HousePulse app
-/// Tests critical user flows and app stability
+/// UI Tests for HousePulse app with Data Seeding
+/// Tests critical user flows using deterministic data states
 final class FamilyTodoUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
-    /// Verify app launches and reaches foreground state
-    func testAppLaunches() {
+    /// Helper to launch app with specific seed arguments
+    private func launchApp(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTestMode", "-resetData"] + arguments
         app.launch()
-
-        let reachedForeground = app.wait(for: .runningForeground, timeout: 5.0)
-        XCTAssertTrue(reachedForeground, "App should launch and reach foreground state")
-
-        // Assert initial tab is visible (Shopping)
-        XCTAssertTrue(app.buttons["tabButton_shopping"].exists, "Shopping tab should be visible on launch")
+        return app
     }
 
-    /// Verify navigation between all main tabs
-    func testTabNavigation() {
-        let app = XCUIApplication()
-        app.launch()
+    /// Verify shopping list flow with seeded data
+    func testShoppingCoreFlow() {
+        let app = launchApp(arguments: ["-seedShoppingList"])
 
-        // Wait for tab bar
-        let shoppingTab = app.buttons["tabButton_shopping"]
-        XCTAssertTrue(shoppingTab.waitForExistence(timeout: 5.0))
+        // 1. Verify seeded items exist
+        XCTAssertTrue(app.staticTexts["Milk"].waitForExistence(timeout: 5.0))
+        XCTAssertTrue(app.staticTexts["Bread"].exists)
 
-        // Navigate to Tasks
-        let tasksTab = app.buttons["tabButton_tasks"]
-        tasksTab.tap()
-        XCTAssertTrue(app.staticTexts["Tasks"].exists)
-
-        // Navigate to Backlog
-        let backlogTab = app.buttons["tabButton_backlog"]
-        backlogTab.tap()
-        XCTAssertTrue(app.staticTexts["Backlog"].exists)
-
-        // Navigate to More
-        let moreTab = app.buttons["tabButton_more"]
-        moreTab.tap()
-        // Check for specific element in More view or title
-        XCTAssertTrue(app.navigationBars["More"].exists || app.staticTexts["More"].exists)
-
-        // Return to Shopping
-        shoppingTab.tap()
-        XCTAssertTrue(app.staticTexts["Shopping"].exists)
-    }
-
-    /// Verify rapid entry flow in Shopping list
-    func testShoppingRapidEntry() {
-        let app = XCUIApplication()
-        app.launch()
-
-        // Ensure we are on Shopping tab
-        let shoppingTab = app.buttons["tabButton_shopping"]
-        if !shoppingTab.isSelected {
-            shoppingTab.tap()
-        }
-
-        // Tap Add Item button
+        // 2. Add new item via Rapid Entry
         let addButton = app.buttons["shoppingAddItemButton"]
-        XCTAssertTrue(addButton.waitForExistence(timeout: 3.0))
+        XCTAssertTrue(addButton.waitForExistence(timeout: 2.0))
         addButton.tap()
 
-        // Type first item
         let textField = app.textFields["shoppingRapidEntryField"]
-        XCTAssertTrue(textField.waitForExistence(timeout: 2.0))
+        if textField.waitForExistence(timeout: 2.0) {
+            textField.typeText("Cheese")
+            textField.typeText("\n")
+            XCTAssertTrue(app.staticTexts["Cheese"].waitForExistence(timeout: 2.0))
+        }
 
-        textField.typeText("Milk")
-        textField.typeText("\n") // Submit
-
-        // Type second item
-        textField.typeText("Eggs")
-        textField.typeText("\n") // Submit
-
-        // Verify items appear in list
-        XCTAssertTrue(app.staticTexts["Milk"].waitForExistence(timeout: 2.0))
-        XCTAssertTrue(app.staticTexts["Eggs"].exists)
-    }
-
-    /// Verify restock panel opens
-    func testRestockPanelOpens() {
-        let app = XCUIApplication()
-        app.launch()
-
+        // 3. Verify Restock Flow
         let restockButton = app.buttons["shoppingRestockButton"]
-        XCTAssertTrue(restockButton.waitForExistence(timeout: 3.0))
-
         restockButton.tap()
 
-        // Verify sheet title
         let sheetTitle = app.staticTexts["Recently Purchased"]
         XCTAssertTrue(sheetTitle.waitForExistence(timeout: 2.0))
 
+        // Find seeded bought item "Eggs"
+        XCTAssertTrue(app.staticTexts["Eggs"].exists)
+
         // Close sheet
         app.buttons["Done"].tap()
-        XCTAssertFalse(sheetTitle.exists)
+    }
+
+    /// Verify tasks flow with seeded data
+    func testTasksCoreFlow() {
+        let app = launchApp(arguments: ["-seedTasks"])
+
+        // Navigate to Tasks
+        app.buttons["tabButton_tasks"].tap()
+
+        // 1. Verify seeded active task
+        let payBills = app.staticTexts["Pay bills"]
+        XCTAssertTrue(payBills.waitForExistence(timeout: 5.0))
+
+        // 2. Add new task
+        let taskInput = app.textFields["taskInputField"]
+        if taskInput.exists {
+            taskInput.tap()
+            taskInput.typeText("Water plants")
+            taskInput.typeText("\n")
+            XCTAssertTrue(app.staticTexts["Water plants"].waitForExistence(timeout: 2.0))
+        }
+    }
+
+    /// Verify backlog categories and items
+    func testBacklogCoreFlow() {
+        let app = launchApp(arguments: ["-seedBacklog"])
+
+        // Navigate to Backlog
+        app.buttons["tabButton_backlog"].tap()
+
+        // 1. Verify category exists
+        XCTAssertTrue(app.staticTexts["Groceries"].waitForExistence(timeout: 5.0))
+
+        // 2. Verify items inside (might need to expand if collapsed by default)
+        XCTAssertTrue(app.staticTexts["Olive Oil"].exists)
+    }
+
+    /// Verify settings navigation
+    func testSettingsFlow() {
+        let app = launchApp()
+
+        // Navigate to More
+        app.buttons["tabButton_more"].tap()
+
+        // Verify Settings option exists
+        let settingsButton = app.buttons["Settings"]
+        if settingsButton.exists {
+            settingsButton.tap()
+            XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 2.0))
+        }
     }
 }

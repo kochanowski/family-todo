@@ -49,6 +49,7 @@ struct MoreView: View {
                             } label: {
                                 MenuRow(icon: "gear", title: "Settings")
                             }
+                            .accessibilityIdentifier("Settings")
                         }
                         .background {
                             RoundedRectangle(cornerRadius: 12)

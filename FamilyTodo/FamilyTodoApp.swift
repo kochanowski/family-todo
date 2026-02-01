@@ -62,6 +62,10 @@ struct FamilyTodoApp: App {
                 .task {
                     householdStore.setModelContext(sharedModelContainer.mainContext)
                     householdStore.setSyncMode(userSession.syncMode)
+
+                    // Configure for UI Testing if needed
+                    UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+
                     #if !CI
                         await userSession.checkAuthenticationStatus()
                         // Configure subscriptions only for cloud users with household
