@@ -102,6 +102,13 @@ jobs:
               exit $status; \
             }
 
+      - name: Upload Test Results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HousePulse-TestResults
+          path: TestResults.xcresult
+
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
   # ─────────────────────────────────────────────────────────────
