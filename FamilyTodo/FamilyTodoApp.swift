@@ -231,9 +231,9 @@ struct UITestHelper {
         }
 
         let tasks = [
-            Task(householdId: householdId, title: "Pay bills", status: .next),
-            Task(householdId: householdId, title: "Call mom", status: .next),
-            Task(householdId: householdId, title: "Walk dog", status: .done),
+            Task(householdId: householdId, title: "Pay bills", status: .next, taskType: .oneOff),
+            Task(householdId: householdId, title: "Call mom", status: .next, taskType: .oneOff),
+            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff),
         ]
         tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
@@ -267,7 +267,7 @@ struct UITestHelper {
         // Tasks - 50 items
         for i in 1 ... 50 {
             let status: Task.TaskStatus = (i % 3 == 0) ? .done : .next
-            let task = Task(householdId: householdId, title: "Task \(i)", status: status)
+            let task = Task(householdId: householdId, title: "Task \(i)", status: status, taskType: .oneOff)
             context.insert(CachedTask(from: task))
         }
     }
