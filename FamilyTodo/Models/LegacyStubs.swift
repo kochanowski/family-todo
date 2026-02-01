@@ -27,6 +27,17 @@ struct Area: Identifiable, Codable {
         ]
     }
 
+    static func defaults(for householdId: UUID) -> [Area] {
+        [
+            Area(householdId: householdId, name: "Kitchen", icon: "refrigerator", colorHex: "#FF5733", sortOrder: 0),
+            Area(householdId: householdId, name: "Living Room", icon: "sofa", colorHex: "#33FF57", sortOrder: 1),
+            Area(householdId: householdId, name: "Bathroom", icon: "shower", colorHex: "#3357FF", sortOrder: 2),
+            Area(householdId: householdId, name: "Bedroom", icon: "bed.double", colorHex: "#FF33A1", sortOrder: 3),
+            Area(householdId: householdId, name: "Garden", icon: "leaf", colorHex: "#A1FF33", sortOrder: 4),
+            Area(householdId: householdId, name: "Other", icon: "folder", colorHex: "#808080", sortOrder: 5),
+        ]
+    }
+
     init(
         id: UUID = UUID(),
         householdId: UUID = UUID(),
