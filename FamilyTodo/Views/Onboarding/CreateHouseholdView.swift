@@ -161,6 +161,7 @@ private struct CreateJoinSheet: View {
     @Binding var joinCode: String
     let onJoin: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         NavigationStack {
