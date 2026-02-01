@@ -200,7 +200,7 @@ struct UITestHelper {
 
     @discardableResult
     private static func seedHousehold(context: ModelContext) -> CachedHousehold {
-        let household = CachedHousehold(name: "Test House", joinCode: "123456")
+        let household = CachedHousehold(name: "Test House", ownerId: "test-owner")
         context.insert(household)
 
         // Emulate user selection of this household
