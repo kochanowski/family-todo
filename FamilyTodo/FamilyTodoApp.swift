@@ -7,6 +7,7 @@ struct FamilyTodoApp: App {
     @StateObject private var userSession = UserSession.shared
     @StateObject private var themeStore = ThemeStore()
     @StateObject private var householdStore = HouseholdStore()
+    @StateObject private var onboardingState = OnboardingState()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -49,10 +50,11 @@ struct FamilyTodoApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environmentObject(userSession)
                 .environmentObject(themeStore)
                 .environmentObject(householdStore)
+                .environmentObject(onboardingState)
                 .modelContainer(sharedModelContainer)
                 .preferredColorScheme(themeStore.colorScheme)
                 .task {
@@ -62,5 +64,34 @@ struct FamilyTodoApp: App {
                     #endif
                 }
         }
+    }
+}
+
+// MARK: - Root View (State-based Navigation)
+
+struct RootView: View {
+    @EnvironmentObject private var onboardingState: OnboardingState
+
+    var body: some View {
+        Group {
+            switch onboardingState.currentState {
+            case .onboarding:
+                OnboardingCarouselView()
+                    .transition(.opacity)
+
+            case .syncChoice:
+                SyncSelectionView()
+                    .transition(.opacity)
+
+            case .householdSetup:
+                CreateHouseholdView()
+                    .transition(.opacity)
+
+            case .mainApp:
+                ContentView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: onboardingState.currentState)
     }
 }
