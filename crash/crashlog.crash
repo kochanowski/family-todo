@@ -1,0 +1,233 @@
+Incident Identifier: 93C1E2CE-3145-47B7-8EB0-0A2294683000
+Distributor ID:      com.apple.TestFlight
+Hardware Model:      iPhone15,4
+Process:             HousePulse [10406]
+Path:                /private/var/containers/Bundle/Application/9141C858-86CE-458A-9927-47E4850AA4B0/HousePulse.app/HousePulse
+Identifier:          com.kochanowski.housepulse
+Version:             1.0 (159)
+AppStoreTools:       17C503a
+AppVariant:          1:iPhone15,4:26
+Beta:                YES
+Code Type:           ARM-64 (Native)
+Role:                Foreground
+Parent Process:      launchd [1]
+Coalition:           com.kochanowski.housepulse [1903]
+
+Date/Time:           2026-02-01 11:48:25.8392 +0100
+Launch Time:         2026-02-01 11:48:25.4036 +0100
+OS Version:          iPhone OS 26.2.1 (23C71)
+Release Type:        User
+Baseband Version:    3.20.03
+Report Version:      104
+
+Exception Type:  EXC_BREAKPOINT (SIGTRAP)
+Exception Codes: 0x0000000000000001, 0x00000001a3447800
+Termination Reason: SIGNAL 5 Trace/BPT trap: 5
+Terminating Process: exc handler [10406]
+
+Triggered by Thread:  0
+
+
+Thread 0 name:
+Thread 0 Crashed:
+0   CloudKit                      	0x00000001a3447800 0x1a32fa000 + 1366016
+1   CloudKit                      	0x00000001a34591dc 0x1a32fa000 + 1438172
+2   CloudKit                      	0x00000001a3459100 0x1a32fa000 + 1437952
+3   CloudKit                      	0x00000001a3303820 0x1a32fa000 + 38944
+4   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+5   libdispatch.dylib             	0x00000001d6b0a9e0 0x1d6b06000 + 18912
+6   CloudKit                      	0x00000001a33037f4 0x1a32fa000 + 38900
+7   HousePulse                    	0x0000000102937a0c CloudKitSubscriptionManager.init() + 484 (CloudKitSubscriptionManager.swift:22)
+8   HousePulse                    	0x0000000102937784 CloudKitSubscriptionManager.__allocating_init() + 28 (CloudKitSubscriptionManager.swift:0)
+9   HousePulse                    	0x0000000102937784 one-time initialization function for shared + 40
+10  libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+11  libdispatch.dylib             	0x00000001d6b0a9e0 0x1d6b06000 + 18912
+12  HousePulse                    	0x000000010298ca38 implicit closure #2 in implicit closure #1 in variable initialization expression of FamilyTodoApp._userSession + 44
+13  SwiftUICore                   	0x00000001a8016014 0x1a7f30000 + 942100
+14  SwiftUICore                   	0x00000001a7f56dec 0x1a7f30000 + 159212
+15  SwiftUICore                   	0x00000001a7f574bc 0x1a7f30000 + 160956
+16  SwiftUICore                   	0x00000001a7f56be4 0x1a7f30000 + 158692
+17  SwiftUICore                   	0x00000001a7f56c30 0x1a7f30000 + 158768
+18  SwiftUICore                   	0x00000001a7f3c910 0x1a7f30000 + 51472
+19  SwiftUICore                   	0x00000001a7f566fc 0x1a7f30000 + 157436
+20  SwiftUICore                   	0x00000001a7f56154 0x1a7f30000 + 155988
+21  SwiftUICore                   	0x00000001a84f8988 0x1a7f30000 + 6064520
+22  AttributeGraph                	0x00000001cfdd9e48 0x1cfdcd000 + 52808
+23  AttributeGraph                	0x00000001cfdd9a4c 0x1cfdcd000 + 51788
+24  AttributeGraph                	0x00000001cfdd937c 0x1cfdcd000 + 50044
+25  AttributeGraph                	0x00000001cfdd3368 0x1cfdcd000 + 25448
+26  SwiftUICore                   	0x00000001a7f54e7c 0x1a7f30000 + 151164
+27  SwiftUICore                   	0x00000001a7f54d7c 0x1a7f30000 + 150908
+28  SwiftUICore                   	0x00000001a7f5446c 0x1a7f30000 + 148588
+29  SwiftUICore                   	0x00000001a84f8988 0x1a7f30000 + 6064520
+30  AttributeGraph                	0x00000001cfdd9e48 0x1cfdcd000 + 52808
+31  AttributeGraph                	0x00000001cfdd9a4c 0x1cfdcd000 + 51788
+32  AttributeGraph                	0x00000001cfdd937c 0x1cfdcd000 + 50044
+33  AttributeGraph                	0x00000001cfdd3368 0x1cfdcd000 + 25448
+34  SwiftUI                       	0x00000001a6c93508 0x1a6c61000 + 206088
+35  SwiftUI                       	0x00000001a7054f84 0x1a6c61000 + 4145028
+36  AttributeGraph                	0x00000001cfdd9e48 0x1cfdcd000 + 52808
+37  AttributeGraph                	0x00000001cfdd9a4c 0x1cfdcd000 + 51788
+38  AttributeGraph                	0x00000001cfdd937c 0x1cfdcd000 + 50044
+39  AttributeGraph                	0x00000001cfdd3368 0x1cfdcd000 + 25448
+40  SwiftUI                       	0x00000001a6c93258 0x1a6c61000 + 205400
+41  SwiftUI                       	0x00000001a70e86d0 0x1a6c61000 + 4749008
+42  AttributeGraph                	0x00000001cfdd9e48 0x1cfdcd000 + 52808
+43  AttributeGraph                	0x00000001cfdd9a4c 0x1cfdcd000 + 51788
+44  AttributeGraph                	0x00000001cfdd3620 0x1cfdcd000 + 26144
+45  AttributeGraph                	0x00000001cfdd33b8 0x1cfdcd000 + 25528
+46  SwiftUI                       	0x00000001a6c9442c 0x1a6c61000 + 209964
+47  SwiftUI                       	0x00000001a6c9dc0c 0x1a6c61000 + 248844
+48  SwiftUI                       	0x00000001a6c9d964 0x1a6c61000 + 248164
+49  SwiftUI                       	0x00000001a6c9d9c4 0x1a6c61000 + 248260
+50  SwiftUICore                   	0x00000001a7f41aa8 0x1a7f30000 + 72360
+51  SwiftUICore                   	0x00000001a7f41cec 0x1a7f30000 + 72940
+52  SwiftUI                       	0x00000001a6c99fcc 0x1a6c61000 + 233420
+53  SwiftUI                       	0x00000001a6c982a8 0x1a6c61000 + 225960
+54  UIKitCore                     	0x00000001a41adeb4 0x1a3939000 + 8867508
+55  UIKitCore                     	0x00000001a4d5b510 0x1a3939000 + 21112080
+56  UIKitCore                     	0x00000001a4d5b8c0 0x1a3939000 + 21113024
+57  UIKitCore                     	0x00000001a480cadc 0x1a3939000 + 15547100
+58  FrontBoardServices            	0x00000001be0d4388 0x1be0b6000 + 123784
+59  FrontBoardServices            	0x00000001be0d4840 0x1be0b6000 + 124992
+60  FrontBoardServices            	0x00000001be0d41a0 0x1be0b6000 + 123296
+61  FrontBoardServices            	0x00000001be142b34 0x1be0b6000 + 576308
+62  FrontBoardServices            	0x00000001be0e1f00 0x1be0b6000 + 179968
+63  FrontBoardServices            	0x00000001be0fed98 0x1be0b6000 + 298392
+64  FrontBoardServices            	0x00000001be1006fc 0x1be0b6000 + 304892
+65  FrontBoardServices            	0x00000001be0e1f00 0x1be0b6000 + 179968
+66  libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+67  libdispatch.dylib             	0x00000001d6b0cbb4 0x1d6b06000 + 27572
+68  BoardServices                 	0x00000001b57c81d4 0x1b57bf000 + 37332
+69  BoardServices                 	0x00000001b57c8054 0x1b57bf000 + 36948
+70  CoreFoundation                	0x000000019e047f10 0x19dfdf000 + 429840
+71  CoreFoundation                	0x000000019e047e84 0x19dfdf000 + 429700
+72  CoreFoundation                	0x000000019e025b30 0x19dfdf000 + 289584
+73  CoreFoundation                	0x000000019dffc6d8 0x19dfdf000 + 120536
+74  CoreFoundation                	0x000000019dffba6c 0x19dfdf000 + 117356
+75  GraphicsServices              	0x000000023fc2c498 0x23fc2b000 + 5272
+76  UIKitCore                     	0x00000001a39d6df8 0x1a3939000 + 646648
+77  UIKitCore                     	0x00000001a397fe54 0x1a3939000 + 290388
+78  SwiftUI                       	0x00000001a6c92d20 0x1a6c61000 + 204064
+79  SwiftUI                       	0x00000001a6c8f8d4 0x1a6c61000 + 190676
+80  SwiftUI                       	0x00000001a6c8f3c0 0x1a6c61000 + 189376
+81  HousePulse                    	0x000000010298e7c8 static FamilyTodoApp.$main() + 24 (FamilyTodoApp.swift:0)
+82  HousePulse                    	0x000000010298e7c8 main + 36
+83  dyld                          	0x000000019b00ee28 0x19b00a000 + 20008
+
+Thread 1 name:
+Thread 1:
+0   libobjc.A.dylib               	0x000000019af8a9b8 0x19af88000 + 10680
+1   AXCoreUtilities               	0x00000001ac4f1888 0x1ac4d5000 + 116872
+2   AXCoreUtilities               	0x00000001ac4f19c0 0x1ac4d5000 + 117184
+3   AXCoreUtilities               	0x00000001ac4f0638 0x1ac4d5000 + 112184
+4   libdispatch.dylib             	0x00000001d6b07adc 0x1d6b06000 + 6876
+5   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+6   libdispatch.dylib             	0x00000001d6b10468 0x1d6b06000 + 42088
+7   libdispatch.dylib             	0x00000001d6b10f44 0x1d6b06000 + 44868
+8   libdispatch.dylib             	0x00000001d6b1b3ec 0x1d6b06000 + 87020
+9   libdispatch.dylib             	0x00000001d6b1ace4 0x1d6b06000 + 85220
+10  libsystem_pthread.dylib       	0x00000001fa8c83b8 0x1fa8c7000 + 5048
+11  libsystem_pthread.dylib       	0x00000001fa8c78c0 0x1fa8c7000 + 2240
+
+Thread 2:
+
+Thread 3 name:
+Thread 3:
+0   libdispatch.dylib             	0x00000001d6b1335c 0x1d6b06000 + 54108
+1   AXCoreUtilities               	0x00000001ac4f0f94 0x1ac4d5000 + 114580
+2   AXCoreUtilities               	0x00000001ac4f2d9c 0x1ac4d5000 + 122268
+3   AXCoreUtilities               	0x00000001ac4eec2c 0x1ac4d5000 + 105516
+4   AXCoreUtilities               	0x00000001ac4ef178 0x1ac4d5000 + 106872
+5   libdispatch.dylib             	0x00000001d6b07adc 0x1d6b06000 + 6876
+6   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+7   libdispatch.dylib             	0x00000001d6b10468 0x1d6b06000 + 42088
+8   libdispatch.dylib             	0x00000001d6b10f78 0x1d6b06000 + 44920
+9   libdispatch.dylib             	0x00000001d6b1b3ec 0x1d6b06000 + 87020
+10  libdispatch.dylib             	0x00000001d6b1ace4 0x1d6b06000 + 85220
+11  libsystem_pthread.dylib       	0x00000001fa8c83b8 0x1fa8c7000 + 5048
+12  libsystem_pthread.dylib       	0x00000001fa8c78c0 0x1fa8c7000 + 2240
+
+Thread 4:
+
+Thread 5 name:
+Thread 5:
+0   libsystem_kernel.dylib        	0x00000002489e1cd4 0x2489e1000 + 3284
+1   libsystem_kernel.dylib        	0x00000002489e52f8 0x2489e1000 + 17144
+2   libsystem_kernel.dylib        	0x00000002489e5214 0x2489e1000 + 16916
+3   libsystem_kernel.dylib        	0x00000002489e505c 0x2489e1000 + 16476
+4   CoreFoundation                	0x000000019e025868 0x19dfdf000 + 288872
+5   CoreFoundation                	0x000000019dffc848 0x19dfdf000 + 120904
+6   CoreFoundation                	0x000000019dffba6c 0x19dfdf000 + 117356
+7   Foundation                    	0x000000019bff2df8 0x19b650000 + 10104312
+8   Foundation                    	0x000000019bff2fd0 0x19b650000 + 10104784
+9   UIKitCore                     	0x00000001a39ac094 0x1a3939000 + 471188
+10  Foundation                    	0x000000019b6b221c 0x19b650000 + 401948
+11  libsystem_pthread.dylib       	0x00000001fa8cb44c 0x1fa8c7000 + 17484
+12  libsystem_pthread.dylib       	0x00000001fa8c78cc 0x1fa8c7000 + 2252
+
+Thread 6 name:
+Thread 6:
+0   libsystem_kernel.dylib        	0x00000002489e810c 0x2489e1000 + 28940
+1   libdispatch.dylib             	0x00000001d6b09c6c 0x1d6b06000 + 15468
+2   libdispatch.dylib             	0x00000001d6b09a8c 0x1d6b06000 + 14988
+3   libdispatch.dylib             	0x00000001d6b17ba0 0x1d6b06000 + 72608
+4   libdispatch.dylib             	0x00000001d6b17758 0x1d6b06000 + 71512
+5   AXCoreUtilities               	0x00000001ac4da864 0x1ac4d5000 + 22628
+6   libdispatch.dylib             	0x00000001d6b07adc 0x1d6b06000 + 6876
+7   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+8   libdispatch.dylib             	0x00000001d6b3d7e4 0x1d6b06000 + 227300
+9   libdispatch.dylib             	0x00000001d6b0c2fc 0x1d6b06000 + 25340
+10  libdispatch.dylib             	0x00000001d6b19f48 0x1d6b06000 + 81736
+11  libdispatch.dylib             	0x00000001d6b1a6fc 0x1d6b06000 + 83708
+12  libsystem_pthread.dylib       	0x00000001fa8c837c 0x1fa8c7000 + 4988
+13  libsystem_pthread.dylib       	0x00000001fa8c78c0 0x1fa8c7000 + 2240
+
+Thread 7:
+
+Thread 8:
+
+Thread 9:
+
+Thread 10:
+
+Thread 11:
+
+Thread 12:
+
+
+Thread 0 crashed with ARM Thread State (64-bit):
+    x0: 0x00000001078b3611   x1: 0x0000000000000000   x2: 0x0000000000000001   x3: 0x0000000000000000
+    x4: 0x0000000107958440   x5: 0x000000000000000f   x6: 0xffffffffbfc007ff   x7: 0xfffff0003ffff800
+    x8: 0x0000000205930000   x9: 0xe8bf83596ae8004f  x10: 0x0000000000000005  x11: 0x007f0001079d2000
+   x12: 0x0000000000000061  x13: 0x00000001079d2600  x14: 0x01000002085f6fe9  x15: 0x00000002085f6fe8
+   x16: 0x00000001a9838dd4  x17: 0x000000019dff550c  x18: 0x0000000000000000  x19: 0x000000020abf9df0
+   x20: 0x000000020ac12010  x21: 0x0000000107a1d6b0  x22: 0x0000000107b98e80  x23: 0x0000000107b79a70
+   x24: 0x000000020ac11ff0  x25: 0x0000000000000000  x26: 0x0000000000000000  x27: 0x0000000000000020
+   x28: 0x00000001078a9240   fp: 0x000000016d4ca6b0   lr: 0x00000001a3447800
+    sp: 0x000000016d4ca510   pc: 0x00000001a3447800 cpsr: 0x60001000
+   esr: 0xf2000001 (Breakpoint) brk 1
+
+
+Binary Images:
+        0x102930000 -         0x102a1bfff HousePulse arm64  <86e546b765ed355b9c61699caf8b0dbc> /var/containers/Bundle/Application/9141C858-86CE-458A-9927-47E4850AA4B0/HousePulse.app/HousePulse
+        0x102aec000 -         0x102af7fff libobjc-trampolines.dylib arm64e  <ed3ce61e93863ea097ab5406bf5531a9> /private/preboot/Cryptexes/OS/usr/lib/libobjc-trampolines.dylib
+        0x19af88000 -         0x19afd9b2f libobjc.A.dylib arm64e  <7203a71f3ce43f6093cfb3063caab174> /usr/lib/libobjc.A.dylib
+        0x19b00a000 -         0x19b0a8b2f dyld arm64e  <dbbf981322cc39fc8d40581143766ff6> /usr/lib/dyld
+        0x19b650000 -         0x19c49681f Foundation arm64e  <75d11b2911a6350787f7487aceb1476a> /System/Library/Frameworks/Foundation.framework/Foundation
+        0x19dfdf000 -         0x19e56573f CoreFoundation arm64e  <bd79fbf583c835f5a0d54ca56e602111> /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+        0x1a32fa000 -         0x1a36e16df CloudKit arm64e  <c6c4a473abea38a190c4eb731c55e2f5> /System/Library/Frameworks/CloudKit.framework/CloudKit
+        0x1a3939000 -         0x1a5d95f3f UIKitCore arm64e  <2708bb8a4e1b36c18385ddfc612cdda5> /System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore
+        0x1a6c61000 -         0x1a7ee2ebf SwiftUI arm64e  <e857eda9d3ff33cfa9c6b95ea0fc74ea> /System/Library/Frameworks/SwiftUI.framework/SwiftUI
+        0x1a7f30000 -         0x1a8e6239f SwiftUICore arm64e  <53897df243f735588663253d90c197d1> /System/Library/Frameworks/SwiftUICore.framework/SwiftUICore
+        0x1a9828000 -         0x1a98a85af libsystem_c.dylib arm64e  <e2fb0b5bed9335a7a6264894601e382b> /usr/lib/system/libsystem_c.dylib
+        0x1ac4d5000 -         0x1ac5d9e5f AXCoreUtilities arm64e  <e697395ffa433ffb90a07999d0c9ac33> /System/Library/PrivateFrameworks/AXCoreUtilities.framework/AXCoreUtilities
+        0x1b57bf000 -         0x1b584187f BoardServices arm64e  <02b7e4d67a8c3791bcc60edbc03e1913> /System/Library/PrivateFrameworks/BoardServices.framework/BoardServices
+        0x1be0b6000 -         0x1be19a13f FrontBoardServices arm64e  <cb628621122f3b689124624d8f473494> /System/Library/PrivateFrameworks/FrontBoardServices.framework/FrontBoardServices
+        0x1cfdcd000 -         0x1cfe144bf AttributeGraph arm64e  <e8717d47cdd23936bd99cbf0f3f93a44> /System/Library/PrivateFrameworks/AttributeGraph.framework/AttributeGraph
+        0x1d6b06000 -         0x1d6b4c21f libdispatch.dylib arm64e  <654f736a691d3c6abd8169bc65b9b8ed> /usr/lib/system/libdispatch.dylib
+        0x1fa8c7000 -         0x1fa8d344f libsystem_pthread.dylib arm64e  <36408bf3c2b337c8abc20251f88e8724> /usr/lib/system/libsystem_pthread.dylib
+        0x23fc2b000 -         0x23fc337ff GraphicsServices arm64e  <a0cf2b0ae26e32f6a585582766c557aa> /System/Library/PrivateFrameworks/GraphicsServices.framework/GraphicsServices
+        0x2489e1000 -         0x248a1bd2b libsystem_kernel.dylib arm64e  <99b78925f0633b62ad223986a636020d> /usr/lib/system/libsystem_kernel.dylib
+
+EOF

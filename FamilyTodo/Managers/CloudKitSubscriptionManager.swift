@@ -19,7 +19,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Private State
 
-    private let container = CKContainer.default()
+    private lazy var container = CKContainer.default()
     private var subscriptionIds: [String] = []
     private var aggregationTimer: Timer?
     private var pendingNotifications: [(recordType: String, timestamp: Date)] = []
