@@ -23,6 +23,17 @@ struct ShoppingListView: View {
                     systemImage: "house.slash",
                     description: Text("Please select or create a household in the More tab.")
                 )
+                .task {
+                    // Recovery: Try to load from cache if session is lost
+                    if userSession.currentHouseholdID == nil, let userId = userSession.userId {
+                        print("DEBUG: Attempting household recovery for user: \(userId)")
+                        await householdStore.loadHousehold(userId: userId)
+                        if let household = householdStore.currentHousehold {
+                            print("DEBUG: Recovered household: \(household.id)")
+                            userSession.setCurrentHousehold(household.id)
+                        }
+                    }
+                }
             }
         }
     }

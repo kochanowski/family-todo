@@ -58,10 +58,17 @@ class HouseholdStore: ObservableObject {
                 let fresh = try await cloudKit.fetchHousehold(id: current.id)
                 updateCache(with: fresh)
                 currentHousehold = fresh
-
-                // Also fetch share if owner
-                if fresh.ownerId == userId {
-                    // We might want to fetch share metadata here if needed
+            } else {
+                // If checking cloud for the first time on this device
+                print("DEBUG: Checking CloudKit for existing household membership...")
+                // Try to find a member record for this user
+                if let member = try await cloudKit.fetchMemberByUserId(userId) {
+                    print("DEBUG: Found member membership for household: \(member.householdId)")
+                    let fresh = try await cloudKit.fetchHousehold(id: member.householdId)
+                    updateCache(with: fresh)
+                    currentHousehold = fresh
+                } else {
+                    print("DEBUG: No existing membership found in cloud.")
                 }
             }
         } catch {
