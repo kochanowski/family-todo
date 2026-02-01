@@ -4,8 +4,22 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
-    private let container: CKContainer
+    private var _container: CKContainer?
     private var isAvailable: Bool?
+
+    /// Lazily creates the CKContainer to avoid crashes during early app initialization
+    private var container: CKContainer {
+        if let existing = _container {
+            return existing
+        }
+        #if CI
+            let c = CKContainer(identifier: "iCloud.com.example.familytodo")
+        #else
+            let c = CKContainer.default()
+        #endif
+        _container = c
+        return c
+    }
 
     private var privateDatabase: CKDatabase {
         container.privateCloudDatabase
@@ -16,11 +30,7 @@ actor CloudKitManager {
     }
 
     init() {
-        #if CI
-            container = CKContainer(identifier: "iCloud.com.example.familytodo")
-        #else
-            container = CKContainer.default()
-        #endif
+        // Container is now lazily initialized on first use
     }
 
     // MARK: - Availability Check

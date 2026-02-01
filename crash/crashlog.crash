@@ -1,10 +1,10 @@
-Incident Identifier: 8C45256B-EDA9-4527-956E-86939F5C302A
+Incident Identifier: FD3781F9-06C5-4827-90AF-61D9A6BB72B2
 Distributor ID:      com.apple.TestFlight
 Hardware Model:      iPhone15,4
-Process:             HousePulse [11551]
-Path:                /private/var/containers/Bundle/Application/7CC1F984-AAD5-4589-9677-59A54BCAA501/HousePulse.app/HousePulse
+Process:             HousePulse [11717]
+Path:                /private/var/containers/Bundle/Application/6801C1FA-A1A9-4C63-BEF7-EEBC7DF2699D/HousePulse.app/HousePulse
 Identifier:          com.kochanowski.housepulse
-Version:             1.0 (166)
+Version:             1.0 (167)
 AppStoreTools:       17C503a
 AppVariant:          1:iPhone15,4:26
 Beta:                YES
@@ -13,8 +13,8 @@ Role:                Foreground
 Parent Process:      launchd [1]
 Coalition:           com.kochanowski.housepulse [1903]
 
-Date/Time:           2026-02-01 13:43:53.5131 +0100
-Launch Time:         2026-02-01 13:43:53.1355 +0100
+Date/Time:           2026-02-01 14:20:48.0476 +0100
+Launch Time:         2026-02-01 14:20:47.7544 +0100
 OS Version:          iPhone OS 26.2.1 (23C71)
 Release Type:        User
 Baseband Version:    3.20.03
@@ -23,7 +23,7 @@ Report Version:      104
 Exception Type:  EXC_BREAKPOINT (SIGTRAP)
 Exception Codes: 0x0000000000000001, 0x00000001a3447800
 Termination Reason: SIGNAL 5 Trace/BPT trap: 5
-Terminating Process: exc handler [11551]
+Terminating Process: exc handler [11717]
 
 Triggered by Thread:  0
 
@@ -37,40 +37,33 @@ Thread 0 Crashed:
 4   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
 5   libdispatch.dylib             	0x00000001d6b0a9e0 0x1d6b06000 + 18912
 6   CloudKit                      	0x00000001a33037f4 0x1a32fa000 + 38900
-7   HousePulse                    	0x000000010069c558 0x100628000 + 476504
-8   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
-9   libdispatch.dylib             	0x00000001d6b0a9e0 0x1d6b06000 + 18912
-10  HousePulse                    	0x000000010064825c 0x100628000 + 131676
-11  HousePulse                    	0x0000000100648aac 0x100628000 + 133804
-12  HousePulse                    	0x00000001006a88c9 0x100628000 + 526537
-13  HousePulse                    	0x0000000100630be1 0x100628000 + 35809
-14  SwiftUI                       	0x00000001a6d6a135 0x1a6c61000 + 1085749
-15  SwiftUI                       	0x00000001a6d6a229 0x1a6c61000 + 1085993
-16  SwiftUI                       	0x00000001a6d6a22d 0x1a6c61000 + 1085997
-17  libswift_Concurrency.dylib    	0x000000019c5037b1 0x19c497000 + 444337
+7   HousePulse                    	0x00000001042ac558 CloudKitManager.init() + 36 (CloudKitManager.swift:22)
+8   HousePulse                    	0x00000001042ac558 CloudKitManager.__allocating_init() + 56 (CloudKitManager.swift:24)
+9   HousePulse                    	0x00000001042ac558 one-time initialization function for shared + 68 (CloudKitManager.swift:5)
+10  libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
+11  libdispatch.dylib             	0x00000001d6b0a9e0 0x1d6b06000 + 18912
+12  HousePulse                    	0x000000010425825c CloudKitManager.shared.unsafeMutableAddressor + 20 (CloudKitManager.swift:5)
+13  HousePulse                    	0x000000010425825c HouseholdStore.cloudKit.getter + 140 (HouseholdStore.swift:15)
+14  HousePulse                    	0x0000000104258aac HouseholdStore.loadHousehold(userId:) + 940 (HouseholdStore.swift:58)
+15  HousePulse                    	0x00000001042b88c9 closure #2 in closure #1 in ShoppingListView.body.getter + 1 (ShoppingListView.swift:28)
+16  HousePulse                    	0x0000000104240be1 <deduplicated_symbol> + 1
+17  SwiftUI                       	0x00000001a6d6a135 0x1a6c61000 + 1085749
+18  SwiftUI                       	0x00000001a6d6a229 0x1a6c61000 + 1085993
+19  SwiftUI                       	0x00000001a6d6a22d 0x1a6c61000 + 1085997
+20  libswift_Concurrency.dylib    	0x000000019c5037b1 0x19c497000 + 444337
 
 Thread 1:
 
 Thread 2:
 
-Thread 3 name:
 Thread 3:
-0   ???                           	0x00000001aeb225f0 0x0 + 7225878000
-1   AXCoreUtilities               	0x00000001ac4f19c0 0x1ac4d5000 + 117184
-2   AXCoreUtilities               	0x00000001ac4f0638 0x1ac4d5000 + 112184
-3   libdispatch.dylib             	0x00000001d6b07adc 0x1d6b06000 + 6876
-4   libdispatch.dylib             	0x00000001d6b217fc 0x1d6b06000 + 112636
-5   libdispatch.dylib             	0x00000001d6b10468 0x1d6b06000 + 42088
-6   libdispatch.dylib             	0x00000001d6b10f44 0x1d6b06000 + 44868
-7   libdispatch.dylib             	0x00000001d6b1b3ec 0x1d6b06000 + 87020
-8   libdispatch.dylib             	0x00000001d6b1ace4 0x1d6b06000 + 85220
-9   libsystem_pthread.dylib       	0x00000001fa8c83b8 0x1fa8c7000 + 5048
-10  libsystem_pthread.dylib       	0x00000001fa8c78c0 0x1fa8c7000 + 2240
 
 Thread 4:
 
-Thread 5 name:
 Thread 5:
+
+Thread 6 name:
+Thread 6:
 0   libsystem_kernel.dylib        	0x00000002489e1cd4 0x2489e1000 + 3284
 1   libsystem_kernel.dylib        	0x00000002489e52f8 0x2489e1000 + 17144
 2   libsystem_kernel.dylib        	0x00000002489e5214 0x2489e1000 + 16916
@@ -85,31 +78,31 @@ Thread 5:
 11  libsystem_pthread.dylib       	0x00000001fa8cb44c 0x1fa8c7000 + 17484
 12  libsystem_pthread.dylib       	0x00000001fa8c78cc 0x1fa8c7000 + 2252
 
-Thread 6:
-
 Thread 7:
 
 Thread 8:
 
 Thread 9:
 
+Thread 10:
+
 
 Thread 0 crashed with ARM Thread State (64-bit):
-    x0: 0x000000010899a811   x1: 0x0000000000000000   x2: 0x0000000000000001   x3: 0x0000000000000000
-    x4: 0x0000000108a28940   x5: 0x000000000000000f   x6: 0xffffffffbfc007ff   x7: 0xfffff0003ffff800
-    x8: 0x0000000205930000   x9: 0xf723c4b7f581005f  x10: 0x0000000000000005  x11: 0x007f000105adc000
-   x12: 0x0000000000000061  x13: 0x0000000105adc600  x14: 0x01000002085f6fe9  x15: 0x00000002085f6fe8
+    x0: 0x0000000154da6811   x1: 0x0000000000000000   x2: 0x0000000000000001   x3: 0x0000000000000000
+    x4: 0x0000000154e6c1c0   x5: 0x000000000000000f   x6: 0xffffffffbfc007ff   x7: 0xfffff0003ffff800
+    x8: 0x0000000205930000   x9: 0xd074eeae64e700a6  x10: 0x0000000000000005  x11: 0x007f0001542ad000
+   x12: 0x0000000000000061  x13: 0x00000001542ad600  x14: 0x01000002085f6fe9  x15: 0x00000002085f6fe8
    x16: 0x00000001a9838dd4  x17: 0x000000019dff550c  x18: 0x0000000000000000  x19: 0x000000020abf9df0
-   x20: 0x000000020ac12010  x21: 0x0000000105a41180  x22: 0x0000000105a27cc0  x23: 0x000000010885f0f0
+   x20: 0x000000020ac12010  x21: 0x00000001541ed200  x22: 0x00000001543b1320  x23: 0x0000000154c53660
    x24: 0x000000020ac11ff0  x25: 0x0000000000000000  x26: 0x0000000000000000  x27: 0x0000000000000000
-   x28: 0xffffffff76ffffff   fp: 0x000000016f7d5fe0   lr: 0x00000001a3447800
-    sp: 0x000000016f7d5e40   pc: 0x00000001a3447800 cpsr: 0x60001000
+   x28: 0xffffffff76ffffff   fp: 0x000000016bbc5fe0   lr: 0x00000001a3447800
+    sp: 0x000000016bbc5e40   pc: 0x00000001a3447800 cpsr: 0x60001000
    esr: 0xf2000001 (Breakpoint) brk 1
 
 
 Binary Images:
-        0x100628000 -         0x100717fff HousePulse arm64  <053a7c2dd05f346ab1dbbb615e65d825> /var/containers/Bundle/Application/7CC1F984-AAD5-4589-9677-59A54BCAA501/HousePulse.app/HousePulse
-        0x1007e8000 -         0x1007f3fff libobjc-trampolines.dylib arm64e  <ed3ce61e93863ea097ab5406bf5531a9> /private/preboot/Cryptexes/OS/usr/lib/libobjc-trampolines.dylib
+        0x104238000 -         0x104327fff HousePulse arm64  <053a7c2dd05f346ab1dbbb615e65d825> /var/containers/Bundle/Application/6801C1FA-A1A9-4C63-BEF7-EEBC7DF2699D/HousePulse.app/HousePulse
+        0x1043f4000 -         0x1043fffff libobjc-trampolines.dylib arm64e  <ed3ce61e93863ea097ab5406bf5531a9> /private/preboot/Cryptexes/OS/usr/lib/libobjc-trampolines.dylib
         0x19b650000 -         0x19c49681f Foundation arm64e  <75d11b2911a6350787f7487aceb1476a> /System/Library/Frameworks/Foundation.framework/Foundation
         0x19c497000 -         0x19c51fd97 libswift_Concurrency.dylib arm64e  <a5c1142476f83d9c8a15d5d3b9af83be> /usr/lib/swift/libswift_Concurrency.dylib
         0x19dfdf000 -         0x19e56573f CoreFoundation arm64e  <bd79fbf583c835f5a0d54ca56e602111> /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
@@ -117,7 +110,6 @@ Binary Images:
         0x1a3939000 -         0x1a5d95f3f UIKitCore arm64e  <2708bb8a4e1b36c18385ddfc612cdda5> /System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore
         0x1a6c61000 -         0x1a7ee2ebf SwiftUI arm64e  <e857eda9d3ff33cfa9c6b95ea0fc74ea> /System/Library/Frameworks/SwiftUI.framework/SwiftUI
         0x1a9828000 -         0x1a98a85af libsystem_c.dylib arm64e  <e2fb0b5bed9335a7a6264894601e382b> /usr/lib/system/libsystem_c.dylib
-        0x1ac4d5000 -         0x1ac5d9e5f AXCoreUtilities arm64e  <e697395ffa433ffb90a07999d0c9ac33> /System/Library/PrivateFrameworks/AXCoreUtilities.framework/AXCoreUtilities
         0x1d6b06000 -         0x1d6b4c21f libdispatch.dylib arm64e  <654f736a691d3c6abd8169bc65b9b8ed> /usr/lib/system/libdispatch.dylib
         0x1fa8c7000 -         0x1fa8d344f libsystem_pthread.dylib arm64e  <36408bf3c2b337c8abc20251f88e8724> /usr/lib/system/libsystem_pthread.dylib
         0x2489e1000 -         0x248a1bd2b libsystem_kernel.dylib arm64e  <99b78925f0633b62ad223986a636020d> /usr/lib/system/libsystem_kernel.dylib
