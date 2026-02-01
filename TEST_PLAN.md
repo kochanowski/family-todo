@@ -6,7 +6,7 @@ This document outlines the testing infrastructure, automated workflows, and spec
 
 The project uses **GitHub Actions** for Continuous Integration and Delivery.
 - **Workflow**: `iOS CI` (`.github/workflows/ios-ci.yml`)
-- **Triggers**: 
+- **Triggers**:
   - Push to `main`
   - Pull Requests
   - Manual dispatch

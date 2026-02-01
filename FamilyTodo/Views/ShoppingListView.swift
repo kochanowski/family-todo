@@ -72,8 +72,6 @@ private struct ShoppingListContent: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
                         ForEach(store.toBuyItems) { item in
                             if itemBeingRemoved != item.id {
                                 ShoppingItemRow(

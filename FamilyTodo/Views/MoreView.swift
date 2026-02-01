@@ -29,7 +29,7 @@ struct MoreView: View {
                             NavigationLink {
                                 CategoriesManagementView()
                             } label: {
-                                MenuRow(icon: "folder", title: "Backlog Categories")
+                                MoreRow(icon: "folder", title: "Backlog Categories")
                             }
 
                             Divider()
@@ -38,7 +38,7 @@ struct MoreView: View {
                             NavigationLink {
                                 RepetitiveTasksView()
                             } label: {
-                                MenuRow(icon: "arrow.trianglehead.2.clockwise.rotate.90", title: "Repetitive Tasks")
+                                MoreRow(icon: "repeat", title: "Repetitive Tasks")
                             }
 
                             Divider()
@@ -47,7 +47,7 @@ struct MoreView: View {
                             NavigationLink {
                                 SettingsView()
                             } label: {
-                                MenuRow(icon: "gear", title: "Settings")
+                                MoreRow(icon: "gear", title: "Settings")
                             }
                             .accessibilityIdentifier("Settings")
                         }
@@ -136,32 +136,34 @@ struct ProfileCard: View {
     }
 }
 
-// MARK: - Menu Row
+// MARK: - More Row Component
 
-struct MenuRow: View {
+/// Standardized row for More menu items to ensure consistent icon sizing and styling.
+struct MoreRow: View {
     let icon: String
     let title: String
+    var tint: Color = .blue // Default to blue, can be overridden if needed
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(.blue)
-                .frame(width: 28)
+                .font(.system(size: 18, weight: .medium)) // Standardized size & weight
+                .foregroundStyle(tint)
+                .frame(width: 24) // Fixed width for alignment
 
             Text(title)
                 .font(.system(size: 16))
+                .foregroundStyle(.primary)
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.secondary.opacity(0.5)) // Subtle chevron
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .contentShape(Rectangle())
-        .accessibilityIdentifier("menuRow_\(title)")
+        .contentShape(Rectangle()) // Full row tap target
     }
 }
 
@@ -381,7 +383,6 @@ private struct AppearanceCard: View {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? Color.primary : secondaryBackground)
             )
-        }
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("appearanceCard_\(mode.displayName)")

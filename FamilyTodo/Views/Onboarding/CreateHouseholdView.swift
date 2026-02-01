@@ -74,7 +74,7 @@ struct CreateHouseholdView: View {
                             }
                         }
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colorScheme == .dark ? .black : .white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -188,7 +188,7 @@ private struct CreateJoinSheet: View {
                 } label: {
                     Text("Join Household")
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colorScheme == .dark ? .black : .white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
