@@ -23,6 +23,6 @@ repos:
         files: \.swift$
       - id: xcodebuild-tests
         name: xcodebuild tests
-        entry: bash -c 'if command -v xcodebuild >/dev/null; then xcodebuild test -project FamilyTodo.xcodeproj -scheme HousePulse -destination "platform=iOS Simulator,name=iPhone 15,OS=17.2" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO; else echo "xcodebuild not available, skipping tests"; fi'
+        entry: bash -c 'if command -v xcodebuild >/dev/null; then SIMULATOR_ID=$(xcrun simctl list devices available --json | jq -r ".devices | to_entries | map(select(.key | contains(\"iOS\"))) | .[0].value | .[0].udid" 2>/dev/null); if [ -n "$SIMULATOR_ID" ]; then xcodebuild test -project FamilyTodo.xcodeproj -scheme HousePulse -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO; else echo "No iOS simulator available, skipping tests"; fi; else echo "xcodebuild not available, skipping tests"; fi'
         language: system
         pass_filenames: false
