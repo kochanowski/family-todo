@@ -59,7 +59,7 @@ private struct TasksContent: View {
                                     .rowInsertAnimation()
                                     .accessibilityIdentifier("taskRow_\(task.title)")
                             }
-                            }
+
                         }
                     }
 
