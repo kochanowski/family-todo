@@ -39,12 +39,17 @@ actor CloudKitManager {
 
     // MARK: - Readiness
 
-    /// Call this after app launch to ensure CloudKit is ready
+    /// Call this after app launch to ensure CloudKit is ready.
+    /// This prevents crashes when CloudKit is accessed too early during app initialization.
     func ensureReady() async {
         guard !isReady else { return }
 
-        // Small delay to ensure app is fully launched before accessing CloudKit
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // 100ms
+        // Yield to let the main run loop complete initialization
+        await _Concurrency.Task.yield()
+
+        // Delay to ensure app is fully launched before accessing CloudKit.
+        // CloudKit can crash with SIGTRAP if accessed during early app startup on iOS 26+.
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000) // 500ms
 
         isReady = true
     }

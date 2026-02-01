@@ -42,6 +42,8 @@ class MemberStore: ObservableObject {
 
         // 2. Load from CloudKit
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
             let fetchedMembers = try await cloudKit.fetchMembers(householdId: householdId)
 
             // Update cache

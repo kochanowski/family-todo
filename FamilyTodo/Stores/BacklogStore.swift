@@ -58,6 +58,8 @@ final class BacklogStore: ObservableObject {
 
         // 2. Sync with CloudKit
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
             async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: householdId)
             async let fetchedItems = cloudKit.fetchBacklogItems(householdId: householdId)
 

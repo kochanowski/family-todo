@@ -67,6 +67,8 @@ final class ShoppingListStore: ObservableObject {
 
         // 2. Sync with CloudKit in background
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
             let fetchedItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
             items = fetchedItems
 

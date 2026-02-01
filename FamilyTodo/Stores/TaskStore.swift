@@ -78,6 +78,8 @@ final class TaskStore: ObservableObject {
 
         // Then sync with CloudKit
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
             let cloudTasks = try await cloudKit.fetchTasks(householdId: householdId)
             tasks = cloudTasks
             syncToCache(cloudTasks)

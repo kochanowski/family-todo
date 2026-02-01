@@ -47,6 +47,9 @@ class HouseholdStore: ObservableObject {
 
         // 2. Load from CloudKit
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
+
             // In a real app with private DB + sharing, finding the "current" household
             // often involves querying for the one owned by user or shared with them.
             // For MVP/HousePulse, we check if we have one locally, otherwise we might look

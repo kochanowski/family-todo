@@ -19,7 +19,8 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Private State
 
-    private lazy var container = CKContainer.default()
+    /// Use CloudKitManager for consistent container access
+    private let cloudKit = CloudKitManager.shared
     private var subscriptionIds: [String] = []
     private var aggregationTimer: Timer?
     private var pendingNotifications: [(recordType: String, timestamp: Date)] = []
@@ -45,6 +46,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
     // MARK: - Subscriptions
 
     private func setupSubscriptions(householdId _: UUID) async {
+        // Ensure CloudKit is ready before accessing
+        await cloudKit.ensureReady()
+
+        let container = await cloudKit.getContainer()
         let database = container.sharedCloudDatabase
         let subscriptionId = "shared-database-changes"
 
@@ -207,6 +212,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     // MARK: - Cleanup
 
     func removeSubscriptions() async {
+        let container = await cloudKit.getContainer()
         let database = container.sharedCloudDatabase
 
         for subscriptionId in subscriptionIds {
