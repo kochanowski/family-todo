@@ -342,6 +342,7 @@
 			children = (
 				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
 				NEWFILE0000000000000016 /* ToastView.swift */,
+				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
