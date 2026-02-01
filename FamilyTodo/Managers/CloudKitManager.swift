@@ -4,21 +4,8 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
-    /// Use nonisolated(unsafe) for lazy container initialization
-    /// This prevents CKContainer.default() from being called during actor init
-    private nonisolated(unsafe) static var _container: CKContainer?
-    private nonisolated(unsafe) static var _isAvailable: Bool?
-
-    private var container: CKContainer {
-        if let c = Self._container { return c }
-        #if CI
-            let c = CKContainer(identifier: "iCloud.com.example.familytodo")
-        #else
-            let c = CKContainer.default()
-        #endif
-        Self._container = c
-        return c
-    }
+    private let container: CKContainer
+    private var isAvailable: Bool?
 
     private var privateDatabase: CKDatabase {
         container.privateCloudDatabase
@@ -28,14 +15,20 @@ actor CloudKitManager {
         container.sharedCloudDatabase
     }
 
-    init() {}
+    init() {
+        #if CI
+            container = CKContainer(identifier: "iCloud.com.example.familytodo")
+        #else
+            container = CKContainer.default()
+        #endif
+    }
 
     // MARK: - Availability Check
 
     /// Check if CloudKit is available before performing operations
     func checkAvailability() async throws {
         // Return cached result if available
-        if let isAvailable = Self._isAvailable {
+        if let isAvailable = self.isAvailable {
             if !isAvailable {
                 throw CloudKitManagerError.notAuthenticated
             }
@@ -44,7 +37,7 @@ actor CloudKitManager {
 
         let status = try await container.accountStatus()
         let isAvailable = status == .available
-        Self._isAvailable = isAvailable
+        self.isAvailable = isAvailable
 
         if !isAvailable {
             throw CloudKitManagerError.notAuthenticated
@@ -53,7 +46,7 @@ actor CloudKitManager {
 
     /// Reset availability cache (call when user signs in/out)
     func resetAvailabilityCache() {
-        Self._isAvailable = nil
+        isAvailable = nil
     }
 
     /// Get the CloudKit container (for use with UICloudSharingController)
