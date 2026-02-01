@@ -463,6 +463,7 @@ actor CloudKitManager {
     /// Create a CKShare for a household
     func createShare(for household: Household) async throws -> CKShare {
         let householdRecord = try await fetchHouseholdRecord(id: household.id)
+        let db = await sharedDatabase
 
         let share = CKShare(rootRecord: householdRecord)
         share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
@@ -496,7 +497,7 @@ actor CloudKitManager {
                 }
             }
 
-            sharedDatabase.add(modifyOperation)
+            db.add(modifyOperation)
         }
     }
 
@@ -511,6 +512,7 @@ actor CloudKitManager {
 
     /// Accept a CloudKit share invitation
     func acceptShare(metadata: CKShare.Metadata) async throws {
+        let ckContainer = await container
         let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
         acceptOperation.qualityOfService = .userInitiated
 
@@ -523,7 +525,7 @@ actor CloudKitManager {
                     continuation.resume(throwing: self.categorizeError(error))
                 }
             }
-            container.add(acceptOperation)
+            ckContainer.add(acceptOperation)
         }
     }
 
@@ -535,7 +537,8 @@ actor CloudKitManager {
         }
 
         // Fetch share metadata from the URL
-        let metadata = try await container.shareMetadata(for: shareURL)
+        let ckContainer = await container
+        let metadata = try await ckContainer.shareMetadata(for: shareURL)
 
         // Accept the share
         try await acceptShare(metadata: metadata)
@@ -546,7 +549,8 @@ actor CloudKitManager {
         let rootRecordID = metadata.rootRecordID
 
         // Fetch the household from the shared database
-        let record = try await sharedDatabase.record(for: rootRecordID)
+        let db = await sharedDatabase
+        let record = try await db.record(for: rootRecordID)
         return try household(from: record)
     }
 
