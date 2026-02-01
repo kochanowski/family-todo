@@ -111,7 +111,7 @@ struct CreateHouseholdView: View {
                 }
             }
             .sheet(isPresented: $showJoinSheet) {
-                JoinHouseholdSheet(
+                CreateJoinSheet(
                     joinCode: $joinCode,
                     onJoin: joinHousehold
                 )
@@ -133,7 +133,7 @@ struct CreateHouseholdView: View {
             do {
                 _ = try await householdStore.createHousehold(
                     name: householdName,
-                    userId: userSession.currentUserId ?? "local-user",
+                    userId: userSession.userId ?? "local-user",
                     displayName: userSession.displayName ?? "Me"
                 )
                 onboardingState.completeHouseholdSetup(withHousehold: true)
@@ -151,9 +151,9 @@ struct CreateHouseholdView: View {
     }
 }
 
-// MARK: - Join Household Sheet
+// MARK: - Join Sheet (local to this view)
 
-private struct JoinHouseholdSheet: View {
+private struct CreateJoinSheet: View {
     @Binding var joinCode: String
     let onJoin: () -> Void
     @Environment(\.dismiss) private var dismiss
