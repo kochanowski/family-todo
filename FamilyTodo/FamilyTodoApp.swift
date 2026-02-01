@@ -112,8 +112,6 @@ struct RootView: View {
 }
 
 /// Helper to configure the app state for UI Testing based on launch arguments
-/// Helper to configure the app state for UI Testing based on launch arguments
-@MainActor
 @MainActor
 struct UITestHelper {
     static func configure(modelContext: ModelContext) {
