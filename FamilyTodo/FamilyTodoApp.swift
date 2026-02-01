@@ -191,6 +191,13 @@ struct UITestHelper {
         UserDefaults.standard.synchronize()
     }
 
+    private static func getCurrentHouseholdId() -> UUID? {
+        guard let idString = UserDefaults.standard.string(forKey: "currentHouseholdID") else {
+            return nil
+        }
+        return UUID(uuidString: idString)
+    }
+
     @discardableResult
     private static func seedHousehold(context: ModelContext) -> CachedHousehold {
         let household = CachedHousehold(name: "Test House", joinCode: "123456")
@@ -201,47 +208,67 @@ struct UITestHelper {
         return household
     }
 
-    private static func seedShoppingList(context: ModelContext, household _: CachedHousehold? = nil) {
+    private static func seedShoppingList(context: ModelContext, household: CachedHousehold? = nil) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed shopping list: no household available")
+            return
+        }
+
         let items = [
-            CachedShoppingItem(name: "Milk", isBought: false),
-            CachedShoppingItem(name: "Bread", isBought: false),
-            CachedShoppingItem(name: "Eggs", isBought: true),
+            ShoppingItem(householdId: householdId, title: "Milk", isBought: false),
+            ShoppingItem(householdId: householdId, title: "Bread", isBought: false),
+            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true),
         ]
         for item in items {
-            /* if items have household relation, set it here. Assuming they don't for now based on cached models or if they do, we'd need to update logic. */
-            context.insert(item)
+            context.insert(CachedShoppingItem(from: item))
         }
     }
 
-    private static func seedTasks(context: ModelContext, household _: CachedHousehold? = nil) {
+    private static func seedTasks(context: ModelContext, household: CachedHousehold? = nil) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed tasks: no household available")
+            return
+        }
+
         let tasks = [
-            CachedTask(title: "Pay bills", isCompleted: false),
-            CachedTask(title: "Call mom", isCompleted: false),
-            CachedTask(title: "Walk dog", isCompleted: true),
+            Task(householdId: householdId, title: "Pay bills", status: .next),
+            Task(householdId: householdId, title: "Call mom", status: .next),
+            Task(householdId: householdId, title: "Walk dog", status: .done),
         ]
-        tasks.forEach { context.insert($0) }
+        tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
 
-    private static func seedBacklog(context: ModelContext, household _: CachedHousehold? = nil) {
-        let category = CachedBacklogCategory(name: "Groceries")
-        context.insert(category)
+    private static func seedBacklog(context: ModelContext, household: CachedHousehold? = nil) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed backlog: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Groceries")
+        let cachedCategory = CachedBacklogCategory(from: category)
+        context.insert(cachedCategory)
 
         let items = [
-            CachedBacklogItem(name: "Olive Oil", category: category),
-            CachedBacklogItem(name: "Spices", category: category),
+            BacklogItem(categoryId: category.id, householdId: householdId, title: "Olive Oil"),
+            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
-        items.forEach { context.insert($0) }
+        items.forEach { context.insert(CachedBacklogItem(from: $0)) }
     }
 
-    private static func seedHeavyData(context: ModelContext, household _: CachedHousehold) {
+    private static func seedHeavyData(context: ModelContext, household: CachedHousehold) {
+        let householdId = household.id
+
         // Shopping List - 50 items
         for i in 1 ... 50 {
-            context.insert(CachedShoppingItem(name: "Item \(i)", isBought: i % 5 == 0))
+            let item = ShoppingItem(householdId: householdId, title: "Item \(i)", isBought: i % 5 == 0)
+            context.insert(CachedShoppingItem(from: item))
         }
 
         // Tasks - 50 items
         for i in 1 ... 50 {
-            context.insert(CachedTask(title: "Task \(i)", isCompleted: i % 3 == 0))
+            let status: Task.TaskStatus = (i % 3 == 0) ? .done : .next
+            let task = Task(householdId: householdId, title: "Task \(i)", status: status)
+            context.insert(CachedTask(from: task))
         }
     }
 }
