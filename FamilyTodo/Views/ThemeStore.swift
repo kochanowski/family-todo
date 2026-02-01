@@ -232,9 +232,48 @@ struct ThemePalette {
     }
 }
 
+// MARK: - Appearance Mode
+
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case light
+    case dark
+    case system
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .light: "Light"
+        case .dark: "Dark"
+        case .system: "System"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .light: "sun.max.fill"
+        case .dark: "moon.fill"
+        case .system: "iphone"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .light: .light
+        case .dark: .dark
+        case .system: nil
+        }
+    }
+}
+
 @MainActor
 final class ThemeStore: ObservableObject {
     @AppStorage("themePreset") private var presetRawValue = ThemePreset.journal.rawValue
+    @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
+    @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
+    @AppStorage("suggestionsEnabled") var suggestionsEnabled = true
 
     var preset: ThemePreset {
         get { ThemePreset(rawValue: presetRawValue) ?? .journal }
@@ -244,16 +283,19 @@ final class ThemeStore: ObservableObject {
         }
     }
 
+    var appearanceMode: AppearanceMode {
+        get { AppearanceMode(rawValue: appearanceModeRawValue) ?? .system }
+        set {
+            appearanceModeRawValue = newValue.rawValue
+            objectWillChange.send()
+        }
+    }
+
     var palette: ThemePalette {
         preset.palette
     }
 
     var colorScheme: ColorScheme? {
-        switch preset {
-        case .night:
-            .dark
-        default:
-            nil // Use system default
-        }
+        appearanceMode.colorScheme
     }
 }

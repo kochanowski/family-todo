@@ -275,40 +275,114 @@ struct RepetitiveTasksView: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var themeStore: ThemeStore
-    @State private var celebrationsEnabled = true
-    @State private var suggestionsEnabled = true
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         List {
-            Section("Appearance") {
-                Picker(
-                    "Theme",
-                    selection: Binding(
-                        get: { themeStore.preset },
-                        set: { themeStore.preset = $0 }
-                    )
-                ) {
-                    ForEach(ThemePreset.allCases) { preset in
-                        Text(preset.displayName).tag(preset)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-
-            Section("Features") {
-                Toggle("Celebrations", isOn: $celebrationsEnabled)
-                Toggle("Suggestions", isOn: $suggestionsEnabled)
-            }
+            // MARK: - Appearance Section
 
             Section {
-                Button("Sign Out", role: .destructive) {
+                AppearanceSelector(selectedMode: Binding(
+                    get: { themeStore.appearanceMode },
+                    set: {
+                        HapticManager.selection()
+                        themeStore.appearanceMode = $0
+                    }
+                ))
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.clear)
+            } header: {
+                Text("Appearance")
+            }
+
+            // MARK: - Toggles Section
+
+            Section {
+                Toggle(isOn: Binding(
+                    get: { themeStore.celebrationsEnabled },
+                    set: { themeStore.celebrationsEnabled = $0 }
+                )) {
+                    Label("Celebrations", systemImage: "party.popper.fill")
+                        .foregroundStyle(.primary)
+                }
+
+                Toggle(isOn: Binding(
+                    get: { themeStore.suggestionsEnabled },
+                    set: { themeStore.suggestionsEnabled = $0 }
+                )) {
+                    Label("Shopping suggestions", systemImage: "lightbulb.fill")
+                        .foregroundStyle(.primary)
+                }
+            }
+
+            // MARK: - Sign Out
+
+            Section {
+                Button(role: .destructive) {
                     // Sign out action
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Sign Out")
+                        Spacer()
+                    }
                 }
             }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Appearance Card Selector
+
+private struct AppearanceSelector: View {
+    @Binding var selectedMode: AppearanceMode
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(AppearanceMode.allCases) { mode in
+                AppearanceCard(
+                    mode: mode,
+                    isSelected: selectedMode == mode,
+                    colorScheme: colorScheme
+                ) {
+                    selectedMode = mode
+                }
+            }
+        }
+    }
+}
+
+private struct AppearanceCard: View {
+    let mode: AppearanceMode
+    let isSelected: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: mode.iconName)
+                    .font(.system(size: 24, weight: .medium))
+
+                Text(mode.displayName)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(isSelected ? .white : .primary)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.primary : secondaryBackground)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var secondaryBackground: Color {
+        colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.93)
     }
 }
 
