@@ -46,11 +46,14 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     private func setupSubscriptions(householdId: UUID) async {
         let database = container.sharedCloudDatabase
+        let householdRecordID = CKRecord.ID(recordName: householdId.uuidString)
+        let predicate = NSPredicate(format: "householdId == %@", CKRecord.Reference(recordID: householdRecordID, action: .none))
 
         // Shopping Item subscription
         await createSubscription(
             recordType: "ShoppingItem",
             subscriptionId: "shopping-changes-\(householdId.uuidString)",
+            predicate: predicate,
             database: database
         )
 
@@ -58,6 +61,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         await createSubscription(
             recordType: "Task",
             subscriptionId: "task-changes-\(householdId.uuidString)",
+            predicate: predicate,
             database: database
         )
     }
@@ -65,20 +69,21 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private func createSubscription(
         recordType: String,
         subscriptionId: String,
+        predicate: NSPredicate,
         database: CKDatabase
     ) async {
-        // Check if subscription already exists
         do {
+            // Check if subscription already exists
             _ = try await database.subscription(for: subscriptionId)
             subscriptionIds.append(subscriptionId)
             return // Already exists
         } catch {
-            // Subscription doesn't exist, create it
+            // Subscription doesn't exist, proceed to create
         }
 
         let subscription = CKQuerySubscription(
             recordType: recordType,
-            predicate: NSPredicate(value: true),
+            predicate: predicate,
             subscriptionID: subscriptionId,
             options: [.firesOnRecordCreation, .firesOnRecordUpdate]
         )
