@@ -78,16 +78,7 @@ final class UserSessionTests: XCTestCase {
         let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
 
         session.startGuestSession()
-
-        let expectation = expectation(description: "Session switches to signed in")
-        var cancellable: AnyCancellable?
-        cancellable = session.$sessionMode
-            .dropFirst()
-            .sink { mode in
-                if mode == .signedIn {
-                    expectation.fulfill()
-                }
-            }
+        XCTAssertEqual(session.sessionMode, .guest)
 
         let user = AuthenticationService.AuthenticatedUser(
             id: "cloudkit-user",
@@ -100,10 +91,11 @@ final class UserSessionTests: XCTestCase {
         authService.currentUser = user
         authService.authenticationState = .authenticated(userID: user.id)
 
-        await fulfillment(of: [expectation], timeout: 1.0)
-        cancellable?.cancel()
+        // Give time for async state change to propagate
+        try? await Task.sleep(for: .milliseconds(100))
 
         XCTAssertEqual(session.sessionMode, .signedIn)
         XCTAssertEqual(session.userId, user.id)
+        XCTAssertEqual(session.displayName, "Test User")
     }
 }
