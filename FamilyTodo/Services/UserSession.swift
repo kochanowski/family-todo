@@ -20,9 +20,16 @@ protocol AuthenticationServiceType: ObservableObject {
     func signInWithApple()
     func signOut()
     func checkCloudKitStatus() async
+
+    // Provide type-erased publisher for observation
+    func getChangePublisher() -> AnyPublisher<Void, Never>
 }
 
-extension AuthenticationService: AuthenticationServiceType {}
+extension AuthenticationService: AuthenticationServiceType {
+    func getChangePublisher() -> AnyPublisher<Void, Never> {
+        objectWillChange.map { _ in () }.eraseToAnyPublisher()
+    }
+}
 
 /// Global user session manager that coordinates authentication state
 /// and user-specific data across the application
@@ -91,10 +98,8 @@ final class UserSession: ObservableObject {
         self.authService = service
         self.userDefaults = userDefaults
 
-        // Capture the objectWillChange publisher before type erasure
-        self.authServicePublisher = (service as any ObservableObject).objectWillChange
-            .map { _ in () }
-            .eraseToAnyPublisher()
+        // Get type-erased publisher from service
+        self.authServicePublisher = service.getChangePublisher()
 
         // Observe authentication state changes
         setupAuthObserver()

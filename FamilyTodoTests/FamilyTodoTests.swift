@@ -32,6 +32,10 @@ final class UserSessionTests: XCTestCase {
         }
 
         func checkCloudKitStatus() async {}
+
+        func getChangePublisher() -> AnyPublisher<Void, Never> {
+            objectWillChange.map { _ in () }.eraseToAnyPublisher()
+        }
     }
 
     private func makeUserDefaults() -> UserDefaults {
