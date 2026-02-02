@@ -21,7 +21,7 @@ protocol AuthenticationServiceType: ObservableObject {
     func signOut()
     func checkCloudKitStatus() async
 
-    // Provide type-erased publisher for observation
+    /// Provide type-erased publisher for observation
     func getChangePublisher() -> AnyPublisher<Void, Never>
 }
 
@@ -99,7 +99,7 @@ final class UserSession: ObservableObject {
         self.userDefaults = userDefaults
 
         // Get type-erased publisher from service
-        self.authServicePublisher = service.getChangePublisher()
+        authServicePublisher = service.getChangePublisher()
 
         // Observe authentication state changes
         setupAuthObserver()

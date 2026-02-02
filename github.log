@@ -1,3 +1,4 @@
+Run set -o pipefail
     not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'HousePulse' from project 'FamilyTodo')
     not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestBundleInject.dylib (in target 'HousePulse' from project 'FamilyTodo')
 ▸ Linking HousePulse
@@ -9,238 +10,318 @@
     not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport (in target 'HousePulse' from project 'FamilyTodo')
     not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework/Testing (in target 'HousePulse' from project 'FamilyTodo')
 ▸ Processing empty-HousePulse.plist
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:36:29: cannot call value of non-function type '[Area]'
-        let defaults = Area.defaults(for: householdId)
-                            ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:42:29: cannot call value of non-function type '[Area]'
-        let defaults = Area.defaults(for: householdId)
-                            ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:43:34: cannot infer key path type from context; consider explicitly specifying a root type
-        let names = defaults.map(\.name)
-                                 ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:54:29: cannot call value of non-function type '[Area]'
-        let defaults = Area.defaults(for: householdId)
-                            ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:62:29: cannot call value of non-function type '[Area]'
-        let defaults = Area.defaults(for: householdId)
-                            ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:70:29: cannot call value of non-function type '[Area]'
-        let defaults = Area.defaults(for: householdId)
-                            ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:78:29: cannot call value of non-function type '[Area]'
-        let defaults = Area.defaults(for: householdId)
-                            ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:79:32: cannot infer key path type from context; consider explicitly specifying a root type
-        let ids = defaults.map(\.id)
-                               ^
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:52:54: type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-        XCTAssertEqual(RecurringChore.RecurrenceType.biweekly.rawValue, "biweekly")
-                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:54:54: type 'RecurringChore.RecurrenceType' has no member 'everyNDays'
-        XCTAssertEqual(RecurringChore.RecurrenceType.everyNDays.rawValue, "every-n-days")
-                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:55:54: type 'RecurringChore.RecurrenceType' has no member 'everyNWeeks'
-        XCTAssertEqual(RecurringChore.RecurrenceType.everyNWeeks.rawValue, "every-n-weeks")
-                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:56:54: type 'RecurringChore.RecurrenceType' has no member 'everyNMonths'
-        XCTAssertEqual(RecurringChore.RecurrenceType.everyNMonths.rawValue, "every-n-months")
-                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:69:30: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-        let nextDate = chore.calculateNextScheduledDate(after: today)
-                       ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:101:30: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-        let nextDate = chore.calculateNextScheduledDate(after: monday)
-                       ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:121:30: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-        let nextDate = chore.calculateNextScheduledDate()
-                       ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:132:30: type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-            recurrenceType: .biweekly
-                            ~^~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:151:30: type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-            recurrenceType: .biweekly,
-                            ~^~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:189:30: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-        let nextDate = chore.calculateNextScheduledDate(after: firstOfMonth)
-                       ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:217:30: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-        let nextDate = chore.calculateNextScheduledDate(after: midMonth)
-                       ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:244:30: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-        let nextDate = chore.calculateNextScheduledDate()
-                       ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:33:22: extra argument 'members' in call
+
+            members: [member]
+~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:48:20: extra argument 'areas' in call
+
+            areas: areas
+~~~~~~~~~~~~~~~~~~~^~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:167:30: value of type 'HouseholdStore' has no member 'hasHousehold'
+
+        XCTAssertFalse(store.hasHousehold)
+                       ~~~~~ ^~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:171:28: value of type 'HouseholdStore' has no member 'inviteCode'
+
+        XCTAssertNil(store.inviteCode)
+                     ~~~~~ ^~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:176:28: value of type 'HouseholdStore' has no member 'currentMember'
+
+        XCTAssertNil(store.currentMember)
+                     ~~~~~ ^~~~~~~~~~~~~
+
+
+
+⚠️  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:196:25: result of call to 'createHousehold(name:userId:displayName:)' is unused
+
+        try await store.createHousehold(name: "Local Home", userId: "guest-user", displayName: "Guest")
+                        ^              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:199:31: value of type 'HouseholdStore' has no member 'currentMember'
+
+        XCTAssertNotNil(store.currentMember)
+                        ~~~~~ ^~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:200:30: value of type 'HouseholdStore' has no member 'currentMember'
+
+        XCTAssertEqual(store.currentMember?.role, .owner)
+                       ~~~~~ ^~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:220:58: value of type 'HouseholdError' has no member 'errorDescription'
+
+        XCTAssertNotNil(HouseholdError.invalidInviteCode.errorDescription)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:221:58: value of type 'HouseholdError' has no member 'errorDescription'
+
+        XCTAssertNotNil(HouseholdError.householdNotFound.errorDescription)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:222:40: type 'HouseholdError' has no member 'invalidShare'
+
+        XCTAssertNotNil(HouseholdError.invalidShare.errorDescription)
+                        ~~~~~~~~~~~~~~ ^~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:223:58: value of type 'HouseholdError' has no member 'errorDescription'
+
+        XCTAssertNotNil(HouseholdError.cloudSyncRequired.errorDescription)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:225:56: value of type 'HouseholdError' has no member 'errorDescription'
+
+        XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription?.contains("invite code") == true)
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:226:56: value of type 'HouseholdError' has no member 'errorDescription'
+
+        XCTAssertTrue(HouseholdError.householdNotFound.errorDescription?.contains("not found") == true)
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:227:38: type 'HouseholdError' has no member 'invalidShare'
+
+        XCTAssertTrue(HouseholdError.invalidShare.errorDescription?.contains("share") == true)
+                      ~~~~~~~~~~~~~~ ^~~~~~~~~~~~
+
+
+
+❌  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:228:56: value of type 'HouseholdError' has no member 'errorDescription'
+
+        XCTAssertTrue(HouseholdError.cloudSyncRequired.errorDescription?.contains("Sign in") == true)
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
+
 ▸ Generating 'HousePulse.app.dSYM'
 xcodebuild-test.log (tail)
+      cd /Users/runner/work/family-todo/family-todo
+      write-file /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-all-non-framework-target-headers.hmap
+
+  MkDir /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      /bin/mkdir -p /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest
+
+  ProcessProductPackaging "" /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent (in target 'HousePulse' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+
+      Entitlements:
+
+      {
+      "application-identifier" = "FAKETEAMID.com.example.familytodo";
+  }
 
       builtin-productPackagingUtility -entitlements -format xml -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent
+
   ProcessProductPackagingDER /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent.der (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       /usr/bin/derq query -f xml -i /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent.der --raw
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/libXCTestBundleInject.dylib /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestBundleInject.dylib (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestBundleInject.dylib /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestBundleInject.dylib (in target 'HousePulse' from project 'FamilyTodo')
+
   Ld /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/HousePulse normal (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
-      /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -isysroot /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -Os -L/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -F/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -filelist /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debu
+      /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -isysroot /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -Os -L/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -F/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -filelist /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/Objects-normal/arm64/HousePulse.LinkFileList -Xlinker -rpath -Xlinker @executable_path/Frameworks -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/Objects-normal/arm64/HousePulse_lto.o -rdynamic -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/Objects-normal/arm64/HousePulse_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/Objects-normal/arm64/HousePulse.swiftmodule -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/HousePulse.app-Simulated.xcent.der -framework SwiftUI -framework Foundation -Xlinker -no_adhoc_codesign -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/HousePulse
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/XCUnit.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework/XCUnit (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework/XCUIAutomation (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/XCTestSupport.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework/XCTestSupport (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/XCTestCore.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework/XCTestCore (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/XCTest.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework/XCTest (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport (in target 'HousePulse' from project 'FamilyTodo')
+
   Copy /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks/Testing.framework /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Frameworks
   warning: not stripping binary because it is signed: /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework/Testing (in target 'HousePulse' from project 'FamilyTodo')
+
   ProcessInfoPlistFile /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Info.plist /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/empty-HousePulse.plist (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
-      builtin-infoPlistUtility /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/empty-HousePulse.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/LaunchScreen-SBPartialInfo.plist -additionalcontentfile /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/assetcatalog_generated_info.plist -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-c
+      builtin-infoPlistUtility /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/empty-HousePulse.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/LaunchScreen-SBPartialInfo.plist -additionalcontentfile /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/HousePulse.build/assetcatalog_generated_info.plist -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/Info.plist
+
   SwiftDriver FamilyTodoTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'FamilyTodoTests' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
-      builtin-SwiftDriver -- /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name FamilyTodoTests -O -enforce-exclusivity\=checked @/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests.SwiftFileList -D CI -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -swift-version 5 -I /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTo
-  SwiftEmitModule normal arm64 Emitting\ module\ for\ FamilyTodoTests (in target 'FamilyTodoTests' from project 'FamilyTodo')
-  EmitSwiftModule normal arm64 (in target 'FamilyTodoTests' from project 'FamilyTodo')
-      cd /Users/runner/work/family-todo/family-todo
+      builtin-SwiftDriver -- /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name FamilyTodoTests -O -enforce-exclusivity\=checked @/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests.SwiftFileList -D CI -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -swift-version 5 -I /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -I /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -F /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk/Developer/Library/Frameworks -c -j3 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator18.5-22F76-96ae0914227b19deccb34b33ba7b5dea.sdkstatcache -output-file-map /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests_const_extract_protocols.json -Xcc -iquote -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-generated-files.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-own-target-headers.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-all-target-headers.hmap -Xcc -iquote -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-project-headers.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources-normal/arm64 -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources/arm64 -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources -emit-objc-header -emit-objc-header-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests-Swift.h -working-directory /Users/runner/work/family-todo/family-todo -experimental-emit-module-separately -disable-cmo
 
-  SwiftCompile normal arm64 Compiling\ TaskStoreTests.swift,\ HouseholdTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskStoreTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
-  SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskStoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
-      cd /Users/runner/work/family-todo/family-todo
-
+  SwiftCompile normal arm64 Compiling\ HouseholdTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
   SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
 
-  SwiftCompile normal arm64 Compiling\ AreaTests.swift,\ RecurringChoreTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:33:22: error: extra argument 'members' in call
+              members: [member]
+  ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:48:20: error: extra argument 'areas' in call
+              areas: areas
+  ~~~~~~~~~~~~~~~~~~~^~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:167:30: error: value of type 'HouseholdStore' has no member 'hasHousehold'
+          XCTAssertFalse(store.hasHousehold)
+                         ~~~~~ ^~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:171:28: error: value of type 'HouseholdStore' has no member 'inviteCode'
+          XCTAssertNil(store.inviteCode)
+                       ~~~~~ ^~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:176:28: error: value of type 'HouseholdStore' has no member 'currentMember'
+          XCTAssertNil(store.currentMember)
+                       ~~~~~ ^~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:196:25: warning: result of call to 'createHousehold(name:userId:displayName:)' is unused
+          try await store.createHousehold(name: "Local Home", userId: "guest-user", displayName: "Guest")
+                          ^              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:199:31: error: value of type 'HouseholdStore' has no member 'currentMember'
+          XCTAssertNotNil(store.currentMember)
+                          ~~~~~ ^~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:200:30: error: value of type 'HouseholdStore' has no member 'currentMember'
+          XCTAssertEqual(store.currentMember?.role, .owner)
+                         ~~~~~ ^~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:220:58: error: value of type 'HouseholdError' has no member 'errorDescription'
+          XCTAssertNotNil(HouseholdError.invalidInviteCode.errorDescription)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:221:58: error: value of type 'HouseholdError' has no member 'errorDescription'
+          XCTAssertNotNil(HouseholdError.householdNotFound.errorDescription)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:222:40: error: type 'HouseholdError' has no member 'invalidShare'
+          XCTAssertNotNil(HouseholdError.invalidShare.errorDescription)
+                          ~~~~~~~~~~~~~~ ^~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:223:58: error: value of type 'HouseholdError' has no member 'errorDescription'
+          XCTAssertNotNil(HouseholdError.cloudSyncRequired.errorDescription)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:225:56: error: value of type 'HouseholdError' has no member 'errorDescription'
+          XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription?.contains("invite code") == true)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:226:56: error: value of type 'HouseholdError' has no member 'errorDescription'
+          XCTAssertTrue(HouseholdError.householdNotFound.errorDescription?.contains("not found") == true)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:227:38: error: type 'HouseholdError' has no member 'invalidShare'
+          XCTAssertTrue(HouseholdError.invalidShare.errorDescription?.contains("share") == true)
+                        ~~~~~~~~~~~~~~ ^~~~~~~~~~~~
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:228:56: error: value of type 'HouseholdError' has no member 'errorDescription'
+          XCTAssertTrue(HouseholdError.cloudSyncRequired.errorDescription?.contains("Sign in") == true)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~~~~~
+
   Failed frontend command:
-  /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/runner/work/family-todo/family-todo/FamilyTodoTests/FamilyTodoTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskTests.swift -primary-file /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift -primary-file /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskStoreTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift -emit-dependencies-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/AreaTests.d -emit-const-values-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug
-  SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+  /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/runner/work/family-todo/family-todo/FamilyTodoTests/FamilyTodoTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskStoreTests.swift -primary-file /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift -emit-dependencies-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/HouseholdTests.d -emit-const-values-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/HouseholdTests.swiftconstvalues -emit-reference-dependencies-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/HouseholdTests.swiftdeps -serialize-diagnostics-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/HouseholdTests.dia -target arm64-apple-ios17.0-simulator -Xllvm -aarch64-use-tbi -enable-objc-interop -sdk /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -I /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -I /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -F /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk/Developer/Library/Frameworks -no-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -module-cache-path /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -swift-version 5 -enforce-exclusivity\=checked -O -D CI -serialize-debugging-options -const-gather-protocols-file /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests_const_extract_protocols.json -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -empty-abi-descriptor -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -validate-clang-modules-once -clang-build-session-file /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/runner/work/family-todo/family-todo -resource-dir /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift -file-compilation-dir /Users/runner/work/family-todo/family-todo -Xcc -ivfsstatcache -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator18.5-22F76-96ae0914227b19deccb34b33ba7b5dea.sdkstatcache -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/swift-overrides.hmap -Xcc -iquote -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-generated-files.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-own-target-headers.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-all-target-headers.hmap -Xcc -iquote -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-project-headers.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources-normal/arm64 -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources/arm64 -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources -module-name FamilyTodoTests -frontend-parseable-output -disable-clang-spi -target-sdk-version 18.5 -target-sdk-name iphonesimulator18.5 -external-plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins\#/Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server -external-plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/local/lib/swift/host/plugins\#/Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server -in-process-plugin-server-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/local/lib/swift/host/plugins -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/HouseholdTests.o -index-unit-output-path /FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/HouseholdTests.o
+  SwiftEmitModule normal arm64 Emitting\ module\ for\ FamilyTodoTests (in target 'FamilyTodoTests' from project 'FamilyTodo')
+
+  EmitSwiftModule normal arm64 (in target 'FamilyTodoTests' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
 
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:36:29: error: cannot call value of non-function type '[Area]'
-          let defaults = Area.defaults(for: householdId)
-                              ^
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:42:29: error: cannot call value of non-function type '[Area]'
-          let defaults = Area.defaults(for: householdId)
-                              ^
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:43:34: error: cannot infer key path type from context; consider explicitly specifying a root type
-          let names = defaults.map(\.name)
-                                   ^
-                                    <#Root#>
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:54:29: error: cannot call value of non-function type '[Area]'
-          let defaults = Area.defaults(for: householdId)
-                              ^
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:62:29: error: cannot call value of non-function type '[Area]'
-          let defaults = Area.defaults(for: householdId)
-                              ^
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:70:29: error: cannot call value of non-function type '[Area]'
-          let defaults = Area.defaults(for: householdId)
-                              ^
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:78:29: error: cannot call value of non-function type '[Area]'
-          let defaults = Area.defaults(for: householdId)
-                              ^
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift:79:32: error: cannot infer key path type from context; consider explicitly specifying a root type
-          let ids = defaults.map(\.id)
-                                 ^
-                                  <#Root#>
-  SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+
+  SwiftCompile normal arm64 Compiling\ FamilyTodoTests.swift,\ TaskTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/FamilyTodoTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+  SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/FamilyTodoTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
 
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:52:54: error: type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-          XCTAssertEqual(RecurringChore.RecurrenceType.biweekly.rawValue, "biweekly")
-                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:54:54: error: type 'RecurringChore.RecurrenceType' has no member 'everyNDays'
-          XCTAssertEqual(RecurringChore.RecurrenceType.everyNDays.rawValue, "every-n-days")
-                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:55:54: error: type 'RecurringChore.RecurrenceType' has no member 'everyNWeeks'
-          XCTAssertEqual(RecurringChore.RecurrenceType.everyNWeeks.rawValue, "every-n-weeks")
-                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:56:54: error: type 'RecurringChore.RecurrenceType' has no member 'everyNMonths'
-          XCTAssertEqual(RecurringChore.RecurrenceType.everyNMonths.rawValue, "every-n-months")
-                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^~~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:69:30: error: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-          let nextDate = chore.calculateNextScheduledDate(after: today)
-                         ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:101:30: error: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-          let nextDate = chore.calculateNextScheduledDate(after: monday)
-                         ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:121:30: error: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-          let nextDate = chore.calculateNextScheduledDate()
-                         ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:132:30: error: type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-              recurrenceType: .biweekly
-                              ~^~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:151:30: error: type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-              recurrenceType: .biweekly,
-                              ~^~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:189:30: error: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-          let nextDate = chore.calculateNextScheduledDate(after: firstOfMonth)
-                         ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:217:30: error: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-          let nextDate = chore.calculateNextScheduledDate(after: midMonth)
-                         ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
-  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift:244:30: error: value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-          let nextDate = chore.calculateNextScheduledDate()
-                         ~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+
+
   GenerateDSYMFile /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app.dSYM /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/HousePulse (in target 'HousePulse' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
       /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/HousePulse -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app.dSYM
+
   SwiftDriverJobDiscovery normal arm64 Emitting module for FamilyTodoTests (in target 'FamilyTodoTests' from project 'FamilyTodo')
+
   SwiftDriver\ Compilation\ Requirements FamilyTodoTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'FamilyTodoTests' from project 'FamilyTodo')
       cd /Users/runner/work/family-todo/family-todo
-      builtin-Swift-Compilation-Requirements -- /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name FamilyTodoTests -O -enforce-exclusivity\=checked @/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests.SwiftFileList -D CI -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -swift-version 5 -I /Users/runner/Library/Developer/Xcode/D
-  note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      builtin-Swift-Compilation-Requirements -- /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name FamilyTodoTests -O -enforce-exclusivity\=checked @/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests.SwiftFileList -D CI -plugin-path /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -swift-version 5 -I /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -I /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator -F /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk/Developer/Library/Frameworks -c -j3 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator18.5-22F76-96ae0914227b19deccb34b33ba7b5dea.sdkstatcache -output-file-map /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/runner/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests_const_extract_protocols.json -Xcc -iquote -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-generated-files.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-own-target-headers.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-all-target-headers.hmap -Xcc -iquote -Xcc /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests-project-headers.hmap -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources-normal/arm64 -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources/arm64 -Xcc -I/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources -emit-objc-header -emit-objc-header-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests-Swift.h -working-directory /Users/runner/work/family-todo/family-todo -experimental-emit-module-separately -disable-cmo
+
+  SwiftCompile normal arm64 Compiling\ TaskStoreTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskStoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+
+  SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/TaskStoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+
+
+  SwiftMergeGeneratedHeaders /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources/FamilyTodoTests-Swift.h /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests-Swift.h (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      builtin-swiftHeaderTool -arch arm64 /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/Objects-normal/arm64/FamilyTodoTests-Swift.h -o /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/DerivedSources/FamilyTodoTests-Swift.h
+
   note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'HousePulse' from project 'FamilyTodo')
+
   Test session results, code coverage, and logs:
-  	/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Logs/Test/Test-HousePulse-2026.02.01_21-04-17-+0000.xcresult
+  	/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Logs/Test/Test-HousePulse-2026.02.02_07-51-48-+0000.xcresult
+
   Testing failed:
-  	Cannot call value of non-function type '[Area]'
-  	Cannot call value of non-function type '[Area]'
-  	Cannot infer key path type from context; consider explicitly specifying a root type
-  	Cannot call value of non-function type '[Area]'
-  	Cannot call value of non-function type '[Area]'
-  	Cannot call value of non-function type '[Area]'
-  	Cannot call value of non-function type '[Area]'
-  	Cannot infer key path type from context; consider explicitly specifying a root type
-  	Type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-  	Type 'RecurringChore.RecurrenceType' has no member 'everyNDays'
-  	Type 'RecurringChore.RecurrenceType' has no member 'everyNWeeks'
-  	Type 'RecurringChore.RecurrenceType' has no member 'everyNMonths'
-  	Value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-  	Value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-  	Value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-  	Type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-  	Type 'RecurringChore.RecurrenceType' has no member 'biweekly'
-  	Value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-  	Value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
-  	Value of type 'RecurringChore' has no member 'calculateNextScheduledDate'
+  	Extra argument 'members' in call
+  	Extra argument 'areas' in call
+  	Value of type 'HouseholdStore' has no member 'hasHousehold'
+  	Value of type 'HouseholdStore' has no member 'inviteCode'
+  	Value of type 'HouseholdStore' has no member 'currentMember'
+  	Value of type 'HouseholdStore' has no member 'currentMember'
+  	Value of type 'HouseholdStore' has no member 'currentMember'
+  	Value of type 'HouseholdError' has no member 'errorDescription'
+  	Value of type 'HouseholdError' has no member 'errorDescription'
+  	Type 'HouseholdError' has no member 'invalidShare'
+  	Value of type 'HouseholdError' has no member 'errorDescription'
+  	Value of type 'HouseholdError' has no member 'errorDescription'
+  	Value of type 'HouseholdError' has no member 'errorDescription'
+  	Type 'HouseholdError' has no member 'invalidShare'
+  	Value of type 'HouseholdError' has no member 'errorDescription'
   	Testing cancelled because the build failed.
+
   ** TEST FAILED **
+
+
   The following build commands failed:
-  	SwiftCompile normal arm64 Compiling\ AreaTests.swift,\ RecurringChoreTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
-  	SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/AreaTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
-  	SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/RecurringChoreTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+  	SwiftCompile normal arm64 /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
+  	SwiftCompile normal arm64 Compiling\ HouseholdTests.swift /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift (in target 'FamilyTodoTests' from project 'FamilyTodo')
   	Testing project FamilyTodo with scheme HousePulse
-  (4 failures)
+  (3 failures)
 Error: Process completed with exit code 65.
