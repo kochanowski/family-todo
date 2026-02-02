@@ -84,6 +84,12 @@ class HouseholdStore: ObservableObject {
     }
 
     func createHousehold(name: String, userId: String, displayName: String) async throws -> Household {
+        // CloudKit safety check
+        precondition(
+            syncMode == .localOnly || syncMode == .cloud,
+            "Invalid sync mode for household creation"
+        )
+
         isLoading = true
         defer { isLoading = false }
 
@@ -106,7 +112,16 @@ class HouseholdStore: ObservableObject {
             _ = try await cloudKit.saveMember(owner)
         }
 
-        // 2. Update Cache
+        // 2. Seed default data in local-only mode
+        if syncMode == .localOnly {
+            try seedDefaultData(
+                householdId: newHousehold.id,
+                userId: userId,
+                displayName: displayName
+            )
+        }
+
+        // 3. Update Cache
         updateCache(with: newHousehold)
         currentHousehold = newHousehold
 
@@ -191,5 +206,218 @@ class HouseholdStore: ObservableObject {
         } catch {
             print("Cache update error: \(error)")
         }
+    }
+
+    // MARK: - Guest Mode Data Seeding
+
+    private func seedDefaultData(
+        householdId: UUID,
+        userId: String,
+        displayName: String
+    ) throws {
+        guard let context = modelContext else {
+            throw HouseholdError.cacheNotAvailable
+        }
+
+        // 1. Create owner member
+        let ownerMember = Member(
+            householdId: householdId,
+            userId: userId,
+            displayName: displayName,
+            role: .owner
+        )
+        context.insert(CachedMember(from: ownerMember))
+
+        // 2. Create 8 starter tasks (3 next, 4 backlog, 1 done)
+        let tasks = createStarterTasks(
+            householdId: householdId,
+            memberId: ownerMember.id
+        )
+        for task in tasks {
+            context.insert(CachedTask(from: task))
+        }
+
+        // 3. Create 5 shopping items
+        let items = createStarterShoppingItems(householdId: householdId)
+        for item in items {
+            context.insert(CachedShoppingItem(from: item))
+        }
+
+        // 4. Create backlog categories and items
+        let (categories, backlogItems) = createStarterBacklog(householdId: householdId)
+        for category in categories {
+            context.insert(CachedBacklogCategory(from: category))
+        }
+        for item in backlogItems {
+            context.insert(CachedBacklogItem(from: item))
+        }
+
+        // Save all
+        try context.save()
+    }
+
+    private func createStarterTasks(
+        householdId: UUID,
+        memberId: UUID
+    ) -> [Task] {
+        let today = Date()
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today) ?? today
+        let thisWeek = Calendar.current.date(byAdding: .day, value: 5, to: today) ?? today
+
+        return [
+            // Next tasks (3 - respects WIP limit)
+            Task(
+                householdId: householdId,
+                title: "Clean kitchen counters",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                dueDate: today,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Take out trash",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                dueDate: today,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Water plants",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                dueDate: thisWeek,
+                taskType: .oneOff
+            ),
+
+            // Backlog tasks (4)
+            Task(
+                householdId: householdId,
+                title: "Vacuum living room",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Clean bathroom sink",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Change bed sheets",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Organize pantry",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+
+            // Done task (1 - shows completion)
+            Task(
+                householdId: householdId,
+                title: "Wipe dining table",
+                status: .done,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                completedAt: yesterday,
+                completedById: memberId.uuidString,
+                taskType: .oneOff
+            ),
+        ]
+    }
+
+    private func createStarterShoppingItems(householdId: UUID) -> [ShoppingItem] {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+
+        return [
+            ShoppingItem(
+                householdId: householdId,
+                title: "Milk",
+                quantityValue: "2",
+                quantityUnit: "L"
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Bread",
+                quantityValue: "1",
+                quantityUnit: "loaf"
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Dish soap",
+                quantityValue: "1",
+                quantityUnit: "bottle"
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Paper towels",
+                quantityValue: "2",
+                quantityUnit: "rolls",
+                isBought: true,
+                boughtAt: yesterday,
+                restockCount: 1
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Coffee",
+                quantityValue: "200",
+                quantityUnit: "g"
+            ),
+        ]
+    }
+
+    private func createStarterBacklog(
+        householdId: UUID
+    ) -> (categories: [BacklogCategory], items: [BacklogItem]) {
+        let homeProjectsCategory = BacklogCategory(
+            householdId: householdId,
+            title: "Home Projects",
+            sortOrder: 0
+        )
+
+        let routineCategory = BacklogCategory(
+            householdId: householdId,
+            title: "Weekly Routine",
+            sortOrder: 1
+        )
+
+        let items = [
+            BacklogItem(
+                categoryId: homeProjectsCategory.id,
+                householdId: householdId,
+                title: "Paint bedroom walls",
+                notes: "Need to buy paint and brushes"
+            ),
+            BacklogItem(
+                categoryId: homeProjectsCategory.id,
+                householdId: householdId,
+                title: "Fix leaky faucet"
+            ),
+            BacklogItem(
+                categoryId: homeProjectsCategory.id,
+                householdId: householdId,
+                title: "Install new shelves in garage"
+            ),
+            BacklogItem(
+                categoryId: routineCategory.id,
+                householdId: householdId,
+                title: "Deep clean bathroom"
+            ),
+            BacklogItem(
+                categoryId: routineCategory.id,
+                householdId: householdId,
+                title: "Mow the lawn"
+            ),
+        ]
+
+        return ([homeProjectsCategory, routineCategory], items)
     }
 }

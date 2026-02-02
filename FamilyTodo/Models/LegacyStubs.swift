@@ -174,6 +174,7 @@ enum HouseholdError: Error, Equatable {
     case householdNotFound
     case cloudSyncRequired
     case invalidInviteCode
+    case cacheNotAvailable
 }
 
 @MainActor

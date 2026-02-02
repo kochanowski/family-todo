@@ -177,10 +177,10 @@ final class HouseholdStoreTests: XCTestCase {
         let schema = Schema([
             CachedHousehold.self,
             CachedMember.self,
-            CachedArea.self,
             CachedTask.self,
-            CachedRecurringChore.self,
             CachedShoppingItem.self,
+            CachedBacklogCategory.self,
+            CachedBacklogItem.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -188,19 +188,56 @@ final class HouseholdStoreTests: XCTestCase {
         store.setModelContext(container.mainContext)
         store.setSyncMode(.localOnly)
 
-        try await store.createHousehold(name: "Local Home", userId: "guest-user", displayName: "Guest")
+        try await store.createHousehold(
+            name: "Local Home",
+            userId: "guest-user",
+            displayName: "Guest"
+        )
 
+        // ✅ Verify household created
         XCTAssertNotNil(store.currentHousehold)
         XCTAssertEqual(store.currentHousehold?.name, "Local Home")
-        XCTAssertEqual(store.currentHousehold?.ownerId, "guest-user")
 
-        // Verify household is cached
         let households = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
         XCTAssertEqual(households.count, 1)
-        XCTAssertEqual(households.first?.name, "Local Home")
 
-        // Note: Current implementation doesn't seed default data (members, areas, tasks, etc.)
-        // This functionality will be added in future iterations when onboarding flow is implemented
+        // ✅ Verify 1 member (owner)
+        let members = try container.mainContext.fetch(FetchDescriptor<CachedMember>())
+        XCTAssertEqual(members.count, 1)
+        XCTAssertEqual(members.first?.displayName, "Guest")
+        XCTAssertEqual(members.first?.roleRaw, "owner")
+
+        // ✅ Verify 8 tasks (3 next, 4 backlog, 1 done)
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedTask>())
+        XCTAssertEqual(tasks.count, 8)
+
+        let nextTasks = tasks.filter { $0.statusRaw == "next" }
+        XCTAssertEqual(nextTasks.count, 3, "Should respect WIP limit")
+
+        let backlogTasks = tasks.filter { $0.statusRaw == "backlog" }
+        XCTAssertEqual(backlogTasks.count, 4)
+
+        let doneTasks = tasks.filter { $0.statusRaw == "done" }
+        XCTAssertEqual(doneTasks.count, 1)
+
+        // ✅ Verify 5 shopping items
+        let items = try container.mainContext.fetch(FetchDescriptor<CachedShoppingItem>())
+        XCTAssertEqual(items.count, 5)
+
+        let boughtItems = items.filter(\.isBought)
+        XCTAssertEqual(boughtItems.count, 1, "Should have one bought item")
+
+        // ✅ Verify 2 backlog categories
+        let categories = try container.mainContext.fetch(FetchDescriptor<CachedBacklogCategory>())
+        XCTAssertEqual(categories.count, 2)
+
+        let categoryTitles = Set(categories.map(\.title))
+        XCTAssertTrue(categoryTitles.contains("Home Projects"))
+        XCTAssertTrue(categoryTitles.contains("Weekly Routine"))
+
+        // ✅ Verify 5 backlog items
+        let backlogItems = try container.mainContext.fetch(FetchDescriptor<CachedBacklogItem>())
+        XCTAssertEqual(backlogItems.count, 5)
     }
 
     // MARK: - HouseholdError Tests
@@ -212,9 +249,10 @@ final class HouseholdStoreTests: XCTestCase {
             .householdNotFound,
             .cloudSyncRequired,
             .memberNotFound,
+            .cacheNotAvailable,
         ]
 
-        XCTAssertEqual(errors.count, 4)
+        XCTAssertEqual(errors.count, 5)
     }
 }
 
