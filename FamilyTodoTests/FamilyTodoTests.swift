@@ -92,7 +92,7 @@ final class UserSessionTests: XCTestCase {
         authService.authenticationState = .authenticated(userID: user.id)
 
         // Give time for async state change to propagate
-        try? await Task.sleep(for: .milliseconds(100))
+        try? await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(session.sessionMode, .signedIn)
         XCTAssertEqual(session.userId, user.id)
