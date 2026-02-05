@@ -79,16 +79,14 @@ private struct ShoppingListContent: View {
                                         item: item,
                                         onToggle: { toggleItem(item) }
                                     )
-                                    .rowInsertAnimation()
                                     .accessibilityIdentifier("shoppingItem_\(item.title)")
                                 }
                             }
 
-                            // Rapid entry row (always at bottom)
+                            // Rapid entry row (stable at bottom, no insert animation)
                             if isRapidEntryActive {
                                 rapidEntryRow
                                     .id("rapidEntry")
-                                    .rowInsertAnimation()
                             }
                         }
                         .padding(.horizontal, 20)
@@ -100,6 +98,14 @@ private struct ShoppingListContent: View {
                     }
                     .onChange(of: rapidEntryFocused) { _, focused in
                         if focused {
+                            withAnimation(WowAnimation.spring) {
+                                proxy.scrollTo("rapidEntry", anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: store.toBuyItems.count) { _, _ in
+                        // Scroll to keep draft row visible after each insert
+                        if isRapidEntryActive {
                             withAnimation(WowAnimation.spring) {
                                 proxy.scrollTo("rapidEntry", anchor: .bottom)
                             }
@@ -204,10 +210,10 @@ private struct ShoppingListContent: View {
     }
 
     private var rapidEntryRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Circle()
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
-                .frame(width: 24, height: 24)
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                .frame(width: 20, height: 20)
 
             TextField("Add item", text: $rapidEntryText)
                 .font(.system(size: 15))
@@ -218,7 +224,7 @@ private struct ShoppingListContent: View {
                     handleRapidEntrySubmit()
                 }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 6)
         .background(cardBackground.opacity(0.01)) // Tap target
     }
 
@@ -333,16 +339,16 @@ struct ShoppingItemRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 // Circular checkbox
                 Circle()
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
-                    .frame(width: 24, height: 24)
+                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                    .frame(width: 20, height: 20)
                     .overlay {
                         if item.isBought {
                             Circle()
                                 .fill(Color.green)
-                                .frame(width: 16, height: 16)
+                                .frame(width: 13, height: 13)
                         }
                     }
 
@@ -354,7 +360,7 @@ struct ShoppingItemRow: View {
 
                 Spacer()
             }
-            .padding(.vertical, 10) // Compact height
+            .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("shoppingItemRow_\(item.title)")

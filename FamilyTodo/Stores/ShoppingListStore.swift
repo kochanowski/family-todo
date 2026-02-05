@@ -35,7 +35,7 @@ final class ShoppingListStore: ObservableObject {
     var toBuyItems: [ShoppingItem] {
         items
             .filter { !$0.isBought }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     var boughtItems: [ShoppingItem] {
@@ -126,10 +126,8 @@ final class ShoppingListStore: ObservableObject {
             isBought: false
         )
 
-        // Optimistic UI update with animation
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-            items.append(item)
-        }
+        // Optimistic UI update (view handles animation)
+        items.append(item)
 
         // Save to cache with pending status
         if let context = modelContext {
@@ -159,9 +157,7 @@ final class ShoppingListStore: ObservableObject {
                 }
             }
         } catch {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                items.removeAll { $0.id == item.id }
-            }
+            items.removeAll { $0.id == item.id }
             // Keep in cache with pending status
             self.error = error
         }
