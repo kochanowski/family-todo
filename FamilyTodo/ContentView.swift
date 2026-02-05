@@ -15,7 +15,10 @@ struct ContentView: View {
     }
 }
 
-/// Main app view with custom floating tab bar anchored to bottom safe area
+/// Main app view with custom floating tab bar overlaid at the bottom.
+///
+/// Uses overlay (not safeAreaInset) so scrolling content extends behind the
+/// tab bar, giving the glass material real content to blur.
 struct MainAppView: View {
     @State private var activeTab: Tab = .shopping
     @Environment(\.colorScheme) private var colorScheme
@@ -40,9 +43,11 @@ struct MainAppView: View {
                 .animation(.easeInOut(duration: 0.3), value: activeTab)
                 .id(activeTab)
         }
-        .safeAreaInset(edge: .bottom) {
+        .overlay(alignment: .bottom) {
+            // Glass tab bar on top of content so material blur samples
+            // the scrolling items underneath.
             FloatingTabBar(activeTab: $activeTab)
-                .padding(.bottom, 8)
+                .ignoresSafeArea(.keyboard)
         }
     }
 
