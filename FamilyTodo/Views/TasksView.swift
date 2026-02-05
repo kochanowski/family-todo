@@ -26,6 +26,7 @@ private struct TasksContent: View {
     @State private var newTaskTitle = ""
     @State private var taskBeingCompleted: UUID?
     @State private var showAllCompleteAnimation = false
+    @State private var showAddSheet = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var userSession: UserSession
@@ -36,62 +37,66 @@ private struct TasksContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                // Header
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
 
-            // Focus rule banner
-            focusRuleBanner
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
+                // Focus rule banner
+                focusRuleBanner
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
 
-            // Tasks list
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    // Active tasks (Next)
-                    if !store.nextTasks.isEmpty {
-                        ForEach(store.nextTasks) { task in
-                            if taskBeingCompleted != task.id {
-                                TaskRow(task: task, onToggle: { toggleTask(task) })
-                                    .rowInsertAnimation()
-                                    .accessibilityIdentifier("taskRow_\(task.title)")
+                // Tasks list
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        // Active tasks (Next)
+                        if !store.nextTasks.isEmpty {
+                            ForEach(store.nextTasks) { task in
+                                if taskBeingCompleted != task.id {
+                                    TaskRow(task: task, onToggle: { toggleTask(task) })
+                                        .rowInsertAnimation()
+                                        .accessibilityIdentifier("taskRow_\(task.title)")
+                                }
                             }
                         }
                     }
+
+                    // Completed section
+                    if !store.doneTasks.isEmpty {
+                        completedSection
+                    }
                 }
-
-                // Completed section
-                if !store.doneTasks.isEmpty {
-                    completedSection
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 120) // Space for input and tab bar
-            .refreshable {
-                store.setSyncMode(userSession.syncMode)
-                await store.loadTasks()
-            }
-
-            Spacer()
-
-            // Add task input
-            inputRow
                 .padding(.horizontal, 20)
-                .padding(.bottom, 100)
+                .padding(.bottom, 80) // Space for floating add button
+                .refreshable {
+                    store.setSyncMode(userSession.syncMode)
+                    await store.loadTasks()
+                }
+            }
+
+            // Compact floating add button
+            addPillButton
+                .padding(.trailing, 20)
+                .padding(.bottom, 16)
         }
         .background(backgroundColor.ignoresSafeArea())
         .task {
             store.setSyncMode(userSession.syncMode)
             await store.loadTasks()
         }
+        .sheet(isPresented: $showAddSheet) {
+            addTaskSheet
+                .presentationDetents([.height(180)])
+                .presentationBackground(.ultraThinMaterial)
+        }
         .onChange(of: store.error as? TaskStoreError) { _, error in
             if let error {
                 let generator = UINotificationFeedbackGenerator()
                 generator.notificationOccurred(.warning)
-                // In a real app we might show a toast here
                 print("Task Error: \(error.localizedDescription)")
             }
         }
@@ -157,27 +162,76 @@ private struct TasksContent: View {
         }
     }
 
-    // MARK: - Input Row
+    // MARK: - Add Pill Button
 
-    private var inputRow: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
-                .frame(width: 22, height: 22)
-
-            TextField("Add task", text: $newTaskTitle)
-                .font(.system(size: 15))
-                .focused($isInputFocused)
-                .accessibilityIdentifier("taskInputField")
-                .onSubmit {
-                    addTask()
-                }
+    private var addPillButton: some View {
+        Button {
+            HapticManager.lightTap()
+            showAddSheet = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Add task")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background {
+                Capsule()
+                    .fill(.blue)
+                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(cardBackground)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("taskAddButton")
+    }
+
+    // MARK: - Add Task Sheet
+
+    private var addTaskSheet: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
+                        .frame(width: 22, height: 22)
+
+                    TextField("What needs to be done?", text: $newTaskTitle)
+                        .font(.system(size: 17))
+                        .focused($isInputFocused)
+                        .accessibilityIdentifier("taskInputField")
+                        .submitLabel(.done)
+                        .onSubmit {
+                            addTask()
+                        }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+                Spacer()
+            }
+            .navigationTitle("New Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        newTaskTitle = ""
+                        showAddSheet = false
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add") {
+                        addTask()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .onAppear {
+                isInputFocused = true
+            }
         }
     }
 
@@ -189,7 +243,7 @@ private struct TasksContent: View {
         let title = newTaskTitle.trimmingCharacters(in: .whitespaces)
 
         // Optimistic check for WIP limit
-        if !store.canMoveToNext(assigneeId: nil) { // Assuming unassigned or current user
+        if !store.canMoveToNext(assigneeId: nil) {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)
             return
@@ -200,6 +254,7 @@ private struct TasksContent: View {
         }
 
         newTaskTitle = ""
+        showAddSheet = false
         HapticManager.lightTap()
     }
 
@@ -291,7 +346,6 @@ struct TaskRow: View {
                             if let dueDate = task.dueDate {
                                 dueDateLabel(dueDate)
                             }
-                            // Assignee support coming later with MemberStore
                         }
                     }
                 }

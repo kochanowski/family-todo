@@ -68,7 +68,7 @@ private struct BacklogContent: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 120)
+                    .padding(.bottom, 20)
                 }
                 .refreshable {
                     store.setSyncMode(userSession.syncMode)

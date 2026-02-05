@@ -74,12 +74,12 @@ struct CreateHouseholdView: View {
                             }
                         }
                         .font(.headline)
-                        .foregroundStyle(colorScheme == .dark ? .black : .white)
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             Capsule()
-                                .fill(householdName.isEmpty ? Color.secondary : Color.primary)
+                                .fill(householdName.isEmpty ? Color.secondary : Color.blue)
                         )
                     }
                     .disabled(householdName.isEmpty || isCreating)
@@ -189,12 +189,12 @@ private struct CreateJoinSheet: View {
                 } label: {
                     Text("Join Household")
                         .font(.headline)
-                        .foregroundStyle(colorScheme == .dark ? .black : .white)
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             Capsule()
-                                .fill(joinCode.isEmpty ? Color.secondary : Color.primary)
+                                .fill(joinCode.isEmpty ? Color.secondary : Color.blue)
                         )
                 }
                 .disabled(joinCode.isEmpty)

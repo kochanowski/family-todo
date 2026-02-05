@@ -50,7 +50,7 @@ struct GuidedEmptyStateView: View {
                         .padding(.vertical, 14)
                         .background(
                             Capsule()
-                                .fill(Color.primary)
+                                .fill(Color.blue)
                         )
                 }
 

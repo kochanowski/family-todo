@@ -81,7 +81,7 @@ struct OnboardingCarouselView: View {
                             .padding(.vertical, 16)
                             .background(
                                 Capsule()
-                                    .fill(Color.primary)
+                                    .fill(Color.blue)
                             )
                     }
                     .padding(.horizontal, 40)

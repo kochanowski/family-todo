@@ -15,7 +15,7 @@ struct ContentView: View {
     }
 }
 
-/// Main app view with custom floating tab bar
+/// Main app view with custom floating tab bar anchored to bottom safe area
 struct MainAppView: View {
     @State private var activeTab: Tab = .shopping
     @Environment(\.colorScheme) private var colorScheme
@@ -39,13 +39,10 @@ struct MainAppView: View {
                 )
                 .animation(.easeInOut(duration: 0.3), value: activeTab)
                 .id(activeTab)
-
-            // Floating tab bar overlay
-            VStack {
-                Spacer()
-                FloatingTabBar(activeTab: $activeTab)
-                    .padding(.bottom, 24)
-            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            FloatingTabBar(activeTab: $activeTab)
+                .padding(.bottom, 8)
         }
     }
 

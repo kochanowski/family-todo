@@ -26,7 +26,7 @@ enum Tab: String, CaseIterable {
     }
 }
 
-/// Custom floating tab bar with glassmorphism effect
+/// Custom floating tab bar with glass effect anchored near the bottom safe area
 struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
@@ -38,13 +38,17 @@ struct FloatingTabBar: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .background {
             Capsule()
                 .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+                .overlay {
+                    Capsule()
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.12), radius: 16, x: 0, y: 4)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 20)
     }
 
     private func tabButton(for tab: Tab) -> some View {
@@ -54,9 +58,9 @@ struct FloatingTabBar: View {
                 activeTab = tab
             }
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
                 Image(systemName: tab.icon)
-                    .font(.system(size: 20, weight: activeTab == tab ? .semibold : .regular))
+                    .font(.system(size: 18, weight: activeTab == tab ? .semibold : .regular))
                     .symbolRenderingMode(.hierarchical)
 
                 Text(tab.title)
@@ -79,7 +83,7 @@ struct FloatingTabBar: View {
         VStack {
             Spacer()
             FloatingTabBar(activeTab: .constant(.shopping))
-                .padding(.bottom, 24)
+                .padding(.bottom, 8)
         }
     }
 }

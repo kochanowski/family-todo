@@ -61,59 +61,59 @@ private struct ShoppingListContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                // Header
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
 
-            // Items list with rapid entry
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(store.toBuyItems) { item in
-                            if itemBeingRemoved != item.id {
-                                ShoppingItemRow(
-                                    item: item,
-                                    onToggle: { toggleItem(item) }
-                                )
-                                .rowInsertAnimation()
-                                .accessibilityIdentifier("shoppingItem_\(item.title)")
+                // Items list with rapid entry
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(store.toBuyItems) { item in
+                                if itemBeingRemoved != item.id {
+                                    ShoppingItemRow(
+                                        item: item,
+                                        onToggle: { toggleItem(item) }
+                                    )
+                                    .rowInsertAnimation()
+                                    .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                }
+                            }
+
+                            // Rapid entry row (always at bottom)
+                            if isRapidEntryActive {
+                                rapidEntryRow
+                                    .id("rapidEntry")
+                                    .rowInsertAnimation()
                             }
                         }
-
-                        // Rapid entry row (always at bottom)
-                        if isRapidEntryActive {
-                            rapidEntryRow
-                                .id("rapidEntry")
-                                .rowInsertAnimation()
-                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 80) // Space for floating add button
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 120) // Space for tab bar + add button
-                }
-                .refreshable {
-                    store.setSyncMode(userSession.syncMode)
-                    await store.loadItems()
-                }
-                .onChange(of: rapidEntryFocused) { _, focused in
-                    if focused {
-                        withAnimation(WowAnimation.spring) {
-                            proxy.scrollTo("rapidEntry", anchor: .bottom)
+                    .refreshable {
+                        store.setSyncMode(userSession.syncMode)
+                        await store.loadItems()
+                    }
+                    .onChange(of: rapidEntryFocused) { _, focused in
+                        if focused {
+                            withAnimation(WowAnimation.spring) {
+                                proxy.scrollTo("rapidEntry", anchor: .bottom)
+                            }
                         }
                     }
                 }
             }
 
-            Spacer()
-
-            // Add item button (compact, bottom)
+            // Compact floating add button
             if !isRapidEntryActive {
-                addItemButton
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 100)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                addPillButton
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 16)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .background(backgroundColor.ignoresSafeArea())
@@ -178,28 +178,25 @@ private struct ShoppingListContent: View {
         }
     }
 
-    // MARK: - Add Item Button
+    // MARK: - Add Pill Button
 
-    private var addItemButton: some View {
+    private var addPillButton: some View {
         Button {
             startRapidEntry()
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.blue)
-
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
                 Text("Add item")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
+                    .font(.system(size: 15, weight: .semibold))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
             .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(cardBackground)
+                Capsule()
+                    .fill(.blue)
+                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)

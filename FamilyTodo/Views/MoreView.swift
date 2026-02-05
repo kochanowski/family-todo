@@ -57,7 +57,7 @@ struct MoreView: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 120)
+                    .padding(.bottom, 20)
                 }
 
                 Spacer()
@@ -142,28 +142,38 @@ struct ProfileCard: View {
 struct MoreRow: View {
     let icon: String
     let title: String
-    var tint: Color = .blue // Default to blue, can be overridden if needed
+    var subtitle: String?
+    var tint: Color = .blue
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 18, weight: .medium)) // Standardized size & weight
+                .font(.system(size: 17, weight: .medium))
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(tint)
-                .frame(width: 24) // Fixed width for alignment
+                .frame(width: 28, height: 28)
 
-            Text(title)
-                .font(.system(size: 16))
-                .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.primary)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.secondary.opacity(0.5)) // Subtle chevron
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .contentShape(Rectangle()) // Full row tap target
+        .contentShape(Rectangle())
     }
 }
 
@@ -381,7 +391,7 @@ private struct AppearanceCard: View {
             .foregroundStyle(isSelected ? .white : .primary)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.primary : secondaryBackground)
+                    .fill(isSelected ? Color.blue : secondaryBackground)
             )
         }
         .buttonStyle(.plain)
