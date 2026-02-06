@@ -43,13 +43,11 @@ struct FloatingTabBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 9)
-        .frame(height: 58)
-        .allowsHitTesting(true)
         .background {
             Capsule()
                 .fill(.clear)
                 .overlay {
-                    VisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
+                    VisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
                         .clipShape(Capsule())
                 }
                 .overlay {
@@ -67,7 +65,6 @@ struct FloatingTabBar: View {
                 )
         }
         .padding(.horizontal, 16)
-        .compositingGroup()
     }
 
     private func tabButton(for tab: Tab) -> some View {
@@ -106,9 +103,7 @@ private struct VisualEffectView: UIViewRepresentable {
     let effect: UIVisualEffect
 
     func makeUIView(context _: Context) -> UIVisualEffectView {
-        let view = UIVisualEffectView(effect: effect)
-        view.isUserInteractionEnabled = false
-        return view
+        UIVisualEffectView(effect: effect)
     }
 
     func updateUIView(_ uiView: UIVisualEffectView, context _: Context) {

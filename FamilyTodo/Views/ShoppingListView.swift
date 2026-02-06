@@ -90,7 +90,7 @@ private struct ShoppingListContent: View {
                             }
                         }
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 128) // Reserve space for add button + tab bar
+                        .padding(.bottom, 80) // Space for floating add button
                     }
                     .refreshable {
                         store.setSyncMode(userSession.syncMode)
@@ -118,7 +118,7 @@ private struct ShoppingListContent: View {
             if !isRapidEntryActive {
                 addPillButton
                     .padding(.trailing, 20)
-                    .padding(.bottom, 102)
+                    .padding(.bottom, 16)
                     .transition(.scale.combined(with: .opacity))
             }
         }
