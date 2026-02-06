@@ -71,7 +71,7 @@ private struct TasksContent: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 80) // Space for floating add button
+                .padding(.bottom, 128) // Reserve space for add button + tab bar
                 .refreshable {
                     store.setSyncMode(userSession.syncMode)
                     await store.loadTasks()
@@ -81,7 +81,7 @@ private struct TasksContent: View {
             // Compact floating add button
             addPillButton
                 .padding(.trailing, 20)
-                .padding(.bottom, 16)
+                .padding(.bottom, 102)
         }
         .task {
             store.setSyncMode(userSession.syncMode)

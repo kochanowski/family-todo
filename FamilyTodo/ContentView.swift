@@ -25,6 +25,9 @@ struct MainAppView: View {
     /// Animation state for tab transitions
     @Namespace private var animation
 
+    /// Shared bottom spacing so content and floating controls stay above tab bar.
+    private let tabBarReservedSpace: CGFloat = 118
+
     var body: some View {
         ZStack {
             // App-wide subtle background – gives the glass tab bar content to blur
@@ -32,6 +35,7 @@ struct MainAppView: View {
 
             // Tab content with animation
             tabContent
+                .safeAreaPadding(.bottom, tabBarReservedSpace)
                 .transition(
                     .asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur),
@@ -44,10 +48,11 @@ struct MainAppView: View {
         .overlay {
             // Keep the bar anchored close to the physical bottom edge.
             FloatingTabBar(activeTab: $activeTab)
-                .padding(.bottom, 6)
+                .padding(.bottom, 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .ignoresSafeArea(.container, edges: .bottom)
                 .ignoresSafeArea(.keyboard, edges: .bottom)
+                .zIndex(1000)
         }
     }
 
