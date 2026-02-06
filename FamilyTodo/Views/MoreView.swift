@@ -62,7 +62,7 @@ struct MoreView: View {
 
                 Spacer()
             }
-            .background(backgroundColor.ignoresSafeArea())
+            .background(Color.clear)
         }
     }
 
@@ -75,10 +75,6 @@ struct MoreView: View {
 
             Spacer()
         }
-    }
-
-    private var backgroundColor: Color {
-        colorScheme == .dark ? .black : Color(hex: "F9F9F9")
     }
 
     private var cardBackground: Color {

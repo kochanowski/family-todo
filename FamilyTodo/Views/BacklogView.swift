@@ -23,7 +23,6 @@ struct BacklogView: View {
 
 private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var userSession: UserSession
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -78,7 +77,6 @@ private struct BacklogContent: View {
 
             Spacer()
         }
-        .background(backgroundColor.ignoresSafeArea())
         .task {
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
@@ -129,10 +127,6 @@ private struct BacklogContent: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var backgroundColor: Color {
-        colorScheme == .dark ? .black : Color(hex: "F9F9F9")
     }
 }
 

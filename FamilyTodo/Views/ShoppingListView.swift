@@ -122,7 +122,6 @@ private struct ShoppingListContent: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .background(backgroundColor.ignoresSafeArea())
         .contentShape(Rectangle())
         .onTapGesture {
             // Tap outside: commit or dismiss rapid entry
@@ -318,10 +317,6 @@ private struct ShoppingListContent: View {
             await store.markAllAsBought()
         }
         HapticManager.success()
-    }
-
-    private var backgroundColor: Color {
-        colorScheme == .dark ? .black : Color(hex: "F9F9F9")
     }
 
     private var cardBackground: Color {

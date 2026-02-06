@@ -21,16 +21,14 @@ struct ContentView: View {
 /// tab bar, giving the glass material real content to blur.
 struct MainAppView: View {
     @State private var activeTab: Tab = .shopping
-    @Environment(\.colorScheme) private var colorScheme
 
     /// Animation state for tab transitions
     @Namespace private var animation
 
     var body: some View {
         ZStack {
-            // Background
-            backgroundColor
-                .ignoresSafeArea()
+            // App-wide subtle background – gives the glass tab bar content to blur
+            AppBackgroundView()
 
             // Tab content with animation
             tabContent
@@ -63,10 +61,6 @@ struct MainAppView: View {
         case .more:
             MoreView()
         }
-    }
-
-    private var backgroundColor: Color {
-        colorScheme == .dark ? .black : Color(hex: "F9F9F9")
     }
 }
 

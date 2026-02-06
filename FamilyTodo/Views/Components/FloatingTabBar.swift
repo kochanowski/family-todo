@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Tab enumeration for the main navigation
 enum Tab: String, CaseIterable {
@@ -26,7 +27,12 @@ enum Tab: String, CaseIterable {
     }
 }
 
-/// Custom floating tab bar with glass effect anchored near the bottom safe area
+/// Custom floating tab bar with real frosted-glass blur anchored near the bottom safe area.
+///
+/// Uses UIKit `UIVisualEffectView(.systemChromeMaterial)` for reliable blur that
+/// adapts to light/dark mode automatically. The parent view must use an overlay
+/// (not safeAreaInset) so scrolling content renders behind the bar, giving the
+/// material real pixels to blur.
 struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
@@ -40,13 +46,17 @@ struct FloatingTabBar: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
         .background {
-            Capsule()
-                .fill(.ultraThinMaterial)
+            // Real UIKit blur – clips to capsule so frosted glass is visible
+            VisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+                .clipShape(Capsule())
                 .overlay {
                     Capsule()
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
                 }
-                .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.12), radius: 16, x: 0, y: 4)
+                .shadow(
+                    color: .black.opacity(colorScheme == .dark ? 0.45 : 0.12),
+                    radius: 16, x: 0, y: 4
+                )
         }
         .padding(.horizontal, 20)
     }

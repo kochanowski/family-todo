@@ -83,7 +83,6 @@ private struct TasksContent: View {
                 .padding(.trailing, 20)
                 .padding(.bottom, 16)
         }
-        .background(backgroundColor.ignoresSafeArea())
         .task {
             store.setSyncMode(userSession.syncMode)
             await store.loadTasks()
@@ -300,10 +299,6 @@ private struct TasksContent: View {
             }
             HapticManager.lightTap()
         }
-    }
-
-    private var backgroundColor: Color {
-        colorScheme == .dark ? .black : Color(hex: "F9F9F9")
     }
 
     private var cardBackground: Color {
