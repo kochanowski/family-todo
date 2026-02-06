@@ -19,13 +19,13 @@ struct AppBackgroundView: View {
 
     private var gradientStops: [Gradient.Stop] {
         if colorScheme == .dark {
-            return [
+            [
                 .init(color: .black, location: 0),
-                .init(color: .black, location: 0.5),
-                .init(color: Color(red: 0.08, green: 0.05, blue: 0.14), location: 1.0),
+                .init(color: .black, location: 0.6),
+                .init(color: Color(red: 0.12, green: 0.08, blue: 0.20), location: 1.0),
             ]
         } else {
-            return [
+            [
                 .init(color: Color(hex: "F9F9F9"), location: 0),
                 .init(color: Color(hex: "F9F9F9"), location: 0.5),
                 .init(color: Color(red: 0.93, green: 0.91, blue: 0.96), location: 1.0),

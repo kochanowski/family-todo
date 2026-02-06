@@ -45,7 +45,9 @@ struct MainAppView: View {
             // Glass tab bar on top of content so material blur samples
             // the scrolling items underneath.
             FloatingTabBar(activeTab: $activeTab)
+                .padding(.bottom, 8)
                 .ignoresSafeArea(.keyboard)
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 

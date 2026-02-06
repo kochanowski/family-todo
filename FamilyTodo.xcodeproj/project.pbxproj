@@ -63,7 +63,6 @@
 		NEWFILE0000000000000006 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000016 /* ToastView.swift */; };
 		NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000017 /* BacklogCategory.swift */; };
 		NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000018 /* LegacyStubs.swift */; };
-		GLASSFIX00000000000002 /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000001 /* VisualEffectView.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
 /* End PBXBuildFile section */
 
@@ -145,7 +144,6 @@
 		NEWFILE0000000000000016 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000017 /* BacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogCategory.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000018 /* LegacyStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyStubs.swift; sourceTree = "<group>"; };
-		GLASSFIX00000000000001 /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -349,7 +347,6 @@
 				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
 				NEWFILE0000000000000016 /* ToastView.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
-				GLASSFIX00000000000001 /* VisualEffectView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
 			);
 			path = Components;
@@ -528,7 +525,6 @@
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
 				NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */,
 				NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */,
-				GLASSFIX00000000000002 /* VisualEffectView.swift in Sources */,
 				GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
