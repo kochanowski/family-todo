@@ -28,7 +28,7 @@ enum Tab: String, CaseIterable {
 
 /// Custom floating tab bar with frosted-glass blur anchored near the bottom safe area.
 ///
-/// Uses SwiftUI `.ultraThinMaterial` so the blur correctly samples SwiftUI-rendered
+/// Uses SwiftUI `.thinMaterial` so the blur correctly samples SwiftUI-rendered
 /// content layers. The parent view must use an overlay (not safeAreaInset) so
 /// scrolling content renders behind the bar, giving the material real pixels to blur.
 struct FloatingTabBar: View {
@@ -45,14 +45,14 @@ struct FloatingTabBar: View {
         .padding(.vertical, 10)
         .background {
             Capsule()
-                .fill(.ultraThinMaterial)
+                .fill(.thinMaterial)
                 .overlay {
                     Capsule()
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
                 }
                 .shadow(
                     color: .black.opacity(colorScheme == .dark ? 0.45 : 0.12),
-                    radius: 16, x: 0, y: 4
+                    radius: 10, x: 0, y: 4
                 )
         }
         .padding(.horizontal, 20)
