@@ -41,13 +41,13 @@ struct MainAppView: View {
                 .animation(.easeInOut(duration: 0.3), value: activeTab)
                 .id(activeTab)
         }
-        .overlay {
-            // Keep the bar anchored close to the physical bottom edge.
+        .overlay(alignment: .bottom) {
+            // Glass tab bar on top of content so material blur samples
+            // the scrolling items underneath.
             FloatingTabBar(activeTab: $activeTab)
-                .padding(.bottom, 6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .ignoresSafeArea(.container, edges: .bottom)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .padding(.bottom, 8)
+                .ignoresSafeArea(.keyboard)
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 

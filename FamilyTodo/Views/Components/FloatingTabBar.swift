@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Tab enumeration for the main navigation
 enum Tab: String, CaseIterable {
@@ -27,10 +26,11 @@ enum Tab: String, CaseIterable {
     }
 }
 
-/// Custom floating tab bar with a UIKit frosted glass background.
+/// Custom floating tab bar with frosted-glass blur anchored near the bottom safe area.
 ///
-/// Uses `UIVisualEffectView` to match native iOS chrome more closely than a
-/// pure SwiftUI material stack.
+/// Uses SwiftUI `.thinMaterial` so the blur correctly samples SwiftUI-rendered
+/// content layers. The parent view must use an overlay (not safeAreaInset) so
+/// scrolling content renders behind the bar, giving the material real pixels to blur.
 struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
@@ -42,29 +42,34 @@ struct FloatingTabBar: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 9)
+        .padding(.vertical, 10)
         .background {
-            Capsule()
-                .fill(.clear)
-                .overlay {
-                    VisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-                        .clipShape(Capsule())
-                }
-                .overlay {
-                    Capsule()
-                        .strokeBorder(
-                            borderColor,
-                            lineWidth: 0.6
-                        )
-                }
-                .shadow(
-                    color: shadowColor,
-                    radius: 12,
-                    x: 0,
-                    y: 6
-                )
+            ZStack {
+                // Base glass: semi-transparent color for reliable glass look
+                Capsule()
+                    .fill(colorScheme == .dark
+                        ? Color(white: 0.15).opacity(0.8)
+                        : Color.white.opacity(0.78))
+
+                // Material: adds real blur when content scrolls behind
+                Capsule()
+                    .fill(.ultraThinMaterial)
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        colorScheme == .dark
+                            ? Color.white.opacity(0.18)
+                            : Color.black.opacity(0.08),
+                        lineWidth: 0.5
+                    )
+            }
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
+                radius: 12, x: 0, y: 5
+            )
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
     }
 
     private func tabButton(for tab: Tab) -> some View {
@@ -84,30 +89,10 @@ struct FloatingTabBar: View {
             }
             .foregroundStyle(activeTab == tab ? .primary : .secondary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tabButton_\(tab.rawValue)")
-    }
-
-    private var borderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
-    }
-
-    private var shadowColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.35) : Color.black.opacity(0.12)
-    }
-}
-
-private struct VisualEffectView: UIViewRepresentable {
-    let effect: UIVisualEffect
-
-    func makeUIView(context _: Context) -> UIVisualEffectView {
-        UIVisualEffectView(effect: effect)
-    }
-
-    func updateUIView(_ uiView: UIVisualEffectView, context _: Context) {
-        uiView.effect = effect
     }
 }
 
@@ -119,7 +104,7 @@ private struct VisualEffectView: UIViewRepresentable {
         VStack {
             Spacer()
             FloatingTabBar(activeTab: .constant(.shopping))
-                .padding(.bottom, 6)
+                .padding(.bottom, 8)
         }
     }
 }

@@ -43,8 +43,3 @@ xcodebuild test -scheme HousePulse -destination 'platform=iOS Simulator,name=iPh
 # UI Tests
 xcodebuild test -scheme HousePulse -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:FamilyTodoUITests
 ```
-
-## UI Tab Bar Glass Notes (2026-02-06)
-- Implementation location: `FamilyTodo/Views/Components/FloatingTabBar.swift`, mounted from `MainAppView` in `FamilyTodo/ContentView.swift`.
-- Blur style/material: UIKit `UIVisualEffectView` wrapped in SwiftUI (`VisualEffectView`) with `UIBlurEffect(style: .systemChromeMaterial)`, clipped to a capsule. Chosen to match native iOS chrome/frosted behavior more closely than a tinted SwiftUI material stack.
-- Keyboard behavior: the tab bar is rendered in a bottom overlay frame and marked with `.ignoresSafeArea(.keyboard, edges: .bottom)` so keyboard-safe-area changes do not push the bar upward.
