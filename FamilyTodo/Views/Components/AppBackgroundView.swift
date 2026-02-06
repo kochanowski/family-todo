@@ -27,8 +27,7 @@ struct AppBackgroundView: View {
         } else {
             [
                 .init(color: Color(hex: "F9F9F9"), location: 0),
-                .init(color: Color(hex: "F9F9F9"), location: 0.7),
-                .init(color: Color(hex: "F5F4F6"), location: 1.0),
+                .init(color: Color(hex: "F9F9F9"), location: 1.0),
             ]
         }
     }

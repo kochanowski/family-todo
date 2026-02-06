@@ -44,16 +44,30 @@ struct FloatingTabBar: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
         .background {
-            Capsule()
-                .fill(.thinMaterial)
-                .overlay {
-                    Capsule()
-                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-                }
-                .shadow(
-                    color: .black.opacity(colorScheme == .dark ? 0.45 : 0.12),
-                    radius: 10, x: 0, y: 4
-                )
+            ZStack {
+                // Base glass: semi-transparent color for reliable glass look
+                Capsule()
+                    .fill(colorScheme == .dark
+                        ? Color(white: 0.15).opacity(0.8)
+                        : Color.white.opacity(0.78))
+
+                // Material: adds real blur when content scrolls behind
+                Capsule()
+                    .fill(.ultraThinMaterial)
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        colorScheme == .dark
+                            ? Color.white.opacity(0.18)
+                            : Color.black.opacity(0.08),
+                        lineWidth: 0.5
+                    )
+            }
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
+                radius: 12, x: 0, y: 5
+            )
         }
         .padding(.horizontal, 20)
     }
