@@ -18,14 +18,37 @@ struct BacklogView: View {
 }
 
 private struct BacklogContent: View {
+    private enum PromotionBanner: Equatable {
+        case assigneeRequired
+        case wipLimitReached(current: Int, limit: Int)
+        case failed(String)
+
+        var text: String {
+            switch self {
+            case .assigneeRequired:
+                "Assign this item before moving it to Tasks/NEXT."
+            case let .wipLimitReached(current, limit):
+                "WIP limit reached (\(current)/\(limit)). Complete one active task first."
+            case let .failed(message):
+                message
+            }
+        }
+    }
+
     @StateObject private var store: BacklogStore
+    @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.appTabBarHeight) private var tabBarHeight
+
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
+    @State private var activeBanner: PromotionBanner?
+    @State private var pendingPromotionItem: BacklogItem?
+    @State private var selectedAssigneeIdForPromotion: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
     }
 
     var body: some View {
@@ -35,13 +58,18 @@ private struct BacklogContent: View {
             )
 
             VStack(spacing: 0) {
-                // Header
                 header
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, activeBanner == nil ? 12 : 8)
 
-                // Content
+                if let activeBanner {
+                    BacklogStatusBanner(text: activeBanner.text)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 if store.isLoading, store.categories.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -64,7 +92,7 @@ private struct BacklogContent: View {
                                         _ = _Concurrency.Task { await store.deleteItem(item) }
                                     },
                                     onPromoteItem: { item in
-                                        _ = _Concurrency.Task { _ = await store.promoteItemToTask(item) }
+                                        promoteItem(item)
                                     },
                                     onRenameCategory: { newTitle in
                                         _ = _Concurrency.Task { await store.renameCategory(category, newTitle: newTitle) }
@@ -81,7 +109,9 @@ private struct BacklogContent: View {
                     }
                     .refreshable {
                         store.setSyncMode(userSession.syncMode)
+                        memberStore.setSyncMode(userSession.syncMode)
                         await store.loadData()
+                        await memberStore.loadMembers()
                     }
                 }
 
@@ -91,7 +121,9 @@ private struct BacklogContent: View {
         }
         .task {
             store.setSyncMode(userSession.syncMode)
+            memberStore.setSyncMode(userSession.syncMode)
             await store.loadData()
+            await memberStore.loadMembers()
         }
         .alert("New Category", isPresented: $isAddingCategory) {
             TextField("Category Name", text: $newCategoryName)
@@ -103,9 +135,46 @@ private struct BacklogContent: View {
                 _ = _Concurrency.Task { await store.addCategory(name) }
             }
         }
+        .sheet(isPresented: Binding(
+            get: { pendingPromotionItem != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingPromotionItem = nil
+                    selectedAssigneeIdForPromotion = nil
+                }
+            }
+        )) {
+            if let pendingPromotionItem {
+                BacklogAssigneePickerSheet(
+                    itemTitle: pendingPromotionItem.title,
+                    members: activeMembers,
+                    selectedAssigneeId: $selectedAssigneeIdForPromotion,
+                    onCancel: {
+                        self.pendingPromotionItem = nil
+                        selectedAssigneeIdForPromotion = nil
+                    },
+                    onConfirm: {
+                        guard let assigneeId = selectedAssigneeIdForPromotion else { return }
+                        let item = pendingPromotionItem
+                        self.pendingPromotionItem = nil
+                        selectedAssigneeIdForPromotion = nil
+                        completePromotion(of: item, assigneeId: assigneeId)
+                    }
+                )
+            }
+        }
     }
 
-    // MARK: - Header
+    private var activeMembers: [Member] {
+        memberStore.members
+            .filter(\.isActive)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var currentMember: Member? {
+        guard let userId = userSession.userId else { return nil }
+        return activeMembers.first { $0.userId == userId }
+    }
 
     private var header: some View {
         HStack {
@@ -125,8 +194,6 @@ private struct BacklogContent: View {
         }
     }
 
-    // MARK: - Empty State
-
     private var emptyState: some View {
         ContentUnavailableView {
             Label("No Categories", systemImage: "archivebox")
@@ -140,6 +207,130 @@ private struct BacklogContent: View {
             .tint(.orange)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func promoteItem(_ item: BacklogItem) {
+        guard !activeMembers.isEmpty else {
+            showBanner(.assigneeRequired)
+            return
+        }
+
+        if activeMembers.count == 1, let assigneeId = activeMembers.first?.id {
+            completePromotion(of: item, assigneeId: assigneeId)
+            return
+        }
+
+        pendingPromotionItem = item
+        selectedAssigneeIdForPromotion = currentMember?.id
+    }
+
+    private func completePromotion(of item: BacklogItem, assigneeId: UUID) {
+        _ = _Concurrency.Task {
+            let result = await store.promoteItemToTask(item, assigneeId: assigneeId)
+            handlePromotionResult(result)
+        }
+    }
+
+    private func handlePromotionResult(_ result: BacklogStore.PromotionResult) {
+        switch result {
+        case .success:
+            activeBanner = nil
+            HapticManager.success()
+        case .assigneeRequired:
+            HapticManager.warning()
+            showBanner(.assigneeRequired)
+        case let .wipLimitReached(current, limit):
+            HapticManager.warning()
+            showBanner(.wipLimitReached(current: current, limit: limit))
+        case let .failed(message):
+            HapticManager.warning()
+            showBanner(.failed(message))
+        }
+    }
+
+    private func showBanner(_ banner: PromotionBanner) {
+        withAnimation(WowAnimation.spring) {
+            activeBanner = banner
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            if activeBanner == banner {
+                withAnimation(WowAnimation.easeOut) {
+                    activeBanner = nil
+                }
+            }
+        }
+    }
+}
+
+private struct BacklogStatusBanner: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.orange.opacity(0.12))
+        }
+    }
+}
+
+private struct BacklogAssigneePickerSheet: View {
+    let itemTitle: String
+    let members: [Member]
+    @Binding var selectedAssigneeId: UUID?
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List(members) { member in
+                Button {
+                    selectedAssigneeId = member.id
+                } label: {
+                    HStack {
+                        Text(member.displayName)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if selectedAssigneeId == member.id {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle("Assign before start")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Promote") {
+                        onConfirm()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(selectedAssigneeId == nil)
+                }
+            }
+        }
+        .presentationDetents([.height(320)])
+        .presentationBackground(.ultraThinMaterial)
     }
 }
 
@@ -163,7 +354,6 @@ struct CategoryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Category header
             HStack {
                 Text(category.title.uppercased())
                     .font(.system(size: 12, weight: .semibold))
@@ -201,7 +391,6 @@ struct CategoryCard: View {
             .padding(.bottom, 12)
             .accessibilityIdentifier("backlogCategoryHeader_\(category.title)")
 
-            // Items
             ForEach(items) { item in
                 BacklogItemRow(item: item)
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -224,14 +413,14 @@ struct CategoryCard: View {
                     .padding(.leading, 16)
             }
 
-            // Add item row
             if isAddingItem {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Circle()
-                        .fill(Color.secondary.opacity(0.3))
-                        .frame(width: 6, height: 6)
+                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                        .frame(width: 20, height: 20)
 
-                    TextField("New item", text: $newItemText)
+                    TextField("Add item", text: $newItemText)
+                        .font(.system(size: 15))
                         .onSubmit {
                             submitItem()
                         }
@@ -247,24 +436,29 @@ struct CategoryCard: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
             } else {
                 Button {
                     isAddingItem = true
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.orange)
+                    HStack(spacing: 10) {
+                        Circle()
+                            .stroke(Color.orange.opacity(0.55), lineWidth: 1.5)
+                            .frame(width: 20, height: 20)
+                            .overlay {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.orange)
+                            }
 
                         Text("Add item")
-                            .font(.system(size: 14))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.orange)
 
                         Spacer()
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogAddItemButton_\(category.title)")
@@ -325,7 +519,7 @@ struct BacklogItemRow: View {
 
             Text(item.title)
                 .font(.system(size: 15))
-                .strikethrough(false) // Ready for future completion status
+                .strikethrough(false)
 
             Spacer()
         }

@@ -5,6 +5,13 @@ import SwiftUI
 /// Store for backlog management (categories and items)
 @MainActor
 final class BacklogStore: ObservableObject {
+    enum PromotionResult: Equatable {
+        case success(createdTaskId: UUID)
+        case assigneeRequired
+        case wipLimitReached(current: Int, limit: Int)
+        case failed(String)
+    }
+
     @Published private(set) var categories: [BacklogCategory] = []
     @Published private(set) var items: [BacklogItem] = []
     @Published private(set) var isLoading = false
@@ -411,29 +418,36 @@ final class BacklogStore: ObservableObject {
     }
 
     @discardableResult
-    func promoteItemToTask(_ item: BacklogItem, preferredStatus: Task.TaskStatus = .next) async -> Task.TaskStatus {
-        guard let modelContext, let householdId else { return .backlog }
+    func promoteItemToTask(
+        _ item: BacklogItem,
+        assigneeId: UUID?,
+        preferredStatus: Task.TaskStatus = .next
+    ) async -> PromotionResult {
+        guard let modelContext, let householdId else {
+            return .failed("Missing local context.")
+        }
 
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setSyncMode(syncMode)
         taskStore.setHousehold(householdId)
 
-        var taskStatus = preferredStatus
-        _ = await taskStore.createTaskFromBacklogItem(
+        let createdTaskId = UUID()
+        let validation = await taskStore.createTaskFromBacklogItem(
             title: item.title,
             notes: item.notes,
-            preferredStatus: taskStatus
+            preferredStatus: preferredStatus,
+            assigneeId: assigneeId,
+            taskId: createdTaskId
         )
-        if taskStatus == .next, taskStore.error as? TaskStoreError == .wipLimitReached {
-            taskStatus = .backlog
-            _ = await taskStore.createTaskFromBacklogItem(
-                title: item.title,
-                notes: item.notes,
-                preferredStatus: taskStatus
-            )
-        }
-        await deleteItem(item)
 
-        return taskStatus
+        switch validation {
+        case .ok:
+            await deleteItem(item)
+            return .success(createdTaskId: createdTaskId)
+        case .assigneeRequired:
+            return .assigneeRequired
+        case let .wipLimitReached(current, limit):
+            return .wipLimitReached(current: current, limit: limit)
+        }
     }
 }

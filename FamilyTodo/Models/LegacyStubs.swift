@@ -541,7 +541,9 @@ final class ChoreScheduler {
                     assigneeIds: chore.defaultAssigneeIds,
                     areaId: chore.areaId,
                     dueDate: nextDate,
-                    notes: chore.notes
+                    notes: chore.notes,
+                    taskType: .recurring,
+                    recurringChoreId: chore.id
                 )
                 await recurringStore.markGenerated(chore, at: now)
             }

@@ -28,6 +28,7 @@ struct MainAppView: View {
     @State private var tabBarHeight: CGFloat = AppChromeMetrics.minimumTabBarHeight
     @State private var isKeyboardVisible = false
     @State private var hasBootstrappedHousehold = false
+    @State private var isTabBarVisibleForCurrentScreen = true
 
     /// Animation state for tab transitions
     @Namespace private var animation
@@ -41,6 +42,9 @@ struct MainAppView: View {
             tabContent
                 .environment(\.appTabBarHeight, tabBarHeight)
                 .environment(\.appKeyboardVisible, isKeyboardVisible)
+                .onTabBarVisibilityChange { isVisible in
+                    isTabBarVisibleForCurrentScreen = isVisible
+                }
                 .transition(
                     .asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur),
@@ -58,10 +62,11 @@ struct MainAppView: View {
                     tabBarHeight = measuredHeight
                 }
                 .padding(.bottom, AppChromeMetrics.tabBarBottomOffset)
-                .offset(y: isKeyboardVisible ? tabBarHeight + 120 : 0)
-                .opacity(isKeyboardVisible ? 0 : 1)
-                .allowsHitTesting(!isKeyboardVisible)
+                .offset(y: (isKeyboardVisible || !isTabBarVisibleForCurrentScreen) ? tabBarHeight + 120 : 0)
+                .opacity((isKeyboardVisible || !isTabBarVisibleForCurrentScreen) ? 0 : 1)
+                .allowsHitTesting(!isKeyboardVisible && isTabBarVisibleForCurrentScreen)
                 .animation(.easeInOut(duration: 0.22), value: isKeyboardVisible)
+                .animation(.easeInOut(duration: 0.22), value: isTabBarVisibleForCurrentScreen)
                 .ignoresSafeArea(edges: .bottom)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in

@@ -2,72 +2,72 @@
 
 Last updated: 2026-02-15
 
-## Implemented (redesign branch)
+## Implemented (current redesign branch)
 
-### Core Features
-- App shell with 4 tabs: Shopping, Tasks, Backlog, More
-- Custom floating tab bar with Liquid Glass (iOS 26+) + material fallback (iOS 17-25)
-- Onboarding: carousel → sync choice → household setup → main app
-- Sign in with Apple + guest mode (local-only with seed data)
+### Core shell
+- 4-tab app shell: Shopping, Tasks, Backlog, More
+- Custom floating tab bar
+  - iOS 26+: Liquid Glass transition path (`GlassEffectContainer` + matched transition)
+  - iOS 17-25: material fallback
+- Onboarding flow: carousel -> sync choice -> household setup -> main app
+- Sign in with Apple + guest mode
 - CloudKit sync + SwiftData offline-first cache
-- 4 theme presets: Journal, Pastel, Soft, Night + Light/Dark/System appearance
 
-### Shopping List ✅
-- Rapid entry (type + enter, chain multiple items)
-- Buy/unbuy checkbox
-- Recently Purchased sheet with swipe-to-delete and "Clear All"
-- Smart suggestions from purchase history
-- Custom keyboard accessory ("Done" pill button)
+### Shopping
+- Rapid entry with stable keyboard behavior
+- Custom keyboard accessory `Done` pill (matching CTA metrics)
+- Recently Purchased:
+  - one-tap restore to shopping list
+  - swipe delete per title
+  - clear all with confirmation
+- Header actions: clear To Buy with confirmation, open Recently Purchased
 
-### Tasks ⚠️ (basic)
-- Create task (title only)
-- Complete/uncomplete with animation
-- WIP limit enforcement (max 3 in .next per assignee)
-- Next + Done sections
-- **Missing:** detail/edit sheet, assignee picker, due date, notes — all fields exist in model but no UI
+### Tasks (backlog-first)
+- `TasksView` is execution board (no manual intake button)
+- Sections: `NEXT`, `BACKLOG`, `COMPLETED`
+- Strict rules:
+  - `NEXT` requires assignee
+  - WIP limit = 3 per assignee
+- Inline blocked-action feedback banner (assignee/WIP)
+- Backlog -> Next start flow with assignee picker for multi-member households
+- Task detail edit sheet (status, assignee, due date, notes)
+- Recurring tasks are shown in `Tasks.BACKLOG` with recurring badge
 
-### Backlog ✅
-- Categories CRUD (add, delete)
-- Items CRUD within categories (add, delete)
-- **Missing:** rename category, reorder, item edit, promote to task
+### Backlog
+- Categories CRUD + reorder/rename support in management
+- Items CRUD per category
+- Promote to task flow with atomic behavior:
+  - backlog item removed only when task create succeeds
+  - typed promotion result (`success`, `assigneeRequired`, `wipLimitReached`, `failed`)
+- Multi-member assignee flow before promotion
 
-### More / Settings ⚠️ (partial)
-- Profile card with household name
-- Member management (full CRUD, roles, context menus)
-- Household sharing via CKShare (`ShareInviteView`)
-- Appearance settings (theme, Light/Dark/System)
-- Celebrations + suggestions toggles
-- **Stubs:** Sign Out (empty closure), Categories Management (local-only @State), Repetitive Tasks ("Coming Soon"), Notification settings
+### More / Settings
+- Profile, member management, household management actions
+- Categories management wired to real `BacklogStore`
+- Repetitive Tasks manager with Daily/Weekly/Monthly/Custom (Every N days)
+- Settings:
+  - appearance + notification toggles
+  - real sign out flow
+  - defensive bottom inset to avoid chrome overlap
+- Detail screens request hidden app tab bar via `appTabBarVisibility(false)`
 
-### Infrastructure ✅
-- `CloudKitManager` with full CRUD for all 6 record types
-- `NotificationService` — task reminders + daily digest
-- `AuthenticationService` — Sign in with Apple + CloudKit identity
-- `UserSession` — session state, sync mode, household ID
-- GitHub Actions CI: build + lint on PR/push, full tests nightly
+### Recurring engine
+- `RecurringChoreStore` CRUD active
+- `ChoreScheduler` runs on app launch/foreground path and generates tasks with:
+  - `status = .backlog`
+  - `taskType = .recurring`
+  - `recurringChoreId` linked to source chore
 
-## In progress
-- Tab bar glass effect fix for iOS 26 (`.overlay`/`.shadow` after `.glassEffect()` issue)
-- Dynamic bottom chrome insets
+## Product decisions now active
+- Backlog-only task intake (no direct add in Tasks)
+- `Tasks.BACKLOG` is a general staging area (promoted + recurring)
+- Rooms/Areas removed from product UI (data compatibility fields remain temporarily)
 
-## Stubs requiring implementation
-| Stub | Location | Priority |
-|------|----------|----------|
-| Task Detail/Edit Sheet | `LegacyStubs.TaskDetailView` | P0 |
-| Sign Out | `SettingsView` empty closure | P0 |
-| Categories → BacklogStore | `CategoriesManagementView` local @State | P0 |
-| Join Household | `CreateHouseholdView.joinHousehold()` TODO | P0 |
-| Role Guardrails | `MemberStore` no validation | P0 |
-| Recurring Chores | `RepetitiveTasksView` + `RecurringChore` model | P1 |
-| Areas/Rooms | `AreaStore` empty + `Area` model with defaults | P1 |
-| Notification Settings | `NotificationSettingsStore` stub | P1 |
-| Household Rename/Leave/Delete | No UI | P1 |
-| Backlog → Task Promotion | No flow | P1 |
-
-## Roadmap
-See `claude-codex-TODO.md` for merged implementation plan (Phases 0-9).
+## In progress / to verify
+- On-device visual verification of iOS 26 glass transition strength/contrast
+- Additional tests for promotion atomicity and recurring metadata consistency
 
 ## Known constraints
-- `HPCloudKitEnabled` default is `NO` for local UI iteration
-- Cloud sharing tests require explicit `sync-enabled` profile
-- Dev on Linux; builds via GitHub Actions or physical device (iPhone 15, iOS 26.2.1)
+- `HPCloudKitEnabled` defaults to `NO` for local UI iteration
+- Cloud sharing tests require explicit sync-enabled profile
+- Build/test loop is primarily via GitHub Actions + physical iPhone validation

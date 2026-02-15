@@ -106,91 +106,107 @@ enum Tab: String, CaseIterable {
 
 /// Floating tab bar rendered above scrolling content.
 ///
-/// On iOS 26+, uses native Liquid Glass. On iOS 17-25, uses a tuned material
-/// fallback with low-opacity tint so blur remains visible.
+/// iOS 26+ path uses Liquid Glass indicator transition (`glassEffectID` +
+/// `glassEffectTransition(.matchedGeometry)`), while iOS 17-25 keeps a material fallback.
 struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
-    private let tabBarContentHeight: CGFloat = 50
-    private let activeIndicatorSize = CGSize(width: 84, height: 50)
+    @Namespace private var glassNamespace
+    @Namespace private var fallbackNamespace
+
+    private let tabBarContentHeight: CGFloat = 52
+    private let activeIndicatorSize = CGSize(width: 86, height: 52)
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            tabBarContent(useGlassIndicator: true)
-                .background {
-                    Capsule()
-                        .fill(liquidBaseTint)
-                }
-                .overlay {
-                    Capsule()
-                        .strokeBorder(borderColor, lineWidth: 0.5)
-                        .allowsHitTesting(false)
-                }
-                .padding(.horizontal, AppChromeMetrics.horizontalInset)
-        } else {
-            tabBarContent(useGlassIndicator: false)
-                .background {
-                    ZStack {
+        Group {
+            if #available(iOS 26.0, *) {
+                tabBarBody(useGlassIndicator: true)
+                    .background {
                         Capsule()
-                            .fill(.ultraThinMaterial)
-
-                        Capsule()
-                            .fill(fallbackTint)
+                            .fill(liquidBaseTint)
                     }
-                }
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .strokeBorder(borderColor, lineWidth: 0.5)
-                        .allowsHitTesting(false)
-                }
-                .shadow(
-                    color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
-                    radius: 12,
-                    x: 0,
-                    y: 5
-                )
-                .padding(.horizontal, AppChromeMetrics.horizontalInset)
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(borderColor, lineWidth: 0.5)
+                            .allowsHitTesting(false)
+                    }
+            } else {
+                tabBarBody(useGlassIndicator: false)
+                    .background {
+                        ZStack {
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+
+                            Capsule()
+                                .fill(fallbackTint)
+                        }
+                    }
+                    .clipShape(Capsule())
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(borderColor, lineWidth: 0.5)
+                            .allowsHitTesting(false)
+                    }
+                    .shadow(
+                        color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
+                        radius: 12,
+                        x: 0,
+                        y: 5
+                    )
+            }
         }
+        .padding(.horizontal, AppChromeMetrics.horizontalInset)
     }
 
-    private func tabBarContent(useGlassIndicator: Bool) -> some View {
-        GeometryReader { proxy in
-            let slotWidth = proxy.size.width / CGFloat(Tab.allCases.count)
-            let indicatorX = slotWidth * (CGFloat(activeTabIndex) + 0.5)
-
-            ZStack {
-                if useGlassIndicator {
-                    if #available(iOS 26.0, *) {
-                        glassIndicator
-                            .frame(width: activeIndicatorSize.width, height: activeIndicatorSize.height)
-                            .position(x: indicatorX, y: proxy.size.height / 2)
-                            .allowsHitTesting(false)
-                            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: activeTab)
-                    }
-                } else {
-                    fallbackIndicator
-                        .frame(width: activeIndicatorSize.width, height: activeIndicatorSize.height)
-                        .position(x: indicatorX, y: proxy.size.height / 2)
-                        .allowsHitTesting(false)
-                        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: activeTab)
-                }
-
+    @ViewBuilder
+    private func tabBarBody(useGlassIndicator: Bool) -> some View {
+        if #available(iOS 26.0, *), useGlassIndicator {
+            GlassEffectContainer(spacing: 0) {
                 HStack(spacing: 0) {
                     ForEach(Tab.allCases, id: \.self) { tab in
-                        tabButton(for: tab)
+                        tabButton(for: tab, useGlassIndicator: true)
                     }
                 }
             }
+            .frame(height: tabBarContentHeight)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 10)
+        } else {
+            HStack(spacing: 0) {
+                ForEach(Tab.allCases, id: \.self) { tab in
+                    tabButton(for: tab, useGlassIndicator: false)
+                }
+            }
+            .frame(height: tabBarContentHeight)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 10)
         }
-        .frame(height: tabBarContentHeight)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
     }
 
-    private func tabButton(for tab: Tab) -> some View {
+    @ViewBuilder
+    private func indicator(for tab: Tab, useGlassIndicator: Bool) -> some View {
+        if activeTab == tab {
+            if useGlassIndicator {
+                if #available(iOS 26.0, *) {
+                    Color.clear
+                        .frame(width: activeIndicatorSize.width, height: activeIndicatorSize.height)
+                        .glassEffect(.regular.tint(dropletTint).interactive(), in: .capsule)
+                        .glassEffectID("activeTabIndicator", in: glassNamespace)
+                        .glassEffectTransition(.matchedGeometry)
+                        .allowsHitTesting(false)
+                }
+            } else {
+                fallbackIndicator
+                    .frame(width: activeIndicatorSize.width, height: activeIndicatorSize.height)
+                    .matchedGeometryEffect(id: "activeTabIndicatorFallback", in: fallbackNamespace)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func tabButton(for tab: Tab, useGlassIndicator: Bool) -> some View {
         Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
                 HapticManager.selection()
                 activeTab = tab
             }
@@ -210,30 +226,23 @@ struct FloatingTabBar: View {
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .background(alignment: .center) {
+            indicator(for: tab, useGlassIndicator: useGlassIndicator)
+        }
         .accessibilityIdentifier("tabButton_\(tab.rawValue)")
-    }
-
-    @available(iOS 26.0, *)
-    private var glassIndicator: some View {
-        Color.clear
-            .glassEffect(.regular.tint(dropletTint).interactive(), in: .capsule)
     }
 
     private var fallbackIndicator: some View {
         Capsule()
-            .fill(colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.88))
+            .fill(colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.9))
             .overlay {
                 Capsule()
                     .strokeBorder(
                         colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.14),
-                        lineWidth: 0.5
+                        lineWidth: 0.6
                     )
             }
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.12), radius: 6, x: 0, y: 3)
-    }
-
-    private var activeTabIndex: Int {
-        Tab.allCases.firstIndex(of: activeTab) ?? 0
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.1), radius: 6, x: 0, y: 3)
     }
 
     private var borderColor: Color {
@@ -241,30 +250,28 @@ struct FloatingTabBar: View {
     }
 
     private var liquidBaseTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.72)
+        colorScheme == .dark ? Color.white.opacity(0.07) : Color.white.opacity(0.7)
     }
 
     private var dropletTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.24) : Color.white.opacity(0.48)
+        colorScheme == .dark ? Color.white.opacity(0.28) : Color.white.opacity(0.52)
     }
 
     private var fallbackTint: Color {
         if colorScheme == .dark {
-            return Color(red: 0.12, green: 0.12, blue: 0.14).opacity(0.30)
+            return Color(red: 0.12, green: 0.12, blue: 0.14).opacity(0.3)
         }
-        return Color.white.opacity(0.30)
+        return Color.white.opacity(0.3)
     }
 }
 
 #Preview {
     ZStack {
-        Color.gray.opacity(0.2)
-            .ignoresSafeArea()
-
+        AppBackgroundView()
         VStack {
             Spacer()
             FloatingTabBar(activeTab: .constant(.shopping))
-                .padding(.bottom, AppChromeMetrics.tabBarBottomOffset)
         }
     }
+    .ignoresSafeArea()
 }

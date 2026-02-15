@@ -2,30 +2,38 @@
 
 Last updated: 2026-02-15
 
-> Full details: see `claude-codex-TODO.md` (merged implementation plan, Phases 0-9).
+## Release Goal (P0 + P1)
+Ship stable MVP with:
+- backlog-first tasks execution,
+- strict WIP enforcement,
+- complete household/member management basics,
+- recurring chores generating backlog tasks,
+- reliable bottom chrome behavior on iPhone.
 
-## Now (Sprint 1 — P0 foundation)
-- **Phase 0:** Session consistency — single source of truth for household, `GuidedEmptyStateView` for empty states
-- **Phase 1:** Task Detail Sheet — edit assignee, due date, notes, status
-- **Phase 3:** Sign Out — wire `AuthenticationService.signOut()`, Categories → `BacklogStore`
-- Tab bar glass effect fix (iOS 26+ `.glassEffect` ordering)
+## Now (P0 stabilization)
+1. Session consistency and sign out reliability across all tabs.
+2. Backlog-first task flow hardening:
+   - assignee-required `NEXT`
+   - atomic promotion
+   - inline blocked-action UX
+3. End-to-end household join/invite polish and error handling.
+4. On-device validation for tab bar glass transition and hit-testing.
 
-## Next (Sprint 2 — P0 multi-user + backlog)
-- **Phase 4:** Join Household flow, household management (rename, leave, delete), role guardrails
-- **Phase 2:** Backlog full operations (rename, reorder, edit item) + Promote to Task
-- Notification settings UI
+## Next (P1 completion)
+1. Recurring chores polish:
+   - richer recurrence presets UX
+   - regression tests for schedule generation windows.
+2. Backlog/Tasks UX refinement:
+   - quick assignee chips
+   - better recurring provenance in task detail.
+3. CI/test expansion:
+   - promotion atomicity tests
+   - recurring metadata tests
+   - task flow smoke tests.
 
-## Later (Sprint 3 — P1 automation)
-- **Phase 5:** Recurring Chores engine (CRUD + ChoreScheduler + task generation)
-- **Phase 6:** Areas / Rooms (CRUD + task/chore integration)
-- **Phase 7:** Polish (celebrations, accessibility, tab bar final)
-- **Phase 8:** Testing gate (unit + UI tests for critical flows)
-
-## Future (Sprint 4 — P2 delight)
-- Quick Search across all lists
-- WidgetKit (tasks, shopping)
-- Siri / App Intents
-- Drag & Drop reorder
-- Weekly Home Pulse digest
-- Smart Restock suggestions
-- Theme customization
+## Deferred (Later backlog)
+1. Quick Search across Shopping/Tasks/Backlog.
+2. Weekly Home Pulse dashboard.
+3. WidgetKit surfaces.
+4. Siri / App Intents.
+5. Smart suggestions and digest enhancements.

@@ -65,20 +65,6 @@ struct MoreView: View {
                                     .padding(.leading, 52)
 
                                 NavigationLink {
-                                    if let householdId = userSession.currentHouseholdID {
-                                        AreasManagementView(householdId: householdId, modelContext: modelContext)
-                                    } else {
-                                        GuidedEmptyStateView()
-                                    }
-                                } label: {
-                                    MoreRow(icon: "square.grid.2x2", title: "Rooms / Areas")
-                                }
-                                .buttonStyle(.plain)
-
-                                Divider()
-                                    .padding(.leading, 52)
-
-                                NavigationLink {
                                     SettingsView()
                                 } label: {
                                     MoreRow(icon: "gear", title: "Settings")
@@ -296,6 +282,7 @@ struct ProfileView: View {
         } message: {
             Text(actionErrorMessage ?? "Unknown error")
         }
+        .appTabBarVisibility(false)
     }
 
     private func renameHousehold() {
@@ -446,6 +433,7 @@ struct CategoriesManagementView: View {
                 renamingCategory = nil
             }
         }
+        .appTabBarVisibility(false)
     }
 
     private func addCategory() {
@@ -464,6 +452,9 @@ struct RepetitiveTasksView: View {
 
     @State private var newTitle = ""
     @State private var recurrenceType: RecurringChore.RecurrenceType = .weekly
+    @State private var recurrenceDay = 2
+    @State private var recurrenceDayOfMonth = 1
+    @State private var recurrenceInterval = 1
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -522,16 +513,39 @@ struct RepetitiveTasksView: View {
                     }
                 }
 
+                switch recurrenceType {
+                case .daily:
+                    EmptyView()
+                case .weekly:
+                    Picker("Day of week", selection: $recurrenceDay) {
+                        ForEach(Array(weekdayOptions.enumerated()), id: \.offset) { offset, day in
+                            Text(day).tag(offset + 1)
+                        }
+                    }
+                case .monthly:
+                    Stepper(value: $recurrenceDayOfMonth, in: 1 ... 28) {
+                        Text("Day of month: \(recurrenceDayOfMonth)")
+                    }
+                case .custom:
+                    Stepper(value: $recurrenceInterval, in: 1 ... 365) {
+                        Text("Every \(recurrenceInterval) day\(recurrenceInterval == 1 ? "" : "s")")
+                    }
+                }
+
                 Button {
                     let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !title.isEmpty else { return }
                     _ = _Concurrency.Task {
                         await store.addChore(
                             title: title,
-                            recurrenceType: recurrenceType
+                            recurrenceType: recurrenceType,
+                            recurrenceInterval: recurrenceType == .custom ? recurrenceInterval : 1,
+                            recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
+                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil
                         )
                     }
                     newTitle = ""
+                    recurrenceInterval = 1
                 } label: {
                     Label("Add repetitive task", systemImage: "plus.circle.fill")
                 }
@@ -544,73 +558,13 @@ struct RepetitiveTasksView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadChores()
         }
-    }
-}
-
-struct AreasManagementView: View {
-    @StateObject private var store: AreaStore
-    @EnvironmentObject private var userSession: UserSession
-    @State private var newAreaName = ""
-
-    init(householdId: UUID, modelContext: ModelContext) {
-        _store = StateObject(
-            wrappedValue: AreaStore(householdId: householdId, modelContext: modelContext)
-        )
+        .appTabBarVisibility(false)
     }
 
-    var body: some View {
-        List {
-            Section("Areas") {
-                if store.areas.isEmpty {
-                    Text("No areas yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(store.areas.sorted(by: { $0.sortOrder < $1.sortOrder })) { area in
-                        Text(area.name)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    _ = _Concurrency.Task {
-                                        await store.deleteArea(area)
-                                    }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                    }
-                }
-            }
-
-            Section("Add area") {
-                HStack {
-                    TextField("Area name", text: $newAreaName)
-                        .onSubmit {
-                            addArea()
-                        }
-
-                    Button {
-                        addArea()
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                    }
-                    .disabled(newAreaName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        .navigationTitle("Rooms / Areas")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            store.setSyncMode(userSession.syncMode)
-            await store.loadAreas()
-        }
-    }
-
-    private func addArea() {
-        let title = newAreaName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        _ = _Concurrency.Task {
-            await store.addArea(name: title)
-        }
-        newAreaName = ""
+    private var weekdayOptions: [String] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        return formatter.weekdaySymbols
     }
 }
 
@@ -619,6 +573,7 @@ struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @Environment(\.appTabBarHeight) private var tabBarHeight
     @StateObject private var notificationSettings = NotificationSettingsStore()
 
     var body: some View {
@@ -724,6 +679,11 @@ struct SettingsView: View {
                 await syncDailyDigest()
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear
+                .frame(height: AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight))
+        }
+        .appTabBarVisibility(false)
     }
 
     private func signOut() {

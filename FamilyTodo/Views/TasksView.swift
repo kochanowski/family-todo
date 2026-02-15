@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 import UIKit
 
-/// Tasks screen - daily chores and immediate to-dos
+/// Tasks screen - execution board for tasks promoted from Backlog
 struct TasksView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
@@ -19,15 +19,29 @@ struct TasksView: View {
 }
 
 private struct TasksContent: View {
+    private enum InlineBanner: Equatable {
+        case assigneeRequired
+        case wipLimitReached(current: Int, limit: Int)
+
+        var text: String {
+            switch self {
+            case .assigneeRequired:
+                "Assign this task before moving it to Next."
+            case let .wipLimitReached(current, limit):
+                "WIP limit reached (\(current)/\(limit)). Complete one active task first."
+            }
+        }
+    }
+
     @StateObject private var store: TaskStore
     @StateObject private var memberStore: MemberStore
 
-    @State private var newTaskTitle = ""
     @State private var taskBeingCompleted: UUID?
     @State private var showAllCompleteAnimation = false
-    @State private var showAddSheet = false
     @State private var selectedTask: Task?
-    @FocusState private var isInputFocused: Bool
+    @State private var pendingNextTask: Task?
+    @State private var selectedAssigneeIdForNext: UUID?
+    @State private var activeBanner: InlineBanner?
 
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.appTabBarHeight) private var tabBarHeight
@@ -45,44 +59,31 @@ private struct TasksContent: View {
             let listBottomInset = isKeyboardVisible
                 ? CGFloat(16)
                 : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
-            let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
-                tabBarHeight: tabBarHeight
-            )
 
-            ZStack(alignment: .bottomTrailing) {
-                VStack(spacing: 0) {
-                    header
+            VStack(spacing: 0) {
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
+
+                focusRuleBanner
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, activeBanner == nil ? 16 : 8)
+
+                if let activeBanner {
+                    InlineStatusBanner(text: activeBanner.text)
                         .padding(.horizontal, 20)
-                        .padding(.top, 16)
                         .padding(.bottom, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
-                    focusRuleBanner
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 16)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if !store.nextTasks.isEmpty {
+                            sectionHeader("NEXT")
 
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            if !store.nextTasks.isEmpty {
-                                sectionHeader("NEXT")
-
-                                ForEach(store.nextTasks) { task in
-                                    if taskBeingCompleted != task.id {
-                                        TaskRow(
-                                            task: task,
-                                            assigneeName: assigneeName(for: task),
-                                            onToggle: { toggleTask(task) },
-                                            onOpenDetail: { selectedTask = task }
-                                        )
-                                        .rowInsertAnimation()
-                                        .accessibilityIdentifier("taskRow_\(task.title)")
-                                    }
-                                }
-                            }
-
-                            if !store.backlogTasks.isEmpty {
-                                sectionHeader("BACKLOG")
-
-                                ForEach(store.backlogTasks) { task in
+                            ForEach(store.nextTasks) { task in
+                                if taskBeingCompleted != task.id {
                                     TaskRow(
                                         task: task,
                                         assigneeName: assigneeName(for: task),
@@ -90,40 +91,57 @@ private struct TasksContent: View {
                                         onOpenDetail: { selectedTask = task }
                                     )
                                     .rowInsertAnimation()
-                                    .accessibilityIdentifier("taskRowBacklog_\(task.title)")
-                                }
-                            }
-
-                            if !store.doneTasks.isEmpty {
-                                sectionHeader("COMPLETED")
-
-                                ForEach(store.doneTasks) { task in
-                                    TaskRow(
-                                        task: task,
-                                        assigneeName: assigneeName(for: task),
-                                        onToggle: { toggleTask(task) },
-                                        onOpenDetail: { selectedTask = task }
-                                    )
-                                    .rowInsertAnimation()
-                                    .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                                    .accessibilityIdentifier("taskRow_\(task.title)")
                                 }
                             }
                         }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, listBottomInset)
-                    .refreshable {
-                        store.setSyncMode(userSession.syncMode)
-                        memberStore.setSyncMode(userSession.syncMode)
-                        await store.loadTasks()
-                        await memberStore.loadMembers()
+
+                        if !store.backlogTasks.isEmpty {
+                            sectionHeader("BACKLOG")
+
+                            ForEach(store.backlogTasks) { task in
+                                TaskRow(
+                                    task: task,
+                                    assigneeName: assigneeName(for: task),
+                                    onToggle: { toggleTask(task) },
+                                    onOpenDetail: { selectedTask = task }
+                                )
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button {
+                                        startTaskFromBacklog(task)
+                                    } label: {
+                                        Label("Start", systemImage: "play.fill")
+                                    }
+                                    .tint(.blue)
+                                }
+                                .rowInsertAnimation()
+                                .accessibilityIdentifier("taskRowBacklog_\(task.title)")
+                            }
+                        }
+
+                        if !store.doneTasks.isEmpty {
+                            sectionHeader("COMPLETED")
+
+                            ForEach(store.doneTasks) { task in
+                                TaskRow(
+                                    task: task,
+                                    assigneeName: assigneeName(for: task),
+                                    onToggle: { toggleTask(task) },
+                                    onOpenDetail: { selectedTask = task }
+                                )
+                                .rowInsertAnimation()
+                                .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                            }
+                        }
                     }
                 }
-
-                if !isKeyboardVisible {
-                    addPillButton
-                        .padding(.trailing, AppChromeMetrics.horizontalInset)
-                        .padding(.bottom, floatingButtonInset)
+                .padding(.horizontal, 20)
+                .padding(.bottom, listBottomInset)
+                .refreshable {
+                    store.setSyncMode(userSession.syncMode)
+                    memberStore.setSyncMode(userSession.syncMode)
+                    await store.loadTasks()
+                    await memberStore.loadMembers()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -134,18 +152,14 @@ private struct TasksContent: View {
             await store.loadTasks()
             await memberStore.loadMembers()
         }
-        .sheet(isPresented: $showAddSheet) {
-            addTaskSheet
-                .presentationDetents([.height(180)])
-                .presentationBackground(.ultraThinMaterial)
-        }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(
                 task: task,
                 members: memberStore.members,
                 onSave: { updatedTask in
                     _ = _Concurrency.Task {
-                        await store.updateTask(updatedTask)
+                        let validation = await store.updateTask(updatedTask)
+                        handleNextTransitionValidation(validation)
                     }
                 },
                 onDelete: { taskToDelete in
@@ -155,13 +169,50 @@ private struct TasksContent: View {
                 }
             )
         }
-        .onChange(of: store.error as? TaskStoreError) { _, error in
-            if let error {
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.warning)
-                print("Task Error: \(error.localizedDescription)")
+        .sheet(isPresented: Binding(
+            get: { pendingNextTask != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingNextTask = nil
+                    selectedAssigneeIdForNext = nil
+                }
+            }
+        )) {
+            if let pendingNextTask {
+                AssigneePickerSheet(
+                    title: "Assign and start",
+                    members: activeMembers,
+                    selectedAssigneeId: $selectedAssigneeIdForNext,
+                    onCancel: {
+                        self.pendingNextTask = nil
+                        selectedAssigneeIdForNext = nil
+                    },
+                    onConfirm: {
+                        guard let assigneeId = selectedAssigneeIdForNext else { return }
+                        self.pendingNextTask = nil
+                        selectedAssigneeIdForNext = nil
+                        moveTaskToNext(pendingNextTask, assigneeId: assigneeId)
+                    }
+                )
             }
         }
+        .onChange(of: store.error as? TaskStoreError) { _, error in
+            guard let error else { return }
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+            print("Task Error: \(error.localizedDescription)")
+        }
+    }
+
+    private var activeMembers: [Member] {
+        memberStore.members
+            .filter(\.isActive)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var currentMember: Member? {
+        guard let userId = userSession.userId else { return nil }
+        return activeMembers.first { $0.userId == userId }
     }
 
     private var header: some View {
@@ -201,100 +252,65 @@ private struct TasksContent: View {
         }
     }
 
-    private var addPillButton: some View {
-        Button {
-            HapticManager.lightTap()
-            showAddSheet = true
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .bold))
-                Text("Add task")
-                    .font(.system(size: 15, weight: .semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
-            .frame(height: AppChromeMetrics.compactCTAHeight)
-            .background {
-                Capsule()
-                    .fill(.green)
-                    .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("taskAddButton")
-    }
-
-    private var addTaskSheet: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
-                        .frame(width: 22, height: 22)
-
-                    TextField("What needs to be done?", text: $newTaskTitle)
-                        .font(.system(size: 17))
-                        .focused($isInputFocused)
-                        .accessibilityIdentifier("taskInputField")
-                        .submitLabel(.done)
-                        .onSubmit {
-                            addTask()
-                        }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-
-                Spacer()
-            }
-            .navigationTitle("New Task")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        newTaskTitle = ""
-                        showAddSheet = false
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add") {
-                        addTask()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .onAppear {
-                isInputFocused = true
-            }
-        }
-    }
-
-    private func addTask() {
-        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-
-        if !store.canMoveToNext(assigneeId: nil) {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.warning)
+    private func startTaskFromBacklog(_ task: Task) {
+        let members = activeMembers
+        guard !members.isEmpty else {
+            showBanner(.assigneeRequired)
             return
         }
 
-        _ = _Concurrency.Task {
-            await store.createTask(title: title, status: .next)
+        if members.count == 1, let assigneeId = members.first?.id {
+            moveTaskToNext(task, assigneeId: assigneeId)
+            return
         }
 
-        newTaskTitle = ""
-        showAddSheet = false
-        HapticManager.lightTap()
+        pendingNextTask = task
+        selectedAssigneeIdForNext = currentMember?.id
+    }
+
+    private func moveTaskToNext(_ task: Task, assigneeId: UUID) {
+        var updatedTask = task
+        updatedTask.status = .next
+        updatedTask.assigneeId = assigneeId
+        updatedTask.assigneeIds = [assigneeId]
+
+        _ = _Concurrency.Task {
+            let validation = await store.updateTask(updatedTask)
+            handleNextTransitionValidation(validation)
+            if validation == .ok {
+                HapticManager.lightTap()
+            }
+        }
     }
 
     private func toggleTask(_ task: Task) {
         let newStatus: Task.TaskStatus = task.status == .done ? .next : .done
 
-        if newStatus == .next, !store.canMoveToNext(assigneeId: task.assigneeId, excludingTaskId: task.id) {
-            HapticManager.warning()
-            return
+        if newStatus == .next {
+            if let existingAssignee = task.assigneeId {
+                let validation = store.validateNextTransition(assigneeId: existingAssignee, excludingTaskId: task.id)
+                guard validation == .ok else {
+                    handleNextTransitionValidation(validation)
+                    HapticManager.warning()
+                    return
+                }
+            } else {
+                let members = activeMembers
+                if members.count == 1, let assigneeId = members.first?.id {
+                    var updatedTask = task
+                    updatedTask.assigneeId = assigneeId
+                    updatedTask.assigneeIds = [assigneeId]
+                    updatedTask.status = .next
+                    _ = _Concurrency.Task {
+                        let validation = await store.updateTask(updatedTask)
+                        handleNextTransitionValidation(validation)
+                    }
+                } else {
+                    pendingNextTask = task
+                    selectedAssigneeIdForNext = currentMember?.id
+                }
+                return
+            }
         }
 
         let willCompleteAll = newStatus == .done && store.nextTasks.count == 1
@@ -307,8 +323,9 @@ private struct TasksContent: View {
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 _ = _Concurrency.Task {
-                    await store.moveTask(task, to: newStatus)
+                    let validation = await store.moveTask(task, to: newStatus)
                     taskBeingCompleted = nil
+                    handleNextTransitionValidation(validation)
 
                     if willCompleteAll {
                         HapticManager.success()
@@ -323,9 +340,37 @@ private struct TasksContent: View {
             }
         } else {
             _ = _Concurrency.Task {
-                await store.moveTask(task, to: newStatus)
+                let validation = await store.moveTask(task, to: newStatus)
+                handleNextTransitionValidation(validation)
+                if validation == .ok {
+                    HapticManager.lightTap()
+                }
             }
-            HapticManager.lightTap()
+        }
+    }
+
+    private func handleNextTransitionValidation(_ validation: TaskStore.NextTransitionValidation) {
+        switch validation {
+        case .ok:
+            activeBanner = nil
+        case .assigneeRequired:
+            showBanner(.assigneeRequired)
+        case let .wipLimitReached(current, limit):
+            showBanner(.wipLimitReached(current: current, limit: limit))
+        }
+    }
+
+    private func showBanner(_ banner: InlineBanner) {
+        withAnimation(WowAnimation.spring) {
+            activeBanner = banner
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            if activeBanner == banner {
+                withAnimation(WowAnimation.easeOut) {
+                    activeBanner = nil
+                }
+            }
         }
     }
 
@@ -341,6 +386,77 @@ private struct TasksContent: View {
             .padding(.top, 24)
             .padding(.bottom, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct InlineStatusBanner: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.orange.opacity(0.12))
+        }
+    }
+}
+
+private struct AssigneePickerSheet: View {
+    let title: String
+    let members: [Member]
+    @Binding var selectedAssigneeId: UUID?
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List(members) { member in
+                Button {
+                    selectedAssigneeId = member.id
+                } label: {
+                    HStack {
+                        Text(member.displayName)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if selectedAssigneeId == member.id {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Start") {
+                        onConfirm()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(selectedAssigneeId == nil)
+                }
+            }
+        }
+        .presentationDetents([.height(320)])
+        .presentationBackground(.ultraThinMaterial)
     }
 }
 
@@ -374,6 +490,15 @@ struct TaskRow: View {
                         .strikethrough(isCompleted)
 
                     HStack(spacing: 8) {
+                        if task.taskType == .recurring {
+                            Label("Recurring", systemImage: "repeat")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.purple)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.purple.opacity(0.12)))
+                        }
+
                         if let dueDate = task.dueDate {
                             dueDateLabel(dueDate)
                         }
@@ -472,7 +597,7 @@ private struct TaskDetailSheet: View {
                 Section("Assignee") {
                     Picker("Who", selection: $assigneeId) {
                         Text("Unassigned").tag(UUID?.none)
-                        ForEach(members) { member in
+                        ForEach(members.filter(\.isActive)) { member in
                             Text(member.displayName).tag(Optional(member.id))
                         }
                     }

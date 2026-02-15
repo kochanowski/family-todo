@@ -33,8 +33,15 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(TaskStore.wipLimit, 3, "WIP limit should be 3")
     }
 
-    func testCanMoveToNext_NoAssignee_ReturnsTrue() {
-        XCTAssertTrue(store.canMoveToNext(assigneeId: nil))
+    func testCanMoveToNext_NoAssignee_ReturnsFalse() {
+        XCTAssertFalse(store.canMoveToNext(assigneeId: nil))
+    }
+
+    func testValidateNextTransition_NoAssignee_ReturnsAssigneeRequired() {
+        XCTAssertEqual(
+            store.validateNextTransition(assigneeId: nil),
+            .assigneeRequired
+        )
     }
 
     func testCanMoveToNext_EmptyTasks_ReturnsTrue() {
