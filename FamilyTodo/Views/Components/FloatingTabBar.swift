@@ -98,8 +98,9 @@ enum Tab: String, CaseIterable {
 struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
-    @Namespace private var dropletNamespace
     private let tabBarContentHeight: CGFloat = 44
+    private let indicatorHorizontalInset: CGFloat = 8
+    private let indicatorVerticalInset: CGFloat = 6
 
     var body: some View {
         HStack(spacing: 0) {
@@ -110,7 +111,14 @@ struct FloatingTabBar: View {
         .frame(height: tabBarContentHeight)
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
-        .background { tabBarSurface }
+        .background {
+            ZStack(alignment: .leading) {
+                tabBarSurface
+                GeometryReader { proxy in
+                    activeIndicator(in: proxy)
+                }
+            }
+        }
         .clipShape(Capsule())
         .overlay {
             Capsule()
@@ -153,26 +161,15 @@ struct FloatingTabBar: View {
                 activeTab = tab
             }
         } label: {
-            ZStack {
-                if activeTab == tab {
-                    activeIndicator
-                        .matchedGeometryEffect(id: "activeTabDroplet", in: dropletNamespace)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .allowsHitTesting(false)
-                }
+            VStack(spacing: 3) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 18, weight: activeTab == tab ? .semibold : .regular))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(activeTab == tab ? tab.activeIconColor : .secondary)
 
-                VStack(spacing: 3) {
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 18, weight: activeTab == tab ? .semibold : .regular))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(activeTab == tab ? tab.activeIconColor : .secondary)
-
-                    Text(tab.title)
-                        .font(.system(size: 10, weight: activeTab == tab ? .semibold : .regular))
-                        .foregroundStyle(activeTab == tab ? .primary : .secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text(tab.title)
+                    .font(.system(size: 10, weight: activeTab == tab ? .semibold : .regular))
+                    .foregroundStyle(activeTab == tab ? .primary : .secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -182,8 +179,24 @@ struct FloatingTabBar: View {
         .accessibilityIdentifier("tabButton_\(tab.rawValue)")
     }
 
+    private func activeIndicator(in proxy: GeometryProxy) -> some View {
+        let slotWidth = proxy.size.width / CGFloat(Tab.allCases.count)
+        let indicatorWidth = max(64, slotWidth - indicatorHorizontalInset)
+        let indicatorHeight = max(44, proxy.size.height - indicatorVerticalInset)
+        let xOffset = indicatorOffsetX(slotWidth: slotWidth, indicatorWidth: indicatorWidth)
+        let yOffset = max(0, (proxy.size.height - indicatorHeight) / 2)
+
+        return Group {
+            activeIndicatorSurface
+        }
+        .frame(width: indicatorWidth, height: indicatorHeight)
+        .offset(x: xOffset, y: yOffset)
+        .allowsHitTesting(false)
+        .animation(.spring(response: 0.34, dampingFraction: 0.8), value: activeTab)
+    }
+
     @ViewBuilder
-    private var activeIndicator: some View {
+    private var activeIndicatorSurface: some View {
         if #available(iOS 26.0, *) {
             GlassEffectContainer(spacing: 0) {
                 Color.white.opacity(0.001)
@@ -193,21 +206,28 @@ struct FloatingTabBar: View {
             .overlay {
                 Capsule()
                     .strokeBorder(
-                        colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.06),
+                        colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.12),
                         lineWidth: 0.5
                     )
             }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.1), radius: 6, x: 0, y: 3)
         } else {
             Capsule()
-                .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.42))
+                .fill(colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.88))
                 .overlay {
                     Capsule()
                         .strokeBorder(
-                            colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.08),
+                            colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.12),
                             lineWidth: 0.5
                         )
                 }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.12), radius: 6, x: 0, y: 3)
         }
+    }
+
+    private func indicatorOffsetX(slotWidth: CGFloat, indicatorWidth: CGFloat) -> CGFloat {
+        let index = CGFloat(Tab.allCases.firstIndex(of: activeTab) ?? 0)
+        return (slotWidth * index) + ((slotWidth - indicatorWidth) / 2)
     }
 
     private var borderColor: Color {
@@ -219,7 +239,7 @@ struct FloatingTabBar: View {
     }
 
     private var dropletTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.16) : Color.white.opacity(0.24)
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.36)
     }
 
     private var fallbackTint: Color {

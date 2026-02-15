@@ -52,6 +52,7 @@ private struct ShoppingListContent: View {
     @FocusState private var rapidEntryFocused: Bool
 
     @State private var showRestock = false
+    @State private var showClearToBuyConfirmation = false
     @State private var itemBeingRemoved: UUID?
 
     @Environment(\.colorScheme) private var colorScheme
@@ -148,6 +149,14 @@ private struct ShoppingListContent: View {
             await store.loadItems()
         }
         .newItemsBanner(manager: subscriptionManager)
+        .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) {
+                clearToBuy()
+            }
+        } message: {
+            Text("This removes current To Buy items. Recently Purchased stays unchanged.")
+        }
     }
 
     // MARK: - Header
@@ -169,30 +178,38 @@ private struct ShoppingListContent: View {
 
             Spacer()
 
-            // Clear all button
-            if !store.toBuyItems.isEmpty {
-                Button {
-                    clearAll()
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                // Clear To Buy button
+                if !store.toBuyItems.isEmpty {
+                    Button {
+                        HapticManager.lightTap()
+                        showClearToBuyConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("shoppingClearButton")
                 }
-            }
 
-            // Restock button with pulse animation
-            Button {
-                HapticManager.lightTap()
-                showRestock = true
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityIdentifier("shoppingRestockButton")
-            .pulseAnimation(restockPulse.isPulsing)
-            .sheet(isPresented: $showRestock) {
-                RestockSheet(restockItems: store.boughtItems, onRestock: restockItem)
+                // Recently purchased
+                Button {
+                    HapticManager.lightTap()
+                    showRestock = true
+                } label: {
+                    Image(systemName: "clock.badge.checkmark")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("shoppingRestockButton")
+                .pulseAnimation(restockPulse.isPulsing)
+                .sheet(isPresented: $showRestock) {
+                    RestockSheet(restockItems: store.boughtItems, onRestock: restockItem)
+                }
             }
         }
     }
@@ -326,9 +343,9 @@ private struct ShoppingListContent: View {
         HapticManager.lightTap()
     }
 
-    private func clearAll() {
+    private func clearToBuy() {
         _Concurrency.Task {
-            await store.markAllAsBought()
+            await store.clearToBuy()
         }
         HapticManager.success()
     }

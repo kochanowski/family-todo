@@ -85,6 +85,37 @@ final class FamilyTodoUITests: XCTestCase {
         XCTAssertTrue(app.buttons["shoppingAddItemButton"].exists)
     }
 
+    func testShoppingClearToBuyConfirmation_CancelKeepsItems() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+
+        let clearButton = app.buttons["shoppingClearButton"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 5.0))
+        clearButton.tap()
+
+        let alert = app.alerts["Clear shopping list?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2.0))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.staticTexts["Milk"].waitForExistence(timeout: 2.0))
+        XCTAssertTrue(app.staticTexts["Bread"].exists)
+    }
+
+    func testShoppingClearToBuyConfirmation_ClearRemovesToBuy() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+
+        let milk = app.staticTexts["Milk"]
+        XCTAssertTrue(milk.waitForExistence(timeout: 5.0))
+
+        app.buttons["shoppingClearButton"].tap()
+        let alert = app.alerts["Clear shopping list?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2.0))
+        alert.buttons["Clear"].tap()
+
+        let milkGone = NSPredicate(format: "exists == false")
+        expectation(for: milkGone, evaluatedWith: milk, handler: nil)
+        waitForExpectations(timeout: 5.0)
+    }
+
     func testRestockMoveAndOpen() {
         let app = launchApp(arguments: ["-seedScenario", "household_basic"])
 
