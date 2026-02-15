@@ -38,15 +38,12 @@ private struct TasksContent: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let safeAreaBottom = proxy.safeAreaInsets.bottom
+        GeometryReader { _ in
             let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight,
-                safeAreaBottom: safeAreaBottom
+                tabBarHeight: tabBarHeight
             )
             let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
-                tabBarHeight: tabBarHeight,
-                safeAreaBottom: safeAreaBottom
+                tabBarHeight: tabBarHeight
             )
 
             ZStack(alignment: .bottomTrailing) {

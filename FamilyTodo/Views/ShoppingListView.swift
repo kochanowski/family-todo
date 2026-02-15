@@ -63,17 +63,24 @@ private struct ShoppingListContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let safeAreaBottom = proxy.safeAreaInsets.bottom
             let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight,
-                safeAreaBottom: safeAreaBottom
+                tabBarHeight: tabBarHeight
             )
             let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
-                tabBarHeight: tabBarHeight,
-                safeAreaBottom: safeAreaBottom
+                tabBarHeight: tabBarHeight
             )
+            let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
 
             ZStack(alignment: .bottomTrailing) {
+                if isRapidEntryActive {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, maxHeight: rapidEntryTapHeight, alignment: .top)
+                        .onTapGesture {
+                            commitOrDismissRapidEntry()
+                        }
+                }
+
                 VStack(spacing: 0) {
                     // Header
                     header
@@ -135,13 +142,6 @@ private struct ShoppingListContent: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // Tap outside: commit or dismiss rapid entry
-            if isRapidEntryActive {
-                commitOrDismissRapidEntry()
-            }
         }
         .task {
             store.setSyncMode(userSession.syncMode)

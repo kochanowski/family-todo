@@ -6,10 +6,9 @@ struct MoreView: View {
     @Environment(\.appTabBarHeight) private var tabBarHeight
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight,
-                safeAreaBottom: proxy.safeAreaInsets.bottom
+                tabBarHeight: tabBarHeight
             )
 
             NavigationStack {

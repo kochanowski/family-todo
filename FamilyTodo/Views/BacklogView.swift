@@ -33,10 +33,9 @@ private struct BacklogContent: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight,
-                safeAreaBottom: proxy.safeAreaInsets.bottom
+                tabBarHeight: tabBarHeight
             )
 
             VStack(spacing: 0) {
