@@ -37,6 +37,7 @@ struct MoreView: View {
                                 } label: {
                                     MoreRow(icon: "folder", title: "Backlog Categories")
                                 }
+                                .buttonStyle(.plain)
 
                                 Divider()
                                     .padding(.leading, 52)
@@ -46,6 +47,7 @@ struct MoreView: View {
                                 } label: {
                                     MoreRow(icon: "repeat", title: "Repetitive Tasks")
                                 }
+                                .buttonStyle(.plain)
 
                                 Divider()
                                     .padding(.leading, 52)
@@ -55,8 +57,10 @@ struct MoreView: View {
                                 } label: {
                                     MoreRow(icon: "gear", title: "Settings")
                                 }
+                                .buttonStyle(.plain)
                                 .accessibilityIdentifier("Settings")
                             }
+                            .tint(.primary)
                             .background {
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(cardBackground)
@@ -147,7 +151,7 @@ struct MoreRow: View {
     let icon: String
     let title: String
     var subtitle: String?
-    var tint: Color = .blue
+    var tint: Color = .primary
 
     var body: some View {
         HStack(spacing: 12) {
