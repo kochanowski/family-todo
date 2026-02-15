@@ -189,8 +189,8 @@ private struct TasksContent: View {
                     .font(.system(size: 15, weight: .semibold))
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
+            .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
                     .fill(.green)

@@ -34,6 +34,7 @@
 		9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC3E5BB230C4430890CE54E /* TaskTests.swift */; };
 		138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29641B06528147179F25068D /* TaskStoreTests.swift */; };
 		58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */; };
+		B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */; };
 		A1B2C3D4E5F60718293A4B80 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B79 /* XCTest.framework */; };
 		A1B2C3D4E5F60718293A4B91 /* Member.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B96 /* Member.swift */; };
 		A1B2C3D4E5F60718293A4B93 /* Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B98 /* Task.swift */; };
@@ -109,6 +110,7 @@
 		7EC3E5BB230C4430890CE54E /* TaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTests.swift; sourceTree = "<group>"; };
 		29641B06528147179F25068D /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdTests.swift; sourceTree = "<group>"; };
+		B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStoreTests.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B75 /* HousePulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = HousePulse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B77 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -258,6 +260,7 @@
 				7EC3E5BB230C4430890CE54E /* TaskTests.swift */,
 				29641B06528147179F25068D /* TaskStoreTests.swift */,
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
+				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 			);
 			path = FamilyTodoTests;
 			sourceTree = "<group>";
@@ -533,6 +536,7 @@
 				9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */,
 				138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */,
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
+				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

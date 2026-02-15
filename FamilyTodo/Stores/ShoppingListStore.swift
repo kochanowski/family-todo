@@ -245,7 +245,11 @@ final class ShoppingListStore: ObservableObject {
     func restoreRecentItem(_ item: ShoppingItem) async {
         let key = normalizedRecentKey(item.title)
         let matchingBought = items.filter { $0.isBought && normalizedRecentKey($0.title) == key }
-        guard let latest = matchingBought.max(by: { recentTimestamp(for: $0) < recentTimestamp(for: $1) }) else {
+        guard
+            let latest = matchingBought.max(by: {
+                recentTimestamp(for: $0) < recentTimestamp(for: $1)
+            })
+        else {
             return
         }
 
@@ -259,6 +263,49 @@ final class ShoppingListStore: ObservableObject {
         for duplicate in matchingBought where duplicate.id != restored.id {
             await deleteItem(duplicate)
         }
+    }
+
+    /// Deletes a single recent item (all bought duplicates matching the same title).
+    func deleteRecentItem(_ item: ShoppingItem) async {
+        let key = normalizedRecentKey(item.title)
+        let matchingBought = items.filter { $0.isBought && normalizedRecentKey($0.title) == key }
+        for match in matchingBought {
+            await deleteItem(match)
+        }
+    }
+
+    /// Clears all recently purchased items.
+    func clearRecentItems() async {
+        let boughtItems = items.filter(\.isBought)
+        guard !boughtItems.isEmpty else { return }
+
+        // Optimistic UI update
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            items.removeAll(where: \.isBought)
+        }
+
+        // Delete from cache/cloud
+        for item in boughtItems {
+            if let context = modelContext {
+                let itemId = item.id
+                let descriptor = FetchDescriptor<CachedShoppingItem>(
+                    predicate: #Predicate { $0.id == itemId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    context.delete(cached)
+                }
+            }
+
+            if isCloudSyncEnabled {
+                do {
+                    try await cloudKit.deleteShoppingItem(id: item.id)
+                } catch {
+                    self.error = error
+                }
+            }
+        }
+
+        try? modelContext?.save()
     }
 
     // MARK: - Bulk Operations

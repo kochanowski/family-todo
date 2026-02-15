@@ -61,14 +61,17 @@ private struct ShoppingListContent: View {
     @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
-        _store = StateObject(wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
+        _store = StateObject(
+            wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
+        )
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let listBottomInset = isKeyboardVisible
-                ? CGFloat(16)
-                : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
+            let listBottomInset =
+                isKeyboardVisible
+                    ? CGFloat(16)
+                    : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
             let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
                 tabBarHeight: tabBarHeight
             )
@@ -210,7 +213,12 @@ private struct ShoppingListContent: View {
                 .accessibilityIdentifier("shoppingRestockButton")
                 .pulseAnimation(restockPulse.isPulsing)
                 .sheet(isPresented: $showRestock) {
-                    RestockSheet(store: store, onRestore: restoreRecentItem)
+                    RestockSheet(
+                        store: store,
+                        onRestore: restoreRecentItem,
+                        onDeleteItem: deleteRecentItem,
+                        onClearAll: clearRecentItems
+                    )
                 }
             }
         }
@@ -229,8 +237,8 @@ private struct ShoppingListContent: View {
                     .font(.system(size: 15, weight: .semibold))
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
+            .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
                     .fill(.blue)
@@ -345,6 +353,20 @@ private struct ShoppingListContent: View {
         HapticManager.lightTap()
     }
 
+    private func deleteRecentItem(_ item: ShoppingItem) {
+        _Concurrency.Task {
+            await store.deleteRecentItem(item)
+        }
+        HapticManager.lightTap()
+    }
+
+    private func clearRecentItems() {
+        _Concurrency.Task {
+            await store.clearRecentItems()
+        }
+        HapticManager.success()
+    }
+
     private func clearToBuy() {
         _Concurrency.Task {
             await store.clearToBuy()
@@ -415,7 +437,10 @@ private struct RapidEntryTextField: UIViewRepresentable {
         textField.autocapitalizationType = .sentences
         textField.autocorrectionType = .yes
         textField.enablesReturnKeyAutomatically = false
-        textField.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        textField.addTarget(
+            context.coordinator, action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
         textField.inputAccessoryView = context.coordinator.makeAccessoryToolbar()
         return textField
     }
@@ -457,19 +482,53 @@ private struct RapidEntryTextField: UIViewRepresentable {
             return false
         }
 
-        func makeAccessoryToolbar() -> UIToolbar {
-            let toolbar = UIToolbar()
-            toolbar.sizeToFit()
+        func makeAccessoryToolbar() -> UIView {
+            let topInset: CGFloat = 6
+            let buttonHeight = AppChromeMetrics.compactCTAHeight
+            let bottomInset = AppChromeMetrics.keyboardAccessoryBottomInset
+            let containerHeight = topInset + buttonHeight + bottomInset
 
-            let spacer = UIBarButtonItem(systemItem: .flexibleSpace)
-            let done = UIBarButtonItem(
-                title: "Done",
-                style: .done,
-                target: self,
-                action: #selector(doneTapped)
+            let container = UIView(
+                frame: CGRect(
+                    x: 0, y: 0, width: UIScreen.main.bounds.width, height: containerHeight
+                )
             )
-            toolbar.items = [spacer, done]
-            return toolbar
+            container.backgroundColor = .clear
+
+            // "Done" pill button matching the "Add item" style
+            let button = UIButton(type: .system)
+            button.setTitle("Done", for: .normal)
+            button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+            button.setTitleColor(.white, for: .normal)
+            button.backgroundColor = UIColor.systemBlue
+            button.layer.cornerRadius = buttonHeight / 2
+            button.contentEdgeInsets = UIEdgeInsets(
+                top: 0,
+                left: AppChromeMetrics.compactCTAHorizontalPadding,
+                bottom: 0,
+                right: AppChromeMetrics.compactCTAHorizontalPadding
+            )
+            button.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
+
+            // Shadow matching the Add item pill
+            button.layer.shadowColor = UIColor.systemBlue.withAlphaComponent(0.3).cgColor
+            button.layer.shadowRadius = 8
+            button.layer.shadowOffset = CGSize(width: 0, height: 4)
+            button.layer.shadowOpacity = 1.0
+
+            button.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(button)
+
+            NSLayoutConstraint.activate([
+                button.trailingAnchor.constraint(
+                    equalTo: container.trailingAnchor,
+                    constant: -AppChromeMetrics.horizontalInset
+                ),
+                button.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -bottomInset),
+                button.heightAnchor.constraint(equalToConstant: buttonHeight),
+            ])
+
+            return container
         }
 
         @objc
@@ -484,12 +543,15 @@ private struct RapidEntryTextField: UIViewRepresentable {
 struct RestockSheet: View {
     @ObservedObject var store: ShoppingListStore
     let onRestore: (ShoppingItem) -> Void
+    let onDeleteItem: (ShoppingItem) -> Void
+    let onClearAll: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @State private var showClearAllConfirmation = false
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            Group {
                 if store.recentItems.isEmpty {
                     ContentUnavailableView(
                         "No Recent Purchases",
@@ -498,23 +560,51 @@ struct RestockSheet: View {
                     )
                     .padding(.top, 60)
                 } else {
-                    LazyVStack(spacing: 0) {
+                    List {
                         ForEach(store.recentItems) { item in
-                            RestockItemRow(item: item, onRestore: { onRestore(item) })
+                            RestockItemRow(
+                                item: item,
+                                onRestore: { onRestore(item) },
+                                onDelete: { onDeleteItem(item) }
+                            )
+                            .listRowInsets(
+                                EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .listStyle(.plain)
                 }
             }
-            .background((colorScheme == .dark ? Color.black : Color(hex: "F9F9F9")).ignoresSafeArea())
+            .background(
+                (colorScheme == .dark ? Color.black : Color(hex: "F9F9F9")).ignoresSafeArea()
+            )
             .navigationTitle("Recently Purchased")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !store.recentItems.isEmpty {
+                        Button(role: .destructive) {
+                            showClearAllConfirmation = true
+                        } label: {
+                            Text("Clear All")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
                 }
+            }
+            .alert("Clear all recently purchased?", isPresented: $showClearAllConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear All", role: .destructive) {
+                    onClearAll()
+                }
+            } message: {
+                Text("This permanently removes all items from the recently purchased list.")
             }
         }
         .presentationDetents([.medium, .large])
@@ -525,6 +615,7 @@ struct RestockSheet: View {
 private struct RestockItemRow: View {
     let item: ShoppingItem
     let onRestore: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack {
@@ -543,6 +634,11 @@ private struct RestockItemRow: View {
             }
         }
         .padding(.vertical, 12)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 }
 
