@@ -1,0 +1,417 @@
+import SwiftUI
+
+/// More screen - hub for settings, profile, and configuration
+struct MoreView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appTabBarHeight) private var tabBarHeight
+
+    var body: some View {
+        GeometryReader { _ in
+            let listBottomInset = AppChromeMetrics.contentBottomInset(
+                tabBarHeight: tabBarHeight
+            )
+
+            NavigationStack {
+                VStack(spacing: 0) {
+                    // Header
+                    header
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
+
+                    // Menu items
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Profile card
+                            NavigationLink {
+                                ProfileView()
+                            } label: {
+                                ProfileCard()
+                            }
+                            .buttonStyle(.plain)
+
+                            // Settings group
+                            VStack(spacing: 0) {
+                                NavigationLink {
+                                    CategoriesManagementView()
+                                } label: {
+                                    MoreRow(icon: "folder", title: "Backlog Categories")
+                                }
+                                .buttonStyle(.plain)
+
+                                Divider()
+                                    .padding(.leading, 52)
+
+                                NavigationLink {
+                                    RepetitiveTasksView()
+                                } label: {
+                                    MoreRow(icon: "repeat", title: "Repetitive Tasks")
+                                }
+                                .buttonStyle(.plain)
+
+                                Divider()
+                                    .padding(.leading, 52)
+
+                                NavigationLink {
+                                    SettingsView()
+                                } label: {
+                                    MoreRow(icon: "gear", title: "Settings")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("Settings")
+                            }
+                            .tint(.primary)
+                            .background {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(cardBackground)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, listBottomInset)
+                    }
+
+                    Spacer()
+                }
+                .background(Color.clear)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack {
+            Text("More")
+                .font(.system(size: 28, weight: .bold))
+
+            Spacer()
+        }
+    }
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+    }
+}
+
+// MARK: - Profile Card
+
+struct ProfileCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var userSession: UserSession
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Avatar stack
+            ZStack {
+                Circle()
+                    .fill(.blue)
+                    .frame(width: 44, height: 44)
+                    .overlay {
+                        Text(String(userSession.displayName?.prefix(1) ?? "U"))
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                // .offset(x: -10) // TODO: Multi-avatar logic
+            }
+            .frame(width: 44)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(userSession.displayName ?? "User")
+                    .font(.system(size: 17, weight: .semibold))
+
+                Text(householdStore.currentHousehold?.name ?? "No Household")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(cardBackground)
+        }
+    }
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+    }
+}
+
+// MARK: - More Row Component
+
+/// Standardized row for More menu items to ensure consistent icon sizing and styling.
+struct MoreRow: View {
+    let icon: String
+    let title: String
+    var subtitle: String?
+    var tint: Color = .primary
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.primary)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Sub-screens
+
+struct ProfileView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var householdStore: HouseholdStore
+
+    var body: some View {
+        List {
+            Section("Household") {
+                if let household = householdStore.currentHousehold {
+                    LabeledContent("Name", value: household.name)
+                } else {
+                    Text("No Household Selected")
+                }
+            }
+
+            Section("Members") {
+                if let household = householdStore.currentHousehold {
+                    NavigationLink {
+                        MemberManagementView(householdId: household.id)
+                    } label: {
+                        Text("Manage Members")
+                    }
+                } else {
+                    Text("Select a household first")
+                }
+            }
+        }
+        .navigationTitle("Profile")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct MemberRow: View {
+    let name: String
+    let initials: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(color)
+                .frame(width: 36, height: 36)
+                .overlay {
+                    Text(initials)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+
+            Text(name)
+                .font(.system(size: 16))
+
+            Spacer()
+        }
+    }
+}
+
+struct CategoriesManagementView: View {
+    @State private var categories: [String] = []
+    @State private var newCategoryName = ""
+
+    var body: some View {
+        List {
+            ForEach(categories, id: \.self) { category in
+                Text(category)
+            }
+            .onDelete { indexSet in
+                categories.remove(atOffsets: indexSet)
+            }
+
+            Section {
+                HStack {
+                    TextField("New category", text: $newCategoryName)
+                        .onSubmit {
+                            addCategory()
+                        }
+
+                    Button {
+                        addCategory()
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(.blue)
+                    }
+                    .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .navigationTitle("Backlog Categories")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func addCategory() {
+        guard !newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        categories.append(newCategoryName.trimmingCharacters(in: .whitespaces))
+        newCategoryName = ""
+    }
+}
+
+struct RepetitiveTasksView: View {
+    var body: some View {
+        ContentUnavailableView(
+            "Coming Soon",
+            systemImage: "arrow.trianglehead.2.clockwise.rotate.90",
+            description: Text("Repetitive tasks will be available in a future update.")
+        )
+        .navigationTitle("Repetitive Tasks")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct SettingsView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        List {
+            // MARK: - Appearance Section
+
+            Section {
+                AppearanceSelector(selectedMode: Binding(
+                    get: { themeStore.appearanceMode },
+                    set: {
+                        HapticManager.selection()
+                        themeStore.appearanceMode = $0
+                    }
+                ))
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.clear)
+            } header: {
+                Text("Appearance")
+            }
+
+            // MARK: - Toggles Section
+
+            Section {
+                Toggle(isOn: Binding(
+                    get: { themeStore.celebrationsEnabled },
+                    set: { themeStore.celebrationsEnabled = $0 }
+                )) {
+                    Label("Celebrations", systemImage: "party.popper.fill")
+                        .foregroundStyle(.primary)
+                }
+                .accessibilityIdentifier("settingsToggle_celebrations")
+
+                Toggle(isOn: Binding(
+                    get: { themeStore.suggestionsEnabled },
+                    set: { themeStore.suggestionsEnabled = $0 }
+                )) {
+                    Label("Shopping suggestions", systemImage: "lightbulb.fill")
+                        .foregroundStyle(.primary)
+                }
+                .accessibilityIdentifier("settingsToggle_suggestions")
+            }
+
+            // MARK: - Sign Out
+
+            Section {
+                Button(role: .destructive) {
+                    // Sign out action
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Sign Out")
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Appearance Card Selector
+
+private struct AppearanceSelector: View {
+    @Binding var selectedMode: AppearanceMode
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(AppearanceMode.allCases) { mode in
+                AppearanceCard(
+                    mode: mode,
+                    isSelected: selectedMode == mode,
+                    colorScheme: colorScheme
+                ) {
+                    selectedMode = mode
+                }
+            }
+        }
+    }
+}
+
+private struct AppearanceCard: View {
+    let mode: AppearanceMode
+    let isSelected: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: mode.iconName)
+                    .font(.system(size: 24, weight: .medium))
+
+                Text(mode.displayName)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(isSelected ? .white : .primary)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.blue : secondaryBackground)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("appearanceCard_\(mode.displayName)")
+    }
+
+    private var secondaryBackground: Color {
+        colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.93)
+    }
+}
+
+#Preview {
+    MoreView()
+        .environmentObject(ThemeStore())
+}

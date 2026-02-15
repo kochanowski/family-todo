@@ -1,0 +1,59 @@
+name: iOS Nightly Regression
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Midnight UTC
+  workflow_dispatch:
+    inputs:
+      cloud_sync_profile:
+        description: Cloud sync profile for this manual run
+        required: false
+        default: preview-local
+        type: choice
+        options:
+          - preview-local
+          - sync-enabled
+
+jobs:
+  nightly-test:
+    name: Regression & Performance Tests
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Tests (All)
+        env:
+          CLOUD_SYNC_PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cloud_sync_profile || 'preview-local' }}
+        run: |
+          set -o pipefail
+
+          HP_CLOUDKIT_ENABLED="NO"
+          if [ "$CLOUD_SYNC_PROFILE" = "sync-enabled" ]; then
+            HP_CLOUDKIT_ENABLED="YES"
+          fi
+          echo "Cloud sync profile: $CLOUD_SYNC_PROFILE (HPCloudKitEnabled=$HP_CLOUDKIT_ENABLED)"
+
+          # Find first available iOS simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | \
+            jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+
+          xcodebuild test \
+            -project FamilyTodo.xcodeproj \
+            -scheme HousePulse \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            INFOPLIST_KEY_HPCloudKitEnabled="$HP_CLOUDKIT_ENABLED" \
+            | xcpretty
+
+      - name: Upload Test Results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: TestResults.xcresult

@@ -1,476 +1,423 @@
 import CloudKit
-import Foundation
+import Combine
 import SwiftData
+import SwiftUI
+import UIKit
 
-// swiftlint:disable type_body_length
-/// Store for household management
 @MainActor
-final class HouseholdStore: ObservableObject {
-    @Published private(set) var currentHousehold: Household?
-    @Published private(set) var currentMember: Member?
-    @Published private(set) var isLoading = false
-    @Published private(set) var error: Error?
+class HouseholdStore: ObservableObject {
+    @Published var currentHousehold: Household?
+    @Published var isLoading = false
+    @Published var error: Error?
+    @Published var share: CKShare?
 
-    private lazy var cloudKit = CloudKitManager.shared
     private var modelContext: ModelContext?
+    private lazy var cloudKit = CloudKitManager.shared
     private var syncMode: SyncMode = .cloud
+
+    // Cache for sharing controller
+    private var activeShare: CKShare?
+    private(set) var activeContainer: CKContainer?
+
+    init(modelContext: ModelContext? = nil) {
+        self.modelContext = modelContext
+    }
+
+    func setModelContext(_ context: ModelContext) {
+        modelContext = context
+    }
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
     }
 
-    private var isCloudSyncEnabled: Bool {
-        syncMode == .cloud
-    }
+    // MARK: - Lifecycle
 
-    /// Set model context for offline caching
-    func setModelContext(_ context: ModelContext) {
-        modelContext = context
-    }
-
-    /// Check if user has a household
-    var hasHousehold: Bool {
-        currentHousehold != nil
-    }
-
-    // MARK: - Load Household
-
-    /// Load household for current user
     func loadHousehold(userId: String) async {
+        guard !isLoading else { return }
         isLoading = true
-        error = nil
+        defer { isLoading = false }
 
-        // 1. Load from cache first (instant UI)
-        loadFromCache(userId: userId)
-
-        if !isCloudSyncEnabled {
-            isLoading = false
-            return
+        // 1. Try to load from cache first
+        if let cached = fetchCachedHousehold(userId: userId) {
+            currentHousehold = cached.toHousehold()
         }
 
-        // 2. Sync with CloudKit in background
-        do {
-            // Try to find user's membership
-            if let member = try await cloudKit.fetchMemberByUserId(userId) {
-                currentMember = member
-                let household = try await cloudKit.fetchHousehold(id: member.householdId)
-                currentHousehold = household
+        guard syncMode == .cloud else { return }
 
-                // 3. Update cache
-                syncToCache(household)
+        // 2. Load from CloudKit
+        do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
+
+            // In a real app with private DB + sharing, finding the "current" household
+            // often involves querying for the one owned by user or shared with them.
+            // For MVP/HousePulse, we check if we have one locally, otherwise we might look
+            // for the one where we are a member.
+
+            // NOTE: This logic assumes 1 household per user for simplicity in this iteration.
+            // If we have a cached one, refresh it.
+            if let current = currentHousehold {
+                let fresh = try await cloudKit.fetchHousehold(id: current.id)
+                updateCache(with: fresh)
+                currentHousehold = fresh
+            } else {
+                // If checking cloud for the first time on this device
+                print("DEBUG: Checking CloudKit for existing household membership...")
+                // Try to find a member record for this user
+                if let member = try await cloudKit.fetchMemberByUserId(userId) {
+                    print("DEBUG: Found member membership for household: \(member.householdId)")
+                    let fresh = try await cloudKit.fetchHousehold(id: member.householdId)
+                    updateCache(with: fresh)
+                    currentHousehold = fresh
+                } else {
+                    print("DEBUG: No existing membership found in cloud.")
+                }
             }
         } catch {
-            // No household found is OK for new users
-            // Keep cached data on error
-            self.error = error
-        }
-
-        isLoading = false
-    }
-
-    private func loadFromCache(userId: String) {
-        guard let context = modelContext else { return }
-
-        // Find member by userId to get householdId
-        let memberDescriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.userId == userId }
-        )
-
-        guard let cachedMember = try? context.fetch(memberDescriptor).first else {
-            currentMember = nil
-            currentHousehold = nil
-            return
-        }
-
-        currentMember = cachedMember.toMember()
-
-        // Load household from cache
-        // Note: SwiftData #Predicate requires captured values to be local variables
-        let targetHouseholdId = cachedMember.householdId
-        let householdDescriptor = FetchDescriptor<CachedHousehold>(
-            predicate: #Predicate { $0.id == targetHouseholdId }
-        )
-
-        if let cachedHousehold = try? context.fetch(householdDescriptor).first {
-            currentHousehold = cachedHousehold.toHousehold()
+            print("Error loading household: \(error)")
+            // Don't show error to user if we have cached data
+            if currentHousehold == nil {
+                self.error = error
+            }
         }
     }
 
-    private func syncToCache(_ household: Household) {
-        guard let context = modelContext else { return }
-
-        let descriptor = FetchDescriptor<CachedHousehold>(
-            predicate: #Predicate { $0.id == household.id }
+    func createHousehold(name: String, userId: String, displayName: String) async throws -> Household {
+        // CloudKit safety check
+        precondition(
+            syncMode == .localOnly || syncMode == .cloud,
+            "Invalid sync mode for household creation"
         )
 
-        if let existing = try? context.fetch(descriptor).first {
-            existing.update(from: household)
-        } else {
-            let cached = CachedHousehold(from: household)
-            context.insert(cached)
-        }
-
-        try? context.save()
-    }
-
-    // MARK: - Create Household
-
-    /// Create a new household with the current user as owner
-    func createHousehold(name: String, userId: String, displayName: String) async throws {
         isLoading = true
-        error = nil
+        defer { isLoading = false }
 
-        let household = Household(
-            name: name,
-            ownerId: userId
-        )
-        let member = Member(
-            householdId: household.id,
-            userId: userId,
-            displayName: displayName,
-            role: .owner
-        )
+        let newHousehold = Household(name: name, ownerId: userId)
 
-        if !isCloudSyncEnabled {
-            seedLocalHousehold(household: household, member: member)
-            isLoading = false
-            return
+        // 1. Save to CloudKit (if cloud sync is enabled and available)
+        if syncMode == .cloud {
+            // Check CloudKit availability first
+            try await cloudKit.checkAvailability()
+
+            _ = try await cloudKit.saveHousehold(newHousehold)
+
+            // Create initial member (owner)
+            let owner = Member(
+                householdId: newHousehold.id,
+                userId: userId,
+                displayName: displayName,
+                role: .owner
+            )
+            _ = try await cloudKit.saveMember(owner)
         }
 
-        do {
-            try await seedCloudHousehold(household: household, member: member)
-            currentHousehold = household
-            currentMember = member
-        } catch {
-            self.error = error
-            throw error
+        // 2. Seed default data in local-only mode
+        if syncMode == .localOnly {
+            try seedDefaultData(
+                householdId: newHousehold.id,
+                userId: userId,
+                displayName: displayName
+            )
         }
 
-        isLoading = false
+        // 3. Update Cache
+        updateCache(with: newHousehold)
+        currentHousehold = newHousehold
+
+        return newHousehold
     }
 
-    private func seedLocalHousehold(household: Household, member: Member) {
-        currentHousehold = household
-        currentMember = member
+    // MARK: - Sharing
 
-        guard let context = modelContext else { return }
-
-        context.insert(CachedHousehold(from: household))
-        context.insert(CachedMember(from: member))
-
-        for area in defaultAreas(for: household.id) {
-            context.insert(CachedArea(from: area))
+    func createShare() async throws -> (CKShare, CKContainer) {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
         }
 
-        for task in starterTasks(for: household.id, memberId: member.id) {
-            context.insert(CachedTask(from: task))
-        }
+        // Check availability and get container from CloudKitManager
+        try await cloudKit.checkAvailability()
+        let container = await cloudKit.getContainer()
 
-        for item in starterItems(for: household.id) {
-            context.insert(CachedShoppingItem(from: item))
-        }
-
-        for chore in starterChores(for: household.id, memberId: member.id) {
-            context.insert(CachedRecurringChore(from: chore))
-        }
-
-        try? context.save()
-    }
-
-    private func seedCloudHousehold(household: Household, member: Member) async throws {
-        _ = try await cloudKit.saveHousehold(household)
-        _ = try await cloudKit.saveMember(member)
-
-        for area in defaultAreas(for: household.id) {
-            _ = try await cloudKit.saveArea(area)
-        }
-
-        for task in starterTasks(for: household.id, memberId: member.id) {
-            _ = try await cloudKit.saveTask(task)
-        }
-
-        for item in starterItems(for: household.id) {
-            _ = try await cloudKit.saveShoppingItem(item)
-        }
-
-        for chore in starterChores(for: household.id, memberId: member.id) {
-            _ = try await cloudKit.saveRecurringChore(chore)
-        }
-    }
-
-    private func defaultAreas(for householdId: UUID) -> [Area] {
-        Area.defaults(for: householdId)
-    }
-
-    private func starterTasks(for householdId: UUID, memberId: UUID) -> [Task] {
-        [
-            Task(
-                householdId: householdId,
-                title: "Fix the faucet",
-                status: .next,
-                assigneeId: memberId,
-                assigneeIds: [memberId],
-                taskType: .oneOff
-            ),
-            Task(
-                householdId: householdId,
-                title: "Take down the Christmas tree",
-                status: .next,
-                assigneeId: memberId,
-                assigneeIds: [memberId],
-                taskType: .oneOff
-            ),
-        ]
-    }
-
-    private func starterItems(for householdId: UUID) -> [ShoppingItem] {
-        [
-            ShoppingItem(householdId: householdId, title: "Milk"),
-            ShoppingItem(householdId: householdId, title: "Bread"),
-            ShoppingItem(householdId: householdId, title: "Sugar"),
-        ]
-    }
-
-    private func starterChores(for householdId: UUID, memberId: UUID) -> [RecurringChore] {
-        var chores = [
-            RecurringChore(
-                householdId: householdId,
-                title: "Water the plants",
-                recurrenceType: .everyNWeeks,
-                recurrenceInterval: 2,
-                defaultAssigneeIds: [memberId]
-            ),
-            RecurringChore(
-                householdId: householdId,
-                title: "Replace towels",
-                recurrenceType: .everyNWeeks,
-                recurrenceInterval: 3,
-                defaultAssigneeIds: [memberId]
-            ),
-            RecurringChore(
-                householdId: householdId,
-                title: "Check purifier filters",
-                recurrenceType: .everyNWeeks,
-                recurrenceInterval: 2,
-                defaultAssigneeIds: [memberId]
-            ),
-        ]
-
-        for index in chores.indices {
-            chores[index].nextScheduledDate = chores[index].calculateNextScheduledDate()
-        }
-
-        return chores
+        let share = try await cloudKit.createShare(for: household)
+        self.share = share
+        activeContainer = container
+        return (share, container)
     }
 
     // MARK: - Join Household
 
-    /// Join an existing household by invite code
     func joinHousehold(inviteCode: String, userId: String, displayName: String) async throws {
         isLoading = true
-        error = nil
+        defer { isLoading = false }
 
-        guard isCloudSyncEnabled else {
-            let syncError = HouseholdError.cloudSyncRequired
-            error = syncError
-            isLoading = false
-            throw syncError
+        guard syncMode == .cloud else {
+            throw HouseholdError.cloudSyncRequired
         }
 
-        do {
-            // Find household by invite code (using household ID as simple invite code for MVP)
-            guard let householdId = UUID(uuidString: inviteCode) else {
-                throw HouseholdError.invalidInviteCode
-            }
+        // Accept the share using the invite code (CloudKit share URL)
+        let household = try await cloudKit.acceptShare(inviteCode: inviteCode)
 
-            let household = try await cloudKit.fetchHousehold(id: householdId)
+        // Create member record for the joining user
+        let member = Member(
+            householdId: household.id,
+            userId: userId,
+            displayName: displayName,
+            role: .member
+        )
+        _ = try await cloudKit.saveMember(member)
 
-            // Create member
-            let member = Member(
-                householdId: household.id,
-                userId: userId,
-                displayName: displayName,
-                role: .member
-            )
-            _ = try await cloudKit.saveMember(member)
-
-            currentHousehold = household
-            currentMember = member
-        } catch {
-            self.error = error
-            throw error
-        }
-
-        isLoading = false
+        // Update local cache
+        updateCache(with: household)
+        currentHousehold = household
     }
 
-    /// Save/update household with optimistic updates
-    func saveHousehold(_ household: Household) async throws {
-        // Optimistic UI update
-        currentHousehold = household
+    // MARK: - SwiftData Helpers
 
-        guard let context = modelContext else {
-            // Fallback to direct CloudKit save if no cache
-            if isCloudSyncEnabled {
-                _ = try await cloudKit.saveHousehold(household)
-            }
-            return
+    private func fetchCachedHousehold(userId _: String) -> CachedHousehold? {
+        guard let context = modelContext else { return nil }
+
+        // Logic: Find household where ownerId == userId OR (TODO: handle shared households)
+        // For now, simple fetch
+        let descriptor = FetchDescriptor<CachedHousehold>()
+        do {
+            return try context.fetch(descriptor).first
+        } catch {
+            print("Fetch error: \(error)")
+            return nil
         }
+    }
 
-        // Save to cache with pending status
+    private func updateCache(with household: Household) {
+        guard let context = modelContext else { return }
+
         let descriptor = FetchDescriptor<CachedHousehold>(
             predicate: #Predicate { $0.id == household.id }
         )
 
-        if let cached = try? context.fetch(descriptor).first {
-            cached.update(from: household)
-            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-        } else {
-            let cached = CachedHousehold(from: household)
-            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-            context.insert(cached)
-        }
-        try? context.save()
-
-        if !isCloudSyncEnabled {
-            if let cached = try? context.fetch(descriptor).first {
-                cached.syncStatusRaw = "synced"
-                cached.lastSyncedAt = Date()
-                try? context.save()
-            }
-            return
-        }
-
-        // Sync to CloudKit
         do {
-            _ = try await cloudKit.saveHousehold(household)
-
-            // Mark as synced
-            if let cached = try? context.fetch(descriptor).first {
-                cached.syncStatusRaw = "synced"
-                cached.lastSyncedAt = Date()
-                try? context.save()
+            let results = try context.fetch(descriptor)
+            if let existing = results.first {
+                existing.update(from: household)
+            } else {
+                context.insert(CachedHousehold(from: household))
             }
+            try context.save()
         } catch {
-            // Keep in cache with pending status
-            throw error
+            print("Cache update error: \(error)")
         }
     }
 
-    /// Get invite code for sharing (household ID for MVP fallback)
-    var inviteCode: String? {
-        currentHousehold?.id.uuidString
-    }
+    // MARK: - Guest Mode Data Seeding
 
-    // MARK: - CKShare Sharing
-
-    /// Get share URL for inviting members
-    func getShareURL() async throws -> URL? {
-        guard isCloudSyncEnabled else {
-            throw HouseholdError.cloudSyncRequired
-        }
-        guard let household = currentHousehold else { return nil }
-        return try await cloudKit.getShareURL(for: household.id)
-    }
-
-    /// Create a CKShare for the current household
-    func createShare() async throws -> CKShare {
-        guard isCloudSyncEnabled else {
-            throw HouseholdError.cloudSyncRequired
-        }
-        guard let household = currentHousehold else {
-            throw HouseholdError.householdNotFound
-        }
-        return try await cloudKit.createShare(for: household)
-    }
-
-    /// Accept a share invitation and join the household
-    func acceptShareInvitation(
-        metadata: CKShare.Metadata,
+    private func seedDefaultData(
+        householdId: UUID,
         userId: String,
         displayName: String
-    ) async throws {
-        isLoading = true
-        error = nil
-
-        guard isCloudSyncEnabled else {
-            let syncError = HouseholdError.cloudSyncRequired
-            error = syncError
-            isLoading = false
-            throw syncError
+    ) throws {
+        guard let context = modelContext else {
+            throw HouseholdError.cacheNotAvailable
         }
 
-        do {
-            // Accept the CloudKit share
-            try await cloudKit.acceptShare(metadata: metadata)
+        // 1. Create owner member
+        let ownerMember = Member(
+            householdId: householdId,
+            userId: userId,
+            displayName: displayName,
+            role: .owner
+        )
+        context.insert(CachedMember(from: ownerMember))
 
-            // Fetch the shared household.
-            //
-            // CI treats Swift warnings as errors, and `CKShare.Metadata.rootRecordID` is
-            // deprecated on newer SDKs. Use dynamic lookup to avoid compile-time
-            // deprecated API usage while still supporting both API shapes.
-            guard
-                let recordID = shareHierarchyRootRecordID(from: metadata),
-                let householdId = UUID(uuidString: recordID.recordName)
-            else {
-                throw HouseholdError.invalidShare
-            }
-
-            let household = try await cloudKit.fetchHousehold(id: householdId)
-
-            // Check if member already exists
-            let existingMember = try await cloudKit.fetchMemberByUserId(userId)
-            if existingMember != nil {
-                // Already a member, just load the household
-                currentHousehold = household
-                currentMember = existingMember
-            } else {
-                // Create new member record
-                let member = Member(
-                    householdId: household.id,
-                    userId: userId,
-                    displayName: displayName,
-                    role: .member
-                )
-                _ = try await cloudKit.saveMember(member)
-
-                currentHousehold = household
-                currentMember = member
-            }
-        } catch {
-            self.error = error
-            throw error
+        // 2. Create 8 starter tasks (3 next, 4 backlog, 1 done)
+        let tasks = createStarterTasks(
+            householdId: householdId,
+            memberId: ownerMember.id
+        )
+        for task in tasks {
+            context.insert(CachedTask(from: task))
         }
 
-        isLoading = false
+        // 3. Create 5 shopping items
+        let items = createStarterShoppingItems(householdId: householdId)
+        for item in items {
+            context.insert(CachedShoppingItem(from: item))
+        }
+
+        // 4. Create backlog categories and items
+        let (categories, backlogItems) = createStarterBacklog(householdId: householdId)
+        for category in categories {
+            context.insert(CachedBacklogCategory(from: category))
+        }
+        for item in backlogItems {
+            context.insert(CachedBacklogItem(from: item))
+        }
+
+        // Save all
+        try context.save()
     }
 
-    private func shareHierarchyRootRecordID(from metadata: CKShare.Metadata) -> CKRecord.ID? {
-        // Preferred (newer SDKs), but not always present.
-        (metadata.value(forKey: "hierarchyRootRecordID") as? CKRecord.ID)
-            // Fallback (deprecated on newer SDKs).
-            ?? (metadata.value(forKey: "rootRecordID") as? CKRecord.ID)
+    private func createStarterTasks(
+        householdId: UUID,
+        memberId: UUID
+    ) -> [Task] {
+        let today = Date()
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today) ?? today
+        let thisWeek = Calendar.current.date(byAdding: .day, value: 5, to: today) ?? today
+
+        return [
+            // Next tasks (3 - respects WIP limit)
+            Task(
+                householdId: householdId,
+                title: "Clean kitchen counters",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                dueDate: today,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Take out trash",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                dueDate: today,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Water plants",
+                status: .next,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                dueDate: thisWeek,
+                taskType: .oneOff
+            ),
+
+            // Backlog tasks (4)
+            Task(
+                householdId: householdId,
+                title: "Vacuum living room",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Clean bathroom sink",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Change bed sheets",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+            Task(
+                householdId: householdId,
+                title: "Organize pantry",
+                status: .backlog,
+                taskType: .oneOff
+            ),
+
+            // Done task (1 - shows completion)
+            Task(
+                householdId: householdId,
+                title: "Wipe dining table",
+                status: .done,
+                assigneeId: memberId,
+                assigneeIds: [memberId],
+                completedAt: yesterday,
+                completedById: memberId.uuidString,
+                taskType: .oneOff
+            ),
+        ]
     }
-}
 
-// swiftlint:enable type_body_length
+    private func createStarterShoppingItems(householdId: UUID) -> [ShoppingItem] {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
 
-enum HouseholdError: LocalizedError {
-    case invalidInviteCode
-    case householdNotFound
-    case invalidShare
-    case cloudSyncRequired
+        return [
+            ShoppingItem(
+                householdId: householdId,
+                title: "Milk",
+                quantityValue: "2",
+                quantityUnit: "L"
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Bread",
+                quantityValue: "1",
+                quantityUnit: "loaf"
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Dish soap",
+                quantityValue: "1",
+                quantityUnit: "bottle"
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Paper towels",
+                quantityValue: "2",
+                quantityUnit: "rolls",
+                isBought: true,
+                boughtAt: yesterday,
+                restockCount: 1
+            ),
+            ShoppingItem(
+                householdId: householdId,
+                title: "Coffee",
+                quantityValue: "200",
+                quantityUnit: "g"
+            ),
+        ]
+    }
 
-    var errorDescription: String? {
-        switch self {
-        case .invalidInviteCode:
-            "Invalid invite code. Please check and try again."
-        case .householdNotFound:
-            "Household not found."
-        case .invalidShare:
-            "Invalid share invitation. The link may be expired or invalid."
-        case .cloudSyncRequired:
-            "Sign in to iCloud to use sharing features."
-        }
+    private func createStarterBacklog(
+        householdId: UUID
+    ) -> (categories: [BacklogCategory], items: [BacklogItem]) {
+        let homeProjectsCategory = BacklogCategory(
+            householdId: householdId,
+            title: "Home Projects",
+            sortOrder: 0
+        )
+
+        let routineCategory = BacklogCategory(
+            householdId: householdId,
+            title: "Weekly Routine",
+            sortOrder: 1
+        )
+
+        let items = [
+            BacklogItem(
+                categoryId: homeProjectsCategory.id,
+                householdId: householdId,
+                title: "Paint bedroom walls",
+                notes: "Need to buy paint and brushes"
+            ),
+            BacklogItem(
+                categoryId: homeProjectsCategory.id,
+                householdId: householdId,
+                title: "Fix leaky faucet"
+            ),
+            BacklogItem(
+                categoryId: homeProjectsCategory.id,
+                householdId: householdId,
+                title: "Install new shelves in garage"
+            ),
+            BacklogItem(
+                categoryId: routineCategory.id,
+                householdId: householdId,
+                title: "Deep clean bathroom"
+            ),
+            BacklogItem(
+                categoryId: routineCategory.id,
+                householdId: householdId,
+                title: "Mow the lawn"
+            ),
+        ]
+
+        return ([homeProjectsCategory, routineCategory], items)
     }
 }

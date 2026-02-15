@@ -360,4 +360,84 @@ extension CloudKitManager {
             updatedAt: updatedAt
         )
     }
+
+    // MARK: - BacklogCategory Mapping
+
+    func backlogCategoryRecord(from category: BacklogCategory) -> CKRecord {
+        let record = CKRecord(recordType: "BacklogCategory", recordID: recordID(for: category.id))
+        record["id"] = category.id.uuidString as CKRecordValue
+        record["householdId"] = reference(for: category.householdId)
+        record["title"] = category.title as CKRecordValue
+        record["sortOrder"] = category.sortOrder as CKRecordValue
+        record["createdAt"] = category.createdAt as CKRecordValue
+        record["updatedAt"] = category.updatedAt as CKRecordValue
+        return record
+    }
+
+    func backlogCategory(from record: CKRecord) throws -> BacklogCategory {
+        guard
+            let idString = record["id"] as? String,
+            let id = UUID(uuidString: idString),
+            let householdReference = record["householdId"] as? CKRecord.Reference,
+            let householdId = UUID(uuidString: householdReference.recordID.recordName),
+            let title = record["title"] as? String,
+            let createdAt = record["createdAt"] as? Date,
+            let updatedAt = record["updatedAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        let sortOrder = record["sortOrder"] as? Int ?? 0
+
+        return BacklogCategory(
+            id: id,
+            householdId: householdId,
+            title: title,
+            sortOrder: sortOrder,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    // MARK: - BacklogItem Mapping
+
+    func backlogItemRecord(from item: BacklogItem) -> CKRecord {
+        let record = CKRecord(recordType: "BacklogItem", recordID: recordID(for: item.id))
+        record["id"] = item.id.uuidString as CKRecordValue
+        record["categoryId"] = reference(for: item.categoryId)
+        record["householdId"] = reference(for: item.householdId)
+        record["title"] = item.title as CKRecordValue
+        if let notes = item.notes {
+            record["notes"] = notes as CKRecordValue
+        }
+        record["createdAt"] = item.createdAt as CKRecordValue
+        record["updatedAt"] = item.updatedAt as CKRecordValue
+        return record
+    }
+
+    func backlogItem(from record: CKRecord) throws -> BacklogItem {
+        guard
+            let idString = record["id"] as? String,
+            let id = UUID(uuidString: idString),
+            let categoryReference = record["categoryId"] as? CKRecord.Reference,
+            let categoryId = UUID(uuidString: categoryReference.recordID.recordName),
+            let householdReference = record["householdId"] as? CKRecord.Reference,
+            let householdId = UUID(uuidString: householdReference.recordID.recordName),
+            let title = record["title"] as? String,
+            let createdAt = record["createdAt"] as? Date,
+            let updatedAt = record["updatedAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        return BacklogItem(
+            id: id,
+            categoryId: categoryId,
+            householdId: householdId,
+            title: title,
+            notes: record["notes"] as? String,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
 }

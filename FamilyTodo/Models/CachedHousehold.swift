@@ -1,8 +1,6 @@
 import Foundation
 import SwiftData
 
-/// SwiftData model for offline caching of Household.
-/// Follows ADR-002: offline-first with optimistic UI updates.
 @Model
 final class CachedHousehold {
     @Attribute(.unique) var id: UUID
@@ -11,11 +9,19 @@ final class CachedHousehold {
     var createdAt: Date
     var updatedAt: Date
 
-    // Sync metadata
-    var syncStatusRaw: String = "synced"
-    var lastSyncedAt: Date?
-    var ckRecordIDData: Data?
-    var ckSystemFieldsData: Data?
+    init(
+        id: UUID = UUID(),
+        name: String = "",
+        ownerId: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.ownerId = ownerId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 
     init(from household: Household) {
         id = household.id
@@ -23,17 +29,6 @@ final class CachedHousehold {
         ownerId = household.ownerId
         createdAt = household.createdAt
         updatedAt = household.updatedAt
-        syncStatusRaw = "synced"
-        lastSyncedAt = Date()
-    }
-
-    func update(from household: Household) {
-        name = household.name
-        ownerId = household.ownerId
-        createdAt = household.createdAt
-        updatedAt = household.updatedAt
-        lastSyncedAt = Date()
-        syncStatusRaw = "synced"
     }
 
     func toHousehold() -> Household {
@@ -42,9 +37,13 @@ final class CachedHousehold {
             name: name,
             ownerId: ownerId,
             createdAt: createdAt,
-            updatedAt: updatedAt,
-            members: [],
-            areas: []
+            updatedAt: updatedAt
         )
+    }
+
+    func update(from household: Household) {
+        name = household.name
+        ownerId = household.ownerId
+        updatedAt = household.updatedAt
     }
 }

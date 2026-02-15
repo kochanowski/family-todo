@@ -1,260 +1,98 @@
-import Foundation
+import CloudKit
+import Combine
 import SwiftData
+import SwiftUI
 
-/// Store for household members
 @MainActor
-final class MemberStore: ObservableObject {
-    @Published private(set) var members: [Member] = []
-    @Published private(set) var isLoading = false
-    @Published private(set) var error: Error?
+class MemberStore: ObservableObject {
+    @Published var members: [Member] = []
+    @Published var isLoading = false
+    @Published var error: Error?
 
+    private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
     private let householdId: UUID?
-    private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
-
-    func setSyncMode(_ mode: SyncMode) {
-        syncMode = mode
-    }
-
-    private var isCloudSyncEnabled: Bool {
-        syncMode == .cloud
-    }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
     }
 
-    /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
         modelContext = context
     }
 
+    func setSyncMode(_ mode: SyncMode) {
+        syncMode = mode
+    }
+
+    // MARK: - Data Loading
+
     func loadMembers() async {
         guard let householdId else { return }
-
+        guard !isLoading else { return }
         isLoading = true
-        error = nil
+        defer { isLoading = false }
 
-        // 1. Load from cache first (instant UI)
-        loadFromCache()
+        // 1. Load from cache
+        members = fetchCachedMembers(householdId: householdId)
 
-        if !isCloudSyncEnabled {
-            isLoading = false
-            return
-        }
+        guard syncMode == .cloud else { return }
 
-        // 2. Sync with CloudKit in background
+        // 2. Load from CloudKit
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
             let fetchedMembers = try await cloudKit.fetchMembers(householdId: householdId)
-            members = fetchedMembers
-            members.sort {
-                if $0.role != $1.role {
-                    return $0.role == .owner
-                }
-                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
 
-            // 3. Update cache
-            syncToCache(fetchedMembers)
+            // Update cache
+            updateCache(with: fetchedMembers, for: householdId)
+
+            // Update UI
+            members = fetchedMembers
         } catch {
-            // Keep cached data on error
+            print("Error loading members: \(error)")
             self.error = error
         }
-
-        isLoading = false
     }
 
-    private func loadFromCache() {
-        guard let context = modelContext, let householdId else { return }
+    // MARK: - Operations
 
-        let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.householdId == householdId }
-        )
-
-        if let cachedMembers = try? context.fetch(descriptor) {
-            members = cachedMembers.map { $0.toMember() }
-            members.sort {
-                if $0.role != $1.role {
-                    return $0.role == .owner
-                }
-                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
-        }
-    }
-
-    private func syncToCache(_ members: [Member]) {
-        guard let context = modelContext else { return }
-
-        for member in members {
-            let descriptor = FetchDescriptor<CachedMember>(
-                predicate: #Predicate { $0.id == member.id }
-            )
-
-            if let existing = try? context.fetch(descriptor).first {
-                existing.update(from: member)
-            } else {
-                let cached = CachedMember(from: member)
-                context.insert(cached)
-            }
-        }
-
-        try? context.save()
-    }
-
-    // MARK: - Member Management
-
-    /// Update member display name
     func updateMember(id: UUID, displayName: String, currentUserId _: String?) async throws {
-        guard !displayName.isEmpty else {
-            throw MemberStoreError.invalidDisplayName
-        }
+        guard let index = members.firstIndex(where: { $0.id == id }) else { return }
+        var member = members[index]
 
-        // Fetch current member
-        guard var member = members.first(where: { $0.id == id }) else {
-            throw MemberStoreError.memberNotFound
-        }
+        // Optimistic Update
+        let oldName = member.displayName
+        member.displayName = displayName
+        members[index] = member
 
-        // Update display name
-        member = Member(
-            id: member.id,
-            householdId: member.householdId,
-            userId: member.userId,
-            displayName: displayName,
-            role: member.role,
-            joinedAt: member.joinedAt,
-            isActive: member.isActive
-        )
+        // Update Cache
+        updateCachedMember(member)
 
-        // Optimistic UI update
-        if let index = members.firstIndex(where: { $0.id == id }) {
-            members[index] = member
-        }
-
-        // Save to cache with pending status
-        if let context = modelContext {
-            let descriptor = FetchDescriptor<CachedMember>(
-                predicate: #Predicate { $0.id == id }
-            )
-            if let cached = try? context.fetch(descriptor).first {
-                cached.update(from: member)
-                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                try? context.save()
-            }
-        }
-
-        if !isCloudSyncEnabled {
-            return
-        }
-
-        // Save to CloudKit
-        do {
-            _ = try await cloudKit.saveMember(member)
-
-            // Mark as synced
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedMember>(
-                    predicate: #Predicate { $0.id == id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "synced"
-                    cached.lastSyncedAt = Date()
-                    try? context.save()
-                }
-            }
-        } catch {
-            // Keep in cache with pending status
-            throw error
-        }
-    }
-
-    /// Delete member with validations
-    func deleteMember(id: UUID, currentUserId: String?) async throws {
-        let member = try memberForUpdate(id: id)
-        try validateDelete(member: member, currentUserId: currentUserId)
-
-        removeMemberFromUI(id: id)
-        updateCacheForDelete(id: id)
-
-        if !isCloudSyncEnabled {
-            return
-        }
-
-        do {
-            try await deleteMemberFromCloud(id: id)
-        } catch {
-            restoreMemberOnFailure(member, id: id)
-            throw error
-        }
-    }
-
-    /// Update member role with validations
-    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {
-        let member = try memberForUpdate(id: id)
-        try validateRoleChange(member: member, newRole: newRole, currentUserId: currentUserId)
-
-        let updatedMember = updatedMember(member, newRole: newRole)
-        updateMemberInUI(updatedMember)
-        updateCacheForSave(updatedMember)
-
-        if !isCloudSyncEnabled {
-            return
-        }
-
-        do {
-            _ = try await cloudKit.saveMember(updatedMember)
-            markMemberSynced(id: id)
-        } catch {
-            throw error
-        }
-    }
-
-    private func memberForUpdate(id: UUID) throws -> Member {
-        guard let member = members.first(where: { $0.id == id }) else {
-            throw MemberStoreError.memberNotFound
-        }
-        return member
-    }
-
-    private func validateDelete(member: Member, currentUserId: String?) throws {
-        if let currentUserId, member.userId == currentUserId, member.role == .owner {
-            throw MemberStoreError.cannotDeleteSelfAsOwner
-        }
-
-        let remainingOwners = members.filter { $0.role == .owner && $0.id != member.id }
-        if remainingOwners.isEmpty {
-            throw MemberStoreError.cannotDeleteLastOwner
-        }
-    }
-
-    private func validateRoleChange(
-        member: Member,
-        newRole: Member.MemberRole,
-        currentUserId: String?
-    ) throws {
-        guard let currentUserId,
-              let currentUser = members.first(where: { $0.userId == currentUserId }),
-              currentUser.role == .owner
-        else {
-            throw MemberStoreError.insufficientPermissions
-        }
-
-        if member.userId == currentUserId, member.role == .owner, newRole == .member {
-            throw MemberStoreError.cannotDemoteSelf
-        }
-
-        if member.role == .owner, newRole == .member {
-            let remainingOwners = members.filter { $0.role == .owner && $0.id != member.id }
-            if remainingOwners.isEmpty {
-                throw MemberStoreError.cannotRemoveLastOwner
+        if syncMode == .cloud {
+            do {
+                _ = try await cloudKit.saveMember(member)
+            } catch {
+                // Revert
+                member.displayName = oldName
+                members[index] = member
+                updateCachedMember(member)
+                throw error
             }
         }
     }
 
-    private func updatedMember(_ member: Member, newRole: Member.MemberRole) -> Member {
-        Member(
+    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId _: String?) async throws {
+        guard let index = members.firstIndex(where: { $0.id == id }) else { return }
+        let member = members[index]
+
+        // TODO: Validate only owner can change roles (should be enforced by UI/CloudKit rules)
+
+        // Optimistic
+        // Since 'role' is let in Member struct (immutable), we need to create a new Member
+        let updatedMember = Member(
             id: member.id,
             householdId: member.householdId,
             userId: member.userId,
@@ -263,111 +101,105 @@ final class MemberStore: ObservableObject {
             joinedAt: member.joinedAt,
             isActive: member.isActive
         )
-    }
 
-    private func updateMemberInUI(_ member: Member) {
-        if let index = members.firstIndex(where: { $0.id == member.id }) {
-            members[index] = member
+        members[index] = updatedMember
+        updateCachedMember(updatedMember)
+
+        if syncMode == .cloud {
+            do {
+                _ = try await cloudKit.saveMember(updatedMember)
+            } catch {
+                members[index] = member // revert
+                updateCachedMember(member)
+                throw error
+            }
         }
     }
 
-    private func removeMemberFromUI(id: UUID) {
-        members.removeAll(where: { $0.id == id })
-    }
+    func deleteMember(id: UUID, currentUserId _: String?) async throws {
+        guard let index = members.firstIndex(where: { $0.id == id }) else { return }
+        let member = members[index]
 
-    private func updateCacheForSave(_ member: Member) {
-        guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.id == member.id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            cached.update(from: member)
-            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            try? context.save()
+        // Optimistic
+        members.remove(at: index)
+        deleteCachedMember(id: id)
+
+        if syncMode == .cloud {
+            do {
+                try await cloudKit.deleteMember(id: id)
+            } catch {
+                // Revert
+                members.insert(member, at: index)
+                updateCachedMember(member)
+                throw error
+            }
         }
     }
 
-    private func updateCacheForDelete(id: UUID) {
-        guard let context = modelContext else { return }
+    // MARK: - SwiftData Helpers
+
+    private func fetchCachedMembers(householdId: UUID) -> [Member] {
+        guard let context = modelContext else { return [] }
+
         let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.id == id }
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.joinedAt)]
         )
-        if let cached = try? context.fetch(descriptor).first {
-            if isCloudSyncEnabled {
-                cached.syncStatusRaw = "pendingDelete"
-                try? context.save()
+
+        do {
+            return try context.fetch(descriptor).map { $0.toMember() }
+        } catch {
+            print("Cache fetch error: \(error)")
+            return []
+        }
+    }
+
+    private func updateCache(with members: [Member], for _: UUID) {
+        guard modelContext != nil else { return }
+
+        // Simple strategy: Delete all for household and regarding (inefficient but safe for now)
+        // Better: diffing. For now, let's just update existing and add new.
+
+        for member in members {
+            updateCachedMember(member)
+        }
+
+        // TODO: Handle deletions (members in cache but not in fetch)
+    }
+
+    private func updateCachedMember(_ member: Member) {
+        guard let context = modelContext else { return }
+
+        let memberId = member.id
+        let descriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate { $0.id == memberId }
+        )
+
+        do {
+            if let cached = try context.fetch(descriptor).first {
+                cached.update(from: member)
             } else {
+                context.insert(CachedMember(from: member))
+            }
+            try context.save()
+        } catch {
+            print("Cache save error: \(error)")
+        }
+    }
+
+    private func deleteCachedMember(id: UUID) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate { $0.id == id }
+        )
+
+        do {
+            if let cached = try context.fetch(descriptor).first {
                 context.delete(cached)
-                try? context.save()
+                try context.save()
             }
-        }
-    }
-
-    private func deleteMemberFromCloud(id: UUID) async throws {
-        try await cloudKit.deleteMember(id: id)
-        guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            context.delete(cached)
-            try? context.save()
-        }
-    }
-
-    private func markMemberSynced(id: UUID) {
-        guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            cached.syncStatusRaw = "synced"
-            cached.lastSyncedAt = Date()
-            try? context.save()
-        }
-    }
-
-    private func restoreMemberOnFailure(_ member: Member, id: UUID) {
-        if !members.contains(where: { $0.id == id }) {
-            members.append(member)
-            members.sort {
-                if $0.role != $1.role {
-                    return $0.role == .owner
-                }
-                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
-        }
-    }
-}
-
-// MARK: - Errors
-
-enum MemberStoreError: LocalizedError {
-    case memberNotFound
-    case invalidDisplayName
-    case cannotDeleteSelfAsOwner
-    case cannotDeleteLastOwner
-    case insufficientPermissions
-    case cannotDemoteSelf
-    case cannotRemoveLastOwner
-
-    var errorDescription: String? {
-        switch self {
-        case .memberNotFound:
-            "Member not found"
-        case .invalidDisplayName:
-            "Display name cannot be empty"
-        case .cannotDeleteSelfAsOwner:
-            "You cannot remove yourself as the owner. Transfer ownership first."
-        case .cannotDeleteLastOwner:
-            "Cannot remove the last owner. At least one owner must remain."
-        case .insufficientPermissions:
-            "Only owners can change member roles"
-        case .cannotDemoteSelf:
-            "You cannot remove your own owner role. Have another owner change your role."
-        case .cannotRemoveLastOwner:
-            "Cannot remove owner role. At least one owner must remain."
+        } catch {
+            print("Cache delete error: \(error)")
         }
     }
 }

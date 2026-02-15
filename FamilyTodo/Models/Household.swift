@@ -6,25 +6,21 @@ struct Household: Identifiable, Codable {
     let ownerId: String
     let createdAt: Date
     var updatedAt: Date
-
-    var members: [Member]
-    var areas: [Area]
+    // Legacy/Test helper properties - keeping for compatibility during refactor
+    var members: [Member] = []
+    var areas: [Area] = []
 
     init(
         id: UUID = UUID(),
-        name: String,
-        ownerId: String,
+        name: String = "",
+        ownerId: String = "",
         createdAt: Date = Date(),
-        updatedAt: Date = Date(),
-        members: [Member] = [],
-        areas: [Area] = []
+        updatedAt: Date = Date()
     ) {
         self.id = id
         self.name = name
         self.ownerId = ownerId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-        self.members = members
-        self.areas = areas
     }
 }

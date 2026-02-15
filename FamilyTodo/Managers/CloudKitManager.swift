@@ -4,19 +4,108 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
-    private let container: CKContainer
-    private let privateDatabase: CKDatabase
-    private let sharedDatabase: CKDatabase
+    // CloudKit container identifier - matches the app's iCloud container
+    #if CI
+        private static let containerIdentifier = "iCloud.com.example.familytodo"
+    #else
+        private static let containerIdentifier = "iCloud.com.kochanowski.housepulse"
+    #endif
 
-    init(container: CKContainer? = nil) {
-        #if CI
-            // Use a stub container in CI to prevent crashes
-            self.container = CKContainer(identifier: "iCloud.com.example.familytodo")
-        #else
-            self.container = container ?? .default()
-        #endif
-        privateDatabase = self.container.privateCloudDatabase
-        sharedDatabase = self.container.sharedCloudDatabase
+    /// Container created on main thread during ensureReady().
+    /// Using MainActor isolation for container to ensure it's created on main thread.
+    @MainActor private static var _sharedContainer: CKContainer?
+
+    private var isAvailable: Bool?
+    private var isReady = false
+
+    /// Gets the shared container, must call ensureReady() first
+    private var container: CKContainer {
+        get async {
+            // Container should be created by ensureReady() on main thread
+            await MainActor.run {
+                if Self._sharedContainer == nil {
+                    Self._sharedContainer = CKContainer(identifier: Self.containerIdentifier)
+                }
+                return Self._sharedContainer!
+            }
+        }
+    }
+
+    private var privateDatabase: CKDatabase {
+        get async {
+            await container.privateCloudDatabase
+        }
+    }
+
+    private var sharedDatabase: CKDatabase {
+        get async {
+            await container.sharedCloudDatabase
+        }
+    }
+
+    init() {
+        // Container is lazily initialized on first use via ensureReady()
+    }
+
+    // MARK: - Readiness
+
+    /// Call this after app launch to ensure CloudKit is ready.
+    /// This prevents crashes when CloudKit is accessed too early during app initialization.
+    /// CKContainer is created on the main thread to avoid crashes.
+    func ensureReady() async {
+        guard !isReady else { return }
+
+        // Yield to let the main run loop complete initialization
+        await _Concurrency.Task.yield()
+
+        // Delay to ensure app is fully launched before accessing CloudKit.
+        // CloudKit can crash with SIGTRAP if accessed during early app startup on iOS 26+.
+        try? await _Concurrency.Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+
+        // Create container on main thread to avoid CloudKit crashes.
+        // CKContainer init crashes on background threads during early app startup.
+        await MainActor.run {
+            if Self._sharedContainer == nil {
+                Self._sharedContainer = CKContainer(identifier: Self.containerIdentifier)
+            }
+        }
+
+        isReady = true
+    }
+
+    // MARK: - Availability Check
+
+    /// Check if CloudKit is available before performing operations
+    func checkAvailability() async throws {
+        // Ensure we're ready first
+        await ensureReady()
+
+        // Return cached result if available
+        if let isAvailable = self.isAvailable {
+            if !isAvailable {
+                throw CloudKitManagerError.notAuthenticated
+            }
+            return
+        }
+
+        let ckContainer = await container
+        let status = try await ckContainer.accountStatus()
+        let isAvailable = status == .available
+        self.isAvailable = isAvailable
+
+        if !isAvailable {
+            throw CloudKitManagerError.notAuthenticated
+        }
+    }
+
+    /// Reset availability cache (call when user signs in/out)
+    func resetAvailabilityCache() {
+        isAvailable = nil
+    }
+
+    /// Get the CloudKit container (for use with UICloudSharingController)
+    func getContainer() async -> CKContainer {
+        await container
     }
 
     enum CloudKitManagerError: LocalizedError {
@@ -52,32 +141,38 @@ actor CloudKitManager {
 
     func saveHousehold(_ household: Household) async throws -> CKRecord {
         let record = householdRecord(from: household)
-        return try await sharedDatabase.save(record)
+        let db = await sharedDatabase
+        return try await db.save(record)
     }
 
     func fetchHousehold(id: UUID) async throws -> Household {
-        let record = try await sharedDatabase.record(for: recordID(for: id))
+        let db = await sharedDatabase
+        let record = try await db.record(for: recordID(for: id))
         return try household(from: record)
     }
 
     func deleteHousehold(id: UUID) async throws {
-        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+        let db = await sharedDatabase
+        _ = try await db.deleteRecord(withID: recordID(for: id))
     }
 
     // MARK: - Member
 
     func saveMember(_ member: Member) async throws -> CKRecord {
         let record = memberRecord(from: member)
-        return try await sharedDatabase.save(record)
+        let db = await sharedDatabase
+        return try await db.save(record)
     }
 
     func fetchMember(id: UUID) async throws -> Member {
-        let record = try await sharedDatabase.record(for: recordID(for: id))
+        let db = await sharedDatabase
+        let record = try await db.record(for: recordID(for: id))
         return try member(from: record)
     }
 
     func deleteMember(id: UUID) async throws {
-        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+        let db = await sharedDatabase
+        _ = try await db.deleteRecord(withID: recordID(for: id))
     }
 
     /// Find member by Apple user ID
@@ -276,6 +371,86 @@ actor CloudKitManager {
         }
     }
 
+    // MARK: - Backlog Category
+
+    func saveBacklogCategory(_ category: BacklogCategory) async throws -> CKRecord {
+        let record = backlogCategoryRecord(from: category)
+        return try await sharedDatabase.save(record)
+    }
+
+    func fetchBacklogCategory(id: UUID) async throws -> BacklogCategory {
+        let record = try await sharedDatabase.record(for: recordID(for: id))
+        return try backlogCategory(from: record)
+    }
+
+    func deleteBacklogCategory(id: UUID) async throws {
+        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+    }
+
+    /// Fetch all backlog categories for a household
+    func fetchBacklogCategories(householdId: UUID) async throws -> [BacklogCategory] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "BacklogCategory", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try backlogCategory(from: record)
+        }
+    }
+
+    // MARK: - Backlog Item
+
+    func saveBacklogItem(_ item: BacklogItem) async throws -> CKRecord {
+        let record = backlogItemRecord(from: item)
+        return try await sharedDatabase.save(record)
+    }
+
+    func fetchBacklogItem(id: UUID) async throws -> BacklogItem {
+        let record = try await sharedDatabase.record(for: recordID(for: id))
+        return try backlogItem(from: record)
+    }
+
+    func deleteBacklogItem(id: UUID) async throws {
+        _ = try await sharedDatabase.deleteRecord(withID: recordID(for: id))
+    }
+
+    /// Fetch all backlog items for a category
+    func fetchBacklogItems(categoryId: UUID) async throws -> [BacklogItem] {
+        let predicate = NSPredicate(
+            format: "categoryId == %@",
+            CKRecord.Reference(recordID: recordID(for: categoryId), action: .none)
+        )
+        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try backlogItem(from: record)
+        }
+    }
+
+    /// Fetch all backlog items for a household
+    func fetchBacklogItems(householdId: UUID) async throws -> [BacklogItem] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+
+        let (results, _) = try await sharedDatabase.records(matching: query)
+        return try results.compactMap { _, result in
+            guard case let .success(record) = result else { return nil }
+            return try backlogItem(from: record)
+        }
+    }
+
     // MARK: - Mapping
 
     // MARK: - Sharing
@@ -288,6 +463,7 @@ actor CloudKitManager {
     /// Create a CKShare for a household
     func createShare(for household: Household) async throws -> CKShare {
         let householdRecord = try await fetchHouseholdRecord(id: household.id)
+        let db = await sharedDatabase
 
         let share = CKShare(rootRecord: householdRecord)
         share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
@@ -321,7 +497,7 @@ actor CloudKitManager {
                 }
             }
 
-            sharedDatabase.add(modifyOperation)
+            db.add(modifyOperation)
         }
     }
 
@@ -336,6 +512,7 @@ actor CloudKitManager {
 
     /// Accept a CloudKit share invitation
     func acceptShare(metadata: CKShare.Metadata) async throws {
+        let ckContainer = await container
         let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
         acceptOperation.qualityOfService = .userInitiated
 
@@ -348,8 +525,33 @@ actor CloudKitManager {
                     continuation.resume(throwing: self.categorizeError(error))
                 }
             }
-            container.add(acceptOperation)
+            ckContainer.add(acceptOperation)
         }
+    }
+
+    /// Accept a share using an invite code (share URL string)
+    /// Returns the shared household after accepting
+    func acceptShare(inviteCode: String) async throws -> Household {
+        guard let shareURL = URL(string: inviteCode) else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        // Fetch share metadata from the URL
+        let ckContainer = await container
+        let metadata = try await ckContainer.shareMetadata(for: shareURL)
+
+        // Accept the share
+        try await acceptShare(metadata: metadata)
+
+        // After accepting, the shared records should be available in sharedDatabase
+        // We need to find the household that was shared with us
+        // The rootRecord of the share should be the household
+        let rootRecordID = metadata.rootRecordID
+
+        // Fetch the household from the shared database
+        let db = await sharedDatabase
+        let record = try await db.record(for: rootRecordID)
+        return try household(from: record)
     }
 
     // MARK: - Error Handling

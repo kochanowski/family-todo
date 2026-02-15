@@ -1,0 +1,648 @@
+import SwiftData
+import SwiftUI
+import UIKit
+
+/// Shopping List screen - quick capture and management of groceries
+struct ShoppingListView: View {
+    @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Group {
+            if let householdId = userSession.currentHouseholdID {
+                ShoppingListContent(householdId: householdId, modelContext: modelContext)
+            } else if let household = householdStore.currentHousehold {
+                // Failsafe: Sync session if store has household
+                ProgressView()
+                    .onAppear {
+                        userSession.setCurrentHousehold(household.id)
+                    }
+            } else {
+                ContentUnavailableView(
+                    "No Household Selected",
+                    systemImage: "house.slash",
+                    description: Text("Please select or create a household in the More tab.")
+                )
+                .task {
+                    // Recovery: Try to load from cache if session is lost
+                    if userSession.currentHouseholdID == nil, let userId = userSession.userId {
+                        print("DEBUG: Attempting household recovery for user: \(userId)")
+                        await householdStore.loadHousehold(userId: userId)
+                        if let household = householdStore.currentHousehold {
+                            print("DEBUG: Recovered household: \(household.id)")
+                            userSession.setCurrentHousehold(household.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ShoppingListContent: View {
+    @StateObject private var store: ShoppingListStore
+    @StateObject private var restockPulse = RestockPulseState()
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+
+    @EnvironmentObject private var userSession: UserSession
+
+    // Rapid entry state
+    @State private var isRapidEntryActive = false
+    @State private var rapidEntryText = ""
+    @State private var rapidEntryFocused = false
+
+    @State private var showRestock = false
+    @State private var showClearToBuyConfirmation = false
+    @State private var itemBeingRemoved: UUID?
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appTabBarHeight) private var tabBarHeight
+    @Environment(\.appKeyboardVisible) private var isKeyboardVisible
+
+    init(householdId: UUID, modelContext: ModelContext) {
+        _store = StateObject(
+            wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
+        )
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let listBottomInset =
+                isKeyboardVisible
+                    ? CGFloat(16)
+                    : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
+            let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
+                tabBarHeight: tabBarHeight
+            )
+            let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
+
+            ZStack(alignment: .bottomTrailing) {
+                if isRapidEntryActive {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, maxHeight: rapidEntryTapHeight, alignment: .top)
+                        .onTapGesture {
+                            commitOrDismissRapidEntry()
+                        }
+                }
+
+                VStack(spacing: 0) {
+                    // Header
+                    header
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
+
+                    // Items list with rapid entry
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(store.toBuyItems) { item in
+                                    if itemBeingRemoved != item.id {
+                                        ShoppingItemRow(
+                                            item: item,
+                                            onToggle: { toggleItem(item) }
+                                        )
+                                        .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                    }
+                                }
+
+                                // Rapid entry row (stable at bottom, no insert animation)
+                                if isRapidEntryActive {
+                                    rapidEntryRow
+                                        .id("rapidEntry")
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, listBottomInset)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                        .refreshable {
+                            store.setSyncMode(userSession.syncMode)
+                            await store.loadItems()
+                        }
+                        .onChange(of: rapidEntryFocused) { _, focused in
+                            if focused {
+                                withAnimation(WowAnimation.spring) {
+                                    proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                }
+                            }
+                        }
+                        .onChange(of: store.toBuyItems.count) { _, _ in
+                            // Scroll to keep draft row visible after each insert
+                            guard isRapidEntryActive else { return }
+                            withAnimation(WowAnimation.spring) {
+                                proxy.scrollTo("rapidEntry", anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+
+                // Compact floating add button
+                if !isRapidEntryActive, !isKeyboardVisible {
+                    addPillButton
+                        .padding(.trailing, AppChromeMetrics.horizontalInset)
+                        .padding(.bottom, floatingButtonInset)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .task {
+            store.setSyncMode(userSession.syncMode)
+            await store.loadItems()
+        }
+        .newItemsBanner(manager: subscriptionManager)
+        .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) {
+                clearToBuy()
+            }
+        } message: {
+            Text("This removes current To Buy items. Recently Purchased stays unchanged.")
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack {
+            Text("Shopping")
+                .font(.system(size: 28, weight: .bold))
+
+            // Item count badge
+            if !store.toBuyItems.isEmpty {
+                Text("\(store.toBuyItems.count)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(.blue))
+            }
+
+            Spacer()
+
+            HStack(spacing: 14) {
+                // Clear To Buy button
+                if !store.toBuyItems.isEmpty {
+                    Button {
+                        HapticManager.lightTap()
+                        showClearToBuyConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("shoppingClearButton")
+                }
+
+                // Recently purchased
+                Button {
+                    HapticManager.lightTap()
+                    showRestock = true
+                } label: {
+                    Image(systemName: "clock.badge.checkmark")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("shoppingRestockButton")
+                .pulseAnimation(restockPulse.isPulsing)
+                .sheet(isPresented: $showRestock) {
+                    RestockSheet(
+                        store: store,
+                        onRestore: restoreRecentItem,
+                        onDeleteItem: deleteRecentItem,
+                        onClearAll: clearRecentItems
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Add Pill Button
+
+    private var addPillButton: some View {
+        Button {
+            startRapidEntry()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Add item")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
+            .frame(height: AppChromeMetrics.compactCTAHeight)
+            .background {
+                Capsule()
+                    .fill(.blue)
+                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("shoppingAddItemButton")
+    }
+
+    private var rapidEntryRow: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+
+            RapidEntryTextField(
+                text: $rapidEntryText,
+                isFocused: $rapidEntryFocused,
+                placeholder: "Add item",
+                onSubmit: handleRapidEntrySubmit,
+                onDone: commitOrDismissRapidEntry
+            )
+            .accessibilityIdentifier("shoppingRapidEntryField")
+        }
+        .padding(.vertical, 6)
+        .background(cardBackground.opacity(0.01)) // Tap target
+    }
+
+    // MARK: - Rapid Entry Logic
+
+    private func startRapidEntry() {
+        HapticManager.lightTap()
+        withAnimation(WowAnimation.spring) {
+            isRapidEntryActive = true
+        }
+        // Delay focus to allow animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            rapidEntryFocused = true
+        }
+    }
+
+    private func handleRapidEntrySubmit() {
+        let trimmedText = rapidEntryText.trimmingCharacters(in: .whitespaces)
+
+        if trimmedText.isEmpty {
+            // Empty submit: exit rapid entry
+            dismissRapidEntry()
+        } else {
+            // Commit item and continue
+            commitRapidEntryItem(trimmedText)
+            rapidEntryText = ""
+            HapticManager.selection()
+            // Keep focus for next item
+            rapidEntryFocused = true
+        }
+    }
+
+    private func commitOrDismissRapidEntry() {
+        let trimmedText = rapidEntryText.trimmingCharacters(in: .whitespaces)
+
+        if !trimmedText.isEmpty {
+            commitRapidEntryItem(trimmedText)
+        }
+
+        dismissRapidEntry()
+    }
+
+    private func commitRapidEntryItem(_ text: String) {
+        _Concurrency.Task {
+            await store.createItem(title: text)
+        }
+    }
+
+    private func dismissRapidEntry() {
+        rapidEntryFocused = false
+        rapidEntryText = ""
+        withAnimation(WowAnimation.spring) {
+            isRapidEntryActive = false
+        }
+    }
+
+    // MARK: - Data Actions
+
+    private func toggleItem(_ item: ShoppingItem) {
+        HapticManager.lightTap()
+
+        // Animate item removal
+        withAnimation(WowAnimation.easeOut) {
+            itemBeingRemoved = item.id
+        }
+
+        // Pulse restock icon
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            restockPulse.pulse()
+            HapticManager.selection()
+        }
+
+        // Actually toggle after animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            _Concurrency.Task {
+                await store.toggleBought(item)
+                itemBeingRemoved = nil
+            }
+        }
+    }
+
+    private func restoreRecentItem(_ item: ShoppingItem) {
+        _Concurrency.Task {
+            await store.restoreRecentItem(item)
+        }
+        HapticManager.lightTap()
+    }
+
+    private func deleteRecentItem(_ item: ShoppingItem) {
+        _Concurrency.Task {
+            await store.deleteRecentItem(item)
+        }
+        HapticManager.lightTap()
+    }
+
+    private func clearRecentItems() {
+        _Concurrency.Task {
+            await store.clearRecentItems()
+        }
+        HapticManager.success()
+    }
+
+    private func clearToBuy() {
+        _Concurrency.Task {
+            await store.clearToBuy()
+        }
+        HapticManager.success()
+    }
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+    }
+}
+
+// MARK: - Shopping Item Row
+
+struct ShoppingItemRow: View {
+    let item: ShoppingItem
+    let onToggle: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 10) {
+                // Circular checkbox
+                Circle()
+                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                    .frame(width: 20, height: 20)
+                    .overlay {
+                        if item.isBought {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 13, height: 13)
+                        }
+                    }
+
+                Text(item.title)
+                    .font(.system(size: 15))
+                    .foregroundStyle(item.isBought ? .secondary : .primary)
+                    .strikethrough(item.isBought)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("shoppingItemRow_\(item.title)")
+    }
+}
+
+private struct RapidEntryTextField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let placeholder: String
+    let onSubmit: () -> Void
+    let onDone: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.font = .systemFont(ofSize: 15)
+        textField.placeholder = placeholder
+        textField.returnKeyType = .done
+        textField.autocapitalizationType = .sentences
+        textField.autocorrectionType = .yes
+        textField.enablesReturnKeyAutomatically = false
+        textField.addTarget(
+            context.coordinator, action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
+        textField.inputAccessoryView = context.coordinator.makeAccessoryToolbar()
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context _: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+
+        if isFocused, !uiView.isFirstResponder {
+            uiView.becomeFirstResponder()
+        } else if !isFocused, uiView.isFirstResponder {
+            uiView.resignFirstResponder()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        private var parent: RapidEntryTextField
+
+        init(_ parent: RapidEntryTextField) {
+            self.parent = parent
+        }
+
+        @objc
+        func textChanged(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_: UITextField) {
+            parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_: UITextField) {
+            parent.isFocused = false
+        }
+
+        func textFieldShouldReturn(_: UITextField) -> Bool {
+            parent.onSubmit()
+            return false
+        }
+
+        func makeAccessoryToolbar() -> UIView {
+            let topInset: CGFloat = 6
+            let buttonHeight = AppChromeMetrics.compactCTAHeight
+            let bottomInset = AppChromeMetrics.keyboardAccessoryBottomInset
+            let containerHeight = topInset + buttonHeight + bottomInset
+
+            let container = UIView(
+                frame: CGRect(
+                    x: 0, y: 0, width: UIScreen.main.bounds.width, height: containerHeight
+                )
+            )
+            container.backgroundColor = .clear
+
+            // "Done" pill button matching the "Add item" style
+            let button = UIButton(type: .system)
+            button.setTitle("Done", for: .normal)
+            button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+            button.setTitleColor(.white, for: .normal)
+            button.backgroundColor = UIColor.systemBlue
+            button.layer.cornerRadius = buttonHeight / 2
+            button.contentEdgeInsets = UIEdgeInsets(
+                top: 0,
+                left: AppChromeMetrics.compactCTAHorizontalPadding,
+                bottom: 0,
+                right: AppChromeMetrics.compactCTAHorizontalPadding
+            )
+            button.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
+
+            // Shadow matching the Add item pill
+            button.layer.shadowColor = UIColor.systemBlue.withAlphaComponent(0.3).cgColor
+            button.layer.shadowRadius = 8
+            button.layer.shadowOffset = CGSize(width: 0, height: 4)
+            button.layer.shadowOpacity = 1.0
+
+            button.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(button)
+
+            NSLayoutConstraint.activate([
+                button.trailingAnchor.constraint(
+                    equalTo: container.trailingAnchor,
+                    constant: -AppChromeMetrics.horizontalInset
+                ),
+                button.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -bottomInset),
+                button.heightAnchor.constraint(equalToConstant: buttonHeight),
+            ])
+
+            return container
+        }
+
+        @objc
+        private func doneTapped() {
+            parent.onDone()
+        }
+    }
+}
+
+// MARK: - Restock Sheet
+
+struct RestockSheet: View {
+    @ObservedObject var store: ShoppingListStore
+    let onRestore: (ShoppingItem) -> Void
+    let onDeleteItem: (ShoppingItem) -> Void
+    let onClearAll: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showClearAllConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if store.recentItems.isEmpty {
+                    ContentUnavailableView(
+                        "No Recent Purchases",
+                        systemImage: "cart",
+                        description: Text("Items marked as bought appear here for one-tap restore.")
+                    )
+                    .padding(.top, 60)
+                } else {
+                    List {
+                        ForEach(store.recentItems) { item in
+                            RestockItemRow(
+                                item: item,
+                                onRestore: { onRestore(item) },
+                                onDelete: { onDeleteItem(item) }
+                            )
+                            .listRowInsets(
+                                EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .background(
+                (colorScheme == .dark ? Color.black : Color(hex: "F9F9F9")).ignoresSafeArea()
+            )
+            .navigationTitle("Recently Purchased")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !store.recentItems.isEmpty {
+                        Button(role: .destructive) {
+                            showClearAllConfirmation = true
+                        } label: {
+                            Text("Clear All")
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert("Clear all recently purchased?", isPresented: $showClearAllConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear All", role: .destructive) {
+                    onClearAll()
+                }
+            } message: {
+                Text("This permanently removes all items from the recently purchased list.")
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(.ultraThinMaterial)
+    }
+}
+
+private struct RestockItemRow: View {
+    let item: ShoppingItem
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(item.title)
+                .font(.system(size: 15))
+                .lineLimit(1)
+
+            Spacer()
+
+            Button {
+                onRestore()
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 12)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+}
+
+#Preview {
+    ShoppingListView()
+        .environmentObject(UserSession.shared)
+}

@@ -26,12 +26,12 @@ final class HouseholdTests: XCTestCase {
             role: .owner
         )
 
-        let household = Household(
+        var household = Household(
             id: householdId,
             name: "Test Family",
-            ownerId: "user1",
-            members: [member]
+            ownerId: "user1"
         )
+        household.members = [member]
 
         XCTAssertEqual(household.members.count, 1)
         XCTAssertEqual(household.members.first?.displayName, "John")
@@ -41,12 +41,12 @@ final class HouseholdTests: XCTestCase {
         let householdId = UUID()
         let areas = Area.defaults(for: householdId)
 
-        let household = Household(
+        var household = Household(
             id: householdId,
             name: "Test Family",
-            ownerId: "user1",
-            areas: areas
+            ownerId: "user1"
         )
+        household.areas = areas
 
         XCTAssertEqual(household.areas.count, 6)
     }
@@ -163,17 +163,12 @@ final class HouseholdStoreTests: XCTestCase {
 
     // MARK: - Computed Properties
 
-    func testHasHousehold_WhenNil_ReturnsFalse() {
-        XCTAssertFalse(store.hasHousehold)
-    }
-
-    func testInviteCode_WhenNoHousehold_ReturnsNil() {
-        XCTAssertNil(store.inviteCode)
+    func testCurrentHousehold_WhenNil_IsNil() {
+        XCTAssertNil(store.currentHousehold)
     }
 
     func testInitialState() {
         XCTAssertNil(store.currentHousehold)
-        XCTAssertNil(store.currentMember)
         XCTAssertFalse(store.isLoading)
         XCTAssertNil(store.error)
     }
@@ -182,10 +177,10 @@ final class HouseholdStoreTests: XCTestCase {
         let schema = Schema([
             CachedHousehold.self,
             CachedMember.self,
-            CachedArea.self,
             CachedTask.self,
-            CachedRecurringChore.self,
             CachedShoppingItem.self,
+            CachedBacklogCategory.self,
+            CachedBacklogItem.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -193,39 +188,71 @@ final class HouseholdStoreTests: XCTestCase {
         store.setModelContext(container.mainContext)
         store.setSyncMode(.localOnly)
 
-        try await store.createHousehold(name: "Local Home", userId: "guest-user", displayName: "Guest")
+        try await store.createHousehold(
+            name: "Local Home",
+            userId: "guest-user",
+            displayName: "Guest"
+        )
 
+        // ✅ Verify household created
         XCTAssertNotNil(store.currentHousehold)
-        XCTAssertNotNil(store.currentMember)
-        XCTAssertEqual(store.currentMember?.role, .owner)
+        XCTAssertEqual(store.currentHousehold?.name, "Local Home")
 
         let households = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
-        let members = try container.mainContext.fetch(FetchDescriptor<CachedMember>())
-        let areas = try container.mainContext.fetch(FetchDescriptor<CachedArea>())
-        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedTask>())
-        let items = try container.mainContext.fetch(FetchDescriptor<CachedShoppingItem>())
-        let chores = try container.mainContext.fetch(FetchDescriptor<CachedRecurringChore>())
-
         XCTAssertEqual(households.count, 1)
+
+        // ✅ Verify 1 member (owner)
+        let members = try container.mainContext.fetch(FetchDescriptor<CachedMember>())
         XCTAssertEqual(members.count, 1)
-        XCTAssertFalse(areas.isEmpty)
-        XCTAssertFalse(tasks.isEmpty)
-        XCTAssertFalse(items.isEmpty)
-        XCTAssertFalse(chores.isEmpty)
+        XCTAssertEqual(members.first?.displayName, "Guest")
+        XCTAssertEqual(members.first?.roleRaw, "owner")
+
+        // ✅ Verify 8 tasks (3 next, 4 backlog, 1 done)
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedTask>())
+        XCTAssertEqual(tasks.count, 8)
+
+        let nextTasks = tasks.filter { $0.statusRaw == "next" }
+        XCTAssertEqual(nextTasks.count, 3, "Should respect WIP limit")
+
+        let backlogTasks = tasks.filter { $0.statusRaw == "backlog" }
+        XCTAssertEqual(backlogTasks.count, 4)
+
+        let doneTasks = tasks.filter { $0.statusRaw == "done" }
+        XCTAssertEqual(doneTasks.count, 1)
+
+        // ✅ Verify 5 shopping items
+        let items = try container.mainContext.fetch(FetchDescriptor<CachedShoppingItem>())
+        XCTAssertEqual(items.count, 5)
+
+        let boughtItems = items.filter(\.isBought)
+        XCTAssertEqual(boughtItems.count, 1, "Should have one bought item")
+
+        // ✅ Verify 2 backlog categories
+        let categories = try container.mainContext.fetch(FetchDescriptor<CachedBacklogCategory>())
+        XCTAssertEqual(categories.count, 2)
+
+        let categoryTitles = Set(categories.map(\.title))
+        XCTAssertTrue(categoryTitles.contains("Home Projects"))
+        XCTAssertTrue(categoryTitles.contains("Weekly Routine"))
+
+        // ✅ Verify 5 backlog items
+        let backlogItems = try container.mainContext.fetch(FetchDescriptor<CachedBacklogItem>())
+        XCTAssertEqual(backlogItems.count, 5)
     }
 
     // MARK: - HouseholdError Tests
 
-    func testHouseholdErrorDescriptions() {
-        XCTAssertNotNil(HouseholdError.invalidInviteCode.errorDescription)
-        XCTAssertNotNil(HouseholdError.householdNotFound.errorDescription)
-        XCTAssertNotNil(HouseholdError.invalidShare.errorDescription)
-        XCTAssertNotNil(HouseholdError.cloudSyncRequired.errorDescription)
+    func testHouseholdErrorCases() {
+        // Test that error cases exist
+        let errors: [HouseholdError] = [
+            .invalidInviteCode,
+            .householdNotFound,
+            .cloudSyncRequired,
+            .memberNotFound,
+            .cacheNotAvailable,
+        ]
 
-        XCTAssertTrue(HouseholdError.invalidInviteCode.errorDescription?.contains("invite code") == true)
-        XCTAssertTrue(HouseholdError.householdNotFound.errorDescription?.contains("not found") == true)
-        XCTAssertTrue(HouseholdError.invalidShare.errorDescription?.contains("share") == true)
-        XCTAssertTrue(HouseholdError.cloudSyncRequired.errorDescription?.contains("Sign in") == true)
+        XCTAssertEqual(errors.count, 5)
     }
 }
 

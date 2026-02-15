@@ -35,7 +35,7 @@ final class ShoppingListStore: ObservableObject {
     var toBuyItems: [ShoppingItem] {
         items
             .filter { !$0.isBought }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     var boughtItems: [ShoppingItem] {
@@ -47,6 +47,18 @@ final class ShoppingListStore: ObservableObject {
                 }
                 return $0.updatedAt > $1.updatedAt
             }
+    }
+
+    /// Recently purchased list deduplicated by normalized title.
+    /// Keeps the most recently purchased record for each product name.
+    var recentItems: [ShoppingItem] {
+        let purchased = items.filter(\.isBought)
+        let grouped = Dictionary(grouping: purchased) { normalizedRecentKey($0.title) }
+
+        return grouped.compactMap { _, records in
+            records.max { recentTimestamp(for: $0) < recentTimestamp(for: $1) }
+        }
+        .sorted { recentTimestamp(for: $0) > recentTimestamp(for: $1) }
     }
 
     // MARK: - Load Items
@@ -67,6 +79,8 @@ final class ShoppingListStore: ObservableObject {
 
         // 2. Sync with CloudKit in background
         do {
+            // Ensure CloudKit is ready before accessing
+            await cloudKit.ensureReady()
             let fetchedItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
             items = fetchedItems
 
@@ -124,10 +138,8 @@ final class ShoppingListStore: ObservableObject {
             isBought: false
         )
 
-        // Optimistic UI update with animation
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-            items.append(item)
-        }
+        // Optimistic UI update (view handles animation)
+        items.append(item)
 
         // Save to cache with pending status
         if let context = modelContext {
@@ -157,9 +169,7 @@ final class ShoppingListStore: ObservableObject {
                 }
             }
         } catch {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                items.removeAll { $0.id == item.id }
-            }
+            items.removeAll { $0.id == item.id }
             // Keep in cache with pending status
             self.error = error
         }
@@ -228,6 +238,100 @@ final class ShoppingListStore: ObservableObject {
             updatedItem.restockCount += 1
         }
         await updateItem(updatedItem)
+    }
+
+    /// Restores a recent item to the active shopping list.
+    /// After restore, the product name disappears from Recent.
+    func restoreRecentItem(_ item: ShoppingItem) async {
+        let key = normalizedRecentKey(item.title)
+        let matchingBought = items.filter { $0.isBought && normalizedRecentKey($0.title) == key }
+        guard
+            let latest = matchingBought.max(by: {
+                recentTimestamp(for: $0) < recentTimestamp(for: $1)
+            })
+        else {
+            return
+        }
+
+        var restored = latest
+        restored.isBought = false
+        restored.boughtAt = nil
+        restored.restockCount += 1
+        restored.updatedAt = Date()
+        await updateItem(restored)
+
+        for duplicate in matchingBought where duplicate.id != restored.id {
+            await deleteItem(duplicate)
+        }
+    }
+
+    /// Deletes a single recent item (all bought duplicates matching the same title).
+    func deleteRecentItem(_ item: ShoppingItem) async {
+        let key = normalizedRecentKey(item.title)
+        let matchingBought = items.filter { $0.isBought && normalizedRecentKey($0.title) == key }
+        for match in matchingBought {
+            await deleteItem(match)
+        }
+    }
+
+    /// Clears all recently purchased items.
+    func clearRecentItems() async {
+        let boughtItems = items.filter(\.isBought)
+        guard !boughtItems.isEmpty else { return }
+
+        // Optimistic UI update
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            items.removeAll(where: \.isBought)
+        }
+
+        // Delete from cache/cloud
+        for item in boughtItems {
+            if let context = modelContext {
+                let itemId = item.id
+                let descriptor = FetchDescriptor<CachedShoppingItem>(
+                    predicate: #Predicate { $0.id == itemId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    context.delete(cached)
+                }
+            }
+
+            if isCloudSyncEnabled {
+                do {
+                    try await cloudKit.deleteShoppingItem(id: item.id)
+                } catch {
+                    self.error = error
+                }
+            }
+        }
+
+        try? modelContext?.save()
+    }
+
+    // MARK: - Bulk Operations
+
+    func markAllAsBought() async {
+        let activeItems = items.filter { !$0.isBought }
+        guard !activeItems.isEmpty else { return }
+
+        // Optimistic UI
+        for item in activeItems {
+            if let index = items.firstIndex(where: { $0.id == item.id }) {
+                withAnimation {
+                    items[index].isBought = true
+                    items[index].boughtAt = Date()
+                }
+            }
+        }
+
+        // Update cache/cloud
+        // Note: Ideally allow batch update, but for now we iterate
+        for item in activeItems {
+            var updated = item
+            updated.isBought = true
+            updated.boughtAt = Date()
+            await updateItem(updated)
+        }
     }
 
     // MARK: - Clear To Buy
@@ -312,5 +416,17 @@ final class ShoppingListStore: ObservableObject {
             // Keep in cache with pending status, reload UI
             await loadItems()
         }
+    }
+
+    private func normalizedRecentKey(_ title: String) -> String {
+        title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private func recentTimestamp(for item: ShoppingItem) -> Date {
+        item.boughtAt ?? item.updatedAt
     }
 }

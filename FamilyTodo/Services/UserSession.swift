@@ -6,7 +6,7 @@ enum SyncMode: Equatable {
     case localOnly
 }
 
-enum SessionMode: String {
+enum SessionMode: String, Equatable {
     case signedOut
     case signedIn
     case guest
@@ -20,9 +20,16 @@ protocol AuthenticationServiceType: ObservableObject {
     func signInWithApple()
     func signOut()
     func checkCloudKitStatus() async
+
+    /// Provide type-erased publisher for observation
+    func getChangePublisher() -> AnyPublisher<Void, Never>
 }
 
-extension AuthenticationService: AuthenticationServiceType {}
+extension AuthenticationService: AuthenticationServiceType {
+    func getChangePublisher() -> AnyPublisher<Void, Never> {
+        objectWillChange.map { _ in () }.eraseToAnyPublisher()
+    }
+}
 
 /// Global user session manager that coordinates authentication state
 /// and user-specific data across the application
@@ -76,18 +83,23 @@ final class UserSession: ObservableObject {
 
     // MARK: - Dependencies
 
-    let authService: AuthenticationService
+    let authService: any AuthenticationServiceType
     private let userDefaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
+    private let authServicePublisher: AnyPublisher<Void, Never>
 
     // MARK: - Initialization
 
     init(
-        authService: AuthenticationService? = nil,
+        authService: (any AuthenticationServiceType)? = nil,
         userDefaults: UserDefaults = .standard
     ) {
-        self.authService = authService ?? AuthenticationService()
+        let service = authService ?? AuthenticationService()
+        self.authService = service
         self.userDefaults = userDefaults
+
+        // Get type-erased publisher from service
+        authServicePublisher = service.getChangePublisher()
 
         // Observe authentication state changes
         setupAuthObserver()
@@ -158,7 +170,7 @@ final class UserSession: ObservableObject {
 
     private func setupAuthObserver() {
         // Observe authentication service state changes using Combine
-        authService.objectWillChange
+        authServicePublisher
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
                 _Concurrency.Task { [weak self] in

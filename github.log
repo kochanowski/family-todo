@@ -1,0 +1,201 @@
+
+  2026-02-02 07:58:21.621 appintentsmetadataprocessor[3332:16007] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+  CopySwiftLibs /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/FamilyTodoTests --scan-folder /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/Frameworks --scan-folder /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/PlugIns --scan-folder /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/SystemExtensions --scan-folder /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/Extensions --scan-folder /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk/System/Library/Frameworks/XCTest.framework --platform iphonesimulator --toolchain /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+  AppIntentsSSUTraining (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/Info.plist --temp-dir-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/ssu --bundle-id com.example.familytodo.tests --product-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest --extracted-metadata-path /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest/Metadata.appintents --metadata-file-list /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Intermediates.noindex/FamilyTodo.build/Debug-iphonesimulator/FamilyTodoTests.build/FamilyTodoTests.DependencyMetadataFileList --archive-ssu-assets
+  2026-02-02 07:58:21.638 appintentsnltrainingprocessor[3333:16013] Parsing options for appintentsnltrainingprocessor
+  2026-02-02 07:58:21.638 appintentsnltrainingprocessor[3333:16013] No AppShortcuts found - Skipping.
+
+  CodeSign /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+
+      Signing Identity:     "Sign to Run Locally"
+
+      /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest
+
+  RegisterExecutionPolicyException /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      builtin-RegisterExecutionPolicyException /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest
+
+  Touch /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest (in target 'FamilyTodoTests' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      /usr/bin/touch -c /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app/PlugIns/FamilyTodoTests.xctest
+
+  CodeSign /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app (in target 'HousePulse' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+
+      Signing Identity:     "Sign to Run Locally"
+
+      /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app
+
+  Validate /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app (in target 'HousePulse' from project 'FamilyTodo')
+      cd /Users/runner/work/family-todo/family-todo
+      builtin-validationUtility /Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Build/Products/Debug-iphonesimulator/HousePulse.app -infoplist-subpath Info.plist
+
+  note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'FamilyTodoTests' from project 'FamilyTodo')
+  note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'HousePulse' from project 'FamilyTodo')
+  2026-02-02 08:06:03.517217+0000 HousePulse[14813:63756] [library] load_eligibility_plist: Failed to open /Users/runner/Library/Developer/CoreSimulator/Devices/38606A79-C4CB-465E-83F3-D09A50714AAE/data/Containers/Data/Application/FF2EF104-97EF-4CD9-88A3-23C5CF46E3D7/private/var/db/eligibilityd/eligibility.plist: No such file or directory(2)
+  Test Suite 'All tests' started at 2026-02-02 08:06:05.183.
+  Test Suite 'FamilyTodoTests.xctest' started at 2026-02-02 08:06:05.183.
+  Test Suite 'FamilyTodoTests' started at 2026-02-02 08:06:05.183.
+  Test Case '-[FamilyTodoTests.FamilyTodoTests testAppImportsCorrectly]' started.
+  Test Case '-[FamilyTodoTests.FamilyTodoTests testAppImportsCorrectly]' passed (0.002 seconds).
+  Test Suite 'FamilyTodoTests' passed at 2026-02-02 08:06:05.185.
+  	 Executed 1 test, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+  Test Suite 'HouseholdStoreTests' started at 2026-02-02 08:06:05.185.
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache]' started.
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:204: error: -[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache] : XCTAssertEqual failed: ("0") is not equal to ("1")
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:205: error: -[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache] : XCTAssertFalse failed
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:206: error: -[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache] : XCTAssertFalse failed
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:207: error: -[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache] : XCTAssertFalse failed
+  /Users/runner/work/family-todo/family-todo/FamilyTodoTests/HouseholdTests.swift:208: error: -[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache] : XCTAssertFalse failed
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testCreateHouseholdLocalOnlySeedsCache]' failed (0.659 seconds).
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testCurrentHousehold_WhenNil_IsNil]' started.
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testCurrentHousehold_WhenNil_IsNil]' passed (0.007 seconds).
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testHouseholdErrorCases]' started.
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testHouseholdErrorCases]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testInitialState]' started.
+  Test Case '-[FamilyTodoTests.HouseholdStoreTests testInitialState]' passed (0.002 seconds).
+  Test Suite 'HouseholdStoreTests' failed at 2026-02-02 08:06:05.856.
+  	 Executed 4 tests, with 5 failures (0 unexpected) in 0.670 (0.671) seconds
+  Test Suite 'HouseholdTests' started at 2026-02-02 08:06:05.861.
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdEncodingDecoding]' started.
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdEncodingDecoding]' passed (0.006 seconds).
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdInitialization]' started.
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdInitialization]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdWithAreas]' started.
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdWithAreas]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdWithMembers]' started.
+  Test Case '-[FamilyTodoTests.HouseholdTests testHouseholdWithMembers]' passed (0.001 seconds).
+  Test Suite 'HouseholdTests' passed at 2026-02-02 08:06:05.870.
+  	 Executed 4 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+  Test Suite 'InviteCodeValidationTests' started at 2026-02-02 08:06:06.025.
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testInvalidInviteCode_Empty]' started.
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testInvalidInviteCode_Empty]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testInvalidInviteCode_NotUUID]' started.
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testInvalidInviteCode_NotUUID]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testInvalidInviteCode_TooShort]' started.
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testInvalidInviteCode_TooShort]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testValidUUIDString]' started.
+  Test Case '-[FamilyTodoTests.InviteCodeValidationTests testValidUUIDString]' passed (0.002 seconds).
+  Test Suite 'InviteCodeValidationTests' passed at 2026-02-02 08:06:06.030.
+  	 Executed 4 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
+  Test Suite 'MemberTests' started at 2026-02-02 08:06:06.031.
+  Test Case '-[FamilyTodoTests.MemberTests testInactiveMember]' started.
+  Test Case '-[FamilyTodoTests.MemberTests testInactiveMember]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.MemberTests testMemberAsRegularMember]' started.
+  Test Case '-[FamilyTodoTests.MemberTests testMemberAsRegularMember]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.MemberTests testMemberEncodingDecoding]' started.
+  Test Case '-[FamilyTodoTests.MemberTests testMemberEncodingDecoding]' passed (0.003 seconds).
+  Test Case '-[FamilyTodoTests.MemberTests testMemberInitialization]' started.
+  Test Case '-[FamilyTodoTests.MemberTests testMemberInitialization]' passed (0.105 seconds).
+  Test Case '-[FamilyTodoTests.MemberTests testMemberRoleRawValues]' started.
+  Test Case '-[FamilyTodoTests.MemberTests testMemberRoleRawValues]' passed (0.001 seconds).
+  Test Suite 'MemberTests' passed at 2026-02-02 08:06:06.143.
+  	 Executed 5 tests, with 0 failures (0 unexpected) in 0.111 (0.112) seconds
+  Test Suite 'TaskStoreTests' started at 2026-02-02 08:06:06.143.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testBacklogTasks_Empty]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testBacklogTasks_Empty]' passed (0.009 seconds).
+  Test Case '-[FamilyTodoTests.TaskStoreTests testCanMoveToNext_EmptyTasks_ReturnsTrue]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testCanMoveToNext_EmptyTasks_ReturnsTrue]' passed (0.003 seconds).
+  Test Case '-[FamilyTodoTests.TaskStoreTests testCanMoveToNext_NoAssignee_ReturnsTrue]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testCanMoveToNext_NoAssignee_ReturnsTrue]' passed (0.004 seconds).
+  Test Case '-[FamilyTodoTests.TaskStoreTests testDoneTasks_Empty]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testDoneTasks_Empty]' passed (0.003 seconds).
+  Test Case '-[FamilyTodoTests.TaskStoreTests testNextTasks_Empty]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testNextTasks_Empty]' passed (0.004 seconds).
+  Test Case '-[FamilyTodoTests.TaskStoreTests testTaskStoreErrorDescription]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testTaskStoreErrorDescription]' passed (0.004 seconds).
+  Test Case '-[FamilyTodoTests.TaskStoreTests testWipLimitConstant]' started.
+  Test Case '-[FamilyTodoTests.TaskStoreTests testWipLimitConstant]' passed (0.004 seconds).
+  Test Suite 'TaskStoreTests' passed at 2026-02-02 08:06:06.241.
+  	 Executed 7 tests, with 0 failures (0 unexpected) in 0.030 (0.098) seconds
+  Test Suite 'TaskTests' started at 2026-02-02 08:06:06.241.
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_DoneTask_ReturnsFalse]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_DoneTask_ReturnsFalse]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_FutureDueDate_ReturnsFalse]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_FutureDueDate_ReturnsFalse]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_NoDueDate_ReturnsFalse]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_NoDueDate_ReturnsFalse]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_PastDueDate_ReturnsTrue]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testIsOverdue_PastDueDate_ReturnsTrue]' passed (0.005 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testTaskEncodingDecoding]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testTaskEncodingDecoding]' passed (0.007 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testTaskInitialization]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testTaskInitialization]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testTaskStatusRawValues]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testTaskStatusRawValues]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testTaskTypeRawValues]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testTaskTypeRawValues]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.TaskTests testTaskWithAllFields]' started.
+  Test Case '-[FamilyTodoTests.TaskTests testTaskWithAllFields]' passed (0.001 seconds).
+  Test Suite 'TaskTests' passed at 2026-02-02 08:06:06.291.
+  	 Executed 9 tests, with 0 failures (0 unexpected) in 0.018 (0.049) seconds
+  Test Suite 'UserSessionTests' started at 2026-02-02 08:06:06.291.
+  Test Case '-[FamilyTodoTests.UserSessionTests testAuthenticatedOverridesGuest]' started.
+  2026-02-02 08:06:06.299964+0000 HousePulse[14813:63756] [general] *** Assertion failure in -[XCTestExpectation fulfill], XCTestExpectation.m:127
+  freed pointer was not the last allocation2026-02-02 08:06:29.832234+0000 HousePulse[15127:65628] [library] load_eligibility_plist: Failed to open /Users/runner/Library/Developer/CoreSimulator/Devices/38606A79-C4CB-465E-83F3-D09A50714AAE/data/Containers/Data/Application/FF2EF104-97EF-4CD9-88A3-23C5CF46E3D7/private/var/db/eligibilityd/eligibility.plist: No such file or directory(2)
+  2026-02-02 08:06:30.069896+0000 HousePulse[15127:65694] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+  2026-02-02 08:06:30.146068+0000 HousePulse[15127:65695] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+
+  Restarting after unexpected exit, crash, or test timeout; summary will include totals from previous launches.
+
+  Test Suite 'Selected tests' started at 2026-02-02 08:06:30.559.
+  Test Suite 'FamilyTodoTests.xctest' started at 2026-02-02 08:06:30.560.
+  Test Suite 'UserSessionTests' started at 2026-02-02 08:06:30.561.
+  Test Case '-[FamilyTodoTests.UserSessionTests testEndGuestSessionClearsAccess]' started.
+  Test Case '-[FamilyTodoTests.UserSessionTests testEndGuestSessionClearsAccess]' passed (0.012 seconds).
+  Test Case '-[FamilyTodoTests.UserSessionTests testStartGuestSessionSetsAccessAndUserId]' started.
+  Test Case '-[FamilyTodoTests.UserSessionTests testStartGuestSessionSetsAccessAndUserId]' passed (0.006 seconds).
+  Test Suite 'UserSessionTests' passed at 2026-02-02 08:06:30.579.
+  	 Executed 2 tests, with 0 failures (0 unexpected) in 0.017 (0.018) seconds
+  Test Suite 'WIPLimitLogicTests' started at 2026-02-02 08:06:30.579.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testBacklogFiltering]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testBacklogFiltering]' passed (0.038 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testBacklogSortedByDueDate]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testBacklogSortedByDueDate]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_AtLimit]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_AtLimit]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_BacklogNotCounted]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_BacklogNotCounted]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_DifferentAssignee_NotCounted]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_DifferentAssignee_NotCounted]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_DoneNotCounted]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_DoneNotCounted]' passed (0.003 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_UnderLimit]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testCanMoveToNext_UnderLimit]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testDoneFiltering]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testDoneFiltering]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testDoneSortedByCompletedAtDescending]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testDoneSortedByCompletedAtDescending]' passed (0.001 seconds).
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testNextFiltering]' started.
+  Test Case '-[FamilyTodoTests.WIPLimitLogicTests testNextFiltering]' passed (0.051 seconds).
+  Test Suite 'WIPLimitLogicTests' passed at 2026-02-02 08:06:30.699.
+  	 Executed 10 tests, with 0 failures (0 unexpected) in 0.098 (0.120) seconds
+  Test Suite 'FamilyTodoTests.xctest' passed at 2026-02-02 08:06:30.700.
+  	 Executed 12 tests, with 0 failures (0 unexpected) in 0.115 (0.139) seconds
+  Test Suite 'Selected tests' passed at 2026-02-02 08:06:30.700.
+  	 Executed 12 tests, with 0 failures (0 unexpected) in 0.115 (0.141) seconds
+  2026-02-02 08:07:04.683 xcodebuild[3161:15152] [MT] IDETestOperationsObserverDebug: 522.947 elapsed -- Testing started completed.
+  2026-02-02 08:07:04.683 xcodebuild[3161:15152] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+  2026-02-02 08:07:04.683 xcodebuild[3161:15152] [MT] IDETestOperationsObserverDebug: 522.947 sec, +522.947 sec -- end
+
+  Test session results, code coverage, and logs:
+  	/Users/runner/Library/Developer/Xcode/DerivedData/FamilyTodo-cfpgmzfxabczeafybskoihferged/Logs/Test/Test-HousePulse-2026.02.02_07-58-14-+0000.xcresult
+
+  Failing tests:
+  	HouseholdStoreTests.testCreateHouseholdLocalOnlySeedsCache()
+  	HouseholdStoreTests.testCreateHouseholdLocalOnlySeedsCache()
+  	HouseholdStoreTests.testCreateHouseholdLocalOnlySeedsCache()
+  	HouseholdStoreTests.testCreateHouseholdLocalOnlySeedsCache()
+  	HouseholdStoreTests.testCreateHouseholdLocalOnlySeedsCache()
+  	UserSessionTests.testAuthenticatedOverridesGuest()
+
+  ** TEST FAILED **
+
+  Testing started

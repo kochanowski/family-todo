@@ -32,6 +32,10 @@ final class UserSessionTests: XCTestCase {
         }
 
         func checkCloudKitStatus() async {}
+
+        func getChangePublisher() -> AnyPublisher<Void, Never> {
+            objectWillChange.map { _ in () }.eraseToAnyPublisher()
+        }
     }
 
     private func makeUserDefaults() -> UserDefaults {
@@ -74,16 +78,7 @@ final class UserSessionTests: XCTestCase {
         let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
 
         session.startGuestSession()
-
-        let expectation = expectation(description: "Session switches to signed in")
-        var cancellable: AnyCancellable?
-        cancellable = session.$sessionMode
-            .dropFirst()
-            .sink { mode in
-                if mode == .signedIn {
-                    expectation.fulfill()
-                }
-            }
+        XCTAssertEqual(session.sessionMode, .guest)
 
         let user = AuthenticationService.AuthenticatedUser(
             id: "cloudkit-user",
@@ -96,10 +91,11 @@ final class UserSessionTests: XCTestCase {
         authService.currentUser = user
         authService.authenticationState = .authenticated(userID: user.id)
 
-        await fulfillment(of: [expectation], timeout: 1.0)
-        cancellable?.cancel()
+        // Give time for async state change to propagate
+        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(session.sessionMode, .signedIn)
         XCTAssertEqual(session.userId, user.id)
+        XCTAssertEqual(session.displayName, "Test User")
     }
 }
