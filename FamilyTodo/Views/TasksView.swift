@@ -190,8 +190,8 @@ private struct TasksContent: View {
             .padding(.vertical, 12)
             .background {
                 Capsule()
-                    .fill(.blue)
-                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .fill(.green)
+                    .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)

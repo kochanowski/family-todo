@@ -117,7 +117,7 @@ private struct BacklogContent: View {
             } label: {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 20))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.orange)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
         }
@@ -135,6 +135,7 @@ private struct BacklogContent: View {
                 isAddingCategory = true
             }
             .buttonStyle(.borderedProminent)
+            .tint(.orange)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -233,11 +234,11 @@ struct CategoryCard: View {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.orange)
 
                         Text("Add item")
                             .font(.system(size: 14))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.orange)
 
                         Spacer()
                     }

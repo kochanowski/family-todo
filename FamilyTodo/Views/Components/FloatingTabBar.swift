@@ -3,7 +3,7 @@ import SwiftUI
 /// Shared layout metrics for floating app chrome (tab bar + floating CTA buttons).
 enum AppChromeMetrics {
     static let minimumTabBarHeight: CGFloat = 56
-    static let tabBarBottomOffset: CGFloat = 8
+    static let tabBarBottomOffset: CGFloat = -4
     static let horizontalInset: CGFloat = 20
 
     private static let floatingButtonClearance: CGFloat = 8
@@ -99,6 +99,7 @@ struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
     @Namespace private var dropletNamespace
+    private let tabBarContentHeight: CGFloat = 44
 
     var body: some View {
         HStack(spacing: 0) {
@@ -106,14 +107,15 @@ struct FloatingTabBar: View {
                 tabButton(for: tab)
             }
         }
+        .frame(height: tabBarContentHeight)
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
-        .background {
-            tabBarSurface
-        }
+        .background { tabBarSurface }
+        .clipShape(Capsule())
         .overlay {
             Capsule()
                 .strokeBorder(borderColor, lineWidth: 0.5)
+                .allowsHitTesting(false)
         }
         .shadow(
             color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
@@ -131,6 +133,7 @@ struct FloatingTabBar: View {
                 Color.clear
                     .glassEffect(.regular.tint(liquidGlassTint))
             }
+            .allowsHitTesting(false)
         } else {
             ZStack {
                 Capsule()
@@ -139,6 +142,7 @@ struct FloatingTabBar: View {
                 Capsule()
                     .fill(fallbackTint)
             }
+            .allowsHitTesting(false)
         }
     }
 
@@ -149,48 +153,60 @@ struct FloatingTabBar: View {
                 activeTab = tab
             }
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 18, weight: activeTab == tab ? .semibold : .regular))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(activeTab == tab ? tab.activeIconColor : .secondary)
+            ZStack {
+                if activeTab == tab {
+                    activeIndicator
+                        .matchedGeometryEffect(id: "activeTabDroplet", in: dropletNamespace)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .allowsHitTesting(false)
+                }
 
-                Text(tab.title)
-                    .font(.system(size: 10, weight: activeTab == tab ? .semibold : .regular))
-                    .foregroundStyle(activeTab == tab ? .primary : .secondary)
+                VStack(spacing: 3) {
+                    Image(systemName: tab.icon)
+                        .font(.system(size: 18, weight: activeTab == tab ? .semibold : .regular))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(activeTab == tab ? tab.activeIconColor : .secondary)
+
+                    Text(tab.title)
+                        .font(.system(size: 10, weight: activeTab == tab ? .semibold : .regular))
+                        .foregroundStyle(activeTab == tab ? .primary : .secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 14)
-            .background {
-                activePillBackground(isActive: activeTab == tab)
-            }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
         .accessibilityIdentifier("tabButton_\(tab.rawValue)")
     }
 
     @ViewBuilder
-    private func activePillBackground(isActive: Bool) -> some View {
-        if isActive {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 0) {
-                    Color.clear
-                        .glassEffect(.regular.tint(dropletTint).interactive())
-                        .matchedGeometryEffect(id: "tab-droplet", in: dropletNamespace)
-                }
-            } else {
-                Capsule()
-                    .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.36))
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(
-                                colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.06),
-                                lineWidth: 0.5
-                            )
-                    }
-                    .matchedGeometryEffect(id: "tab-droplet", in: dropletNamespace)
+    private var activeIndicator: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 0) {
+                Color.white.opacity(0.001)
+                    .glassEffect(.regular.tint(dropletTint).interactive())
             }
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.06),
+                        lineWidth: 0.5
+                    )
+            }
+        } else {
+            Capsule()
+                .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.42))
+                .overlay {
+                    Capsule()
+                        .strokeBorder(
+                            colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.08),
+                            lineWidth: 0.5
+                        )
+                }
         }
     }
 
@@ -203,7 +219,7 @@ struct FloatingTabBar: View {
     }
 
     private var dropletTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.16) : Color.white.opacity(0.22)
+        colorScheme == .dark ? Color.white.opacity(0.16) : Color.white.opacity(0.24)
     }
 
     private var fallbackTint: Color {
