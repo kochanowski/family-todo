@@ -11,11 +11,7 @@ struct BacklogView: View {
             if let householdId = userSession.currentHouseholdID {
                 BacklogContent(householdId: householdId, modelContext: modelContext)
             } else {
-                ContentUnavailableView(
-                    "No Household Selected",
-                    systemImage: "house.slash",
-                    description: Text("Please select or create a household in the More tab.")
-                )
+                GuidedEmptyStateView()
             }
         }
     }
@@ -66,6 +62,12 @@ private struct BacklogContent: View {
                                     },
                                     onDeleteItem: { item in
                                         _ = _Concurrency.Task { await store.deleteItem(item) }
+                                    },
+                                    onPromoteItem: { item in
+                                        _ = _Concurrency.Task { _ = await store.promoteItemToTask(item) }
+                                    },
+                                    onRenameCategory: { newTitle in
+                                        _ = _Concurrency.Task { await store.renameCategory(category, newTitle: newTitle) }
                                     },
                                     onDeleteCategory: {
                                         _ = _Concurrency.Task { await store.deleteCategory(category) }
@@ -148,12 +150,16 @@ struct CategoryCard: View {
     let items: [BacklogItem]
     let onAddItem: (String) -> Void
     let onDeleteItem: (BacklogItem) -> Void
+    let onPromoteItem: (BacklogItem) -> Void
+    let onRenameCategory: (String) -> Void
     let onDeleteCategory: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isAddingItem = false
     @State private var newItemText = ""
     @State private var showDeleteConfirmation = false
+    @State private var showRenameAlert = false
+    @State private var renameCategoryText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -166,6 +172,13 @@ struct CategoryCard: View {
                 Spacer()
 
                 Menu {
+                    Button {
+                        renameCategoryText = category.title
+                        showRenameAlert = true
+                    } label: {
+                        Label("Rename Category", systemImage: "pencil")
+                    }
+
                     Button(role: .destructive) {
                         if items.isEmpty {
                             onDeleteCategory()
@@ -191,6 +204,14 @@ struct CategoryCard: View {
             // Items
             ForEach(items) { item in
                 BacklogItemRow(item: item)
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button {
+                            onPromoteItem(item)
+                        } label: {
+                            Label("Promote", systemImage: "arrow.up.circle")
+                        }
+                        .tint(.blue)
+                    }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             onDeleteItem(item)
@@ -266,6 +287,13 @@ struct CategoryCard: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will permanently delete the category and all its items.")
+        }
+        .alert("Rename Category", isPresented: $showRenameAlert) {
+            TextField("Category Name", text: $renameCategoryText)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                onRenameCategory(renameCategoryText)
+            }
         }
     }
 

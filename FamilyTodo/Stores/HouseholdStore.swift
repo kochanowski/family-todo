@@ -33,6 +33,12 @@ class HouseholdStore: ObservableObject {
 
     // MARK: - Lifecycle
 
+    /// Preferred entry point for restoring session household context.
+    /// It loads cached data first and refreshes membership from CloudKit when enabled.
+    func loadCurrentHouseholdAndMembership(userId: String) async {
+        await loadHousehold(userId: userId)
+    }
+
     func loadHousehold(userId: String) async {
         guard !isLoading else { return }
         isLoading = true
@@ -172,6 +178,112 @@ class HouseholdStore: ObservableObject {
         currentHousehold = household
     }
 
+    // MARK: - Household Management
+
+    func renameCurrentHousehold(_ name: String) async throws {
+        guard var household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        household.name = trimmedName
+        household.updatedAt = Date()
+
+        if syncMode == .cloud {
+            _ = try await cloudKit.saveHousehold(household)
+        }
+
+        updateCache(with: household)
+        currentHousehold = household
+    }
+
+    func leaveCurrentHousehold(userId: String) async throws {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+
+        if syncMode == .cloud {
+            guard let member = try await cloudKit.fetchMemberByUserId(userId),
+                  member.householdId == household.id
+            else {
+                throw HouseholdError.memberNotFound
+            }
+
+            let members = try await cloudKit.fetchMembers(householdId: household.id)
+            let activeOwners = members.filter { $0.isActive && $0.role == .owner }
+
+            if member.role == .owner, activeOwners.count <= 1 {
+                throw HouseholdError.transferOwnershipRequired
+            }
+
+            let updatedMember = Member(
+                id: member.id,
+                householdId: member.householdId,
+                userId: member.userId,
+                displayName: member.displayName,
+                role: member.role,
+                joinedAt: member.joinedAt,
+                isActive: false
+            )
+            _ = try await cloudKit.saveMember(updatedMember)
+        }
+
+        clearCurrentHousehold()
+    }
+
+    func deleteCurrentHousehold(requestedBy userId: String) async throws {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+
+        guard household.ownerId == userId else {
+            throw HouseholdError.notAuthorized
+        }
+
+        if syncMode == .cloud {
+            let members = try await cloudKit.fetchMembers(householdId: household.id)
+            for member in members {
+                try await cloudKit.deleteMember(id: member.id)
+            }
+
+            let tasks = try await cloudKit.fetchTasks(householdId: household.id)
+            for task in tasks {
+                try await cloudKit.deleteTask(id: task.id)
+            }
+
+            let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: household.id)
+            for item in shoppingItems {
+                try await cloudKit.deleteShoppingItem(id: item.id)
+            }
+
+            let backlogItems = try await cloudKit.fetchBacklogItems(householdId: household.id)
+            for item in backlogItems {
+                try await cloudKit.deleteBacklogItem(id: item.id)
+            }
+
+            let categories = try await cloudKit.fetchBacklogCategories(householdId: household.id)
+            for category in categories {
+                try await cloudKit.deleteBacklogCategory(id: category.id)
+            }
+
+            try await cloudKit.deleteHousehold(id: household.id)
+        }
+
+        removeHouseholdFromCache(id: household.id)
+        clearCurrentHousehold()
+    }
+
+    func clearCurrentHousehold() {
+        currentHousehold = nil
+        share = nil
+        activeContainer = nil
+        activeShare = nil
+    }
+
     // MARK: - SwiftData Helpers
 
     private func fetchCachedHousehold(userId _: String) -> CachedHousehold? {
@@ -205,6 +317,56 @@ class HouseholdStore: ObservableObject {
             try context.save()
         } catch {
             print("Cache update error: \(error)")
+        }
+    }
+
+    private func removeHouseholdFromCache(id: UUID) {
+        guard let context = modelContext else { return }
+
+        let householdId = id
+        let householdDescriptor = FetchDescriptor<CachedHousehold>(
+            predicate: #Predicate { $0.id == householdId }
+        )
+        let memberDescriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let taskDescriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let shoppingDescriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let backlogCategoryDescriptor = FetchDescriptor<CachedBacklogCategory>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let backlogItemDescriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+
+        do {
+            if let cachedHousehold = try context.fetch(householdDescriptor).first {
+                context.delete(cachedHousehold)
+            }
+
+            for member in try context.fetch(memberDescriptor) {
+                context.delete(member)
+            }
+            for task in try context.fetch(taskDescriptor) {
+                context.delete(task)
+            }
+            for item in try context.fetch(shoppingDescriptor) {
+                context.delete(item)
+            }
+            for category in try context.fetch(backlogCategoryDescriptor) {
+                context.delete(category)
+            }
+            for item in try context.fetch(backlogItemDescriptor) {
+                context.delete(item)
+            }
+
+            try context.save()
+        } catch {
+            print("Cache household removal error: \(error)")
         }
     }
 

@@ -59,13 +59,17 @@ class MemberStore: ObservableObject {
 
     // MARK: - Operations
 
-    func updateMember(id: UUID, displayName: String, currentUserId _: String?) async throws {
+    func updateMember(id: UUID, displayName: String, currentUserId: String?) async throws {
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        try assertCanEditMember(id: id, currentUserId: currentUserId)
+
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         var member = members[index]
 
         // Optimistic Update
         let oldName = member.displayName
-        member.displayName = displayName
+        member.displayName = trimmedName
         members[index] = member
 
         // Update Cache
@@ -84,11 +88,18 @@ class MemberStore: ObservableObject {
         }
     }
 
-    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId _: String?) async throws {
+    func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {
+        try assertOwnerPermissions(currentUserId: currentUserId)
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         let member = members[index]
 
-        // TODO: Validate only owner can change roles (should be enforced by UI/CloudKit rules)
+        if isCurrentUserMember(member, currentUserId: currentUserId), newRole != .owner {
+            throw MemberStoreError.transferOwnershipRequired
+        }
+
+        if member.role == .owner, newRole != .owner, activeOwnersCount <= 1 {
+            throw MemberStoreError.lastOwnerRequired
+        }
 
         // Optimistic
         // Since 'role' is let in Member struct (immutable), we need to create a new Member
@@ -116,9 +127,17 @@ class MemberStore: ObservableObject {
         }
     }
 
-    func deleteMember(id: UUID, currentUserId _: String?) async throws {
+    func deleteMember(id: UUID, currentUserId: String?) async throws {
+        try assertOwnerPermissions(currentUserId: currentUserId)
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         let member = members[index]
+
+        if isCurrentUserMember(member, currentUserId: currentUserId) {
+            throw MemberStoreError.cannotRemoveSelf
+        }
+        if member.role == .owner, activeOwnersCount <= 1 {
+            throw MemberStoreError.lastOwnerRequired
+        }
 
         // Optimistic
         members.remove(at: index)
@@ -200,6 +219,62 @@ class MemberStore: ObservableObject {
             }
         } catch {
             print("Cache delete error: \(error)")
+        }
+    }
+
+    // MARK: - Permissions
+
+    private func assertOwnerPermissions(currentUserId: String?) throws {
+        guard let userId = currentUserId,
+              let currentMember = members.first(where: { $0.userId == userId }),
+              currentMember.role == .owner
+        else {
+            throw MemberStoreError.ownerPermissionsRequired
+        }
+    }
+
+    private func assertCanEditMember(id: UUID, currentUserId: String?) throws {
+        guard let userId = currentUserId,
+              let currentMember = members.first(where: { $0.userId == userId })
+        else {
+            throw MemberStoreError.ownerPermissionsRequired
+        }
+
+        if currentMember.role == .owner {
+            return
+        }
+
+        guard currentMember.id == id else {
+            throw MemberStoreError.ownerPermissionsRequired
+        }
+    }
+
+    private func isCurrentUserMember(_ member: Member, currentUserId: String?) -> Bool {
+        guard let currentUserId else { return false }
+        return member.userId == currentUserId
+    }
+
+    private var activeOwnersCount: Int {
+        members.filter { $0.isActive && $0.role == .owner }.count
+    }
+}
+
+enum MemberStoreError: LocalizedError, Equatable {
+    case ownerPermissionsRequired
+    case transferOwnershipRequired
+    case cannotRemoveSelf
+    case lastOwnerRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .ownerPermissionsRequired:
+            "Only household owners can manage member roles."
+        case .transferOwnershipRequired:
+            "Transfer ownership before changing your own owner role."
+        case .cannotRemoveSelf:
+            "You cannot remove yourself from members management."
+        case .lastOwnerRequired:
+            "The household must keep at least one owner."
         }
     }
 }

@@ -21,9 +21,13 @@ struct ContentView: View {
 /// Uses overlay (not safeAreaInset) so scrolling content extends behind the
 /// tab bar, giving the glass material real content to blur.
 struct MainAppView: View {
+    @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
+
     @State private var activeTab: Tab = .shopping
     @State private var tabBarHeight: CGFloat = AppChromeMetrics.minimumTabBarHeight
     @State private var isKeyboardVisible = false
+    @State private var hasBootstrappedHousehold = false
 
     /// Animation state for tab transitions
     @Namespace private var animation
@@ -66,6 +70,9 @@ struct MainAppView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardVisible = false
         }
+        .task {
+            await bootstrapHouseholdIfNeeded()
+        }
     }
 
     @ViewBuilder
@@ -79,6 +86,18 @@ struct MainAppView: View {
             BacklogView()
         case .more:
             MoreView()
+        }
+    }
+
+    private func bootstrapHouseholdIfNeeded() async {
+        guard !hasBootstrappedHousehold else { return }
+        hasBootstrappedHousehold = true
+
+        guard userSession.currentHouseholdID == nil, let userId = userSession.userId else { return }
+
+        await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+        if let household = householdStore.currentHousehold {
+            userSession.setCurrentHousehold(household.id)
         }
     }
 }

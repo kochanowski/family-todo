@@ -18,6 +18,8 @@ struct FamilyTodoApp: App {
             CachedBacklogCategory.self,
             CachedBacklogItem.self,
             CachedHousehold.self,
+            CachedArea.self,
+            CachedRecurringChore.self,
         ])
         #if CI
             let modelConfiguration = ModelConfiguration(
@@ -77,6 +79,12 @@ struct FamilyTodoApp: App {
                             subscriptionManager.configure(userId: userId, householdId: householdId)
                         }
                     #endif
+
+                    await ChoreScheduler.shared.runIfNeeded(
+                        householdId: userSession.currentHouseholdID,
+                        modelContext: sharedModelContainer.mainContext,
+                        syncMode: userSession.syncMode
+                    )
                 }
         }
     }
@@ -180,6 +188,8 @@ struct UITestHelper {
             try context.delete(model: CachedBacklogCategory.self)
             try context.delete(model: CachedMember.self)
             try context.delete(model: CachedHousehold.self)
+            try context.delete(model: CachedArea.self)
+            try context.delete(model: CachedRecurringChore.self)
         } catch {
             print("Failed to clear data: \(error)")
         }

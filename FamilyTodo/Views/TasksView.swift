@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// Tasks screen - daily chores and immediate to-dos
 struct TasksView: View {
@@ -11,11 +12,7 @@ struct TasksView: View {
             if let householdId = userSession.currentHouseholdID {
                 TasksContent(householdId: householdId, modelContext: modelContext)
             } else {
-                ContentUnavailableView(
-                    "No Household Selected",
-                    systemImage: "house.slash",
-                    description: Text("Please select or create a household in the More tab.")
-                )
+                GuidedEmptyStateView()
             }
         }
     }
@@ -23,19 +20,24 @@ struct TasksView: View {
 
 private struct TasksContent: View {
     @StateObject private var store: TaskStore
+    @StateObject private var memberStore: MemberStore
+
     @State private var newTaskTitle = ""
     @State private var taskBeingCompleted: UUID?
     @State private var showAllCompleteAnimation = false
     @State private var showAddSheet = false
+    @State private var selectedTask: Task?
     @FocusState private var isInputFocused: Bool
-    @Environment(\.colorScheme) private var colorScheme
+
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.appTabBarHeight) private var tabBarHeight
     @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
-        _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
-        _store.wrappedValue.setHousehold(householdId)
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(householdId)
+        _store = StateObject(wrappedValue: taskStore)
+        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
     }
 
     var body: some View {
@@ -49,34 +51,62 @@ private struct TasksContent: View {
 
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
-                    // Header
                     header
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
                         .padding(.bottom, 12)
 
-                    // Focus rule banner
                     focusRuleBanner
                         .padding(.horizontal, 20)
                         .padding(.bottom, 16)
 
-                    // Tasks list
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            // Active tasks (Next)
                             if !store.nextTasks.isEmpty {
+                                sectionHeader("NEXT")
+
                                 ForEach(store.nextTasks) { task in
                                     if taskBeingCompleted != task.id {
-                                        TaskRow(task: task, onToggle: { toggleTask(task) })
-                                            .rowInsertAnimation()
-                                            .accessibilityIdentifier("taskRow_\(task.title)")
+                                        TaskRow(
+                                            task: task,
+                                            assigneeName: assigneeName(for: task),
+                                            onToggle: { toggleTask(task) },
+                                            onOpenDetail: { selectedTask = task }
+                                        )
+                                        .rowInsertAnimation()
+                                        .accessibilityIdentifier("taskRow_\(task.title)")
                                     }
                                 }
                             }
 
-                            // Completed section
+                            if !store.backlogTasks.isEmpty {
+                                sectionHeader("BACKLOG")
+
+                                ForEach(store.backlogTasks) { task in
+                                    TaskRow(
+                                        task: task,
+                                        assigneeName: assigneeName(for: task),
+                                        onToggle: { toggleTask(task) },
+                                        onOpenDetail: { selectedTask = task }
+                                    )
+                                    .rowInsertAnimation()
+                                    .accessibilityIdentifier("taskRowBacklog_\(task.title)")
+                                }
+                            }
+
                             if !store.doneTasks.isEmpty {
-                                completedSection
+                                sectionHeader("COMPLETED")
+
+                                ForEach(store.doneTasks) { task in
+                                    TaskRow(
+                                        task: task,
+                                        assigneeName: assigneeName(for: task),
+                                        onToggle: { toggleTask(task) },
+                                        onOpenDetail: { selectedTask = task }
+                                    )
+                                    .rowInsertAnimation()
+                                    .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                                }
                             }
                         }
                     }
@@ -84,11 +114,12 @@ private struct TasksContent: View {
                     .padding(.bottom, listBottomInset)
                     .refreshable {
                         store.setSyncMode(userSession.syncMode)
+                        memberStore.setSyncMode(userSession.syncMode)
                         await store.loadTasks()
+                        await memberStore.loadMembers()
                     }
                 }
 
-                // Compact floating add button
                 if !isKeyboardVisible {
                     addPillButton
                         .padding(.trailing, AppChromeMetrics.horizontalInset)
@@ -99,12 +130,30 @@ private struct TasksContent: View {
         }
         .task {
             store.setSyncMode(userSession.syncMode)
+            memberStore.setSyncMode(userSession.syncMode)
             await store.loadTasks()
+            await memberStore.loadMembers()
         }
         .sheet(isPresented: $showAddSheet) {
             addTaskSheet
                 .presentationDetents([.height(180)])
                 .presentationBackground(.ultraThinMaterial)
+        }
+        .sheet(item: $selectedTask) { task in
+            TaskDetailSheet(
+                task: task,
+                members: memberStore.members,
+                onSave: { updatedTask in
+                    _ = _Concurrency.Task {
+                        await store.updateTask(updatedTask)
+                    }
+                },
+                onDelete: { taskToDelete in
+                    _ = _Concurrency.Task {
+                        await store.deleteTask(taskToDelete)
+                    }
+                }
+            )
         }
         .onChange(of: store.error as? TaskStoreError) { _, error in
             if let error {
@@ -115,14 +164,11 @@ private struct TasksContent: View {
         }
     }
 
-    // MARK: - Header
-
     private var header: some View {
         HStack {
             Text("Tasks")
                 .font(.system(size: 28, weight: .bold))
 
-            // All complete indicator
             if store.nextTasks.isEmpty, !store.doneTasks.isEmpty {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 24))
@@ -134,8 +180,6 @@ private struct TasksContent: View {
             Spacer()
         }
     }
-
-    // MARK: - Focus Rule Banner
 
     private var focusRuleBanner: some View {
         HStack(spacing: 12) {
@@ -156,26 +200,6 @@ private struct TasksContent: View {
                 .fill(.blue.opacity(0.1))
         }
     }
-
-    // MARK: - Completed Section
-
-    private var completedSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("COMPLETED")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.top, 24)
-                .padding(.bottom, 8)
-
-            ForEach(store.doneTasks) { task in
-                TaskRow(task: task, onToggle: { toggleTask(task) })
-                    .rowInsertAnimation()
-                    .accessibilityIdentifier("taskRowCompleted_\(task.title)")
-            }
-        }
-    }
-
-    // MARK: - Add Pill Button
 
     private var addPillButton: some View {
         Button {
@@ -200,8 +224,6 @@ private struct TasksContent: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("taskAddButton")
     }
-
-    // MARK: - Add Task Sheet
 
     private var addTaskSheet: some View {
         NavigationStack {
@@ -248,21 +270,17 @@ private struct TasksContent: View {
         }
     }
 
-    // MARK: - Data Actions
-
     private func addTask() {
-        guard !newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
 
-        let title = newTaskTitle.trimmingCharacters(in: .whitespaces)
-
-        // Optimistic check for WIP limit
         if !store.canMoveToNext(assigneeId: nil) {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)
             return
         }
 
-        _Concurrency.Task {
+        _ = _Concurrency.Task {
             await store.createTask(title: title, status: .next)
         }
 
@@ -274,28 +292,25 @@ private struct TasksContent: View {
     private func toggleTask(_ task: Task) {
         let newStatus: Task.TaskStatus = task.status == .done ? .next : .done
 
-        if newStatus == .next, !store.canMoveToNext(assigneeId: task.assigneeId) {
+        if newStatus == .next, !store.canMoveToNext(assigneeId: task.assigneeId, excludingTaskId: task.id) {
             HapticManager.warning()
             return
         }
 
-        // Check if this completes all tasks
         let willCompleteAll = newStatus == .done && store.nextTasks.count == 1
 
         if newStatus == .done {
-            // Animate completion
             HapticManager.lightTap()
             withAnimation(WowAnimation.easeOut) {
                 taskBeingCompleted = task.id
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                _Concurrency.Task {
+                _ = _Concurrency.Task {
                     await store.moveTask(task, to: newStatus)
                     taskBeingCompleted = nil
 
                     if willCompleteAll {
-                        // Celebrate!
                         HapticManager.success()
                         showAllCompleteAnimation = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -307,31 +322,37 @@ private struct TasksContent: View {
                 }
             }
         } else {
-            // Un-completing: no special animation
-            _Concurrency.Task {
+            _ = _Concurrency.Task {
                 await store.moveTask(task, to: newStatus)
             }
             HapticManager.lightTap()
         }
     }
 
-    private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+    private func assigneeName(for task: Task) -> String? {
+        guard let assigneeId = task.assigneeId else { return nil }
+        return memberStore.members.first(where: { $0.id == assigneeId })?.displayName
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.top, 24)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-// MARK: - Task Row
-
 struct TaskRow: View {
     let task: Task
+    let assigneeName: String?
     let onToggle: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
+    let onOpenDetail: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 12) {
-                // Square checkbox
+        HStack(spacing: 12) {
+            Button(action: onToggle) {
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(isCompleted ? Color.green : Color.secondary.opacity(0.3), lineWidth: 2)
                     .frame(width: 22, height: 22)
@@ -342,28 +363,40 @@ struct TaskRow: View {
                                 .foregroundStyle(.green)
                         }
                     }
+            }
+            .buttonStyle(.plain)
 
+            Button(action: onOpenDetail) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(task.title)
                         .font(.system(size: 15))
                         .foregroundStyle(isCompleted ? .secondary : .primary)
                         .strikethrough(isCompleted)
 
-                    // Metadata row
-                    if task.dueDate != nil {
-                        HStack(spacing: 8) {
-                            if let dueDate = task.dueDate {
-                                dueDateLabel(dueDate)
-                            }
+                    HStack(spacing: 8) {
+                        if let dueDate = task.dueDate {
+                            dueDateLabel(dueDate)
+                        }
+
+                        if let assigneeName {
+                            Text(assigneeName)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.secondary.opacity(0.14)))
                         }
                     }
                 }
-
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 12)
+            .buttonStyle(.plain)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 12)
     }
 
     private var isCompleted: Bool {
@@ -373,15 +406,132 @@ struct TaskRow: View {
     @ViewBuilder
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
+        let isOverdue = task.isOverdue
+
         Text(dateFormatter.string(from: date))
-            .font(.system(size: 12))
-            .foregroundStyle(isToday ? .orange : .secondary)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(isOverdue ? .red : (isToday ? .orange : .secondary))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.12)))
     }
 
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         return formatter
+    }
+}
+
+private struct TaskDetailSheet: View {
+    let task: Task
+    let members: [Member]
+    let onSave: (Task) -> Void
+    let onDelete: (Task) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var title: String
+    @State private var status: Task.TaskStatus
+    @State private var assigneeId: UUID?
+    @State private var hasDueDate: Bool
+    @State private var dueDate: Date
+    @State private var notes: String
+
+    init(
+        task: Task,
+        members: [Member],
+        onSave: @escaping (Task) -> Void,
+        onDelete: @escaping (Task) -> Void
+    ) {
+        self.task = task
+        self.members = members
+        self.onSave = onSave
+        self.onDelete = onDelete
+
+        _title = State(initialValue: task.title)
+        _status = State(initialValue: task.status)
+        _assigneeId = State(initialValue: task.assigneeId)
+        _hasDueDate = State(initialValue: task.dueDate != nil)
+        _dueDate = State(initialValue: task.dueDate ?? Date())
+        _notes = State(initialValue: task.notes ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Task") {
+                    TextField("Title", text: $title)
+                    Picker("Status", selection: $status) {
+                        Text("Backlog").tag(Task.TaskStatus.backlog)
+                        Text("Next").tag(Task.TaskStatus.next)
+                        Text("Done").tag(Task.TaskStatus.done)
+                    }
+                }
+
+                Section("Assignee") {
+                    Picker("Who", selection: $assigneeId) {
+                        Text("Unassigned").tag(UUID?.none)
+                        ForEach(members) { member in
+                            Text(member.displayName).tag(Optional(member.id))
+                        }
+                    }
+                }
+
+                Section("Due Date") {
+                    Toggle("Set due date", isOn: $hasDueDate)
+                    if hasDueDate {
+                        DatePicker(
+                            "Due",
+                            selection: $dueDate,
+                            displayedComponents: [.date]
+                        )
+                    }
+                }
+
+                Section("Notes") {
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 120)
+                }
+
+                Section {
+                    Button("Delete Task", role: .destructive) {
+                        onDelete(task)
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle("Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        save()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        var updatedTask = task
+        updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedTask.status = status
+        updatedTask.assigneeId = assigneeId
+        updatedTask.assigneeIds = assigneeId.map { [$0] } ?? []
+        updatedTask.dueDate = hasDueDate ? dueDate : nil
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedTask.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+
+        onSave(updatedTask)
+        dismiss()
     }
 }
 

@@ -50,9 +50,13 @@ final class TaskStore: ObservableObject {
     }
 
     /// Check if user can add more tasks to "Next" (WIP limit)
-    func canMoveToNext(assigneeId: UUID?) -> Bool {
+    func canMoveToNext(assigneeId: UUID?, excludingTaskId: UUID? = nil) -> Bool {
         guard let assigneeId else { return true }
-        let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
+        let currentCount = tasks.filter {
+            $0.status == .next &&
+                $0.assigneeId == assigneeId &&
+                $0.id != excludingTaskId
+        }.count
         return currentCount < Self.wipLimit
     }
 
@@ -170,6 +174,9 @@ final class TaskStore: ObservableObject {
         try? modelContext.save()
 
         if !isCloudSyncEnabled {
+            if task.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: task)
             return
         }
@@ -182,6 +189,9 @@ final class TaskStore: ObservableObject {
             try? modelContext.save()
 
             // Schedule notification if task has due date
+            if task.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: task)
         } catch {
             self.error = error
@@ -194,7 +204,7 @@ final class TaskStore: ObservableObject {
 
         // Check WIP limit if moving to next
         let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
-        if task.status == .next, !canMoveToNext(assigneeId: wipAssigneeId) {
+        if task.status == .next, !canMoveToNext(assigneeId: wipAssigneeId, excludingTaskId: task.id) {
             error = TaskStoreError.wipLimitReached
             return
         }
@@ -218,6 +228,9 @@ final class TaskStore: ObservableObject {
         }
 
         if !isCloudSyncEnabled {
+            if updatedTask.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: updatedTask)
             return
         }
@@ -227,6 +240,9 @@ final class TaskStore: ObservableObject {
             _ = try await cloudKit.saveTask(updatedTask)
 
             // Update notification (remove old, schedule new if due date changed)
+            if updatedTask.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: updatedTask)
         } catch {
             self.error = error
@@ -274,6 +290,21 @@ final class TaskStore: ObservableObject {
         } catch {
             self.error = error
         }
+    }
+
+    @discardableResult
+    func createTaskFromBacklogItem(
+        title: String,
+        notes: String? = nil,
+        preferredStatus: Task.TaskStatus = .next
+    ) async -> Task.TaskStatus {
+        let resolvedStatus = preferredStatus
+        await createTask(
+            title: title,
+            status: resolvedStatus,
+            notes: notes
+        )
+        return resolvedStatus
     }
 }
 

@@ -7,8 +7,10 @@ struct CreateHouseholdView: View {
 
     @State private var householdName = ""
     @State private var isCreating = false
+    @State private var isJoining = false
     @State private var showJoinSheet = false
     @State private var joinCode = ""
+    @State private var joinErrorMessage: String?
     @FocusState private var isTextFieldFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
@@ -117,6 +119,14 @@ struct CreateHouseholdView: View {
                 )
                 .presentationDetents([.medium])
             }
+            .alert("Could not join household", isPresented: Binding(
+                get: { joinErrorMessage != nil },
+                set: { if !$0 { joinErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(joinErrorMessage ?? "Unknown error")
+            }
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     isTextFieldFocused = true
@@ -149,9 +159,34 @@ struct CreateHouseholdView: View {
     }
 
     private func joinHousehold() {
-        // TODO: Implement join via invite code
-        // For now, just complete with household active
-        onboardingState.completeHouseholdSetup(withHousehold: true)
+        let trimmedCode = joinCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCode.isEmpty else { return }
+        guard !isJoining else { return }
+
+        isJoining = true
+        joinErrorMessage = nil
+
+        _Concurrency.Task {
+            do {
+                householdStore.setSyncMode(userSession.syncMode)
+                try await householdStore.joinHousehold(
+                    inviteCode: trimmedCode,
+                    userId: userSession.userId ?? "local-user",
+                    displayName: userSession.displayName ?? "Me"
+                )
+                if let household = householdStore.currentHousehold {
+                    userSession.setCurrentHousehold(household.id)
+                }
+
+                joinCode = ""
+                showJoinSheet = false
+                onboardingState.completeHouseholdSetup(withHousehold: true)
+            } catch {
+                joinErrorMessage = error.localizedDescription
+            }
+
+            isJoining = false
+        }
     }
 }
 
@@ -185,7 +220,6 @@ private struct CreateJoinSheet: View {
 
                 Button {
                     onJoin()
-                    dismiss()
                 } label: {
                     Text("Join Household")
                         .font(.headline)

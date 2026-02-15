@@ -83,7 +83,7 @@
 
 #### 1.4 Backlog → Task Promotion
 - **UI**: Swipe action na backlog item → "Promote to Task"
-- **Flow**: 
+- **Flow**:
   1. Swipe → pojawia się confirmation
   2. Creates task z tytułem backlog item + status `.next`
   3. Opcjonalnie: otwiera Task Detail Sheet do uzupełnienia
