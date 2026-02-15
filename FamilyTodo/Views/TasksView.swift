@@ -31,6 +31,7 @@ private struct TasksContent: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.appTabBarHeight) private var tabBarHeight
+    @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
@@ -39,9 +40,9 @@ private struct TasksContent: View {
 
     var body: some View {
         GeometryReader { _ in
-            let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight
-            )
+            let listBottomInset = isKeyboardVisible
+                ? CGFloat(16)
+                : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
             let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
                 tabBarHeight: tabBarHeight
             )
@@ -88,9 +89,11 @@ private struct TasksContent: View {
                 }
 
                 // Compact floating add button
-                addPillButton
-                    .padding(.trailing, AppChromeMetrics.horizontalInset)
-                    .padding(.bottom, floatingButtonInset)
+                if !isKeyboardVisible {
+                    addPillButton
+                        .padding(.trailing, AppChromeMetrics.horizontalInset)
+                        .padding(.bottom, floatingButtonInset)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }

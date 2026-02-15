@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var userSession: UserSession
@@ -22,6 +23,7 @@ struct ContentView: View {
 struct MainAppView: View {
     @State private var activeTab: Tab = .shopping
     @State private var tabBarHeight: CGFloat = AppChromeMetrics.minimumTabBarHeight
+    @State private var isKeyboardVisible = false
 
     /// Animation state for tab transitions
     @Namespace private var animation
@@ -34,6 +36,7 @@ struct MainAppView: View {
             // Tab content with animation
             tabContent
                 .environment(\.appTabBarHeight, tabBarHeight)
+                .environment(\.appKeyboardVisible, isKeyboardVisible)
                 .transition(
                     .asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur),
@@ -51,8 +54,17 @@ struct MainAppView: View {
                     tabBarHeight = measuredHeight
                 }
                 .padding(.bottom, AppChromeMetrics.tabBarBottomOffset)
-                .ignoresSafeArea(.keyboard)
+                .offset(y: isKeyboardVisible ? tabBarHeight + 120 : 0)
+                .opacity(isKeyboardVisible ? 0 : 1)
+                .allowsHitTesting(!isKeyboardVisible)
+                .animation(.easeInOut(duration: 0.22), value: isKeyboardVisible)
                 .ignoresSafeArea(edges: .bottom)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
         }
     }
 

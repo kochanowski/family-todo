@@ -49,6 +49,18 @@ final class ShoppingListStore: ObservableObject {
             }
     }
 
+    /// Recently purchased list deduplicated by normalized title.
+    /// Keeps the most recently purchased record for each product name.
+    var recentItems: [ShoppingItem] {
+        let purchased = items.filter(\.isBought)
+        let grouped = Dictionary(grouping: purchased) { normalizedRecentKey($0.title) }
+
+        return grouped.compactMap { _, records in
+            records.max { recentTimestamp(for: $0) < recentTimestamp(for: $1) }
+        }
+        .sorted { recentTimestamp(for: $0) > recentTimestamp(for: $1) }
+    }
+
     // MARK: - Load Items
 
     func loadItems() async {
@@ -228,6 +240,27 @@ final class ShoppingListStore: ObservableObject {
         await updateItem(updatedItem)
     }
 
+    /// Restores a recent item to the active shopping list.
+    /// After restore, the product name disappears from Recent.
+    func restoreRecentItem(_ item: ShoppingItem) async {
+        let key = normalizedRecentKey(item.title)
+        let matchingBought = items.filter { $0.isBought && normalizedRecentKey($0.title) == key }
+        guard let latest = matchingBought.max(by: { recentTimestamp(for: $0) < recentTimestamp(for: $1) }) else {
+            return
+        }
+
+        var restored = latest
+        restored.isBought = false
+        restored.boughtAt = nil
+        restored.restockCount += 1
+        restored.updatedAt = Date()
+        await updateItem(restored)
+
+        for duplicate in matchingBought where duplicate.id != restored.id {
+            await deleteItem(duplicate)
+        }
+    }
+
     // MARK: - Bulk Operations
 
     func markAllAsBought() async {
@@ -336,5 +369,17 @@ final class ShoppingListStore: ObservableObject {
             // Keep in cache with pending status, reload UI
             await loadItems()
         }
+    }
+
+    private func normalizedRecentKey(_ title: String) -> String {
+        title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private func recentTimestamp(for item: ShoppingItem) -> Date {
+        item.boughtAt ?? item.updatedAt
     }
 }

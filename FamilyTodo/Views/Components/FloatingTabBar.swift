@@ -26,10 +26,19 @@ private struct AppTabBarHeightKey: EnvironmentKey {
     static let defaultValue: CGFloat = AppChromeMetrics.minimumTabBarHeight
 }
 
+private struct AppKeyboardVisibleKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var appTabBarHeight: CGFloat {
         get { self[AppTabBarHeightKey.self] }
         set { self[AppTabBarHeightKey.self] = newValue }
+    }
+
+    var appKeyboardVisible: Bool {
+        get { self[AppKeyboardVisibleKey.self] }
+        set { self[AppKeyboardVisibleKey.self] = newValue }
     }
 }
 
@@ -100,20 +109,30 @@ struct FloatingTabBar: View {
     @Environment(\.colorScheme) private var colorScheme
     @Namespace private var glassNamespace
     @Namespace private var fallbackNamespace
-    private let tabBarContentHeight: CGFloat = 44
-    private let activeIndicatorSize = CGSize(width: 82, height: 42)
+    private let tabBarContentHeight: CGFloat = 50
+    private let activeIndicatorSize = CGSize(width: 82, height: 48)
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Tab.allCases, id: \.self) { tab in
-                tabButton(for: tab)
+        Group {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 0) {
+                    tabBarContent
+                        .glassEffect(.regular.tint(liquidGlassTint), in: .capsule)
+                }
+            } else {
+                tabBarContent
+                    .background {
+                        ZStack {
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+
+                            Capsule()
+                                .fill(fallbackTint)
+                        }
+                    }
+                    .clipShape(Capsule())
             }
         }
-        .frame(height: tabBarContentHeight)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
-        .background { tabBarSurface }
-        .clipShape(Capsule())
         .overlay {
             Capsule()
                 .strokeBorder(borderColor, lineWidth: 0.5)
@@ -128,24 +147,15 @@ struct FloatingTabBar: View {
         .padding(.horizontal, AppChromeMetrics.horizontalInset)
     }
 
-    @ViewBuilder
-    private var tabBarSurface: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) {
-                Color.clear
-                    .glassEffect(.regular.tint(liquidGlassTint))
+    private var tabBarContent: some View {
+        HStack(spacing: 0) {
+            ForEach(Tab.allCases, id: \.self) { tab in
+                tabButton(for: tab)
             }
-            .allowsHitTesting(false)
-        } else {
-            ZStack {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-
-                Capsule()
-                    .fill(fallbackTint)
-            }
-            .allowsHitTesting(false)
         }
+        .frame(height: tabBarContentHeight)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
     }
 
     private func tabButton(for tab: Tab) -> some View {
@@ -184,21 +194,18 @@ struct FloatingTabBar: View {
     @ViewBuilder
     private var activeTabIndicator: some View {
         if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) {
-                Color.clear
-                    .glassEffect(.regular.tint(dropletTint).interactive())
-                    .glassEffectID("tabActiveIndicator", in: glassNamespace)
-                    .glassEffectTransition(.matchedGeometry)
-            }
-            .clipShape(Capsule())
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.14),
-                        lineWidth: 0.5
-                    )
-            }
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.1), radius: 6, x: 0, y: 3)
+            Color.clear
+                .glassEffect(.regular.tint(dropletTint).interactive(), in: .capsule)
+                .glassEffectID("tabActiveIndicator", in: glassNamespace)
+                .glassEffectTransition(.matchedGeometry)
+                .overlay {
+                    Capsule()
+                        .strokeBorder(
+                            colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.14),
+                            lineWidth: 0.5
+                        )
+                }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.1), radius: 6, x: 0, y: 3)
         } else {
             Capsule()
                 .fill(colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.88))
@@ -219,11 +226,11 @@ struct FloatingTabBar: View {
     }
 
     private var liquidGlassTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.24)
+        colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.22)
     }
 
     private var dropletTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.36)
+        colorScheme == .dark ? Color.white.opacity(0.24) : Color.white.opacity(0.48)
     }
 
     private var fallbackTint: Color {

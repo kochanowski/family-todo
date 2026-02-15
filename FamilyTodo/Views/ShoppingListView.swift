@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
@@ -49,7 +50,7 @@ private struct ShoppingListContent: View {
     // Rapid entry state
     @State private var isRapidEntryActive = false
     @State private var rapidEntryText = ""
-    @FocusState private var rapidEntryFocused: Bool
+    @State private var rapidEntryFocused = false
 
     @State private var showRestock = false
     @State private var showClearToBuyConfirmation = false
@@ -57,6 +58,7 @@ private struct ShoppingListContent: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appTabBarHeight) private var tabBarHeight
+    @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
@@ -64,9 +66,9 @@ private struct ShoppingListContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight
-            )
+            let listBottomInset = isKeyboardVisible
+                ? CGFloat(16)
+                : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
             let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
                 tabBarHeight: tabBarHeight
             )
@@ -112,6 +114,7 @@ private struct ShoppingListContent: View {
                             .padding(.horizontal, 20)
                             .padding(.bottom, listBottomInset)
                         }
+                        .scrollDismissesKeyboard(.interactively)
                         .refreshable {
                             store.setSyncMode(userSession.syncMode)
                             await store.loadItems()
@@ -125,17 +128,16 @@ private struct ShoppingListContent: View {
                         }
                         .onChange(of: store.toBuyItems.count) { _, _ in
                             // Scroll to keep draft row visible after each insert
-                            if isRapidEntryActive {
-                                withAnimation(WowAnimation.spring) {
-                                    proxy.scrollTo("rapidEntry", anchor: .bottom)
-                                }
+                            guard isRapidEntryActive else { return }
+                            withAnimation(WowAnimation.spring) {
+                                proxy.scrollTo("rapidEntry", anchor: .bottom)
                             }
                         }
                     }
                 }
 
                 // Compact floating add button
-                if !isRapidEntryActive {
+                if !isRapidEntryActive, !isKeyboardVisible {
                     addPillButton
                         .padding(.trailing, AppChromeMetrics.horizontalInset)
                         .padding(.bottom, floatingButtonInset)
@@ -208,7 +210,7 @@ private struct ShoppingListContent: View {
                 .accessibilityIdentifier("shoppingRestockButton")
                 .pulseAnimation(restockPulse.isPulsing)
                 .sheet(isPresented: $showRestock) {
-                    RestockSheet(restockItems: store.boughtItems, onRestock: restockItem)
+                    RestockSheet(store: store, onRestore: restoreRecentItem)
                 }
             }
         }
@@ -245,14 +247,14 @@ private struct ShoppingListContent: View {
                 .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
                 .frame(width: 20, height: 20)
 
-            TextField("Add item", text: $rapidEntryText)
-                .font(.system(size: 15))
-                .focused($rapidEntryFocused)
-                .submitLabel(.done)
-                .accessibilityIdentifier("shoppingRapidEntryField")
-                .onSubmit {
-                    handleRapidEntrySubmit()
-                }
+            RapidEntryTextField(
+                text: $rapidEntryText,
+                isFocused: $rapidEntryFocused,
+                placeholder: "Add item",
+                onSubmit: handleRapidEntrySubmit,
+                onDone: commitOrDismissRapidEntry
+            )
+            .accessibilityIdentifier("shoppingRapidEntryField")
         }
         .padding(.vertical, 6)
         .background(cardBackground.opacity(0.01)) // Tap target
@@ -336,9 +338,9 @@ private struct ShoppingListContent: View {
         }
     }
 
-    private func restockItem(_ item: ShoppingItem) {
+    private func restoreRecentItem(_ item: ShoppingItem) {
         _Concurrency.Task {
-            await store.toggleBought(item)
+            await store.restoreRecentItem(item)
         }
         HapticManager.lightTap()
     }
@@ -393,34 +395,112 @@ struct ShoppingItemRow: View {
     }
 }
 
+private struct RapidEntryTextField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let placeholder: String
+    let onSubmit: () -> Void
+    let onDone: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.font = .systemFont(ofSize: 15)
+        textField.placeholder = placeholder
+        textField.returnKeyType = .done
+        textField.autocapitalizationType = .sentences
+        textField.autocorrectionType = .yes
+        textField.enablesReturnKeyAutomatically = false
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        textField.inputAccessoryView = context.coordinator.makeAccessoryToolbar()
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context _: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+
+        if isFocused, !uiView.isFirstResponder {
+            uiView.becomeFirstResponder()
+        } else if !isFocused, uiView.isFirstResponder {
+            uiView.resignFirstResponder()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        private var parent: RapidEntryTextField
+
+        init(_ parent: RapidEntryTextField) {
+            self.parent = parent
+        }
+
+        @objc
+        func textChanged(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_: UITextField) {
+            parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_: UITextField) {
+            parent.isFocused = false
+        }
+
+        func textFieldShouldReturn(_: UITextField) -> Bool {
+            parent.onSubmit()
+            return false
+        }
+
+        func makeAccessoryToolbar() -> UIToolbar {
+            let toolbar = UIToolbar()
+            toolbar.sizeToFit()
+
+            let spacer = UIBarButtonItem(systemItem: .flexibleSpace)
+            let done = UIBarButtonItem(
+                title: "Done",
+                style: .done,
+                target: self,
+                action: #selector(doneTapped)
+            )
+            toolbar.items = [spacer, done]
+            return toolbar
+        }
+
+        @objc
+        private func doneTapped() {
+            parent.onDone()
+        }
+    }
+}
+
 // MARK: - Restock Sheet
 
 struct RestockSheet: View {
-    let restockItems: [ShoppingItem]
-    let onRestock: (ShoppingItem) -> Void
+    @ObservedObject var store: ShoppingListStore
+    let onRestore: (ShoppingItem) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                if restockItems.isEmpty {
+                if store.recentItems.isEmpty {
                     ContentUnavailableView(
                         "No Recent Purchases",
                         systemImage: "cart",
-                        description: Text("Items you check off will appear here for easy restocking.")
+                        description: Text("Items marked as bought appear here for one-tap restore.")
                     )
                     .padding(.top, 60)
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(restockItems.enumerated()), id: \.element.id) { index, item in
-                            RestockItemRow(item: item, onRestock: { onRestock(item) })
-                                .opacity(0)
-                                .onAppear {} // Staggered fade handled via animation
-                                .animation(
-                                    .easeOut(duration: 0.2).delay(WowAnimation.staggerDelay(index: index)),
-                                    value: restockItems.count
-                                )
+                        ForEach(store.recentItems) { item in
+                            RestockItemRow(item: item, onRestore: { onRestore(item) })
                         }
                     }
                     .padding(.horizontal, 20)
@@ -444,7 +524,7 @@ struct RestockSheet: View {
 
 private struct RestockItemRow: View {
     let item: ShoppingItem
-    let onRestock: () -> Void
+    let onRestore: () -> Void
 
     var body: some View {
         HStack {
@@ -455,7 +535,7 @@ private struct RestockItemRow: View {
             Spacer()
 
             Button {
-                onRestock()
+                onRestore()
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22))
