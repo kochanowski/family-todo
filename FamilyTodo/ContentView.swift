@@ -21,6 +21,7 @@ struct ContentView: View {
 /// tab bar, giving the glass material real content to blur.
 struct MainAppView: View {
     @State private var activeTab: Tab = .shopping
+    @State private var tabBarHeight: CGFloat = AppChromeMetrics.minimumTabBarHeight
 
     /// Animation state for tab transitions
     @Namespace private var animation
@@ -32,6 +33,7 @@ struct MainAppView: View {
 
             // Tab content with animation
             tabContent
+                .environment(\.appTabBarHeight, tabBarHeight)
                 .transition(
                     .asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur),
@@ -45,7 +47,10 @@ struct MainAppView: View {
             // Glass tab bar on top of content so material blur samples
             // the scrolling items underneath.
             FloatingTabBar(activeTab: $activeTab)
-                .padding(.bottom, 8)
+                .onMeasuredHeight { measuredHeight in
+                    tabBarHeight = measuredHeight
+                }
+                .padding(.bottom, AppChromeMetrics.tabBarBottomOffset)
                 .ignoresSafeArea(.keyboard)
                 .ignoresSafeArea(edges: .bottom)
         }

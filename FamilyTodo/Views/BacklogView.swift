@@ -24,6 +24,7 @@ struct BacklogView: View {
 private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
     @EnvironmentObject private var userSession: UserSession
+    @Environment(\.appTabBarHeight) private var tabBarHeight
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
 
@@ -32,50 +33,60 @@ private struct BacklogContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+        GeometryReader { proxy in
+            let listBottomInset = AppChromeMetrics.contentBottomInset(
+                tabBarHeight: tabBarHeight,
+                safeAreaBottom: proxy.safeAreaInsets.bottom
+            )
 
-            // Content
-            if store.isLoading, store.categories.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if store.categories.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(store.categories) { category in
-                            CategoryCard(
-                                category: category,
-                                items: store.items(for: category.id),
-                                onAddItem: { title in
-                                    HapticManager.lightTap()
-                                    _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
-                                },
-                                onDeleteItem: { item in
-                                    _ = _Concurrency.Task { await store.deleteItem(item) }
-                                },
-                                onDeleteCategory: {
-                                    _ = _Concurrency.Task { await store.deleteCategory(category) }
-                                }
-                            )
-                            .rowInsertAnimation()
-                        }
-                    }
+            VStack(spacing: 0) {
+                // Header
+                header
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 80)
-                }
-                .refreshable {
-                    store.setSyncMode(userSession.syncMode)
-                    await store.loadData()
-                }
-            }
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
 
-            Spacer()
+                // Content
+                if store.isLoading, store.categories.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.bottom, listBottomInset)
+                } else if store.categories.isEmpty {
+                    emptyState
+                        .padding(.bottom, listBottomInset)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            ForEach(store.categories) { category in
+                                CategoryCard(
+                                    category: category,
+                                    items: store.items(for: category.id),
+                                    onAddItem: { title in
+                                        HapticManager.lightTap()
+                                        _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
+                                    },
+                                    onDeleteItem: { item in
+                                        _ = _Concurrency.Task { await store.deleteItem(item) }
+                                    },
+                                    onDeleteCategory: {
+                                        _ = _Concurrency.Task { await store.deleteCategory(category) }
+                                    }
+                                )
+                                .rowInsertAnimation()
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, listBottomInset)
+                    }
+                    .refreshable {
+                        store.setSyncMode(userSession.syncMode)
+                        await store.loadData()
+                    }
+                }
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .task {
             store.setSyncMode(userSession.syncMode)

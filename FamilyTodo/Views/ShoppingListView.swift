@@ -55,72 +55,86 @@ private struct ShoppingListContent: View {
     @State private var itemBeingRemoved: UUID?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appTabBarHeight) private var tabBarHeight
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext))
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 0) {
-                // Header
-                header
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
+        GeometryReader { proxy in
+            let safeAreaBottom = proxy.safeAreaInsets.bottom
+            let listBottomInset = AppChromeMetrics.contentBottomInset(
+                tabBarHeight: tabBarHeight,
+                safeAreaBottom: safeAreaBottom
+            )
+            let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
+                tabBarHeight: tabBarHeight,
+                safeAreaBottom: safeAreaBottom
+            )
 
-                // Items list with rapid entry
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(store.toBuyItems) { item in
-                                if itemBeingRemoved != item.id {
-                                    ShoppingItemRow(
-                                        item: item,
-                                        onToggle: { toggleItem(item) }
-                                    )
-                                    .accessibilityIdentifier("shoppingItem_\(item.title)")
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    // Header
+                    header
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
+
+                    // Items list with rapid entry
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(store.toBuyItems) { item in
+                                    if itemBeingRemoved != item.id {
+                                        ShoppingItemRow(
+                                            item: item,
+                                            onToggle: { toggleItem(item) }
+                                        )
+                                        .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                    }
+                                }
+
+                                // Rapid entry row (stable at bottom, no insert animation)
+                                if isRapidEntryActive {
+                                    rapidEntryRow
+                                        .id("rapidEntry")
                                 }
                             }
-
-                            // Rapid entry row (stable at bottom, no insert animation)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, listBottomInset)
+                        }
+                        .refreshable {
+                            store.setSyncMode(userSession.syncMode)
+                            await store.loadItems()
+                        }
+                        .onChange(of: rapidEntryFocused) { _, focused in
+                            if focused {
+                                withAnimation(WowAnimation.spring) {
+                                    proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                }
+                            }
+                        }
+                        .onChange(of: store.toBuyItems.count) { _, _ in
+                            // Scroll to keep draft row visible after each insert
                             if isRapidEntryActive {
-                                rapidEntryRow
-                                    .id("rapidEntry")
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 80) // Space for floating add button
-                    }
-                    .refreshable {
-                        store.setSyncMode(userSession.syncMode)
-                        await store.loadItems()
-                    }
-                    .onChange(of: rapidEntryFocused) { _, focused in
-                        if focused {
-                            withAnimation(WowAnimation.spring) {
-                                proxy.scrollTo("rapidEntry", anchor: .bottom)
-                            }
-                        }
-                    }
-                    .onChange(of: store.toBuyItems.count) { _, _ in
-                        // Scroll to keep draft row visible after each insert
-                        if isRapidEntryActive {
-                            withAnimation(WowAnimation.spring) {
-                                proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                withAnimation(WowAnimation.spring) {
+                                    proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Compact floating add button
-            if !isRapidEntryActive {
-                addPillButton
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 16)
-                    .transition(.scale.combined(with: .opacity))
+                // Compact floating add button
+                if !isRapidEntryActive {
+                    addPillButton
+                        .padding(.trailing, AppChromeMetrics.horizontalInset)
+                        .padding(.bottom, floatingButtonInset)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .contentShape(Rectangle())
         .onTapGesture {

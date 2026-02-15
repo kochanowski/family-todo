@@ -1,5 +1,65 @@
 import SwiftUI
 
+/// Shared layout metrics for floating app chrome (tab bar + floating CTA buttons).
+enum AppChromeMetrics {
+    static let minimumTabBarHeight: CGFloat = 56
+    static let tabBarBottomOffset: CGFloat = 8
+    static let horizontalInset: CGFloat = 20
+
+    private static let floatingButtonBottomMargin: CGFloat = 12
+    private static let contentBottomMargin: CGFloat = 18
+
+    static func floatingButtonBottomInset(tabBarHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+        overlayCompensation(tabBarHeight: tabBarHeight, safeAreaBottom: safeAreaBottom) + floatingButtonBottomMargin
+    }
+
+    static func contentBottomInset(tabBarHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+        overlayCompensation(tabBarHeight: tabBarHeight, safeAreaBottom: safeAreaBottom) + contentBottomMargin
+    }
+
+    private static func overlayCompensation(tabBarHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+        max(0, normalized(tabBarHeight) + tabBarBottomOffset - safeAreaBottom)
+    }
+
+    private static func normalized(_ tabBarHeight: CGFloat) -> CGFloat {
+        max(tabBarHeight, minimumTabBarHeight)
+    }
+}
+
+private struct AppTabBarHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = AppChromeMetrics.minimumTabBarHeight
+}
+
+extension EnvironmentValues {
+    var appTabBarHeight: CGFloat {
+        get { self[AppTabBarHeightKey.self] }
+        set { self[AppTabBarHeightKey.self] = newValue }
+    }
+}
+
+private struct ViewHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+extension View {
+    func onMeasuredHeight(_ onChange: @escaping (CGFloat) -> Void) -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: ViewHeightPreferenceKey.self, value: proxy.size.height)
+            }
+        }
+        .onPreferenceChange(ViewHeightPreferenceKey.self) { height in
+            guard height > 0 else { return }
+            onChange(height)
+        }
+    }
+}
+
 /// Tab enumeration for the main navigation
 enum Tab: String, CaseIterable {
     case shopping
@@ -26,11 +86,10 @@ enum Tab: String, CaseIterable {
     }
 }
 
-/// Custom floating tab bar with frosted-glass blur anchored near the bottom safe area.
+/// Floating tab bar rendered above scrolling content.
 ///
-/// Uses SwiftUI `.thinMaterial` so the blur correctly samples SwiftUI-rendered
-/// content layers. The parent view must use an overlay (not safeAreaInset) so
-/// scrolling content renders behind the bar, giving the material real pixels to blur.
+/// On iOS 26+, uses native Liquid Glass. On iOS 17-25, uses a tuned material
+/// fallback with low-opacity tint so blur remains visible.
 struct FloatingTabBar: View {
     @Binding var activeTab: Tab
     @Environment(\.colorScheme) private var colorScheme
@@ -44,32 +103,37 @@ struct FloatingTabBar: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
         .background {
-            ZStack {
-                // Base glass: semi-transparent color for reliable glass look
-                Capsule()
-                    .fill(colorScheme == .dark
-                        ? Color(white: 0.15).opacity(0.8)
-                        : Color.white.opacity(0.78))
+            tabBarSurface
+        }
+        .overlay {
+            Capsule()
+                .strokeBorder(borderColor, lineWidth: 0.5)
+        }
+        .shadow(
+            color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
+            radius: 12,
+            x: 0,
+            y: 5
+        )
+        .padding(.horizontal, AppChromeMetrics.horizontalInset)
+    }
 
-                // Material: adds real blur when content scrolls behind
+    @ViewBuilder
+    private var tabBarSurface: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 0) {
+                Color.clear
+                    .glassEffect(.regular.tint(liquidGlassTint))
+            }
+        } else {
+            ZStack {
                 Capsule()
                     .fill(.ultraThinMaterial)
-            }
-            .overlay {
+
                 Capsule()
-                    .strokeBorder(
-                        colorScheme == .dark
-                            ? Color.white.opacity(0.18)
-                            : Color.black.opacity(0.08),
-                        lineWidth: 0.5
-                    )
+                    .fill(fallbackTint)
             }
-            .shadow(
-                color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
-                radius: 12, x: 0, y: 5
-            )
         }
-        .padding(.horizontal, 20)
     }
 
     private func tabButton(for tab: Tab) -> some View {
@@ -88,11 +152,49 @@ struct FloatingTabBar: View {
                     .font(.system(size: 10, weight: activeTab == tab ? .semibold : .regular))
             }
             .foregroundStyle(activeTab == tab ? .primary : .secondary)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 6)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
+            .background {
+                activePillBackground(isActive: activeTab == tab)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tabButton_\(tab.rawValue)")
+    }
+
+    @ViewBuilder
+    private func activePillBackground(isActive: Bool) -> some View {
+        if isActive {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 0) {
+                    Color.clear
+                        .glassEffect(.regular.tint(activePillTint).interactive())
+                }
+            } else {
+                Capsule()
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.36))
+            }
+        }
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
+    }
+
+    private var liquidGlassTint: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.24)
+    }
+
+    private var activePillTint: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.32)
+    }
+
+    private var fallbackTint: Color {
+        if colorScheme == .dark {
+            return Color(red: 0.12, green: 0.12, blue: 0.14).opacity(0.30)
+        }
+        return Color.white.opacity(0.30)
     }
 }
 
@@ -104,7 +206,7 @@ struct FloatingTabBar: View {
         VStack {
             Spacer()
             FloatingTabBar(activeTab: .constant(.shopping))
-                .padding(.bottom, 8)
+                .padding(.bottom, AppChromeMetrics.tabBarBottomOffset)
         }
     }
 }

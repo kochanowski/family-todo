@@ -170,7 +170,7 @@ These features are documented and planned for implementation after MVP launch. E
 
 ### Analytics & Metrics
 - **What:** App Store Connect analytics (downloads, active users, retention, crashes)
-- **Documentation:** [Analytics Guide](docs/2026-01-10_analytics-explained.md)
+- **Documentation:** [Analytics Guide (archived)](docs/old/docs/2026-01-10_analytics-explained.md)
 - **Status:** Not implemented
 - **Priority:** Medium (after MVP launch with 10+ users)
 - **Effort:** 0h (App Store Connect is automatic)
@@ -181,7 +181,7 @@ These features are documented and planned for implementation after MVP launch. E
 - **What:** In-app purchases / subscriptions (StoreKit 2)
 - **Model:** Freemium recommended (free: 2 members, paid: 3+ members)
 - **Pricing:** $4.99/mo or $39.99/yr
-- **Documentation:** [Monetization Guide](docs/2026-01-10_monetization-explained.md)
+- **Documentation:** [Monetization Guide (archived)](docs/old/docs/2026-01-10_monetization-explained.md)
 - **Status:** Not implemented
 - **Priority:** High (required for sustainability after product-market fit)
 - **Effort:** 8-12h (App Store Connect setup + StoreKit 2 code + PaywallUI)
@@ -191,7 +191,7 @@ These features are documented and planned for implementation after MVP launch. E
 ### Localization (i18n)
 - **What:** Multi-language support (Polish, German, Italian, Spanish, Chinese, Japanese)
 - **Approach:** DIY with AI assistance (ChatGPT/Claude) + native review
-- **Documentation:** [Localization Guide](docs/2026-01-10_localization-explained.md)
+- **Documentation:** [Localization Guide (archived)](docs/old/docs/2026-01-10_localization-explained.md)
 - **Status:** English only
 - **Priority:** Medium (expand user base internationally)
 - **Effort:** ~15-20h for 3 languages (PL, DE, IT)
@@ -206,7 +206,7 @@ These features are documented and planned for implementation after MVP launch. E
 ### Automated Testing
 - **What:** Unit tests, UI tests, integration tests
 - **Framework:** XCTest (built-in)
-- **Documentation:** [Testing Strategy](docs/2026-01-10_testing-strategy.md)
+- **Documentation:** [Testing Strategy (archived)](docs/old/docs/2026-01-10_testing-strategy.md)
 - **Status:** Partially implemented (GitHub Actions CI configured, no tests yet)
 - **Priority:** High (code quality, refactoring confidence)
 - **Recommended approach:** Level 1 (Unit tests only) for MVP
@@ -226,7 +226,7 @@ These features are documented and planned for implementation after MVP launch. E
   - **Secondary:** Facebook/Instagram Ads ($50-100/month)
   - **Organic:** Product Hunt launch, Reddit engagement, X/Twitter #BuildInPublic
 - **Launch strategy:** Aggressive Day 1 post-MVP
-- **Documentation:** [Marketing Strategy Guide](docs/2026-01-11_marketing-strategy-explained.md)
+- **Documentation:** [Marketing Strategy Guide (archived)](docs/old/docs/2026-01-11_marketing-strategy-explained.md)
 - **Status:** Planned (execute post-MVP)
 - **Priority:** High (user acquisition critical for validation)
 - **Effort:** 5-10h/week (monitoring ads, content creation, community engagement)
@@ -237,7 +237,7 @@ These features are documented and planned for implementation after MVP launch. E
 - **ASO priorities:** Keywords, screenshots with value props, first 3 lines of description
 
 ### Implementation Prerequisites
-- **Getting Started:** See [Getting Started Checklist](docs/2026-01-10_getting-started-checklist.md)
+- **Getting Started:** See [Getting Started Checklist (archived)](docs/old/docs/2026-01-10_getting-started-checklist.md)
 - **Required:** Xcode project setup, CloudKit capability, GitHub repo
 - **Estimated first working prototype:** 2-3 weeks (4-6 sessions × 4h)
 
@@ -247,7 +247,7 @@ These features are documented and planned for implementation after MVP launch. E
 - **UI Framework**: SwiftUI
 - **Architecture**: Offline-first with background sync
 - **Auth**: Sign in with Apple
-- **Backend**: CloudKit (see ADR-001 in old-docs/)
+- **Backend**: CloudKit (see `docs/2026-01-10_adr-001-cloudkit-backend.md`)
 - **Local Storage**: SwiftData (for offline caching)
 - **CI/CD**: GitHub Actions
 - **Testing**: XCTest (unit tests implemented)
@@ -307,7 +307,7 @@ All data access uses Observable stores:
 
 ### CloudKit Schema
 
-See `old-docs/2026-01-11_cloudkit-schema.md` for full schema details.
+See `docs/2026-01-11_cloudkit-schema.md` for full schema details.
 
 Record types:
 - `Household` - Container for all household data
@@ -380,9 +380,9 @@ Design UI language, structures, and flows to match this thinking.
    - Remove in future cleanup once migration path is clear
 
 2. **Documentation:**
-   - Some docs in `old-docs/` are outdated
-   - Active docs should reference `Complete Implementation.md` for UI/UX
-   - `NEW_VERSION.md` contains outdated architecture (pre-Backlog refactor)
+   - Historical docs are archived in `docs/old/`
+   - Active status and planning docs are in `STATUS.md` + `docs/current/`
+   - Use `docs/current/DOCS_MIGRATION_INDEX.md` to map old -> new locations
 
 3. **Testing:**
    - `HouseholdTests.swift` fully covers guest seeding
@@ -478,8 +478,8 @@ When working in this repository, the agent (Claude/Gemini) is allowed to:
 
 ## Language
 
-- Product requirements document (instructions.md) is in Polish
-- Code, comments, and documentation should be in English
+- Archived product requirements document (`docs/old/root/instructions.md`) is in Polish
+- Code, comments, and active documentation should be in English
 
 ---
 
@@ -490,27 +490,27 @@ When working in this repository, the agent (Claude/Gemini) is allowed to:
 | File | Purpose |
 |------|---------|
 | `CLAUDE.md` | This file - agent guidance |
-| `README.md` | Project overview and setup |
-| `TODO.md` | Unified roadmap and status |
-| `Complete Implementation.md` | Full UI/UX specification |
-| `instructions.md` | Product requirements (Polish) |
-| `WOW.md` | UX polish & haptics specification |
+| `README.md` | Current documentation entrypoint |
+| `STATUS.md` | Current implementation status |
+| `docs/current/ROADMAP.md` | Active roadmap |
+| `docs/current/TESTING_CI_POLICY.md` | CI and testing policy |
+| `docs/current/CLOUD_SYNC_PROFILES.md` | Cloud sync profile switching |
+| `docs/current/DOCS_MIGRATION_INDEX.md` | Documentation migration map |
 
 ### Documentation Structure
 
 ```
 ├── CLAUDE.md                    # Agent guidance (this file)
-├── README.md                    # Project README
-├── TODO.md                      # Current roadmap
-├── Complete Implementation.md   # UI/UX spec
-├── NEW_VERSION.md              # Technical docs (partially outdated)
-├── instructions.md             # Product requirements (PL)
-├── WOW.md                      # UX polish spec
-└── old-docs/                   # Archive (outdated docs)
-    ├── 2026-01-10_adr-001-cloudkit-backend.md
-    ├── 2026-01-10_cloudkit-setup-guide.md
-    ├── 2026-01-11_cloudkit-schema.md
-    └── ...other archived docs
+├── README.md                    # Current docs entrypoint
+├── STATUS.md                    # Current implementation status
+└── docs/
+    ├── current/                 # Active operational docs
+    │   ├── ROADMAP.md
+    │   ├── TESTING_CI_POLICY.md
+    │   ├── CLOUD_SYNC_PROFILES.md
+    │   └── DOCS_MIGRATION_INDEX.md
+    ├── old/root/                # Archived legacy root docs
+    └── old/docs/                # Archived historical specs/proposals
 ```
 
 ### Common Commands
@@ -561,9 +561,9 @@ gh run view <run-id> --log
 ## Questions?
 
 If you're uncertain about:
-- **Architecture decisions** → Check `old-docs/2026-01-10_adr-*.md`
-- **UI/UX patterns** → Check `Complete Implementation.md`
-- **Current roadmap** → Check `TODO.md`
-- **Product requirements** → Check `instructions.md` (Polish) or ask user
+- **Architecture decisions** → Check `docs/2026-01-10_adr-001-cloudkit-backend.md` and `docs/2026-01-12_adr-002-error-handling-offline-first.md`
+- **Current roadmap** → Check `docs/current/ROADMAP.md`
+- **Current status** → Check `STATUS.md`
+- **Archived historical requirements** → Check `docs/old/root/instructions.md` (Polish)
 
 When in doubt, prefer simplicity and follow existing patterns in the codebase.

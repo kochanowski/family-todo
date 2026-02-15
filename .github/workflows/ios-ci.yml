@@ -9,6 +9,15 @@ on:
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      cloud_sync_profile:
+        description: Cloud sync profile for this manual run
+        required: false
+        default: preview-local
+        type: choice
+        options:
+          - preview-local
+          - sync-enabled
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -42,10 +51,18 @@ jobs:
           echo "DerivedData cleaned successfully"
 
       - name: Build (no signing)
+        env:
+          CLOUD_SYNC_PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cloud_sync_profile || 'preview-local' }}
         run: |
           set -o pipefail
           # `xcpretty` sometimes omits the underlying compiler error output.
           # Keep a raw log and print its tail on failure for easier debugging in CI.
+
+          HP_CLOUDKIT_ENABLED="NO"
+          if [ "$CLOUD_SYNC_PROFILE" = "sync-enabled" ]; then
+            HP_CLOUDKIT_ENABLED="YES"
+          fi
+          echo "Cloud sync profile: $CLOUD_SYNC_PROFILE (HPCloudKitEnabled=$HP_CLOUDKIT_ENABLED)"
 
           # Find first available iOS simulator
           SIMULATOR_ID=$(xcrun simctl list devices available --json | \
@@ -59,6 +76,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
+            INFOPLIST_KEY_HPCloudKitEnabled="$HP_CLOUDKIT_ENABLED" \
             OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
             2>&1 | tee xcodebuild-build.log | bundle exec xcpretty || { \
               status=$?; \

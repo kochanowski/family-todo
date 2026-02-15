@@ -21,13 +21,14 @@ struct AppBackgroundView: View {
         if colorScheme == .dark {
             [
                 .init(color: .black, location: 0),
-                .init(color: .black, location: 0.6),
+                .init(color: Color(red: 0.05, green: 0.05, blue: 0.08), location: 0.72),
                 .init(color: Color(red: 0.12, green: 0.08, blue: 0.20), location: 1.0),
             ]
         } else {
             [
-                .init(color: Color(hex: "F9F9F9"), location: 0),
-                .init(color: Color(hex: "F9F9F9"), location: 1.0),
+                .init(color: Color(hex: "FAFAF9"), location: 0),
+                .init(color: Color(hex: "F5F1EB"), location: 0.78),
+                .init(color: Color(hex: "EDE4D9"), location: 1.0),
             ]
         }
     }

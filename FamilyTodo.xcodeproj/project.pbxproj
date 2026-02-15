@@ -46,7 +46,6 @@
 		1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D1A7F2E84B45DFA676530A /* SignInView.swift */; };
 		4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */; };
 		6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */; };
-		6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8002B6BF847E4BEEB264BCCE /* TaskListView.swift */; };
 		C3D4E5F60718293A4B5C6D7E /* ThemeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */; };
 		B8F1C2D3E4F5061728394B5C /* AppColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */; };
 		C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65D304A5384580AD9E9724 /* OnboardingView.swift */; };
@@ -126,7 +125,6 @@
 		C3D1A7F2E84B45DFA676530A /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedTask.swift; sourceTree = "<group>"; };
 		F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
-		8002B6BF847E4BEEB264BCCE /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeStore.swift; sourceTree = "<group>"; };
 		F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
 		EC65D304A5384580AD9E9724 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -333,7 +331,6 @@
 				NEWGROUP000000000000001 /* Components */,
 				AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
-				8002B6BF847E4BEEB264BCCE /* TaskListView.swift */,
 				D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
 );
@@ -504,7 +501,6 @@
 				C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */,
 				4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */,
 				6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */,
-				6DB8B430A7844D63ACA3E66F /* TaskListView.swift in Sources */,
 				C3D4E5F60718293A4B5C6D7E /* ThemeStore.swift in Sources */,
 				B8F1C2D3E4F5061728394B5C /* AppColors.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */,

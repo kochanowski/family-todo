@@ -3,66 +3,75 @@ import SwiftUI
 /// More screen - hub for settings, profile, and configuration
 struct MoreView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appTabBarHeight) private var tabBarHeight
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Header
-                header
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
+        GeometryReader { proxy in
+            let listBottomInset = AppChromeMetrics.contentBottomInset(
+                tabBarHeight: tabBarHeight,
+                safeAreaBottom: proxy.safeAreaInsets.bottom
+            )
 
-                // Menu items
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Profile card
-                        NavigationLink {
-                            ProfileView()
-                        } label: {
-                            ProfileCard()
-                        }
-                        .buttonStyle(.plain)
+            NavigationStack {
+                VStack(spacing: 0) {
+                    // Header
+                    header
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
 
-                        // Settings group
-                        VStack(spacing: 0) {
+                    // Menu items
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Profile card
                             NavigationLink {
-                                CategoriesManagementView()
+                                ProfileView()
                             } label: {
-                                MoreRow(icon: "folder", title: "Backlog Categories")
+                                ProfileCard()
                             }
+                            .buttonStyle(.plain)
 
-                            Divider()
-                                .padding(.leading, 52)
+                            // Settings group
+                            VStack(spacing: 0) {
+                                NavigationLink {
+                                    CategoriesManagementView()
+                                } label: {
+                                    MoreRow(icon: "folder", title: "Backlog Categories")
+                                }
 
-                            NavigationLink {
-                                RepetitiveTasksView()
-                            } label: {
-                                MoreRow(icon: "repeat", title: "Repetitive Tasks")
+                                Divider()
+                                    .padding(.leading, 52)
+
+                                NavigationLink {
+                                    RepetitiveTasksView()
+                                } label: {
+                                    MoreRow(icon: "repeat", title: "Repetitive Tasks")
+                                }
+
+                                Divider()
+                                    .padding(.leading, 52)
+
+                                NavigationLink {
+                                    SettingsView()
+                                } label: {
+                                    MoreRow(icon: "gear", title: "Settings")
+                                }
+                                .accessibilityIdentifier("Settings")
                             }
-
-                            Divider()
-                                .padding(.leading, 52)
-
-                            NavigationLink {
-                                SettingsView()
-                            } label: {
-                                MoreRow(icon: "gear", title: "Settings")
+                            .background {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(cardBackground)
                             }
-                            .accessibilityIdentifier("Settings")
                         }
-                        .background {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(cardBackground)
-                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, listBottomInset)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 80)
-                }
 
-                Spacer()
+                    Spacer()
+                }
+                .background(Color.clear)
             }
-            .background(Color.clear)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 

@@ -30,6 +30,7 @@ private struct TasksContent: View {
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var userSession: UserSession
+    @Environment(\.appTabBarHeight) private var tabBarHeight
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: TaskStore(modelContext: modelContext))
@@ -37,51 +38,64 @@ private struct TasksContent: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 0) {
-                // Header
-                header
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
+        GeometryReader { proxy in
+            let safeAreaBottom = proxy.safeAreaInsets.bottom
+            let listBottomInset = AppChromeMetrics.contentBottomInset(
+                tabBarHeight: tabBarHeight,
+                safeAreaBottom: safeAreaBottom
+            )
+            let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
+                tabBarHeight: tabBarHeight,
+                safeAreaBottom: safeAreaBottom
+            )
 
-                // Focus rule banner
-                focusRuleBanner
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 16)
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    // Header
+                    header
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
 
-                // Tasks list
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        // Active tasks (Next)
-                        if !store.nextTasks.isEmpty {
-                            ForEach(store.nextTasks) { task in
-                                if taskBeingCompleted != task.id {
-                                    TaskRow(task: task, onToggle: { toggleTask(task) })
-                                        .rowInsertAnimation()
-                                        .accessibilityIdentifier("taskRow_\(task.title)")
+                    // Focus rule banner
+                    focusRuleBanner
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 16)
+
+                    // Tasks list
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            // Active tasks (Next)
+                            if !store.nextTasks.isEmpty {
+                                ForEach(store.nextTasks) { task in
+                                    if taskBeingCompleted != task.id {
+                                        TaskRow(task: task, onToggle: { toggleTask(task) })
+                                            .rowInsertAnimation()
+                                            .accessibilityIdentifier("taskRow_\(task.title)")
+                                    }
                                 }
+                            }
+
+                            // Completed section
+                            if !store.doneTasks.isEmpty {
+                                completedSection
                             }
                         }
                     }
-
-                    // Completed section
-                    if !store.doneTasks.isEmpty {
-                        completedSection
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, listBottomInset)
+                    .refreshable {
+                        store.setSyncMode(userSession.syncMode)
+                        await store.loadTasks()
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 80) // Space for floating add button
-                .refreshable {
-                    store.setSyncMode(userSession.syncMode)
-                    await store.loadTasks()
-                }
-            }
 
-            // Compact floating add button
-            addPillButton
-                .padding(.trailing, 20)
-                .padding(.bottom, 16)
+                // Compact floating add button
+                addPillButton
+                    .padding(.trailing, AppChromeMetrics.horizontalInset)
+                    .padding(.bottom, floatingButtonInset)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .task {
             store.setSyncMode(userSession.syncMode)
