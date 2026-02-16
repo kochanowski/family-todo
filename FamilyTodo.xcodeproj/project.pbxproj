@@ -28,6 +28,9 @@
 		A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B72 /* ContentView.swift */; };
 		A1B2C3D4E5F60718293A4B7C /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */; };
 		ASSETSXCASS3TS00000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ASSETSXCASS3TS00000000002 /* Assets.xcassets */; };
+		FONTBUILD000000000000001 /* PressStart2P-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FONTFILE0000000000000001 /* PressStart2P-Regular.ttf */; };
+		FONTBUILD000000000000002 /* CaveatBrush-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FONTFILE0000000000000002 /* CaveatBrush-Regular.ttf */; };
+		FONTBUILD000000000000003 /* SpecialElite-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FONTFILE0000000000000003 /* SpecialElite-Regular.ttf */; };
 		A1B2C3D4E5F60718293A4B7D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B77 /* SwiftUI.framework */; };
 		A1B2C3D4E5F60718293A4B7E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B78 /* Foundation.framework */; };
 		A1B2C3D4E5F60718293A4B7F /* FamilyTodoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B74 /* FamilyTodoTests.swift */; };
@@ -108,6 +111,9 @@
 		A1B2C3D4E5F60718293A4B72 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ASSETSXCASS3TS00000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FONTFILE0000000000000001 /* PressStart2P-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/Fonts/PressStart2P-Regular.ttf"; sourceTree = "<group>"; };
+		FONTFILE0000000000000002 /* CaveatBrush-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/Fonts/CaveatBrush-Regular.ttf"; sourceTree = "<group>"; };
+		FONTFILE0000000000000003 /* SpecialElite-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/Fonts/SpecialElite-Regular.ttf"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B74 /* FamilyTodoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoTests.swift; sourceTree = "<group>"; };
 		7EC3E5BB230C4430890CE54E /* TaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTests.swift; sourceTree = "<group>"; };
 		29641B06528147179F25068D /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
@@ -204,6 +210,9 @@
 				A1B2C3D4E5F60718293A4B72 /* ContentView.swift */,
 				A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */,
 				ASSETSXCASS3TS00000000002 /* Assets.xcassets */,
+				FONTFILE0000000000000001 /* PressStart2P-Regular.ttf */,
+				FONTFILE0000000000000002 /* CaveatBrush-Regular.ttf */,
+				FONTFILE0000000000000003 /* SpecialElite-Regular.ttf */,
 			);
 			path = FamilyTodo;
 			sourceTree = "<group>";
@@ -460,6 +469,9 @@
 			files = (
 				A1B2C3D4E5F60718293A4B7C /* LaunchScreen.storyboard in Resources */,
 				ASSETSXCASS3TS00000000001 /* Assets.xcassets in Resources */,
+				FONTBUILD000000000000001 /* PressStart2P-Regular.ttf in Resources */,
+				FONTBUILD000000000000002 /* CaveatBrush-Regular.ttf in Resources */,
+				FONTBUILD000000000000003 /* SpecialElite-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -616,6 +628,11 @@
 				INFOPLIST_KEY_HPCloudKitEnabled = NO;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIAppFonts = (
+					"Resources/Fonts/PressStart2P-Regular.ttf",
+					"Resources/Fonts/CaveatBrush-Regular.ttf",
+					"Resources/Fonts/SpecialElite-Regular.ttf",
+				);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -644,6 +661,11 @@
 				INFOPLIST_KEY_HPCloudKitEnabled = NO;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIAppFonts = (
+					"Resources/Fonts/PressStart2P-Regular.ttf",
+					"Resources/Fonts/CaveatBrush-Regular.ttf",
+					"Resources/Fonts/SpecialElite-Regular.ttf",
+				);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
