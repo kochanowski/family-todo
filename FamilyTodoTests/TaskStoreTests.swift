@@ -4,6 +4,8 @@ import XCTest
 
 @MainActor
 final class TaskStoreTests: XCTestCase {
+    private let recommendedWipDefaultsKey = "recommendedWipLimit"
+    private var originalRecommendedWipValue: Int?
     private var modelContainer: ModelContainer!
     private var store: TaskStore!
     private let householdId = UUID()
@@ -11,6 +13,14 @@ final class TaskStoreTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
+
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: recommendedWipDefaultsKey) != nil {
+            originalRecommendedWipValue = defaults.integer(forKey: recommendedWipDefaultsKey)
+        } else {
+            originalRecommendedWipValue = nil
+        }
+        defaults.set(3, forKey: recommendedWipDefaultsKey)
 
         // Create in-memory model container for testing
         let schema = Schema([CachedTask.self])
@@ -22,6 +32,14 @@ final class TaskStoreTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        let defaults = UserDefaults.standard
+        if let originalRecommendedWipValue {
+            defaults.set(originalRecommendedWipValue, forKey: recommendedWipDefaultsKey)
+        } else {
+            defaults.removeObject(forKey: recommendedWipDefaultsKey)
+        }
+        originalRecommendedWipValue = nil
+
         store = nil
         modelContainer = nil
         try await super.tearDown()

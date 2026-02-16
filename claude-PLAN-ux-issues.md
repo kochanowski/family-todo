@@ -1232,3 +1232,586 @@ Przeszukać wszystkie `@Model` klasy pod kątem nowych non-optional properties b
 > - być Optional (`Type?`)
 >
 > Inaczej SwiftData lightweight migration zawsze crashnie na istniejących użytkownikach.
+
+---
+---
+
+# UX Round 2 — 10 nowych issues (2026-02-16 13:58)
+
+## Spis zmian
+
+| # | Issue | Pliki | Effort | Status |
+|---|-------|-------|--------|--------|
+| R2-1 | Banner „Add tasks" → tap naviguje do Backlog | `TasksView.swift` | 15 min | ✅ DO |
+| R2-2 | ~~Backlog promote~~ | — | — | ❌ SKIP — działa OK |
+| R2-3 | More: ikona „Task History" — spójność | `MoreView.swift` | 5 min | ✅ DO |
+| R2-4 | Completed task: swipe → archiwizuj | `TasksView.swift` | 30 min | ✅ DO |
+| R2-5 | Nazwy: „Completed" (Tasks) + „Task History" (More) | `TasksView.swift`, `MoreView.swift` | 15 min | ✅ DO |
+| R2-6 | More → Task History: cleanup options | `MoreView.swift` | 45 min | ✅ DO |
+| R2-7 | ~~Shopping badge kolory~~ | — | — | ❌ SKIP |
+| R2-8 | Settings: konfigurowalny WIP limit (1-7) | `MoreView.swift`, `TaskStore.swift`, `TasksView.swift` | 45 min | ✅ DO |
+| R2-9 | Tasks: mniejsze odstępy | `TasksView.swift` | 5 min | ✅ DO |
+| R2-10 | Checkbox: square fill (blue) | `TasksView.swift` | 15 min | ✅ DO |
+| R2-11 | WIP zone: zielony border dla zadań 1-3 | `TasksView.swift` | 10 min | ✅ DO (NOWE) |
+
+### Decyzje użytkownika (2026-02-16 14:07)
+
+- **Checkbox:** Opcja B — `square` → `checkmark.square.fill` (.blue)
+- **Nazwy:** „COMPLETED" w Tasks (bez zmian) + „Task History" w More
+- **Shopping badge:** zostawić bez zmian
+- **Backlog promote:** działa poprawnie — drop
+- **WIP kolory:** zielony left border dla pozycji 1-3 (normal zone)
+
+---
+
+## R2-1 — Banner „Add tasks from Backlog" → tap naviguje do Backlog
+
+### Problem
+Gdy NEXT jest puste, banner mówi „Add tasks from Backlog to start" z ikoną `plus.circle` — ale kliknięcie nic nie robi. Intuicyjnie user chce kliknąć i przejść do Backlog.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/TasksView.swift`
+
+Dodać `@Binding var selectedTab: AppTab` lub użyć `@EnvironmentObject` z tab selection. Owinąć banner w `Button` gdy `count == 0`:
+
+```swift
+// OBECNE (L238-269):
+@ViewBuilder
+private var focusRuleBanner: some View {
+    let count = store.nextTasks.count
+    // ... HStack z tekstem i ikoną
+}
+
+// NOWE:
+@ViewBuilder
+private var focusRuleBanner: some View {
+    let count = store.nextTasks.count
+    let state: (color: Color, icon: String, text: String) = switch count {
+    case 0:
+        (.blue, "plus.circle", "Add tasks from Backlog to start")
+    // ... reszta bez zmian
+    }
+
+    if count == 0 {
+        Button {
+            // Przejdź do Backlog tab
+            tabSelection = .backlog
+        } label: {
+            bannerContent(state: state)
+        }
+        .buttonStyle(.plain)
+    } else {
+        bannerContent(state: state)
+    }
+}
+
+private func bannerContent(state: (color: Color, icon: String, text: String)) -> some View {
+    HStack(spacing: 12) {
+        Image(systemName: state.icon)
+            .font(.system(size: 18))
+            .foregroundStyle(state.color)
+        Text(state.text)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(.secondary)
+        Spacer()
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .background {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(state.color.opacity(0.1))
+    }
+}
+```
+
+> **UWAGA:** Wymaga dostępu do tab selection binding. Sprawdzić jak `ContentView` zarządza `TabView` selection i przekazać do `TasksContent`.
+
+---
+
+## R2-2 — Backlog → Tasks promote nadal nie działa
+
+### Problem
+User nie może przenieść zadania z Backlog do Tasks. Kod `promoteItem` (L283-305) wygląda poprawnie strukturalnie — trzeba debugować.
+
+### Możliwe root causes
+
+1. **`userSession.userId` jest `nil` w guest mode** — sprawdzić czy `userId` jest ustawiany w `UserSession` dla gościa
+2. **`UUID(uuidString: userId)` zwraca `nil`** — jeśli `userId` nie jest poprawnym UUID stringiem (np. jest Apple ID zamiast UUID)
+3. **`store.promoteItemToTask` zwraca błąd** — walidacja wewnętrzna blokuje
+
+### Sposób debugowania
+
+Dodać tymczasowe `print()` lub sprawdzić w `TaskStore.promoteItemToTask`:
+
+```swift
+// W BacklogView.swift L283-290, dodać logi:
+private func promoteItem(_ item: BacklogItem) {
+    print("DEBUG promoteItem: activeMembers=\(activeMembers.count), userId=\(userSession.userId ?? "nil")")
+    if activeMembers.isEmpty {
+        if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
+            print("DEBUG: guest promote with assigneeId=\(assigneeId)")
+            completePromotion(of: item, assigneeId: assigneeId)
+        } else {
+            print("DEBUG: no userId or UUID parse failed. userId=\(userSession.userId ?? "nil")")
+            showBanner(.assigneeRequired)
+        }
+        return
+    }
+    // ... reszta
+}
+```
+
+Sprawdzić `promoteItemToTask` w `TaskStore` — czy nie blokuje z powodu soft WIP limitu lub innej walidacji.
+
+---
+
+## R2-3 — More: ikona Completed Tasks — spójność kolorów
+
+### Problem
+W More lista: Backlog Categories (gray), Repetitive Tasks (gray), **Completed Tasks (green)**, Settings (gray). Zielona ikona jest niespójna.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/MoreView.swift`
+
+**Linia 63:**
+
+```swift
+// OBECNE:
+MoreRow(icon: "checkmark.circle", title: "Completed Tasks", tint: .green)
+
+// NOWE:
+MoreRow(icon: "checkmark.circle", title: "Completed Tasks")
+```
+
+Usunąć `tint: .green` → domyślne `.primary` (jak reszta ikon). Opcjonalnie zmienić ikonę na `clock.arrow.circlepath` (history) co lepiej oddaje „archiwum".
+
+---
+
+## R2-4 — Completed task: long-press/swipe → archiwizuj do More
+
+### Problem
+Completed tasks w Tasks nie mają opcji szybkiego przeniesienia do archiwum (More → Completed Tasks). User chce long-press lub swipe.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/TasksView.swift`
+
+**Linie 123-133** — dodać swipe actions i context menu do completed task rows:
+
+```swift
+// OBECNE (L123-133):
+ForEach(store.recentlyDoneTasks) { task in
+    TaskRow(
+        task: task,
+        assigneeName: assigneeName(for: task),
+        wipZone: .normal,
+        onToggle: { toggleTask(task) },
+        onOpenDetail: { selectedTask = task }
+    )
+    .rowInsertAnimation()
+    .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+}
+
+// NOWE:
+ForEach(store.recentlyDoneTasks) { task in
+    TaskRow(
+        task: task,
+        assigneeName: assigneeName(for: task),
+        wipZone: .normal,
+        onToggle: { toggleTask(task) },
+        onOpenDetail: { selectedTask = task }
+    )
+    .swipeActions(edge: .trailing) {
+        Button {
+            archiveTask(task)
+        } label: {
+            Label("Archive", systemImage: "archivebox")
+        }
+        .tint(.orange)
+    }
+    .contextMenu {
+        Button {
+            archiveTask(task)
+        } label: {
+            Label("Move to History", systemImage: "archivebox")
+        }
+
+        Button {
+            toggleTask(task)
+        } label: {
+            Label("Undo Complete", systemImage: "arrow.uturn.backward")
+        }
+    }
+    .rowInsertAnimation()
+    .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+}
+```
+
+Dodać helper function:
+
+```swift
+private func archiveTask(_ task: Task) {
+    // Ustaw completedAt na >24h temu → przeniesie do archivedDoneTasks
+    var updated = task
+    updated.completedAt = Date().addingTimeInterval(-86401)
+    _ = _Concurrency.Task {
+        await store.updateTask(updated)
+    }
+}
+```
+
+---
+
+## R2-5 — Nazwy sekcji: „Recently Done" vs „Task History"
+
+### Propozycje nazw
+
+| Tasks tab | More tab | Logika |
+|-----------|----------|--------|
+| **Recently Done** | **Task History** | DONE = świeże (24h), HISTORY = archiwum |
+| **Just Finished** | **All Completed** | Lekki vs formalny |
+| **Done Today** | **Past Tasks** | Temporalny podział |
+| **✓ Recent** | **✓ Archive** | Minimalistyczne |
+
+**Rekomendacja:** **„Recently Done"** (Tasks) + **„Task History"** (More)
+
+### Zmiana
+
+1. **`TasksView.swift` L121:** `sectionHeader("COMPLETED")` → `sectionHeader("RECENTLY DONE")`
+2. **`MoreView.swift` L63:** `title: "Completed Tasks"` → `title: "Task History"`
+3. **`MoreView.swift` CompletedTasksView:** zmienić `navigationTitle` i empty state text
+
+---
+
+## R2-6 — More → Task History: opcje czyszczenia
+
+### Propozycje
+
+Tak — Clean All + Clean by period to dobre pomysły. Proponuję:
+
+- **Clear All** — kasuje całą historię
+- **Keep Last 7 Days** — zostawia ostatni tydzień
+- **Keep Last 30 Days** — zostawia ostatni miesiąc
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/MoreView.swift` — w `CompletedTasksView`
+
+Dodać toolbar button z menu:
+
+```swift
+.toolbar {
+    ToolbarItem(placement: .topBarTrailing) {
+        Menu {
+            Button(role: .destructive) {
+                clearArchivedTasks(olderThan: nil) // all
+            } label: {
+                Label("Clear All", systemImage: "trash")
+            }
+
+            Button {
+                clearArchivedTasks(olderThan: 7)
+            } label: {
+                Label("Keep Last 7 Days", systemImage: "calendar")
+            }
+
+            Button {
+                clearArchivedTasks(olderThan: 30)
+            } label: {
+                Label("Keep Last 30 Days", systemImage: "calendar.badge.clock")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 17))
+        }
+    }
+}
+```
+
+Dodać do `TaskStore`:
+
+```swift
+func clearArchivedTasks(keepingDays: Int?) {
+    let cutoff: Date? = keepingDays.map { Date().addingTimeInterval(-Double($0) * 86400) }
+    tasks.removeAll { task in
+        guard task.status == .done,
+              let completedAt = task.completedAt,
+              completedAt <= Date().addingTimeInterval(-86400)
+        else { return false }
+
+        if let cutoff { return completedAt < cutoff }
+        return true  // Clear All
+    }
+    // Persist deletion
+}
+```
+
+---
+
+## R2-7 — Shopping: spójność kolorów Add item + badge
+
+### Obecny stan
+- Add item pill: `.fill(.blue)` + blue shadow
+- Count badge: `.fill(.blue)`
+
+### Rekomendacja
+
+Niebieskie jest OK jako akcent akcji — spójne z iOS native. Ale można rozważyć:
+
+**Opcja A (zachowaj blue, subtelniejszy badge):**
+```swift
+// Badge (L220):
+.background(Capsule().fill(.blue.opacity(0.15)))  // zamiast solid blue
+.foregroundStyle(.blue)  // zamiast .white
+```
+
+**Opcja B (system tint — dopasuje się do theme):**
+```swift
+// Add pill (L283):
+.fill(Color.accentColor)
+
+// Badge:
+.background(Capsule().fill(Color.accentColor))
+```
+
+**Opcja C (bez zmian):** Niebieskie FAB-style przyciski to standard iOS (np. Reminders, Notes). Jeśli reszta aplikacji też używa `.blue` jako akcentu — jest spójne.
+
+> **Rekomendacja:** Opcja A — zmniejsz wizualną wagę badge'a, zachowaj blue na CTA. Badge z pełnym `.blue` rywalizuje z przyciskiem o uwagę.
+
+---
+
+## R2-8 — Settings: konfigurowalny WIP limit (1-7)
+
+### Zmiana 1 — TaskStore
+
+**Plik:** `FamilyTodo/Stores/TaskStore.swift`
+
+```swift
+// OBECNE:
+static let recommendedWipLimit = 3
+
+// NOWE:
+@AppStorage("recommendedWipLimit") static var recommendedWipLimit = 3
+```
+
+> **UWAGA:** `@AppStorage` na `static var` nie działa w Swift — trzeba refaktorować na instancyjny property lub używać `UserDefaults.standard.integer(forKey:)`. Proponuję:
+
+```swift
+static var recommendedWipLimit: Int {
+    let stored = UserDefaults.standard.integer(forKey: "recommendedWipLimit")
+    return stored > 0 ? stored : 3
+}
+```
+
+### Zmiana 2 — SettingsView
+
+**Plik:** `FamilyTodo/Views/MoreView.swift` — w `SettingsView` (L643+)
+
+Dodać nową sekcję po toggles:
+
+```swift
+Section("Tasks") {
+    HStack {
+        Label("Recommended task limit", systemImage: "target")
+            .foregroundStyle(.primary)
+
+        Spacer()
+
+        Stepper(
+            "\(wipLimit)",
+            value: $wipLimit,
+            in: 1...7
+        )
+        .frame(width: 120)
+    }
+}
+```
+
+Z `@AppStorage`:
+
+```swift
+@AppStorage("recommendedWipLimit") private var wipLimit = 3
+```
+
+### Zmiana 3 — TasksView banner
+
+Banner już używa `TaskStore.recommendedWipLimit` — będzie automatycznie reagować na zmianę UserDefaults.
+
+---
+
+## R2-9 — Tasks: mniejsze odstępy między zadaniami
+
+### Problem
+`TaskRow` ma `.padding(.vertical, 12)` = 24pt total. Za dużo, zwłaszcza widoczne na screenshocie.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/TasksView.swift`
+
+**Linia 608:**
+
+```swift
+// OBECNE:
+.padding(.vertical, 12)
+
+// NOWE:
+.padding(.vertical, 6)
+```
+
+**Apple HIG reference:** iOS 17+ Lists mają ~44pt row height. Z 22px checkbox + 6pt top + 6pt bottom = 34pt min, co jest wciąż dobrym touch targetem (checkbox ma 44x44 frame).
+
+---
+
+## R2-10 — Checkbox: alternatywne ikony
+
+### Propozycje
+
+Zamiast zielonych checkmarków (`RoundedRectangle` + `checkmark`):
+
+| # | Styl | Unchecked | Checked | Opis |
+|---|------|-----------|---------|------|
+| A | **SF Symbols circle** | `circle` | `checkmark.circle.fill` (.green) | Apple Reminders style |
+| B | **Solid fill** | `square` (.secondary) | `checkmark.square.fill` (.blue) | Apple-native checkbox |
+| C | **Minimal dot** | `circle` | `largecircle.fill.circle` (.primary) | Radio-button feel |
+| D | **Soft check** | `circle` (.secondary) | `checkmark.circle.fill` (.teal) | Mniej agresywny kolor |
+| E | **Strikethrough only** | brak ikony | strikethrough tekst | Ultra-minimalistyczne |
+
+**Rekomendacja:** **Opcja A** (Reminders-style) lub **D** (teal zamiast green — mniej krzykliwy):
+
+```swift
+// Opcja A:
+Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+    .font(.system(size: 22))
+    .foregroundStyle(isCompleted ? .green : .secondary.opacity(0.4))
+
+// Opcja D:
+Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+    .font(.system(size: 22))
+    .foregroundStyle(isCompleted ? .teal : .secondary.opacity(0.4))
+```
+
+**DECYZJA:** Opcja B — square checkbox, blue fill.
+
+```swift
+// NOWE (zastąpić cały Button(action: onToggle) w TaskRow.body):
+Button(action: onToggle) {
+    Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
+        .font(.system(size: 22))
+        .foregroundStyle(isCompleted ? .blue : .secondary.opacity(0.3))
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+}
+.buttonStyle(.plain)
+```
+
+Usunąć cały obecny `RoundedRectangle(cornerRadius: 4)` + overlay z `checkmark`.
+
+---
+
+## R2-11 — WIP zone: zielony border dla zadań 1-3 (NOWE)
+
+### Problem
+Pomarańczowy i czerwony indicator działają dobrze dla 4-5 i 6+, ale brakuje pozytywnego zielonego feedbacku dla „normalnej" strefy (1-3 taski).
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/TasksView.swift`
+
+**Linie 609-622** — zmienić overlay w TaskRow:
+
+```swift
+// OBECNE:
+.overlay(alignment: .leading) {
+    switch wipZone {
+    case .normal:
+        EmptyView()
+    case .warning:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.orange)
+            .frame(width: 3)
+    case .danger:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.red)
+            .frame(width: 3)
+    }
+}
+
+// NOWE:
+.overlay(alignment: .leading) {
+    RoundedRectangle(cornerRadius: 2)
+        .fill(wipZoneColor)
+        .frame(width: 3)
+}
+```
+
+Dodać computed property w TaskRow:
+
+```swift
+private var wipZoneColor: Color {
+    switch wipZone {
+    case .normal: .green
+    case .warning: .orange
+    case .danger: .red
+    }
+}
+```
+
+> **UWAGA:** `.normal` dotyczy TYLKO tasks w sekcji NEXT (pozycje 1-3). Tasks w BACKLOG i COMPLETED też przekazują `.normal` — ale te nie mają overlay bo używają tego samego WipZone. Trzeba dodać dodatkowy warunek: zielony indicator tylko gdy task.status == .next.
+
+Alternatywnie: dodać nowy case `.safe` do WipZone enum:
+
+```swift
+enum WipZone {
+    case safe     // pozycja 1-3 w NEXT (zielony)
+    case normal   // backlog / completed (brak indicatora)
+    case warning  // pozycja 4-5 (pomarańczowy)
+    case danger   // pozycja 6+ (czerwony)
+}
+```
+
+I w overlay:
+```swift
+.overlay(alignment: .leading) {
+    switch wipZone {
+    case .normal:
+        EmptyView()
+    case .safe:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.green)
+            .frame(width: 3)
+    case .warning:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.orange)
+            .frame(width: 3)
+    case .danger:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.red)
+            .frame(width: 3)
+    }
+}
+```
+
+W `wipZone(for:)` helper (L418):
+```swift
+private func wipZone(for index: Int) -> TaskRow.WipZone {
+    index < TaskStore.recommendedWipLimit ? .safe : (index < 5 ? .warning : .danger)
+}
+```
+
+---
+
+## Kolejność wdrażania (po decyzjach)
+
+1. **R2-9** (spacing) — 5 min
+2. **R2-3** (More icon) — 5 min
+3. **R2-5** (naming: „Task History") — 15 min
+4. **R2-10** (square checkbox blue) — 15 min
+5. **R2-11** (green WIP zone) — 10 min
+6. **R2-1** (banner tap → Backlog) — 15 min
+7. **R2-4** (archive swipe) — 30 min
+8. **R2-8** (settings WIP stepper) — 45 min
+9. **R2-6** (cleanup options) — 45 min
+
+**Łączny effort: ~3h** (pomniejszony o R2-2 i R2-7)

@@ -48,7 +48,7 @@ struct MainAppView: View {
             }
             Tab(AppTab.tasks.title, systemImage: AppTab.tasks.icon, value: .tasks) {
                 NavigationStack {
-                    TasksView()
+                    TasksView(selectedTab: $activeTab)
                 }
             }
             Tab(AppTab.backlog.title, systemImage: AppTab.backlog.icon, value: .backlog) {
@@ -75,7 +75,7 @@ struct MainAppView: View {
             .tag(AppTab.shopping)
 
             NavigationStack {
-                TasksView()
+                TasksView(selectedTab: $activeTab)
             }
             .tabItem {
                 Label(AppTab.tasks.title, systemImage: AppTab.tasks.icon)

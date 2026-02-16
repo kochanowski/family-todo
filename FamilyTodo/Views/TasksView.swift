@@ -6,11 +6,20 @@ import UIKit
 struct TasksView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
+    @Binding private var selectedTab: AppTab
+
+    init(selectedTab: Binding<AppTab>) {
+        _selectedTab = selectedTab
+    }
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
-                TasksContent(householdId: householdId, modelContext: modelContext)
+                TasksContent(
+                    householdId: householdId,
+                    modelContext: modelContext,
+                    selectedTab: $selectedTab
+                )
             } else {
                 GuidedEmptyStateView()
             }
@@ -43,14 +52,17 @@ private struct TasksContent: View {
     @State private var selectedAssigneeIdForNext: UUID?
     @State private var activeBanner: InlineBanner?
     @AppStorage("hasSeenCompletedTasksInfo") private var hasSeenCompletedTasksInfo = false
+    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
+    @Binding private var selectedTab: AppTab
 
     @EnvironmentObject private var userSession: UserSession
 
-    init(householdId: UUID, modelContext: ModelContext) {
+    init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(householdId)
         _store = StateObject(wrappedValue: taskStore)
         _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _selectedTab = selectedTab
     }
 
     var body: some View {
@@ -128,6 +140,27 @@ private struct TasksContent: View {
                                 onToggle: { toggleTask(task) },
                                 onOpenDetail: { selectedTask = task }
                             )
+                            .swipeActions(edge: .trailing) {
+                                Button {
+                                    archiveTask(task)
+                                } label: {
+                                    Label("Archive", systemImage: "archivebox")
+                                }
+                                .tint(.orange)
+                            }
+                            .contextMenu {
+                                Button {
+                                    archiveTask(task)
+                                } label: {
+                                    Label("Move to History", systemImage: "archivebox")
+                                }
+
+                                Button {
+                                    toggleTask(task)
+                                } label: {
+                                    Label("Undo Complete", systemImage: "arrow.uturn.backward")
+                                }
+                            }
                             .rowInsertAnimation()
                             .accessibilityIdentifier("taskRowCompleted_\(task.title)")
                         }
@@ -241,14 +274,27 @@ private struct TasksContent: View {
         let state: (color: Color, icon: String, text: String) = switch count {
         case 0:
             (.blue, "plus.circle", "Add tasks from Backlog to start")
-        case 1 ... TaskStore.recommendedWipLimit:
-            (.blue, "target", "\(count) of \(TaskStore.recommendedWipLimit) recommended slots used")
+        case 1 ... recommendedWipLimit:
+            (.blue, "target", "\(count) of \(recommendedWipLimit) recommended slots used")
         case 4 ... 5:
             (.orange, "exclamationmark.circle", "\(count) active - consider finishing some first")
         default:
             (.red, "exclamationmark.triangle", "\(count) active - too many tasks reduces focus")
         }
 
+        if count == 0 {
+            Button {
+                selectedTab = .backlog
+            } label: {
+                focusRuleBannerContent(state: state)
+            }
+            .buttonStyle(.plain)
+        } else {
+            focusRuleBannerContent(state: state)
+        }
+    }
+
+    private func focusRuleBannerContent(state: (color: Color, icon: String, text: String)) -> some View {
         HStack(spacing: 12) {
             Image(systemName: state.icon)
                 .font(.system(size: 18))
@@ -417,13 +463,21 @@ private struct TasksContent: View {
     }
 
     private func wipZone(for index: Int) -> TaskRow.WipZone {
-        if index < TaskStore.recommendedWipLimit {
-            return .normal
+        if index < recommendedWipLimit {
+            return .safe
         }
-        if index < TaskStore.recommendedWipLimit + 2 {
+        if index < recommendedWipLimit + 2 {
             return .warning
         }
         return .danger
+    }
+
+    private func archiveTask(_ task: Task) {
+        var updatedTask = task
+        updatedTask.completedAt = Date().addingTimeInterval(-86401)
+        _ = _Concurrency.Task {
+            _ = await store.updateTask(updatedTask)
+        }
     }
 
     private var completedTasksInfoBanner: some View {
@@ -432,7 +486,7 @@ private struct TasksContent: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.blue)
 
-            Text("Completed tasks move to More -> Completed Tasks after 24h")
+            Text("Completed tasks move to More -> Task History after 24h")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
@@ -532,6 +586,7 @@ private struct AssigneePickerSheet: View {
 
 struct TaskRow: View {
     enum WipZone {
+        case safe
         case normal
         case warning
         case danger
@@ -546,16 +601,9 @@ struct TaskRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Button(action: onToggle) {
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(isCompleted ? Color.green : Color.secondary.opacity(0.3), lineWidth: 2)
-                    .frame(width: 22, height: 22)
-                    .overlay {
-                        if isCompleted {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.green)
-                        }
-                    }
+                Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 22))
+                    .foregroundStyle(isCompleted ? .blue : .secondary.opacity(0.3))
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -605,9 +653,13 @@ struct TaskRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 6)
         .overlay(alignment: .leading) {
             switch wipZone {
+            case .safe:
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.green)
+                    .frame(width: 3)
             case .normal:
                 EmptyView()
             case .warning:
@@ -759,6 +811,6 @@ private struct TaskDetailSheet: View {
 }
 
 #Preview {
-    TasksView()
+    TasksView(selectedTab: .constant(.tasks))
         .environmentObject(UserSession.shared)
 }

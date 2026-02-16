@@ -25,11 +25,22 @@ final class TaskStore: ObservableObject {
         syncMode == .cloud
     }
 
-    /// Recommended WIP limit per user (soft limit, not blocking).
-    static let recommendedWipLimit = 3
+    /// Default recommended WIP limit per user.
+    static let defaultRecommendedWipLimit = 3
+
+    /// Recommended WIP limit per user (soft limit, configurable in Settings).
+    static var recommendedWipLimit: Int {
+        let stored = UserDefaults.standard.integer(forKey: "recommendedWipLimit")
+        if stored <= 0 {
+            return defaultRecommendedWipLimit
+        }
+        return min(max(stored, 1), 7)
+    }
 
     /// Backward-compatible alias used in older call sites/tests.
-    static let wipLimit = recommendedWipLimit
+    static var wipLimit: Int {
+        recommendedWipLimit
+    }
 
     enum NextTransitionValidation: Equatable {
         case ok
@@ -340,6 +351,31 @@ final class TaskStore: ObservableObject {
             await notificationService.removeTaskReminder(for: task)
         } catch {
             self.error = error
+        }
+    }
+
+    /// Clears archived done tasks (older than 24h).
+    /// - Parameter keepingDays:
+    ///   - `nil`: delete all archived tasks.
+    ///   - number: keep tasks from last N days, delete older archived tasks.
+    func clearArchivedTasks(keepingDays: Int?) async {
+        let archiveCutoff = Date().addingTimeInterval(-86400)
+        let retentionCutoff = keepingDays.map { Date().addingTimeInterval(-Double($0) * 86400) }
+
+        let tasksToDelete = tasks.filter { task in
+            guard task.status == .done, let completedAt = task.completedAt else { return false }
+            guard completedAt <= archiveCutoff else { return false }
+
+            if let retentionCutoff {
+                return completedAt < retentionCutoff
+            }
+            return true
+        }
+
+        guard !tasksToDelete.isEmpty else { return }
+
+        for task in tasksToDelete {
+            await deleteTask(task)
         }
     }
 

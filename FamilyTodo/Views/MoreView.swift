@@ -60,7 +60,7 @@ struct MoreView: View {
                         NavigationLink {
                             CompletedTasksView()
                         } label: {
-                            MoreRow(icon: "checkmark.circle", title: "Completed Tasks", tint: .green)
+                            MoreRow(icon: "checkmark.circle", title: "Task History")
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("CompletedTasks")
@@ -578,7 +578,7 @@ struct CompletedTasksView: View {
                 ContentUnavailableView {
                     Label("No Household", systemImage: "house")
                 } description: {
-                    Text("Join or create a household to see completed tasks.")
+                    Text("Join or create a household to see task history.")
                 }
             }
         }
@@ -586,8 +586,19 @@ struct CompletedTasksView: View {
 }
 
 private struct CompletedTasksContent: View {
+    private enum CleanupAction: String, Identifiable {
+        case clearAll
+        case keepLast7Days
+        case keepLast30Days
+
+        var id: String {
+            rawValue
+        }
+    }
+
     @StateObject private var store: TaskStore
     @EnvironmentObject private var userSession: UserSession
+    @State private var pendingCleanup: CleanupAction?
 
     init(householdId: UUID, modelContext: ModelContext) {
         let taskStore = TaskStore(modelContext: modelContext)
@@ -599,7 +610,7 @@ private struct CompletedTasksContent: View {
         Group {
             if store.archivedDoneTasks.isEmpty {
                 ContentUnavailableView {
-                    Label("No Archived Tasks", systemImage: "checkmark.circle")
+                    Label("No Task History", systemImage: "checkmark.circle")
                 } description: {
                     Text("Completed tasks older than 24h appear here.")
                 }
@@ -631,11 +642,88 @@ private struct CompletedTasksContent: View {
                 .listStyle(.plain)
             }
         }
-        .navigationTitle("Completed Tasks")
+        .navigationTitle("Task History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if !store.archivedDoneTasks.isEmpty {
+                    Menu {
+                        Button(role: .destructive) {
+                            pendingCleanup = .clearAll
+                        } label: {
+                            Label("Clear All", systemImage: "trash")
+                        }
+
+                        Button {
+                            pendingCleanup = .keepLast7Days
+                        } label: {
+                            Label("Keep Last 7 Days", systemImage: "calendar")
+                        }
+
+                        Button {
+                            pendingCleanup = .keepLast30Days
+                        } label: {
+                            Label("Keep Last 30 Days", systemImage: "calendar.badge.clock")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 17))
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Task History Cleanup",
+            isPresented: Binding(
+                get: { pendingCleanup != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingCleanup = nil
+                    }
+                }
+            )
+        ) {
+            Button("Clear All", role: .destructive) {
+                runCleanupAction(.clearAll)
+            }
+            Button("Keep Last 7 Days") {
+                runCleanupAction(.keepLast7Days)
+            }
+            Button("Keep Last 30 Days") {
+                runCleanupAction(.keepLast30Days)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingCleanup = nil
+            }
+        } message: {
+            switch pendingCleanup {
+            case .clearAll:
+                Text("This permanently removes all items from Task History.")
+            case .keepLast7Days:
+                Text("This removes history older than 7 days.")
+            case .keepLast30Days:
+                Text("This removes history older than 30 days.")
+            case .none:
+                Text("")
+            }
+        }
         .task {
             store.setSyncMode(userSession.syncMode)
             await store.loadTasks()
+        }
+    }
+
+    private func runCleanupAction(_ action: CleanupAction) {
+        pendingCleanup = nil
+        _ = _Concurrency.Task {
+            switch action {
+            case .clearAll:
+                await store.clearArchivedTasks(keepingDays: nil)
+            case .keepLast7Days:
+                await store.clearArchivedTasks(keepingDays: 7)
+            case .keepLast30Days:
+                await store.clearArchivedTasks(keepingDays: 30)
+            }
         }
     }
 }
@@ -646,6 +734,7 @@ struct SettingsView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @StateObject private var notificationSettings = NotificationSettingsStore()
+    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
 
     var body: some View {
         List {
@@ -685,6 +774,21 @@ struct SettingsView: View {
                         .foregroundStyle(.primary)
                 }
                 .accessibilityIdentifier("settingsToggle_suggestions")
+            }
+
+            Section("Tasks") {
+                HStack {
+                    Label("Recommended task limit", systemImage: "target")
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Stepper(value: $recommendedWipLimit, in: 1 ... 7) {
+                        Text("\(recommendedWipLimit)")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .frame(width: 130)
+                }
             }
 
             Section("Notifications") {
