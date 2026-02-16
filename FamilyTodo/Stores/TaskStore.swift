@@ -356,6 +356,27 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    /// Clears completed tasks.
+    /// - Parameter keepingDays:
+    ///   - `nil`: delete all completed tasks.
+    ///   - number: keep tasks from last N days, delete older completed tasks.
+    func clearCompletedTasks(keepingDays: Int?) async {
+        let retentionCutoff = keepingDays.map { Date().addingTimeInterval(-Double($0) * 86400) }
+
+        let tasksToDelete = tasks.filter { task in
+            guard task.status == .done else { return false }
+            guard let retentionCutoff else { return true }
+            let completedDate = task.completedAt ?? task.updatedAt
+            return completedDate < retentionCutoff
+        }
+
+        guard !tasksToDelete.isEmpty else { return }
+
+        for task in tasksToDelete {
+            await deleteTask(task)
+        }
+    }
+
     /// Clears archived done tasks (older than 24h).
     /// - Parameter keepingDays:
     ///   - `nil`: delete all archived tasks.

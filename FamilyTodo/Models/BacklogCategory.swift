@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct BacklogCategory: Identifiable, Codable {
     let id: UUID
@@ -53,5 +54,27 @@ struct BacklogItem: Identifiable, Codable {
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+extension BacklogCategory {
+    /// Palette of cheerful, stable colors used for category tagging.
+    static let categoryPalette: [Color] = [
+        .purple,
+        .orange,
+        .teal,
+        .pink,
+        .indigo,
+        .mint,
+        .brown,
+        .cyan,
+        Color(red: 0.95, green: 0.4, blue: 0.3), // coral
+        Color(red: 0.3, green: 0.7, blue: 0.4), // emerald
+    ]
+
+    /// Deterministic color derived from category id.
+    var color: Color {
+        let hash = abs(id.hashValue)
+        return Self.categoryPalette[hash % Self.categoryPalette.count]
     }
 }

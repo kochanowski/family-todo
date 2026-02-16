@@ -459,6 +459,10 @@ struct CategoryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
+                Circle()
+                    .fill(category.color)
+                    .frame(width: 10, height: 10)
+
                 Text(category.title.uppercased())
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)

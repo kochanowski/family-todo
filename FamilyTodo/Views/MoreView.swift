@@ -58,17 +58,6 @@ struct MoreView: View {
                             .padding(.leading, 52)
 
                         NavigationLink {
-                            CompletedTasksView()
-                        } label: {
-                            MoreRow(icon: "checkmark.circle", title: "Task History")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("CompletedTasks")
-
-                        Divider()
-                            .padding(.leading, 52)
-
-                        NavigationLink {
                             SettingsView()
                         } label: {
                             MoreRow(icon: "gear", title: "Settings")
