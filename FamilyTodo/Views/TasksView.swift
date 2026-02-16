@@ -271,12 +271,13 @@ private struct TasksContent: View {
     @ViewBuilder
     private var focusRuleBanner: some View {
         let count = store.nextTasks.count
+        let limit = normalizedWipLimit
         let state: (color: Color, icon: String, text: String) = switch count {
         case 0:
             (.blue, "plus.circle", "Add tasks from Backlog to start")
-        case 1 ... recommendedWipLimit:
-            (.blue, "target", "\(count) of \(recommendedWipLimit) recommended slots used")
-        case 4 ... 5:
+        case 1 ... limit:
+            (.blue, "target", "\(count) of \(limit) recommended slots used")
+        case (limit + 1) ... (limit + 2):
             (.orange, "exclamationmark.circle", "\(count) active - consider finishing some first")
         default:
             (.red, "exclamationmark.triangle", "\(count) active - too many tasks reduces focus")
@@ -463,13 +464,18 @@ private struct TasksContent: View {
     }
 
     private func wipZone(for index: Int) -> TaskRow.WipZone {
-        if index < recommendedWipLimit {
+        let limit = normalizedWipLimit
+        if index < limit {
             return .safe
         }
-        if index < recommendedWipLimit + 2 {
+        if index < limit + 2 {
             return .warning
         }
         return .danger
+    }
+
+    private var normalizedWipLimit: Int {
+        min(max(recommendedWipLimit, 1), 7)
     }
 
     private func archiveTask(_ task: Task) {
@@ -603,7 +609,7 @@ struct TaskRow: View {
             Button(action: onToggle) {
                 Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
                     .font(.system(size: 22))
-                    .foregroundStyle(isCompleted ? .blue : .secondary.opacity(0.3))
+                    .foregroundStyle(isCompleted ? .blue : uncheckedColor)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -653,29 +659,41 @@ struct TaskRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 6)
-        .overlay(alignment: .leading) {
-            switch wipZone {
-            case .safe:
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.green)
-                    .frame(width: 3)
-            case .normal:
-                EmptyView()
-            case .warning:
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.orange)
-                    .frame(width: 3)
-            case .danger:
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.red)
-                    .frame(width: 3)
-            }
+        .padding(.vertical, 2)
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(rowBackgroundColor)
         }
     }
 
     private var isCompleted: Bool {
         task.status == .done
+    }
+
+    private var uncheckedColor: Color {
+        switch wipZone {
+        case .safe:
+            .green.opacity(0.5)
+        case .normal:
+            .secondary.opacity(0.3)
+        case .warning:
+            .orange
+        case .danger:
+            .red
+        }
+    }
+
+    private var rowBackgroundColor: Color {
+        switch wipZone {
+        case .safe:
+            .green.opacity(0.04)
+        case .normal:
+            .clear
+        case .warning:
+            .orange.opacity(0.06)
+        case .danger:
+            .red.opacity(0.08)
+        }
     }
 
     @ViewBuilder

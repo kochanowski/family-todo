@@ -1815,3 +1815,160 @@ private func wipZone(for index: Int) -> TaskRow.WipZone {
 9. **R2-6** (cleanup options) — 45 min
 
 **Łączny effort: ~3h** (pomniejszony o R2-2 i R2-7)
+
+---
+
+## R2-BUG-1 — focusRuleBanner: hardcoded progi warning/danger (BUGFIX)
+
+### Problem
+W `TasksView.swift` w `focusRuleBanner` progi `case 4 ... 5` (orange) są hardcoded, nie dostosowują się do dynamicznego WIP limitu configurowalnego w Settings (R2-8).
+
+Jeśli user zmieni limit na 5, to 5 tasków pokaże warning (pomarańczowy) zamiast green — bo `case 4...5` jest stałe.
+
+### Obecny kod (do naprawienia)
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — w `focusRuleBanner`
+
+```swift
+// ŹLE — hardcoded progi:
+let state: (color: Color, icon: String, text: String) = switch count {
+case 0:
+    (.blue, "plus.circle", "Add tasks from Backlog to start")
+case 1 ... recommendedWipLimit:
+    (.blue, "target", "\(count) of \(recommendedWipLimit) recommended slots used")
+case 4 ... 5:                    // ← BUG: hardcoded
+    (.orange, "exclamationmark.circle", "\(count) active - consider finishing some first")
+default:
+    (.red, "exclamationmark.triangle", "\(count) active - too many tasks reduces focus")
+}
+```
+
+### Poprawka
+
+```swift
+// DOBRZE — dynamiczne progi:
+let state: (color: Color, icon: String, text: String) = switch count {
+case 0:
+    (.blue, "plus.circle", "Add tasks from Backlog to start")
+case 1 ... recommendedWipLimit:
+    (.blue, "target", "\(count) of \(recommendedWipLimit) recommended slots used")
+case (recommendedWipLimit + 1) ... (recommendedWipLimit + 2):
+    (.orange, "exclamationmark.circle", "\(count) active - consider finishing some first")
+default:
+    (.red, "exclamationmark.triangle", "\(count) active - too many tasks reduces focus")
+}
+```
+
+> **Zmiana:** `case 4 ... 5` → `case (recommendedWipLimit + 1) ... (recommendedWipLimit + 2)`
+
+---
+
+## R2-BUG-2 — Tasks: spacing nadal za duży (BUGFIX)
+
+### Problem
+`.padding(.vertical, 6)` wciąż daje za duże odstępy. Checkbox już ma `frame(width: 44, height: 44)` — dodatkowy padding jest zbędny.
+
+### Poprawka
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — w `TaskRow.body`
+
+```swift
+// OBECNE:
+.padding(.vertical, 6)
+
+// NOWE:
+.padding(.vertical, 2)
+```
+
+---
+
+## R2-12 — WIP zone: redesign — checkbox kolor + subtelne tło (NOWE)
+
+### Problem
+Lewy pasek kolorowy (overlay `.leading`) jest zbyt utility/inżynierski. Chcemy bardziej elegancki sposób sygnalizacji WIP zone.
+
+### Zmiana: usunąć lewy pasek, dodać 2 efekty
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — w `TaskRow`
+
+#### Krok 1 — Usunąć cały `.overlay(alignment: .leading)` block
+
+Usunąć linie z overlay (obecne ~L657-675):
+
+```swift
+// USUNĄĆ CAŁOŚĆ:
+.overlay(alignment: .leading) {
+    switch wipZone {
+    case .safe:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.green)
+            .frame(width: 3)
+    case .normal:
+        EmptyView()
+    case .warning:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.orange)
+            .frame(width: 3)
+    case .danger:
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.red)
+            .frame(width: 3)
+    }
+}
+```
+
+#### Krok 2 — Checkbox kolor zależny od WIP zone
+
+Zmienić foregroundStyle checkboxa (L604-606):
+
+```swift
+// OBECNE:
+Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
+    .font(.system(size: 22))
+    .foregroundStyle(isCompleted ? .blue : .secondary.opacity(0.3))
+
+// NOWE:
+Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
+    .font(.system(size: 22))
+    .foregroundStyle(isCompleted ? .blue : uncheckedColor)
+```
+
+Dodać computed property:
+
+```swift
+private var uncheckedColor: Color {
+    switch wipZone {
+    case .safe:    .green.opacity(0.5)
+    case .normal:  .secondary.opacity(0.3)
+    case .warning: .orange
+    case .danger:  .red
+    }
+}
+```
+
+#### Krok 3 — Subtelne tło wiersza
+
+Dodać `.background` na HStack (po `.padding(.vertical, 2)`):
+
+```swift
+.padding(.vertical, 2)
+.background {
+    RoundedRectangle(cornerRadius: 8)
+        .fill(rowBackgroundColor)
+}
+```
+
+Dodać computed property:
+
+```swift
+private var rowBackgroundColor: Color {
+    switch wipZone {
+    case .safe:    .green.opacity(0.04)
+    case .normal:  .clear
+    case .warning: .orange.opacity(0.06)
+    case .danger:  .red.opacity(0.08)
+    }
+}
+```
+
+> **Efekt:** Unchecked checkbox jest zielony/pomarańczowy/czerwony + wiersz ma delikatne kolorowe tło. Completed taski (`.normal`) nie mają żadnego tintowania. Bardzo subtelne, ale daje informację zwrotną.
