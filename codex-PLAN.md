@@ -70,7 +70,7 @@
 enum ThemePreset: String, CaseIterable, Identifiable {
     case journal, pastel, soft, night
     case retro, paper, ocean // NEW
-    
+
     var fontName: String? {
         switch self {
         case .retro: "PressStart2P-Regular"
