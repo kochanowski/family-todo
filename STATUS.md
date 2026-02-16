@@ -2,26 +2,72 @@
 
 Last updated: 2026-02-15
 
-## Implemented (new redesign)
-- App shell with 4 tabs: Shopping, Tasks, Backlog, More.
-- New onboarding flow: onboarding carousel -> sync choice -> household setup -> main app.
-- Shopping rapid entry flow (show/hide draft row, submit chain, restock sheet).
-- Tasks flow with active/completed split and add-task sheet.
-- Backlog categories with in-card item add/delete.
-- Offline-first data layer in SwiftData caches + CloudKit store integration.
-- Guest vs cloud session modes in `UserSession`.
-- CI on GitHub Actions with build and lint on PR/push.
+## Implemented (current redesign branch)
 
-## In progress (this branch)
-- Tab bar glass polish for iOS 26 Liquid Glass + fallback for iOS 17-25.
-- Dynamic bottom chrome insets to keep CTA buttons visible above floating tab bar.
-- Documentation cleanup after redesign.
+### Core shell
+- 4-tab app shell: Shopping, Tasks, Backlog, More
+- Custom floating tab bar
+  - iOS 26+: Liquid Glass transition path (`GlassEffectContainer` + matched transition)
+  - iOS 17-25: material fallback
+- Onboarding flow: carousel -> sync choice -> household setup -> main app
+- Sign in with Apple + guest mode
+- CloudKit sync + SwiftData offline-first cache
 
-## Remaining TODO
-- Finish manual validation on physical iPhone (glass behavior during scroll, CTA visibility, rapid entry).
-- Expand automated tests for critical flows (nightly covers full test suite; PR remains build+lint only).
-- Add cloud sharing regression checks when running with sync-enabled profile.
+### Shopping
+- Rapid entry with stable keyboard behavior
+- Custom keyboard accessory `Done` pill (matching CTA metrics)
+- Recently Purchased:
+  - one-tap restore to shopping list
+  - swipe delete per title
+  - clear all with confirmation
+- Header actions: clear To Buy with confirmation, open Recently Purchased
+
+### Tasks (backlog-first)
+- `TasksView` is execution board (no manual intake button)
+- Sections: `NEXT`, `BACKLOG`, `COMPLETED`
+- Strict rules:
+  - `NEXT` requires assignee
+  - WIP limit = 3 per assignee
+- Inline blocked-action feedback banner (assignee/WIP)
+- Backlog -> Next start flow with assignee picker for multi-member households
+- Task detail edit sheet (status, assignee, due date, notes)
+- Recurring tasks are shown in `Tasks.BACKLOG` with recurring badge
+
+### Backlog
+- Categories CRUD + reorder/rename support in management
+- Items CRUD per category
+- Promote to task flow with atomic behavior:
+  - backlog item removed only when task create succeeds
+  - typed promotion result (`success`, `assigneeRequired`, `wipLimitReached`, `failed`)
+- Multi-member assignee flow before promotion
+
+### More / Settings
+- Profile, member management, household management actions
+- Categories management wired to real `BacklogStore`
+- Repetitive Tasks manager with Daily/Weekly/Monthly/Custom (Every N days)
+- Settings:
+  - appearance + notification toggles
+  - real sign out flow
+  - defensive bottom inset to avoid chrome overlap
+- Detail screens request hidden app tab bar via `appTabBarVisibility(false)`
+
+### Recurring engine
+- `RecurringChoreStore` CRUD active
+- `ChoreScheduler` runs on app launch/foreground path and generates tasks with:
+  - `status = .backlog`
+  - `taskType = .recurring`
+  - `recurringChoreId` linked to source chore
+
+## Product decisions now active
+- Backlog-only task intake (no direct add in Tasks)
+- `Tasks.BACKLOG` is a general staging area (promoted + recurring)
+- Rooms/Areas removed from product UI (data compatibility fields remain temporarily)
+
+## In progress / to verify
+- On-device visual verification of iOS 26 glass transition strength/contrast
+- Additional tests for promotion atomicity and recurring metadata consistency
 
 ## Known constraints
-- `HPCloudKitEnabled` default is `NO` for phone UI-preview workflows.
-- Cloud sharing scenarios require explicit sync-enabled profile in CI/manual runs.
+- `HPCloudKitEnabled` defaults to `NO` for local UI iteration
+- Cloud sharing tests require explicit sync-enabled profile
+- Build/test loop is primarily via GitHub Actions + physical iPhone validation

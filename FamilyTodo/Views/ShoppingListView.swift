@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
@@ -19,22 +20,18 @@ struct ShoppingListView: View {
                         userSession.setCurrentHousehold(household.id)
                     }
             } else {
-                ContentUnavailableView(
-                    "No Household Selected",
-                    systemImage: "house.slash",
-                    description: Text("Please select or create a household in the More tab.")
-                )
-                .task {
-                    // Recovery: Try to load from cache if session is lost
-                    if userSession.currentHouseholdID == nil, let userId = userSession.userId {
-                        print("DEBUG: Attempting household recovery for user: \(userId)")
-                        await householdStore.loadHousehold(userId: userId)
-                        if let household = householdStore.currentHousehold {
-                            print("DEBUG: Recovered household: \(household.id)")
-                            userSession.setCurrentHousehold(household.id)
+                GuidedEmptyStateView()
+                    .task {
+                        // Recovery: Try to load from cache if session is lost
+                        if userSession.currentHouseholdID == nil, let userId = userSession.userId {
+                            print("DEBUG: Attempting household recovery for user: \(userId)")
+                            await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+                            if let household = householdStore.currentHousehold {
+                                print("DEBUG: Recovered household: \(household.id)")
+                                userSession.setCurrentHousehold(household.id)
+                            }
                         }
                     }
-                }
             }
         }
     }
@@ -55,10 +52,12 @@ private struct ShoppingListContent: View {
     @State private var showRestock = false
     @State private var showClearToBuyConfirmation = false
     @State private var itemBeingRemoved: UUID?
+    @State private var editingItemId: UUID?
+    @State private var editingItemText = ""
+    @State private var isKeyboardVisible = false
+    @State private var draggedItem: ShoppingItem?
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.appTabBarHeight) private var tabBarHeight
-    @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -71,10 +70,8 @@ private struct ShoppingListContent: View {
             let listBottomInset =
                 isKeyboardVisible
                     ? CGFloat(16)
-                    : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
-            let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
-                tabBarHeight: tabBarHeight
-            )
+                    : AppChromeMetrics.compactCTAHeight + 28
+            let floatingButtonInset: CGFloat = 16
             let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
 
             ZStack(alignment: .bottomTrailing) {
@@ -99,13 +96,45 @@ private struct ShoppingListContent: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(store.toBuyItems) { item in
-                                    if itemBeingRemoved != item.id {
-                                        ShoppingItemRow(
-                                            item: item,
-                                            onToggle: { toggleItem(item) }
-                                        )
-                                        .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                    Group {
+                                        if itemBeingRemoved != item.id {
+                                            if editingItemId == item.id {
+                                                ShoppingItemInlineEditRow(
+                                                    text: $editingItemText,
+                                                    onSubmit: { commitEditingItem(item) },
+                                                    onCancel: cancelEditingItem
+                                                )
+                                                .accessibilityIdentifier("shoppingItemEdit_\(item.title)")
+                                            } else {
+                                                ShoppingItemRow(
+                                                    item: item,
+                                                    onToggle: { toggleItem(item) },
+                                                    onEdit: { startEditingItem(item) }
+                                                )
+                                                .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                            }
+                                        }
                                     }
+                                    .onDrag {
+                                        draggedItem = item
+                                        return NSItemProvider(object: item.id.uuidString as NSString)
+                                    }
+                                    .onDrop(
+                                        of: [UTType.text],
+                                        delegate: ShoppingItemReorderDropDelegate(
+                                            item: item,
+                                            items: store.toBuyItems,
+                                            draggedItem: $draggedItem,
+                                            onMove: { from, to in
+                                                store.moveToBuyItems(from: from, to: to, persist: false)
+                                            },
+                                            onDrop: {
+                                                _ = _Concurrency.Task {
+                                                    await store.persistCurrentToBuyOrder()
+                                                }
+                                            }
+                                        )
+                                    )
                                 }
 
                                 // Rapid entry row (stable at bottom, no insert animation)
@@ -154,6 +183,16 @@ private struct ShoppingListContent: View {
             await store.loadItems()
         }
         .newItemsBanner(manager: subscriptionManager)
+        .onChange(of: isKeyboardVisible) { _, visible in
+            guard !visible, let editingItem = currentEditingItem else { return }
+            commitEditingItem(editingItem)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
         .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
@@ -271,6 +310,7 @@ private struct ShoppingListContent: View {
     // MARK: - Rapid Entry Logic
 
     private func startRapidEntry() {
+        cancelEditingItem()
         HapticManager.lightTap()
         withAnimation(WowAnimation.spring) {
             isRapidEntryActive = true
@@ -318,6 +358,36 @@ private struct ShoppingListContent: View {
         rapidEntryText = ""
         withAnimation(WowAnimation.spring) {
             isRapidEntryActive = false
+        }
+    }
+
+    private var currentEditingItem: ShoppingItem? {
+        guard let editingItemId else { return nil }
+        return store.toBuyItems.first(where: { $0.id == editingItemId })
+    }
+
+    private func startEditingItem(_ item: ShoppingItem) {
+        dismissRapidEntry()
+        editingItemId = item.id
+        editingItemText = item.title
+    }
+
+    private func cancelEditingItem() {
+        editingItemId = nil
+        editingItemText = ""
+    }
+
+    private func commitEditingItem(_ item: ShoppingItem) {
+        guard editingItemId == item.id else { return }
+        let trimmed = editingItemText.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { cancelEditingItem() }
+
+        guard !trimmed.isEmpty, trimmed != item.title else { return }
+
+        var updatedItem = item
+        updatedItem.title = trimmed
+        _ = _Concurrency.Task {
+            await store.updateItem(updatedItem)
         }
     }
 
@@ -384,13 +454,12 @@ private struct ShoppingListContent: View {
 struct ShoppingItemRow: View {
     let item: ShoppingItem
     let onToggle: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
+    let onEdit: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 10) {
-                // Circular checkbox
+        HStack(spacing: 10) {
+            // Circular checkbox
+            Button(action: onToggle) {
                 Circle()
                     .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
                     .frame(width: 20, height: 20)
@@ -401,19 +470,69 @@ struct ShoppingItemRow: View {
                                 .frame(width: 13, height: 13)
                         }
                     }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("shoppingToggle_\(item.title)")
 
+            Button(action: onEdit) {
                 Text(item.title)
                     .font(.system(size: 15))
                     .foregroundStyle(item.isBought ? .secondary : .primary)
                     .strikethrough(item.isBought)
                     .lineLimit(1)
-
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 6)
+            .buttonStyle(.plain)
+
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 6)
         .accessibilityIdentifier("shoppingItemRow_\(item.title)")
+    }
+}
+
+private struct ShoppingItemInlineEditRow: View {
+    @Binding var text: String
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    @FocusState private var isFocused: Bool
+    @State private var isCancelling = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+
+            TextField("Item name", text: $text)
+                .font(.system(size: 15))
+                .submitLabel(.done)
+                .focused($isFocused)
+                .onSubmit(onSubmit)
+                .onChange(of: isFocused) { _, focused in
+                    if !focused, !isCancelling {
+                        onSubmit()
+                    }
+                }
+                .autocorrectionDisabled()
+
+            Button {
+                isCancelling = true
+                onCancel()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 6)
+        .onAppear {
+            isCancelling = false
+            DispatchQueue.main.async {
+                isFocused = true
+            }
+        }
     }
 }
 
@@ -633,12 +752,47 @@ private struct RestockItemRow: View {
                     .foregroundStyle(.blue)
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 6)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+private struct ShoppingItemReorderDropDelegate: DropDelegate {
+    let item: ShoppingItem
+    let items: [ShoppingItem]
+    @Binding var draggedItem: ShoppingItem?
+    let onMove: (IndexSet, Int) -> Void
+    let onDrop: () -> Void
+
+    func dropEntered(info _: DropInfo) {
+        guard
+            let draggedItem,
+            draggedItem.id != item.id,
+            let fromIndex = items.firstIndex(where: { $0.id == draggedItem.id }),
+            let toIndex = items.firstIndex(where: { $0.id == item.id })
+        else {
+            return
+        }
+
+        onMove(
+            IndexSet(integer: fromIndex),
+            toIndex > fromIndex ? toIndex + 1 : toIndex
+        )
+    }
+
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        draggedItem = nil
+        onDrop()
+        HapticManager.lightTap()
+        return true
     }
 }
 

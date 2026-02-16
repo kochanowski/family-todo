@@ -1,6 +1,5 @@
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var userSession: UserSession
@@ -16,89 +15,101 @@ struct ContentView: View {
     }
 }
 
-/// Main app view with custom floating tab bar overlaid at the bottom.
-///
-/// Uses overlay (not safeAreaInset) so scrolling content extends behind the
-/// tab bar, giving the glass material real content to blur.
+/// Main app shell using native TabView.
+/// iOS 26+ gets system Liquid Glass tab transitions automatically.
 struct MainAppView: View {
-    @State private var activeTab: Tab = .shopping
-    @State private var tabBarHeight: CGFloat = AppChromeMetrics.minimumTabBarHeight
-    @State private var isKeyboardVisible = false
+    @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
 
-    /// Animation state for tab transitions
-    @Namespace private var animation
+    @State private var activeTab: AppTab = .shopping
+    @State private var hasBootstrappedHousehold = false
 
     var body: some View {
-        ZStack {
-            // App-wide subtle background – gives the glass tab bar content to blur
-            AppBackgroundView()
-
-            // Tab content with animation
-            tabContent
-                .environment(\.appTabBarHeight, tabBarHeight)
-                .environment(\.appKeyboardVisible, isKeyboardVisible)
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur),
-                        removal: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur)
-                    )
-                )
-                .animation(.easeInOut(duration: 0.3), value: activeTab)
-                .id(activeTab)
+        Group {
+            if #available(iOS 18.0, *) {
+                modernTabView
+            } else {
+                legacyTabView
+            }
         }
-        .overlay(alignment: .bottom) {
-            // Glass tab bar on top of content so material blur samples
-            // the scrolling items underneath.
-            FloatingTabBar(activeTab: $activeTab)
-                .onMeasuredHeight { measuredHeight in
-                    tabBarHeight = measuredHeight
+        .background(AppBackgroundView())
+        .task {
+            await bootstrapHouseholdIfNeeded()
+        }
+    }
+
+    @available(iOS 18.0, *)
+    private var modernTabView: some View {
+        TabView(selection: $activeTab) {
+            Tab(AppTab.shopping.title, systemImage: AppTab.shopping.icon, value: .shopping) {
+                NavigationStack {
+                    ShoppingListView()
                 }
-                .padding(.bottom, AppChromeMetrics.tabBarBottomOffset)
-                .offset(y: isKeyboardVisible ? tabBarHeight + 120 : 0)
-                .opacity(isKeyboardVisible ? 0 : 1)
-                .allowsHitTesting(!isKeyboardVisible)
-                .animation(.easeInOut(duration: 0.22), value: isKeyboardVisible)
-                .ignoresSafeArea(edges: .bottom)
+            }
+            Tab(AppTab.tasks.title, systemImage: AppTab.tasks.icon, value: .tasks) {
+                NavigationStack {
+                    TasksView(selectedTab: $activeTab)
+                }
+            }
+            Tab(AppTab.backlog.title, systemImage: AppTab.backlog.icon, value: .backlog) {
+                NavigationStack {
+                    BacklogView()
+                }
+            }
+            Tab(AppTab.more.title, systemImage: AppTab.more.icon, value: .more) {
+                NavigationStack {
+                    MoreView()
+                }
+            }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            isKeyboardVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            isKeyboardVisible = false
+    }
+
+    private var legacyTabView: some View {
+        TabView(selection: $activeTab) {
+            NavigationStack {
+                ShoppingListView()
+            }
+            .tabItem {
+                Label(AppTab.shopping.title, systemImage: AppTab.shopping.icon)
+            }
+            .tag(AppTab.shopping)
+
+            NavigationStack {
+                TasksView(selectedTab: $activeTab)
+            }
+            .tabItem {
+                Label(AppTab.tasks.title, systemImage: AppTab.tasks.icon)
+            }
+            .tag(AppTab.tasks)
+
+            NavigationStack {
+                BacklogView()
+            }
+            .tabItem {
+                Label(AppTab.backlog.title, systemImage: AppTab.backlog.icon)
+            }
+            .tag(AppTab.backlog)
+
+            NavigationStack {
+                MoreView()
+            }
+            .tabItem {
+                Label(AppTab.more.title, systemImage: AppTab.more.icon)
+            }
+            .tag(AppTab.more)
         }
     }
 
-    @ViewBuilder
-    private var tabContent: some View {
-        switch activeTab {
-        case .shopping:
-            ShoppingListView()
-        case .tasks:
-            TasksView()
-        case .backlog:
-            BacklogView()
-        case .more:
-            MoreView()
+    private func bootstrapHouseholdIfNeeded() async {
+        guard !hasBootstrappedHousehold else { return }
+        hasBootstrappedHousehold = true
+
+        guard userSession.currentHouseholdID == nil, let userId = userSession.userId else { return }
+
+        await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+        if let household = householdStore.currentHousehold {
+            userSession.setCurrentHousehold(household.id)
         }
-    }
-}
-
-// MARK: - Blur Transition Extension
-
-extension AnyTransition {
-    static var blur: AnyTransition {
-        .modifier(
-            active: BlurModifier(radius: 2),
-            identity: BlurModifier(radius: 0)
-        )
-    }
-}
-
-struct BlurModifier: ViewModifier {
-    let radius: CGFloat
-
-    func body(content: Content) -> some View {
-        content.blur(radius: radius)
     }
 }
 

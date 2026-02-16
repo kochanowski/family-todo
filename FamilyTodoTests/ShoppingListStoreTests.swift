@@ -76,6 +76,22 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertFalse(store.recentItems.contains(where: { normalized($0.title) == "sugar" }))
     }
 
+    func testUpdateItemTitleDoesNotChangeBoughtState() async {
+        await store.createItem(title: "Bread")
+        guard var item = store.toBuyItems.first(where: { normalized($0.title) == "bread" }) else {
+            XCTFail("Expected created item")
+            return
+        }
+
+        item.title = "Wholegrain Bread"
+        await store.updateItem(item)
+
+        XCTAssertEqual(store.toBuyItems.count, 1)
+        XCTAssertEqual(store.toBuyItems.first?.title, "Wholegrain Bread")
+        XCTAssertFalse(store.toBuyItems.first?.isBought ?? true)
+        XCTAssertTrue(store.recentItems.isEmpty)
+    }
+
     private func createBoughtItem(title: String) async {
         await store.createItem(title: title)
 

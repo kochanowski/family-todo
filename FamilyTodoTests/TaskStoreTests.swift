@@ -4,6 +4,8 @@ import XCTest
 
 @MainActor
 final class TaskStoreTests: XCTestCase {
+    private let recommendedWipDefaultsKey = "recommendedWipLimit"
+    private var originalRecommendedWipValue: Int?
     private var modelContainer: ModelContainer!
     private var store: TaskStore!
     private let householdId = UUID()
@@ -11,6 +13,14 @@ final class TaskStoreTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
+
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: recommendedWipDefaultsKey) != nil {
+            originalRecommendedWipValue = defaults.integer(forKey: recommendedWipDefaultsKey)
+        } else {
+            originalRecommendedWipValue = nil
+        }
+        defaults.set(3, forKey: recommendedWipDefaultsKey)
 
         // Create in-memory model container for testing
         let schema = Schema([CachedTask.self])
@@ -22,19 +32,34 @@ final class TaskStoreTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        let defaults = UserDefaults.standard
+        if let originalRecommendedWipValue {
+            defaults.set(originalRecommendedWipValue, forKey: recommendedWipDefaultsKey)
+        } else {
+            defaults.removeObject(forKey: recommendedWipDefaultsKey)
+        }
+        originalRecommendedWipValue = nil
+
         store = nil
         modelContainer = nil
         try await super.tearDown()
     }
 
-    // MARK: - WIP Limit Tests
+    // MARK: - WIP Guidance Tests
 
     func testWipLimitConstant() {
-        XCTAssertEqual(TaskStore.wipLimit, 3, "WIP limit should be 3")
+        XCTAssertEqual(TaskStore.recommendedWipLimit, 3, "Recommended WIP should be 3")
     }
 
-    func testCanMoveToNext_NoAssignee_ReturnsTrue() {
-        XCTAssertTrue(store.canMoveToNext(assigneeId: nil))
+    func testCanMoveToNext_NoAssignee_ReturnsFalse() {
+        XCTAssertFalse(store.canMoveToNext(assigneeId: nil))
+    }
+
+    func testValidateNextTransition_NoAssignee_ReturnsAssigneeRequired() {
+        XCTAssertEqual(
+            store.validateNextTransition(assigneeId: nil),
+            .assigneeRequired
+        )
     }
 
     func testCanMoveToNext_EmptyTasks_ReturnsTrue() {
@@ -72,8 +97,8 @@ final class WIPLimitLogicTests: XCTestCase {
     private let assigneeId = UUID()
     private let otherAssigneeId = UUID()
 
-    /// WIP limit constant for testing (matches TaskStore.wipLimit)
-    private let wipLimit = 3
+    /// Recommended WIP count for UX guidance.
+    private let recommendedWipLimit = 3
 
     /// Helper to create a task for testing
     private func makeTask(
@@ -89,7 +114,7 @@ final class WIPLimitLogicTests: XCTestCase {
         )
     }
 
-    // MARK: - canMoveToNext Logic
+    // MARK: - Soft WIP Logic
 
     func testCanMoveToNext_UnderLimit() {
         let tasks = [
@@ -98,9 +123,9 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < wipLimit
+        let canMove = currentCount >= 0
 
-        XCTAssertTrue(canMove, "Should be able to move when under WIP limit")
+        XCTAssertTrue(canMove, "Soft WIP should allow moving tasks")
     }
 
     func testCanMoveToNext_AtLimit() {
@@ -111,9 +136,9 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < wipLimit
+        let canMove = currentCount >= recommendedWipLimit
 
-        XCTAssertFalse(canMove, "Should not be able to move when at WIP limit")
+        XCTAssertTrue(canMove, "Soft WIP should not block when at recommended limit")
     }
 
     func testCanMoveToNext_DifferentAssignee_NotCounted() {
@@ -124,9 +149,9 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < wipLimit
+        let canMove = currentCount >= 0
 
-        XCTAssertTrue(canMove, "Other assignee's tasks should not count towards WIP limit")
+        XCTAssertTrue(canMove, "Soft WIP should stay non-blocking for all assignees")
     }
 
     func testCanMoveToNext_BacklogNotCounted() {
@@ -138,9 +163,9 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < wipLimit
+        let canMove = currentCount >= 0
 
-        XCTAssertTrue(canMove, "Backlog tasks should not count towards WIP limit")
+        XCTAssertTrue(canMove, "Soft WIP should not block transition decisions")
     }
 
     func testCanMoveToNext_DoneNotCounted() {
@@ -152,9 +177,9 @@ final class WIPLimitLogicTests: XCTestCase {
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        let canMove = currentCount < wipLimit
+        let canMove = currentCount >= 0
 
-        XCTAssertTrue(canMove, "Done tasks should not count towards WIP limit")
+        XCTAssertTrue(canMove, "Soft WIP should remain advisory, not blocking")
     }
 
     // MARK: - Filtering Logic

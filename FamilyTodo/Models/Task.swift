@@ -7,6 +7,7 @@ struct Task: Identifiable, Codable {
     var status: TaskStatus
     var assigneeId: UUID?
     var assigneeIds: [UUID]
+    var backlogCategoryId: UUID?
     var areaId: UUID?
     var dueDate: Date?
     var completedAt: Date?
@@ -35,6 +36,7 @@ struct Task: Identifiable, Codable {
         status: TaskStatus,
         assigneeId: UUID? = nil,
         assigneeIds: [UUID] = [],
+        backlogCategoryId: UUID? = nil,
         areaId: UUID? = nil,
         dueDate: Date? = nil,
         completedAt: Date? = nil,
@@ -51,6 +53,7 @@ struct Task: Identifiable, Codable {
         self.status = status
         self.assigneeId = assigneeId
         self.assigneeIds = assigneeIds
+        self.backlogCategoryId = backlogCategoryId
         self.areaId = areaId
         self.dueDate = dueDate
         self.completedAt = completedAt

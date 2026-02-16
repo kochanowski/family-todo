@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl]
+    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -173,8 +173,8 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     needs: [build-and-test, swiftlint]
-    # Only run on manual dispatch, tags starting with 'v', or pushes to main or rebuild/swiftui-clean-impl
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rebuild/swiftui-clean-impl'))
+    # Only run on manual dispatch, tags starting with 'v', or pushes to main or feature/continue-mvp
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/continue-mvp'))
 
     steps:
       - name: Checkout

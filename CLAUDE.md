@@ -243,14 +243,16 @@ These features are documented and planned for implementation after MVP launch. E
 
 ## Technical Stack
 
-- **Platform**: iOS 17+
+- **Platform**: iOS 17+ (iOS 26+ for Liquid Glass effects)
 - **UI Framework**: SwiftUI
-- **Architecture**: Offline-first with background sync
+- **Architecture**: Offline-first with background sync (ADR-002)
 - **Auth**: Sign in with Apple
 - **Backend**: CloudKit (see `docs/2026-01-10_adr-001-cloudkit-backend.md`)
 - **Local Storage**: SwiftData (for offline caching)
 - **CI/CD**: GitHub Actions
-- **Testing**: XCTest (unit tests implemented)
+- **Testing**: XCTest
+- **Active branch**: `rebuild/swiftui-clean-impl`
+- **Development**: Linux (user) → GitHub Actions (build/test) → iPhone 15 (iOS 26.2.1, physical testing)
 
 ## Architecture & Implementation
 
@@ -276,46 +278,104 @@ The app supports two sync modes:
 
 ### Navigation Structure
 
-**Tab Bar (4 tabs):**
+**Custom Floating Tab Bar** (`FloatingTabBar.swift`) — not native TabView:
 1. **Shopping** 🛒 - Shared shopping list with restock
 2. **Tasks** ✓ - Active tasks (max 3 per person in "Next")
 3. **Backlog** 📦 - Long-term storage (categorized)
 4. **More** ⋯ - Settings, household, profile
 
+Tab bar uses Liquid Glass effect on iOS 26+ (`GlassEffectContainer` + `.glassEffect()`) with material fallback on iOS 17-25. Hides on keyboard show.
+
+### Codebase Structure
+
+```
+FamilyTodo/
+├── FamilyTodoApp.swift          # App entry, schema, environment setup
+├── ContentView.swift             # Auth gate → MainAppView (tab switcher)
+├── Models/
+│   ├── Task.swift                # status: backlog/next/done, assigneeId, dueDate, notes, areaId, recurringChoreId
+│   ├── ShoppingItem.swift        # title, quantity, unit, isBought, restockCount
+│   ├── Household.swift           # name, ownerId, members[], areas[]
+│   ├── Member.swift              # userId, displayName, role (owner/member), isActive
+│   ├── BacklogCategory.swift     # + BacklogItem (title, notes, categoryId)
+│   ├── Cached*.swift             # SwiftData @Model versions of all above
+│   └── LegacyStubs.swift         # ⚠️ Area, RecurringChore models + stub views/stores
+├── Views/
+│   ├── ShoppingListView.swift    # ✅ Full: rapid entry, buy/unbuy, RestockSheet, suggestions
+│   ├── TasksView.swift           # ⚠️ Basic CRUD only — no detail/edit sheet
+│   ├── BacklogView.swift         # ✅ Categories + items CRUD
+│   ├── MoreView.swift            # ⚠️ Hub with partial sub-screens (see below)
+│   ├── SignInView.swift          # Sign in with Apple UI
+│   ├── OnboardingView.swift      # ⚠️ Legacy? May be unused
+│   ├── MemberManagementView.swift # ✅ Full CRUD + roles + context menus
+│   ├── ShareInviteView.swift     # ✅ UICloudSharingController wrapper
+│   ├── ThemeStore.swift          # 4 presets: Journal, Pastel, Soft, Night
+│   ├── Components/
+│   │   ├── FloatingTabBar.swift  # Custom glass tab bar
+│   │   ├── AppBackgroundView.swift
+│   │   ├── GuidedEmptyStateView.swift
+│   │   ├── NewItemsBanner.swift
+│   │   └── ToastView.swift
+│   └── Onboarding/
+│       ├── OnboardingCarouselView.swift
+│       ├── CreateHouseholdView.swift  # ⚠️ joinHousehold() is TODO
+│       ├── SyncSelectionView.swift
+│       └── AuroraBackground.swift
+├── Stores/
+│   ├── ShoppingListStore.swift   # ✅ Full: CRUD, restock, suggestions, CloudKit sync
+│   ├── TaskStore.swift           # ✅ CRUD + WIP limit + notifications
+│   ├── BacklogStore.swift        # ✅ Categories + items CRUD
+│   ├── HouseholdStore.swift      # ✅ Create/load/share + guest seeding
+│   └── MemberStore.swift         # ✅ CRUD + roles (⚠️ no role validation enforcement)
+├── Managers/
+│   ├── CloudKitManager.swift     # Full CloudKit CRUD for all record types
+│   ├── CloudKitManager+Mapping.swift  # CKRecord ↔ Model mapping
+│   └── CloudKitSubscriptionManager.swift
+├── Services/
+│   ├── AuthenticationService.swift    # Sign in with Apple + CloudKit identity
+│   ├── UserSession.swift              # Session state, sync mode, household ID
+│   ├── NotificationService.swift      # Task reminders + daily digest
+│   └── OnboardingState.swift
+└── Utilities/
+    ├── AppColors.swift
+    ├── Color+Pastel.swift
+    ├── HapticManager.swift
+    └── InteractionTokens.swift        # AppChromeMetrics, Tab enum, etc.
+```
+
 ### Data Models (SwiftData Cache)
 
-Current schema (as of 2026-02-02):
+Current schema:
 - `CachedHousehold` - Household metadata
 - `CachedMember` - Household members with roles
 - `CachedTask` - Tasks with status, assignee, dates
 - `CachedShoppingItem` - Shopping list items
 - `CachedBacklogCategory` - Category containers
 - `CachedBacklogItem` - Items within categories
-
-**Removed models:**
-- ~~`CachedArea`~~ - deprecated, replaced by Backlog Categories
-- ~~`CachedRecurringChore`~~ - deferred to post-MVP
+- `CachedArea` - Legacy, in LegacyStubs (unused but in schema)
+- `CachedRecurringChore` - Legacy, in LegacyStubs (unused but in schema)
 
 ### Store Pattern
 
-All data access uses Observable stores:
-- `HouseholdStore` - Household CRUD + guest seeding
-- `TaskStore` - Task management with WIP limit enforcement
-- `ShoppingStore` - Shopping list with restock logic
+All stores follow the same offline-first pattern:
+1. Load from SwiftData cache first (instant UI)
+2. If `syncMode == .cloud` → fetch from CloudKit
+3. Update cache + UI
+4. Writes: optimistic UI update → cache → CloudKit sync
+
+Stores:
+- `HouseholdStore` - Household CRUD + CKShare + guest seeding
+- `TaskStore` - Task management with WIP limit (3 per assignee in .next)
+- `ShoppingListStore` - Shopping list with restock/suggestions logic
 - `BacklogStore` - Category and item management
-- `ThemeStore` - App theme (Light/Dark/System)
+- `MemberStore` - Member CRUD + role management
+- `ThemeStore` - Appearance (Light/Dark/System) + celebrations/suggestions toggles
 
 ### CloudKit Schema
 
 See `docs/2026-01-11_cloudkit-schema.md` for full schema details.
 
-Record types:
-- `Household` - Container for all household data
-- `Member` - User membership with roles
-- `Task` - Task records with references
-- `ShoppingItem` - Shopping list entries
-- `BacklogCategory` - Category records
-- `BacklogItem` - Item records within categories
+Record types: Household, Member, Task, ShoppingItem, BacklogCategory, BacklogItem
 
 ## User Mental Model
 
@@ -327,67 +387,46 @@ Users think in terms of:
 
 Design UI language, structures, and flows to match this thinking.
 
-## Recent Changes & Known Issues
+## Current Implementation Status (2026-02-15)
 
-### Recent Architecture Changes (2026-02-02)
+### ✅ Fully Working
+- Onboarding flow (carousel → sync selection → household creation)
+- Guest mode with seeded demo data
+- Sign in with Apple authentication
+- CloudKit CRUD for all core models + SwiftData cache
+- Shopping list: rapid entry, buy/unbuy, recently purchased restock, swipe delete, clear all, suggestions
+- Tasks: create, complete/uncomplete, WIP limit (3/assignee), completed section
+- Backlog: categories CRUD, items CRUD, swipe delete
+- Member management: CRUD, roles (owner/member), context menus
+- Household sharing via CKShare (basic)
+- Notifications: task reminders (due date), daily digest
+- Theme: 4 presets (Journal, Pastel, Soft, Night), appearance mode (Light/Dark/System)
+- Floating tab bar with Liquid Glass (iOS 26+) + material fallback
+- Keyboard accessory: custom "Done" pill button above keyboard
 
-**Guest Mode Data Seeding** ✅
-- Implemented `HouseholdStore.seedDefaultData()` for guest users
-- Auto-populates demo data on household creation in `.localOnly` mode
-- Includes realistic tasks, shopping items, and backlog categories
-- Respects WIP limit (3 tasks in "Next" status)
+### ⚠️ Stubs / Partial
+- **Task Detail/Edit** → stub "Coming Soon" in `LegacyStubs.TaskDetailView` — no way to edit assignee, due date, notes, area
+- **Recurring Chores** → stub "Coming Soon" in `RepetitiveTasksView` — model `RecurringChore` exists but no store/UI
+- **Areas/Rooms** → `AreaStore` is empty stub — model `Area` with defaults exists but unused
+- **Categories Management (More)** → uses local `@State [String]`, NOT wired to `BacklogStore`!
+- **Sign Out** → empty closure in `SettingsView` (line ~346)
+- **Notification Settings** → `NotificationSettingsStore` is stub with hardcoded defaults
+- **Join Household** → `CreateHouseholdView.joinHousehold()` is TODO
+- **Role Guardrails** → `MemberStore` accepts `currentUserId` parameter but doesn't validate it
+- **Household Rename/Leave/Delete** → no UI
+- **Backlog → Task Promotion** → no flow connecting the two
 
-**Model Simplification** ✅
-- Removed `CachedArea` from schema (Areas concept deprecated)
-- Removed `CachedRecurringChore` from schema (deferred to post-MVP)
-- Added `CachedBacklogCategory` and `CachedBacklogItem` (new backlog system)
-- Tasks retain optional `areaId` field for backward compatibility
-
-**Error Handling** ✅
-- Added `HouseholdError.cacheNotAvailable` case
-- Precondition checks in `createHousehold()` for sync mode validation
-
-### Current Implementation Status
-
-**Working:**
-- ✅ Onboarding flow (carousel → sync selection → household creation)
-- ✅ Guest mode with seeded demo data
-- ✅ Sign in with Apple authentication
-- ✅ CloudKit CRUD for all core models
-- ✅ SwiftData local cache with offline support
-- ✅ Tab navigation (Shopping, Tasks, Backlog, More)
-- ✅ Task WIP limit enforcement (max 3 in "Next")
-- ✅ Shopping list with restock functionality
-- ✅ Household sharing via CKShare
-- ✅ Member management (add, edit, delete, roles)
-- ✅ Basic notifications (daily digest + deadlines)
-- ✅ Theme switching (Light/Dark/System)
-
-**In Progress:**
-- 🚧 TestFlight deployment (credentials setup needed)
-- 🚧 Unit test coverage expansion
-
-**Deferred to Post-MVP:**
-- ⏸️ Recurring chores auto-scheduling
-- ⏸️ Advanced sync (retry queue, conflict UI, sync status indicators)
-- ⏸️ Activity feed
-- ⏸️ Templates and attachments
+### 📋 Roadmap
+See `claude-codex-TODO.md` for the merged implementation roadmap (Phases 0-9).
 
 ### Known Technical Debt
+1. `LegacyStubs.swift` contains models (Area, RecurringChore), stub views (TaskDetailView), and stub stores (AreaStore, NotificationSettingsStore) that should be broken out into real implementations
+2. `Task.areaId` and `Task.recurringChoreId` exist in the model but have no UI
+3. `OnboardingView.swift` (in Views/) may be legacy/unused — investigate
+4. `CategoriesManagementView` in MoreView doesn't persist changes
+5. Historical docs archived in `docs/old/`; active docs in `docs/current/`
 
-1. **Legacy Fields:**
-   - `Task.areaId` is optional and unused (kept for migration safety)
-   - Remove in future cleanup once migration path is clear
 
-2. **Documentation:**
-   - Historical docs are archived in `docs/old/`
-   - Active status and planning docs are in `STATUS.md` + `docs/current/`
-   - Use `docs/current/DOCS_MIGRATION_INDEX.md` to map old -> new locations
-
-3. **Testing:**
-   - `HouseholdTests.swift` fully covers guest seeding
-   - Need more coverage for TaskStore WIP limit logic
-   - Need CloudKitManager mock tests
 
 ## Development Guidelines
 
@@ -489,28 +528,30 @@ When working in this repository, the agent (Claude/Gemini) is allowed to:
 
 | File | Purpose |
 |------|---------|
-| `CLAUDE.md` | This file - agent guidance |
-| `README.md` | Current documentation entrypoint |
-| `STATUS.md` | Current implementation status |
+| `CLAUDE.md` | This file — agent guidance |
+| `claude-codex-TODO.md` | **Merged implementation roadmap** (Phases 0-9) |
+| `claude-PLAN.md` | Antigravity's fix plan (Done button, RestockSheet, Glass) |
+| `claude-NOTES.md` | Review notes on Codex implementation |
+| `codex-PLAN.md` | Codex's implementation plan |
+| `README.md` | Documentation entrypoint |
+| `STATUS.md` | Implementation status (may be outdated — check this file instead) |
 | `docs/current/ROADMAP.md` | Active roadmap |
 | `docs/current/TESTING_CI_POLICY.md` | CI and testing policy |
 | `docs/current/CLOUD_SYNC_PROFILES.md` | Cloud sync profile switching |
-| `docs/current/DOCS_MIGRATION_INDEX.md` | Documentation migration map |
 
 ### Documentation Structure
 
 ```
 ├── CLAUDE.md                    # Agent guidance (this file)
-├── README.md                    # Current docs entrypoint
-├── STATUS.md                    # Current implementation status
+├── claude-codex-TODO.md         # Merged roadmap (source of truth for next steps)
+├── claude-PLAN.md               # Fix plan for specific bugs
+├── claude-NOTES.md              # Code review notes
+├── codex-PLAN.md                # Codex implementation plan
+├── README.md                    # Docs entrypoint
+├── STATUS.md                    # Implementation status
 └── docs/
     ├── current/                 # Active operational docs
-    │   ├── ROADMAP.md
-    │   ├── TESTING_CI_POLICY.md
-    │   ├── CLOUD_SYNC_PROFILES.md
-    │   └── DOCS_MIGRATION_INDEX.md
-    ├── old/root/                # Archived legacy root docs
-    └── old/docs/                # Archived historical specs/proposals
+    └── old/                     # Archived legacy docs
 ```
 
 ### Common Commands
@@ -533,11 +574,13 @@ gh run view <run-id> --log
 
 ### Important Constraints
 
-1. **No Areas/RecurringChores** - These were removed. Use Backlog Categories instead.
+1. **Areas/RecurringChores exist as legacy models** - Models defined in `LegacyStubs.swift`, stores are empty stubs. Planned for future implementation (see Phase 5-6 in roadmap).
 2. **Guest seeding is automatic** - Don't manually seed in tests; call `createHousehold()` with `.localOnly` mode.
 3. **WIP limit is 3** - Enforce in TaskStore, not UI. UI should disable "Move to Next" when limit reached.
 4. **CloudKit sync is optional** - App must work fully in `.localOnly` mode.
 5. **SwiftData is source of truth** - CloudKit is for sync only, not primary storage.
+6. **iOS 26 Liquid Glass** - `glassEffect()` must be the LAST modifier. No `.overlay` or `.shadow` after it — they block compositing.
+7. **Development on Linux** - User develops on Linux/Manjaro. All builds and tests run via GitHub Actions or on physical device (iPhone 15, iOS 26.2.1).
 
 ### Useful Patterns
 

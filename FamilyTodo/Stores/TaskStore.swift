@@ -25,8 +25,28 @@ final class TaskStore: ObservableObject {
         syncMode == .cloud
     }
 
-    /// WIP limit per user (max 3 tasks in "Next")
-    static let wipLimit = 3
+    /// Default recommended WIP limit per user.
+    static let defaultRecommendedWipLimit = 3
+
+    /// Recommended WIP limit per user (soft limit, configurable in Settings).
+    static var recommendedWipLimit: Int {
+        let stored = UserDefaults.standard.integer(forKey: "recommendedWipLimit")
+        if stored <= 0 {
+            return defaultRecommendedWipLimit
+        }
+        return min(max(stored, 1), 7)
+    }
+
+    /// Backward-compatible alias used in older call sites/tests.
+    static var wipLimit: Int {
+        recommendedWipLimit
+    }
+
+    enum NextTransitionValidation: Equatable {
+        case ok
+        case assigneeRequired
+        case wipLimitReached(current: Int, limit: Int)
+    }
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -49,11 +69,39 @@ final class TaskStore: ObservableObject {
             .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
 
-    /// Check if user can add more tasks to "Next" (WIP limit)
-    func canMoveToNext(assigneeId: UUID?) -> Bool {
-        guard let assigneeId else { return true }
-        let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
-        return currentCount < Self.wipLimit
+    /// Recently completed tasks shown on Tasks tab (last 24h).
+    var recentlyDoneTasks: [Task] {
+        doneTasks.filter { task in
+            guard let completedAt = task.completedAt else { return true }
+            return completedAt > Date().addingTimeInterval(-86400)
+        }
+    }
+
+    /// Archived completed tasks shown in More -> Completed Tasks (older than 24h).
+    var archivedDoneTasks: [Task] {
+        doneTasks.filter { task in
+            guard let completedAt = task.completedAt else { return false }
+            return completedAt <= Date().addingTimeInterval(-86400)
+        }
+    }
+
+    /// Validate if task can enter "Next" state.
+    func validateNextTransition(assigneeId: UUID?, excludingTaskId: UUID? = nil) -> NextTransitionValidation {
+        guard let assigneeId else { return .assigneeRequired }
+        _ = excludingTaskId
+        _ = assigneeId
+        // Soft limit: transitions are allowed; UI communicates overload via color zones.
+        return .ok
+    }
+
+    /// Count of active Next tasks for a specific assignee.
+    func nextTaskCount(for assigneeId: UUID) -> Int {
+        tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
+    }
+
+    /// Backward-compatible helper for legacy call sites.
+    func canMoveToNext(assigneeId: UUID?, excludingTaskId: UUID? = nil) -> Bool {
+        validateNextTransition(assigneeId: assigneeId, excludingTaskId: excludingTaskId) == .ok
     }
 
     // MARK: - Data Loading
@@ -120,21 +168,29 @@ final class TaskStore: ObservableObject {
 
     // MARK: - Task Operations
 
+    @discardableResult
     func createTask(
+        taskId: UUID = UUID(),
         title: String,
         status: Task.TaskStatus = .backlog,
         assigneeId: UUID? = nil,
         assigneeIds: [UUID] = [],
+        backlogCategoryId: UUID? = nil,
         areaId: UUID? = nil,
         dueDate: Date? = nil,
-        notes: String? = nil
-    ) async {
-        guard let householdId else { return }
+        notes: String? = nil,
+        taskType: Task.TaskType = .oneOff,
+        recurringChoreId: UUID? = nil
+    ) async -> NextTransitionValidation {
+        guard let householdId else { return .ok }
 
-        // Check WIP limit
-        if status == .next, !canMoveToNext(assigneeId: assigneeId) {
-            error = TaskStoreError.wipLimitReached
-            return
+        // Validate transition constraints (assignee required for Next).
+        if status == .next {
+            let validation = validateNextTransition(assigneeId: assigneeId)
+            guard validation == .ok else {
+                error = validation.taskStoreError
+                return validation
+            }
         }
 
         let resolvedAssigneeIds: [UUID] = if !assigneeIds.isEmpty {
@@ -146,14 +202,17 @@ final class TaskStore: ObservableObject {
         }
 
         let task = Task(
+            id: taskId,
             householdId: householdId,
             title: title,
             status: status,
             assigneeId: assigneeId,
             assigneeIds: resolvedAssigneeIds,
+            backlogCategoryId: backlogCategoryId,
             areaId: areaId,
             dueDate: dueDate,
-            taskType: .oneOff,
+            taskType: taskType,
+            recurringChoreId: recurringChoreId,
             notes: notes
         )
 
@@ -170,8 +229,11 @@ final class TaskStore: ObservableObject {
         try? modelContext.save()
 
         if !isCloudSyncEnabled {
+            if task.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: task)
-            return
+            return .ok
         }
 
         // Sync to CloudKit
@@ -182,21 +244,29 @@ final class TaskStore: ObservableObject {
             try? modelContext.save()
 
             // Schedule notification if task has due date
+            if task.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: task)
         } catch {
             self.error = error
         }
+        return .ok
     }
 
-    func updateTask(_ task: Task) async {
+    @discardableResult
+    func updateTask(_ task: Task) async -> NextTransitionValidation {
         var updatedTask = task
         updatedTask.updatedAt = Date()
 
-        // Check WIP limit if moving to next
+        // Validate transition constraints if moving to Next.
         let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
-        if task.status == .next, !canMoveToNext(assigneeId: wipAssigneeId) {
-            error = TaskStoreError.wipLimitReached
-            return
+        if task.status == .next {
+            let validation = validateNextTransition(assigneeId: wipAssigneeId, excludingTaskId: task.id)
+            guard validation == .ok else {
+                error = validation.taskStoreError
+                return validation
+            }
         }
 
         // Optimistic UI update
@@ -218,8 +288,11 @@ final class TaskStore: ObservableObject {
         }
 
         if !isCloudSyncEnabled {
+            if updatedTask.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: updatedTask)
-            return
+            return .ok
         }
 
         // Sync to CloudKit
@@ -227,22 +300,29 @@ final class TaskStore: ObservableObject {
             _ = try await cloudKit.saveTask(updatedTask)
 
             // Update notification (remove old, schedule new if due date changed)
+            if updatedTask.dueDate != nil, !notificationService.isAuthorized {
+                await notificationService.requestAuthorization()
+            }
             await notificationService.scheduleTaskReminder(for: updatedTask)
         } catch {
             self.error = error
         }
+        return .ok
     }
 
-    func moveTask(_ task: Task, to status: Task.TaskStatus) async {
+    @discardableResult
+    func moveTask(_ task: Task, to status: Task.TaskStatus) async -> NextTransitionValidation {
         var updatedTask = task
         updatedTask.status = status
         updatedTask.updatedAt = Date()
 
         if status == .done {
             updatedTask.completedAt = Date()
+        } else if task.status == .done {
+            updatedTask.completedAt = nil
         }
 
-        await updateTask(updatedTask)
+        return await updateTask(updatedTask)
     }
 
     func deleteTask(_ task: Task) async {
@@ -275,15 +355,101 @@ final class TaskStore: ObservableObject {
             self.error = error
         }
     }
+
+    /// Clears completed tasks.
+    /// - Parameter keepingDays:
+    ///   - `nil`: delete all completed tasks.
+    ///   - number: keep tasks from last N days, delete older completed tasks.
+    func clearCompletedTasks(keepingDays: Int?) async {
+        let retentionCutoff = keepingDays.map { Date().addingTimeInterval(-Double($0) * 86400) }
+
+        let tasksToDelete = tasks.filter { task in
+            guard task.status == .done else { return false }
+            guard let retentionCutoff else { return true }
+            let completedDate = task.completedAt ?? task.updatedAt
+            return completedDate < retentionCutoff
+        }
+
+        guard !tasksToDelete.isEmpty else { return }
+
+        for task in tasksToDelete {
+            await deleteTask(task)
+        }
+    }
+
+    /// Clears archived done tasks (older than 24h).
+    /// - Parameter keepingDays:
+    ///   - `nil`: delete all archived tasks.
+    ///   - number: keep tasks from last N days, delete older archived tasks.
+    func clearArchivedTasks(keepingDays: Int?) async {
+        let archiveCutoff = Date().addingTimeInterval(-86400)
+        let retentionCutoff = keepingDays.map { Date().addingTimeInterval(-Double($0) * 86400) }
+
+        let tasksToDelete = tasks.filter { task in
+            guard task.status == .done, let completedAt = task.completedAt else { return false }
+            guard completedAt <= archiveCutoff else { return false }
+
+            if let retentionCutoff {
+                return completedAt < retentionCutoff
+            }
+            return true
+        }
+
+        guard !tasksToDelete.isEmpty else { return }
+
+        for task in tasksToDelete {
+            await deleteTask(task)
+        }
+    }
+
+    @discardableResult
+    func createTaskFromBacklogItem(
+        title: String,
+        notes: String? = nil,
+        preferredStatus: Task.TaskStatus = .next,
+        assigneeId: UUID? = nil,
+        taskType: Task.TaskType = .oneOff,
+        recurringChoreId: UUID? = nil,
+        taskId: UUID = UUID(),
+        backlogCategoryId: UUID? = nil
+    ) async -> NextTransitionValidation {
+        await createTask(
+            taskId: taskId,
+            title: title,
+            status: preferredStatus,
+            assigneeId: assigneeId,
+            assigneeIds: assigneeId.map { [$0] } ?? [],
+            backlogCategoryId: backlogCategoryId,
+            notes: notes,
+            taskType: taskType,
+            recurringChoreId: recurringChoreId
+        )
+    }
+}
+
+private extension TaskStore.NextTransitionValidation {
+    var taskStoreError: TaskStoreError? {
+        switch self {
+        case .ok:
+            nil
+        case .assigneeRequired:
+            .assigneeRequired
+        case .wipLimitReached:
+            .wipLimitReached
+        }
+    }
 }
 
 enum TaskStoreError: LocalizedError, Equatable {
+    case assigneeRequired
     case wipLimitReached
 
     var errorDescription: String? {
         switch self {
+        case .assigneeRequired:
+            "Assign this task before moving it to Next."
         case .wipLimitReached:
-            "WIP limit reached. Complete or move existing tasks before adding more to Next."
+            "You are above the recommended active task count. Consider finishing some tasks first."
         }
     }
 }

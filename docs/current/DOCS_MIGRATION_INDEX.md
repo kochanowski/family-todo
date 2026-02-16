@@ -2,6 +2,9 @@
 
 Last updated: 2026-02-15
 
+> **Current source of truth:** `CLAUDE.md` (project context) + `STATUS.md` (implementation status) + `claude-codex-TODO.md` (roadmap).
+> This file maps legacy docs to their archived locations for reference only.
+
 ## Root -> `docs/old/root`
 | Old file | New location | Reason |
 |---|---|---|

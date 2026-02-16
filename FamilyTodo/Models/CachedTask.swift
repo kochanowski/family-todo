@@ -11,6 +11,7 @@ final class CachedTask {
     var statusRaw: String
     var assigneeId: UUID?
     var assigneeIdsData: Data?
+    var backlogCategoryId: UUID?
     var areaId: UUID?
     var dueDate: Date?
     var completedAt: Date?
@@ -34,6 +35,7 @@ final class CachedTask {
         statusRaw = task.status.rawValue
         assigneeId = task.assigneeId
         assigneeIdsData = Self.encodeAssigneeIds(task.assigneeIds)
+        backlogCategoryId = task.backlogCategoryId
         areaId = task.areaId
         dueDate = task.dueDate
         completedAt = task.completedAt
@@ -52,6 +54,7 @@ final class CachedTask {
         statusRaw = task.status.rawValue
         assigneeId = task.assigneeId
         assigneeIdsData = Self.encodeAssigneeIds(task.assigneeIds)
+        backlogCategoryId = task.backlogCategoryId
         areaId = task.areaId
         dueDate = task.dueDate
         completedAt = task.completedAt
@@ -69,6 +72,7 @@ final class CachedTask {
             status: Task.TaskStatus(rawValue: statusRaw) ?? .backlog,
             assigneeId: assigneeId,
             assigneeIds: Self.decodeAssigneeIds(assigneeIdsData),
+            backlogCategoryId: backlogCategoryId,
             areaId: areaId,
             dueDate: dueDate,
             completedAt: completedAt,

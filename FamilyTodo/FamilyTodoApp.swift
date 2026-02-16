@@ -18,6 +18,8 @@ struct FamilyTodoApp: App {
             CachedBacklogCategory.self,
             CachedBacklogItem.self,
             CachedHousehold.self,
+            CachedArea.self,
+            CachedRecurringChore.self,
         ])
         #if CI
             let modelConfiguration = ModelConfiguration(
@@ -44,7 +46,26 @@ struct FamilyTodoApp: App {
                     fatalError("Could not create CI ModelContainer: \(error)")
                 }
             #else
-                fatalError("Could not create ModelContainer: \(error)")
+                // Recovery path for incompatible/corrupted local SwiftData store.
+                // This prevents app launch crash on migration failures in TestFlight production data.
+                print("⚠️ ModelContainer migration failed: \(error)")
+                print("⚠️ Destroying local store and retrying...")
+
+                let appSupportURL =
+                    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                        ?? URL(fileURLWithPath: NSTemporaryDirectory())
+                let defaultStoreURL = appSupportURL.appendingPathComponent("default.store")
+                let storePath = defaultStoreURL.path
+
+                for suffix in ["", "-shm", "-wal"] {
+                    try? FileManager.default.removeItem(atPath: storePath + suffix)
+                }
+
+                do {
+                    return try ModelContainer(for: schema, configurations: [modelConfiguration])
+                } catch {
+                    fatalError("Could not create ModelContainer after reset: \(error)")
+                }
             #endif
         }
     }()
@@ -77,6 +98,12 @@ struct FamilyTodoApp: App {
                             subscriptionManager.configure(userId: userId, householdId: householdId)
                         }
                     #endif
+
+                    await ChoreScheduler.shared.runIfNeeded(
+                        householdId: userSession.currentHouseholdID,
+                        modelContext: sharedModelContainer.mainContext,
+                        syncMode: userSession.syncMode
+                    )
                 }
         }
     }
@@ -180,6 +207,8 @@ struct UITestHelper {
             try context.delete(model: CachedBacklogCategory.self)
             try context.delete(model: CachedMember.self)
             try context.delete(model: CachedHousehold.self)
+            try context.delete(model: CachedArea.self)
+            try context.delete(model: CachedRecurringChore.self)
         } catch {
             print("Failed to clear data: \(error)")
         }

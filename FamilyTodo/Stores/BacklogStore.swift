@@ -5,6 +5,13 @@ import SwiftUI
 /// Store for backlog management (categories and items)
 @MainActor
 final class BacklogStore: ObservableObject {
+    enum PromotionResult: Equatable {
+        case success(createdTaskId: UUID)
+        case assigneeRequired
+        case wipLimitReached(current: Int, limit: Int)
+        case failed(String)
+    }
+
     @Published private(set) var categories: [BacklogCategory] = []
     @Published private(set) var items: [BacklogItem] = []
     @Published private(set) var isLoading = false
@@ -223,15 +230,95 @@ final class BacklogStore: ObservableObject {
         }
     }
 
+    func renameCategory(_ category: BacklogCategory, newTitle: String) async {
+        let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        guard let index = categories.firstIndex(where: { $0.id == category.id }) else { return }
+
+        var updatedCategory = categories[index]
+        updatedCategory.title = trimmedTitle
+        updatedCategory.updatedAt = Date()
+
+        withAnimation {
+            categories[index] = updatedCategory
+        }
+
+        if let context = modelContext {
+            let categoryId = category.id
+            let descriptor = FetchDescriptor<CachedBacklogCategory>(
+                predicate: #Predicate { $0.id == categoryId }
+            )
+            if let cached = try? context.fetch(descriptor).first {
+                cached.update(from: updatedCategory)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+                try? context.save()
+            }
+        }
+
+        guard isCloudSyncEnabled else { return }
+        do {
+            _ = try await cloudKit.saveBacklogCategory(updatedCategory)
+        } catch {
+            self.error = error
+            await loadData()
+        }
+    }
+
+    func reorderCategories(orderedIds: [UUID]) async {
+        guard !orderedIds.isEmpty else { return }
+
+        var indexMap: [UUID: Int] = [:]
+        for (index, id) in orderedIds.enumerated() {
+            indexMap[id] = index
+        }
+
+        for idx in categories.indices {
+            guard let newOrder = indexMap[categories[idx].id] else { continue }
+            categories[idx].sortOrder = newOrder
+            categories[idx].updatedAt = Date()
+        }
+        categories.sort { $0.sortOrder < $1.sortOrder }
+
+        if let context = modelContext {
+            for category in categories {
+                let categoryId = category.id
+                let descriptor = FetchDescriptor<CachedBacklogCategory>(
+                    predicate: #Predicate { $0.id == categoryId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.update(from: category)
+                    cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                    cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+                }
+            }
+            try? context.save()
+        }
+
+        guard isCloudSyncEnabled else { return }
+        for category in categories {
+            do {
+                _ = try await cloudKit.saveBacklogCategory(category)
+            } catch {
+                self.error = error
+            }
+        }
+    }
+
     // MARK: - Item Operations
 
-    func addItem(to categoryId: UUID, title: String) async {
+    func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil, notes: String? = nil) async {
         guard let householdId else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let item = BacklogItem(
             categoryId: categoryId,
             householdId: householdId,
-            title: title
+            title: trimmedTitle,
+            assigneeId: assigneeId,
+            notes: trimmedNotes
         )
 
         // Optimistic UI
@@ -272,30 +359,138 @@ final class BacklogStore: ObservableObject {
         }
     }
 
-    func deleteItem(_ item: BacklogItem) async {
-        // Optimistic UI
-        withAnimation {
-            items.removeAll { $0.id == item.id }
+    @discardableResult
+    func deleteItem(_ item: BacklogItem) async -> Bool {
+        await deleteItemInternal(item, reloadOnFailure: true)
+    }
+
+    private func deleteItemInternal(_ item: BacklogItem, reloadOnFailure: Bool) async -> Bool {
+        guard let currentIndex = items.firstIndex(where: { $0.id == item.id }) else {
+            removeCachedItem(id: item.id)
+            return true
         }
 
-        // Cache
+        let removedItem = items[currentIndex]
+
+        withAnimation {
+            items.remove(at: currentIndex)
+        }
+
+        if !isCloudSyncEnabled {
+            removeCachedItem(id: item.id)
+            return true
+        }
+
+        do {
+            try await cloudKit.deleteBacklogItem(id: item.id)
+            removeCachedItem(id: item.id)
+            return true
+        } catch {
+            self.error = error
+            withAnimation {
+                let safeIndex = min(currentIndex, items.count)
+                items.insert(removedItem, at: safeIndex)
+            }
+            if reloadOnFailure {
+                await loadData()
+            }
+            return false
+        }
+    }
+
+    private func removeCachedItem(id: UUID) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            context.delete(cached)
+            try? context.save()
+        }
+    }
+
+    func updateItem(_ item: BacklogItem, title: String, notes: String?) async {
+        await updateItem(item, title: title, notes: notes, assigneeId: item.assigneeId)
+    }
+
+    func updateItem(_ item: BacklogItem, title: String, notes: String?, assigneeId: UUID?) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        var updatedItem = items[index]
+        updatedItem.title = trimmedTitle
+        updatedItem.notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedItem.assigneeId = assigneeId
+        updatedItem.updatedAt = Date()
+
+        withAnimation {
+            items[index] = updatedItem
+        }
+
         if let context = modelContext {
+            let itemId = updatedItem.id
             let descriptor = FetchDescriptor<CachedBacklogItem>(
-                predicate: #Predicate { $0.id == item.id }
+                predicate: #Predicate { $0.id == itemId }
             )
             if let cached = try? context.fetch(descriptor).first {
-                context.delete(cached)
+                cached.update(from: updatedItem)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 try? context.save()
             }
         }
 
-        if !isCloudSyncEnabled { return }
-
+        guard isCloudSyncEnabled else { return }
         do {
-            try await cloudKit.deleteBacklogItem(id: item.id)
+            _ = try await cloudKit.saveBacklogItem(updatedItem)
         } catch {
             self.error = error
             await loadData()
+        }
+    }
+
+    @discardableResult
+    func promoteItemToTask(
+        _ item: BacklogItem,
+        assigneeId: UUID?,
+        preferredStatus: Task.TaskStatus = .next
+    ) async -> PromotionResult {
+        guard let modelContext, let householdId else {
+            return .failed("Missing local context.")
+        }
+
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setSyncMode(syncMode)
+        taskStore.setHousehold(householdId)
+
+        let createdTaskId = UUID()
+        let resolvedAssigneeId = assigneeId ?? item.assigneeId
+        let validation = await taskStore.createTaskFromBacklogItem(
+            title: item.title,
+            notes: item.notes,
+            preferredStatus: preferredStatus,
+            assigneeId: resolvedAssigneeId,
+            taskId: createdTaskId,
+            backlogCategoryId: item.categoryId
+        )
+
+        switch validation {
+        case .ok:
+            let didDeleteBacklogItem = await deleteItemInternal(item, reloadOnFailure: false)
+            guard didDeleteBacklogItem else {
+                if let createdTask = taskStore.tasks.first(where: { $0.id == createdTaskId }) {
+                    await taskStore.deleteTask(createdTask)
+                }
+                return .failed(
+                    "Couldn't remove item from Backlog. Promotion was rolled back."
+                )
+            }
+            return .success(createdTaskId: createdTaskId)
+        case .assigneeRequired:
+            return .assigneeRequired
+        case let .wipLimitReached(current, limit):
+            return .wipLimitReached(current: current, limit: limit)
         }
     }
 }

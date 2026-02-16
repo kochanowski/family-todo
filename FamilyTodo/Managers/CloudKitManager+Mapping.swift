@@ -156,6 +156,9 @@ extension CloudKitManager {
         if !task.assigneeIds.isEmpty {
             record["assigneeIds"] = references(from: task.assigneeIds) as CKRecordValue
         }
+        if let backlogCategoryId = task.backlogCategoryId {
+            record["backlogCategoryId"] = reference(for: backlogCategoryId)
+        }
         if let areaId = task.areaId {
             record["areaId"] = reference(for: areaId)
         }
@@ -204,6 +207,7 @@ extension CloudKitManager {
             status: status,
             assigneeId: uuid(from: record["assigneeId"] as? CKRecord.Reference),
             assigneeIds: uuidArray(from: record["assigneeIds"] as? [CKRecord.Reference]),
+            backlogCategoryId: uuid(from: record["backlogCategoryId"] as? CKRecord.Reference),
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             dueDate: record["dueDate"] as? Date,
             completedAt: record["completedAt"] as? Date,
@@ -323,6 +327,7 @@ extension CloudKitManager {
             record["boughtAt"] = boughtAt as CKRecordValue
         }
         record["restockCount"] = item.restockCount as CKRecordValue
+        record["sortOrder"] = item.sortOrder as CKRecordValue
         record["createdAt"] = item.createdAt as CKRecordValue
         record["updatedAt"] = item.updatedAt as CKRecordValue
         return record
@@ -346,6 +351,10 @@ extension CloudKitManager {
             record["restockCount"] as? Int
                 ?? (record["restockCount"] as? Int64).map(Int.init)
                 ?? 0
+        let sortOrderValue =
+            record["sortOrder"] as? Int
+                ?? (record["sortOrder"] as? Int64).map(Int.init)
+                ?? 0
 
         return ShoppingItem(
             id: id,
@@ -356,6 +365,7 @@ extension CloudKitManager {
             isBought: isBoughtValue == 1,
             boughtAt: record["boughtAt"] as? Date,
             restockCount: restockCountValue,
+            sortOrder: sortOrderValue,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -407,6 +417,9 @@ extension CloudKitManager {
         record["categoryId"] = reference(for: item.categoryId)
         record["householdId"] = reference(for: item.householdId)
         record["title"] = item.title as CKRecordValue
+        if let assigneeId = item.assigneeId {
+            record["assigneeId"] = reference(for: assigneeId)
+        }
         if let notes = item.notes {
             record["notes"] = notes as CKRecordValue
         }
@@ -435,6 +448,7 @@ extension CloudKitManager {
             categoryId: categoryId,
             householdId: householdId,
             title: title,
+            assigneeId: uuid(from: record["assigneeId"] as? CKRecord.Reference),
             notes: record["notes"] as? String,
             createdAt: createdAt,
             updatedAt: updatedAt

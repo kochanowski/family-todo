@@ -362,7 +362,7 @@ actor CloudKitManager {
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
         )
         let query = CKQuery(recordType: "ShoppingItem", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
 
         let (results, _) = try await sharedDatabase.records(matching: query)
         return try results.compactMap { _, result in
