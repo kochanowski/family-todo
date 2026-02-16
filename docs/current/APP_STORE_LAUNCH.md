@@ -102,7 +102,7 @@
 
 struct WelcomeCarouselView: View {
     @State private var currentPage = 0
-    
+
     var body: some View {
         TabView(selection: $currentPage) {
             AnimatedSplashPage().tag(0)
@@ -329,9 +329,9 @@ family,todo,household,chore,task,shopping,list,grocery,organizer,home,shared,fam
 
 #### Opis (first paragraph = most important):
 ```
-HousePulse keeps your entire household organized — without the stress. 
+HousePulse keeps your entire household organized — without the stress.
 
-Focus on just 3 active tasks. No infinite to-do lists, no guilt. 
+Focus on just 3 active tasks. No infinite to-do lists, no guilt.
 Your backlog captures ideas until you're ready.
 
 🛒 Shopping list with smart suggestions and one-tap restock

@@ -235,6 +235,7 @@ private struct TasksContent: View {
         }
     }
 
+    @ViewBuilder
     private var focusRuleBanner: some View {
         let count = store.nextTasks.count
         let state: (color: Color, icon: String, text: String) = switch count {

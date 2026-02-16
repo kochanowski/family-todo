@@ -1013,3 +1013,85 @@ struct ShoppingDragDelegate: DropDelegate {
 | Completed info banner | Jednorazowy info banner w Tasks | Wszystkie |
 | Completed Tasks More | More → Completed Tasks pokazuje historię | Wszystkie |
 | Shopping reorder | Long-press → drag to reorder | Wszystkie |
+
+---
+
+## 🔴 CI Fix — Build failure po wdrożeniu
+
+### Błąd
+
+Build `22060361720` (commit `4e2997e`) padł na:
+
+```
+❌ TasksView.swift:238:44: function declares an opaque return type,
+   but has no return statements in its body from which to infer an underlying type
+
+⚠️ TasksView.swift:264:10: result of call to 'background(alignment:content:)' is unused
+```
+
+### Root cause
+
+`focusRuleBanner: some View` (L238-268) ma **multi-statement body**:
+
+```swift
+private var focusRuleBanner: some View {   // ← opaque return type
+    let count = store.nextTasks.count       // ← statement 1
+    let state: (...) = switch count { ... } // ← statement 2
+    HStack { ... }                          // ← view (statement 3)
+        .background { ... }                 // ← trailing — traktowane jako osobny statement!
+}
+```
+
+Swift wymaga **single-expression body** dla inferencji `some View` w computed property.
+Codex użył `let state = switch count { ... }` — to poprawna składnia Swift 5.9, ale w multi-statement computed property kompilator nie jest w stanie wywnioskować typu `some View`.
+
+Warning `.background is unused` to efekt uboczny — kompilator traktuje `.background { }` jako osobne wyrażenie (nie chain na `HStack`), bo jest zdezorientowany przez wieloliniowy body.
+
+### Rozwiązanie
+
+Dodać `@ViewBuilder` do computed property. To mówi Swiftowi, żeby traktował body jako view builder (jak `var body`), co pozwala na `let` statements + view content:
+
+**Plik:** `FamilyTodo/Views/TasksView.swift`
+
+**Linia 238** — dodać `@ViewBuilder`:
+
+```swift
+// OBECNE:
+private var focusRuleBanner: some View {
+
+// NOWE:
+@ViewBuilder
+private var focusRuleBanner: some View {
+```
+
+To jedyna potrzebna zmiana. `@ViewBuilder` pozwala na:
+- lokalne `let` bindingi
+- wieloliniowy body z view hierarchią
+- poprawne chainowanie `.background { }` na `HStack`
+
+### Alternatywne rozwiązanie (jeśli `@ViewBuilder` nie wystarczy)
+
+Wyciągnąć tuple do osobnej funkcji:
+
+```swift
+private func focusBannerState() -> (color: Color, icon: String, text: String) {
+    let count = store.nextTasks.count
+    switch count {
+    case 0:
+        return (.blue, "plus.circle", "Add tasks from Backlog to start")
+    case 1 ... TaskStore.recommendedWipLimit:
+        return (.blue, "target", "\(count) of \(TaskStore.recommendedWipLimit) recommended slots used")
+    case 4 ... 5:
+        return (.orange, "exclamationmark.circle", "\(count) active - consider finishing some first")
+    default:
+        return (.red, "exclamationmark.triangle", "\(count) active - too many tasks reduces focus")
+    }
+}
+
+private var focusRuleBanner: some View {
+    let state = focusBannerState()
+    // ... reszta bez zmian
+}
+```
+
+> To drugie rozwiązanie też wymaga `@ViewBuilder` jeśli jest `let` w computed property — więc użyj rozwiązania 1.
