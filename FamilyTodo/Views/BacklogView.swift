@@ -281,8 +281,12 @@ private struct BacklogContent: View {
     }
 
     private func promoteItem(_ item: BacklogItem) {
-        guard !activeMembers.isEmpty else {
-            showBanner(.assigneeRequired)
+        if activeMembers.isEmpty {
+            if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
+                completePromotion(of: item, assigneeId: assigneeId)
+            } else {
+                showBanner(.assigneeRequired)
+            }
             return
         }
 
@@ -491,35 +495,36 @@ struct CategoryCard: View {
             .padding(.bottom, 12)
             .accessibilityIdentifier("backlogCategoryHeader_\(category.title)")
 
-            ForEach(items) { item in
-                BacklogItemRow(
-                    item: item,
-                    assigneeName: assigneeNameFor(item.assigneeId),
-                    onTap: { onEditItem(item) },
-                    onEdit: { onEditItem(item) },
-                    onAssign: { onAssignItem(item) },
-                    onPromote: { onPromoteItem(item) },
-                    onDelete: { onDeleteItem(item) }
-                )
-                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button {
-                        onPromoteItem(item)
-                    } label: {
-                        Label("Promote", systemImage: "arrow.up.circle")
+            VStack(spacing: 6) {
+                ForEach(items) { item in
+                    BacklogItemRow(
+                        item: item,
+                        assigneeName: assigneeNameFor(item.assigneeId),
+                        onTap: { onEditItem(item) },
+                        onEdit: { onEditItem(item) },
+                        onAssign: { onAssignItem(item) },
+                        onPromote: { onPromoteItem(item) },
+                        onDelete: { onDeleteItem(item) }
+                    )
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button {
+                            onPromoteItem(item)
+                        } label: {
+                            Label("Promote", systemImage: "arrow.up.circle")
+                        }
+                        .tint(.blue)
                     }
-                    .tint(.blue)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        onDeleteItem(item)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            onDeleteItem(item)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
-
-                Divider()
-                    .padding(.leading, 16)
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
 
             if isAddingItem {
                 HStack(spacing: 10) {
@@ -624,6 +629,7 @@ struct BacklogItemRow: View {
     let onAssign: () -> Void
     let onPromote: () -> Void
     let onDelete: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -680,8 +686,12 @@ struct BacklogItemRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : .white)
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             onTap()

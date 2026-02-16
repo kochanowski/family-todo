@@ -35,7 +35,12 @@ final class ShoppingListStore: ObservableObject {
     var toBuyItems: [ShoppingItem] {
         items
             .filter { !$0.isBought }
-            .sorted { $0.createdAt < $1.createdAt }
+            .sorted { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder {
+                    return lhs.sortOrder < rhs.sortOrder
+                }
+                return lhs.createdAt < rhs.createdAt
+            }
     }
 
     var boughtItems: [ShoppingItem] {
@@ -135,7 +140,8 @@ final class ShoppingListStore: ObservableObject {
             title: title,
             quantityValue: quantityValue,
             quantityUnit: quantityUnit,
-            isBought: false
+            isBought: false,
+            sortOrder: nextToBuySortOrder()
         )
 
         // Optimistic UI update (view handles animation)
@@ -236,6 +242,7 @@ final class ShoppingListStore: ObservableObject {
         } else {
             updatedItem.boughtAt = nil
             updatedItem.restockCount += 1
+            updatedItem.sortOrder = nextToBuySortOrder()
         }
         await updateItem(updatedItem)
     }
@@ -257,12 +264,92 @@ final class ShoppingListStore: ObservableObject {
         restored.isBought = false
         restored.boughtAt = nil
         restored.restockCount += 1
+        restored.sortOrder = nextToBuySortOrder()
         restored.updatedAt = Date()
         await updateItem(restored)
 
         for duplicate in matchingBought where duplicate.id != restored.id {
             await deleteItem(duplicate)
         }
+    }
+
+    // MARK: - Reordering
+
+    func moveToBuyItems(from source: IndexSet, to destination: Int, persist: Bool = true) {
+        var orderedItems = toBuyItems
+        orderedItems.move(fromOffsets: source, toOffset: destination)
+        applyToBuyOrder(orderedItems)
+
+        guard persist else { return }
+        _ = _Concurrency.Task {
+            await persistCurrentToBuyOrder()
+        }
+    }
+
+    func persistCurrentToBuyOrder() async {
+        let orderedItems = toBuyItems
+        updateCachedOrder(for: orderedItems)
+
+        guard isCloudSyncEnabled else { return }
+
+        for item in orderedItems {
+            do {
+                _ = try await cloudKit.saveShoppingItem(item)
+                markCachedItemSynced(itemId: item.id)
+            } catch {
+                self.error = error
+            }
+        }
+    }
+
+    private func applyToBuyOrder(_ orderedItems: [ShoppingItem]) {
+        var sortOrderByID: [UUID: Int] = [:]
+        for (index, item) in orderedItems.enumerated() {
+            sortOrderByID[item.id] = index
+        }
+
+        for index in items.indices {
+            guard let sortOrder = sortOrderByID[items[index].id] else { continue }
+            items[index].sortOrder = sortOrder
+            items[index].updatedAt = Date()
+        }
+    }
+
+    private func updateCachedOrder(for orderedItems: [ShoppingItem]) {
+        guard let context = modelContext else { return }
+
+        for item in orderedItems {
+            let itemId = item.id
+            let descriptor = FetchDescriptor<CachedShoppingItem>(
+                predicate: #Predicate { $0.id == itemId }
+            )
+            if let cached = try? context.fetch(descriptor).first {
+                cached.update(from: item)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+            }
+        }
+        try? context.save()
+    }
+
+    private func markCachedItemSynced(itemId: UUID) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.id == itemId }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            cached.syncStatusRaw = "synced"
+            cached.lastSyncedAt = Date()
+            try? context.save()
+        }
+    }
+
+    private func nextToBuySortOrder() -> Int {
+        let currentMax = items
+            .filter { !$0.isBought }
+            .map(\.sortOrder)
+            .max() ?? -1
+        return currentMax + 1
     }
 
     /// Deletes a single recent item (all bought duplicates matching the same title).

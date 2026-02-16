@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
@@ -54,6 +55,7 @@ private struct ShoppingListContent: View {
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
     @State private var isKeyboardVisible = false
+    @State private var draggedItem: ShoppingItem?
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -94,23 +96,45 @@ private struct ShoppingListContent: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(store.toBuyItems) { item in
-                                    if itemBeingRemoved != item.id {
-                                        if editingItemId == item.id {
-                                            ShoppingItemInlineEditRow(
-                                                text: $editingItemText,
-                                                onSubmit: { commitEditingItem(item) },
-                                                onCancel: cancelEditingItem
-                                            )
-                                            .accessibilityIdentifier("shoppingItemEdit_\(item.title)")
-                                        } else {
-                                            ShoppingItemRow(
-                                                item: item,
-                                                onToggle: { toggleItem(item) },
-                                                onEdit: { startEditingItem(item) }
-                                            )
-                                            .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                    Group {
+                                        if itemBeingRemoved != item.id {
+                                            if editingItemId == item.id {
+                                                ShoppingItemInlineEditRow(
+                                                    text: $editingItemText,
+                                                    onSubmit: { commitEditingItem(item) },
+                                                    onCancel: cancelEditingItem
+                                                )
+                                                .accessibilityIdentifier("shoppingItemEdit_\(item.title)")
+                                            } else {
+                                                ShoppingItemRow(
+                                                    item: item,
+                                                    onToggle: { toggleItem(item) },
+                                                    onEdit: { startEditingItem(item) }
+                                                )
+                                                .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                            }
                                         }
                                     }
+                                    .onDrag {
+                                        draggedItem = item
+                                        return NSItemProvider(object: item.id.uuidString as NSString)
+                                    }
+                                    .onDrop(
+                                        of: [UTType.text],
+                                        delegate: ShoppingItemReorderDropDelegate(
+                                            item: item,
+                                            items: store.toBuyItems,
+                                            draggedItem: $draggedItem,
+                                            onMove: { from, to in
+                                                store.moveToBuyItems(from: from, to: to, persist: false)
+                                            },
+                                            onDrop: {
+                                                _ = _Concurrency.Task {
+                                                    await store.persistCurrentToBuyOrder()
+                                                }
+                                            }
+                                        )
+                                    )
                                 }
 
                                 // Rapid entry row (stable at bottom, no insert animation)
@@ -728,12 +752,47 @@ private struct RestockItemRow: View {
                     .foregroundStyle(.blue)
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 6)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+private struct ShoppingItemReorderDropDelegate: DropDelegate {
+    let item: ShoppingItem
+    let items: [ShoppingItem]
+    @Binding var draggedItem: ShoppingItem?
+    let onMove: (IndexSet, Int) -> Void
+    let onDrop: () -> Void
+
+    func dropEntered(info _: DropInfo) {
+        guard
+            let draggedItem,
+            draggedItem.id != item.id,
+            let fromIndex = items.firstIndex(where: { $0.id == draggedItem.id }),
+            let toIndex = items.firstIndex(where: { $0.id == item.id })
+        else {
+            return
+        }
+
+        onMove(
+            IndexSet(integer: fromIndex),
+            toIndex > fromIndex ? toIndex + 1 : toIndex
+        )
+    }
+
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        draggedItem = nil
+        onDrop()
+        HapticManager.lightTap()
+        return true
     }
 }
 

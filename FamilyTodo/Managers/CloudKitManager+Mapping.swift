@@ -323,6 +323,7 @@ extension CloudKitManager {
             record["boughtAt"] = boughtAt as CKRecordValue
         }
         record["restockCount"] = item.restockCount as CKRecordValue
+        record["sortOrder"] = item.sortOrder as CKRecordValue
         record["createdAt"] = item.createdAt as CKRecordValue
         record["updatedAt"] = item.updatedAt as CKRecordValue
         return record
@@ -346,6 +347,10 @@ extension CloudKitManager {
             record["restockCount"] as? Int
                 ?? (record["restockCount"] as? Int64).map(Int.init)
                 ?? 0
+        let sortOrderValue =
+            record["sortOrder"] as? Int
+                ?? (record["sortOrder"] as? Int64).map(Int.init)
+                ?? 0
 
         return ShoppingItem(
             id: id,
@@ -356,6 +361,7 @@ extension CloudKitManager {
             isBought: isBoughtValue == 1,
             boughtAt: record["boughtAt"] as? Date,
             restockCount: restockCountValue,
+            sortOrder: sortOrderValue,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

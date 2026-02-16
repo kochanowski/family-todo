@@ -25,8 +25,11 @@ final class TaskStore: ObservableObject {
         syncMode == .cloud
     }
 
-    /// WIP limit per user (max 3 tasks in "Next")
-    static let wipLimit = 3
+    /// Recommended WIP limit per user (soft limit, not blocking).
+    static let recommendedWipLimit = 3
+
+    /// Backward-compatible alias used in older call sites/tests.
+    static let wipLimit = recommendedWipLimit
 
     enum NextTransitionValidation: Equatable {
         case ok
@@ -55,18 +58,34 @@ final class TaskStore: ObservableObject {
             .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
 
+    /// Recently completed tasks shown on Tasks tab (last 24h).
+    var recentlyDoneTasks: [Task] {
+        doneTasks.filter { task in
+            guard let completedAt = task.completedAt else { return true }
+            return completedAt > Date().addingTimeInterval(-86400)
+        }
+    }
+
+    /// Archived completed tasks shown in More -> Completed Tasks (older than 24h).
+    var archivedDoneTasks: [Task] {
+        doneTasks.filter { task in
+            guard let completedAt = task.completedAt else { return false }
+            return completedAt <= Date().addingTimeInterval(-86400)
+        }
+    }
+
     /// Validate if task can enter "Next" state.
     func validateNextTransition(assigneeId: UUID?, excludingTaskId: UUID? = nil) -> NextTransitionValidation {
         guard let assigneeId else { return .assigneeRequired }
-        let currentCount = tasks.filter {
-            $0.status == .next &&
-                $0.assigneeId == assigneeId &&
-                $0.id != excludingTaskId
-        }.count
-        guard currentCount < Self.wipLimit else {
-            return .wipLimitReached(current: currentCount, limit: Self.wipLimit)
-        }
+        _ = excludingTaskId
+        _ = assigneeId
+        // Soft limit: transitions are allowed; UI communicates overload via color zones.
         return .ok
+    }
+
+    /// Count of active Next tasks for a specific assignee.
+    func nextTaskCount(for assigneeId: UUID) -> Int {
+        tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
     }
 
     /// Backward-compatible helper for legacy call sites.
@@ -153,7 +172,7 @@ final class TaskStore: ObservableObject {
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
-        // Check WIP limit
+        // Validate transition constraints (assignee required for Next).
         if status == .next {
             let validation = validateNextTransition(assigneeId: assigneeId)
             guard validation == .ok else {
@@ -227,7 +246,7 @@ final class TaskStore: ObservableObject {
         var updatedTask = task
         updatedTask.updatedAt = Date()
 
-        // Check WIP limit if moving to next
+        // Validate transition constraints if moving to Next.
         let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
         if task.status == .next {
             let validation = validateNextTransition(assigneeId: wipAssigneeId, excludingTaskId: task.id)
@@ -286,6 +305,8 @@ final class TaskStore: ObservableObject {
 
         if status == .done {
             updatedTask.completedAt = Date()
+        } else if task.status == .done {
+            updatedTask.completedAt = nil
         }
 
         return await updateTask(updatedTask)
@@ -367,7 +388,7 @@ enum TaskStoreError: LocalizedError, Equatable {
         case .assigneeRequired:
             "Assign this task before moving it to Next."
         case .wipLimitReached:
-            "WIP limit reached. Complete or move existing tasks before adding more to Next."
+            "You are above the recommended active task count. Consider finishing some tasks first."
         }
     }
 }

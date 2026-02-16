@@ -13,6 +13,7 @@ final class CachedShoppingItem {
     var isBought: Bool
     var boughtAt: Date?
     var restockCount: Int
+    var sortOrder: Int
     var createdAt: Date
     var updatedAt: Date
 
@@ -31,6 +32,7 @@ final class CachedShoppingItem {
         isBought = item.isBought
         boughtAt = item.boughtAt
         restockCount = item.restockCount
+        sortOrder = item.sortOrder
         createdAt = item.createdAt
         updatedAt = item.updatedAt
         syncStatusRaw = "synced"
@@ -45,6 +47,7 @@ final class CachedShoppingItem {
         isBought = item.isBought
         boughtAt = item.boughtAt
         restockCount = item.restockCount
+        sortOrder = item.sortOrder
         createdAt = item.createdAt
         updatedAt = item.updatedAt
         lastSyncedAt = Date()
@@ -61,6 +64,7 @@ final class CachedShoppingItem {
             isBought: isBought,
             boughtAt: boughtAt,
             restockCount: restockCount,
+            sortOrder: sortOrder,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

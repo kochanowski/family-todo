@@ -1,7 +1,7 @@
 # Final Plan v1 (`final-TODO.md`) — P0+P1 Execution Roadmap
 
 ## Summary
-To jest plan wykonawczy po analizie `claude-codex-TODO.md` i aktualnego kodu.  
+To jest plan wykonawczy po analizie `claude-codex-TODO.md` i aktualnego kodu.
 Zakres: **P0 + P1** (bez P2), żeby domknąć pełne działanie produktu i stabilny release.
 
 ## Korekty względem `claude-codex-TODO.md`

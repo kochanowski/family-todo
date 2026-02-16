@@ -58,6 +58,17 @@ struct MoreView: View {
                             .padding(.leading, 52)
 
                         NavigationLink {
+                            CompletedTasksView()
+                        } label: {
+                            MoreRow(icon: "checkmark.circle", title: "Completed Tasks", tint: .green)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("CompletedTasks")
+
+                        Divider()
+                            .padding(.leading, 52)
+
+                        NavigationLink {
                             SettingsView()
                         } label: {
                             MoreRow(icon: "gear", title: "Settings")
@@ -552,6 +563,80 @@ struct RepetitiveTasksView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale.current
         return formatter.weekdaySymbols
+    }
+}
+
+struct CompletedTasksView: View {
+    @EnvironmentObject private var userSession: UserSession
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Group {
+            if let householdId = userSession.currentHouseholdID {
+                CompletedTasksContent(householdId: householdId, modelContext: modelContext)
+            } else {
+                ContentUnavailableView {
+                    Label("No Household", systemImage: "house")
+                } description: {
+                    Text("Join or create a household to see completed tasks.")
+                }
+            }
+        }
+    }
+}
+
+private struct CompletedTasksContent: View {
+    @StateObject private var store: TaskStore
+    @EnvironmentObject private var userSession: UserSession
+
+    init(householdId: UUID, modelContext: ModelContext) {
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(householdId)
+        _store = StateObject(wrappedValue: taskStore)
+    }
+
+    var body: some View {
+        Group {
+            if store.archivedDoneTasks.isEmpty {
+                ContentUnavailableView {
+                    Label("No Archived Tasks", systemImage: "checkmark.circle")
+                } description: {
+                    Text("Completed tasks older than 24h appear here.")
+                }
+            } else {
+                List {
+                    ForEach(store.archivedDoneTasks) { task in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(task.title)
+                                .font(.system(size: 15))
+                                .strikethrough(true)
+                                .foregroundStyle(.secondary)
+
+                            if let notes = task.notes, !notes.isEmpty {
+                                Text(notes)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(2)
+                            }
+
+                            if let completedAt = task.completedAt {
+                                Text(completedAt, style: .relative)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+        .navigationTitle("Completed Tasks")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            store.setSyncMode(userSession.syncMode)
+            await store.loadTasks()
+        }
     }
 }
 

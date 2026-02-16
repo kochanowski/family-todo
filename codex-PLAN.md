@@ -1,201 +1,152 @@
-# Plan Implementacji: HousePulse Full Flow (Tasks, Backlog, More/Settings, Household & Invite)
+# Plan v5: Uspojnienie Backlog→Tasks, WIP=3, Glass i Settings (decision-complete)
 
 ## Summary
-1. Na podstawie aktualnego kodu: Shopping jest prawie kompletne, ale pełny produkt nadal blokują luki w Tasks, Backlog↔More, Household/Invite i Settings.
-2. Kluczowe braki: `CreateHouseholdView.joinHousehold()` jest TODO, `CategoriesManagementView` działa tylko lokalnie, `RepetitiveTasksView` to placeholder, `SettingsView` nie ma realnego sign out, a walidacje ról w `MemberStore` są niewymuszone.
-3. Plan docelowy: domknąć pełny flow użytkownika od onboardingu i stworzenia/dołączenia household, przez codzienną pracę na Tasks/Backlog, po zarządzanie household i ustawieniami.
-4. W tym trybie plan jest dostarczony inline; docelowy artefakt do zapisania: `codex-TODO.md`.
+Na bazie review kodu i Twoich decyzji ustalamy finalny kierunek:
+1. `Tasks` przechodzi na model **Backlog-only intake**: nowe zadania tworzymy w `Backlog`, a do aktywnych (`NEXT`) trafiaja przez promocje/przydzial.
+2. Limit WIP jest **twardy per osoba**: `NEXT` wymaga assignee i max `3` aktywne taski na osobe.
+3. Ostrzezenia WIP: **inline banner + blokada akcji** (bez dodawania 4. taska).
+4. `Rooms/Areas` usuwamy z produktu (UI + entrypointy), ale zachowujemy kompatybilnosc danych.
+5. `Repetitive Tasks` tworzy taski do `Tasks.Backlog` z oznaczeniem recurring; `Custom` dostaje realna konfiguracje.
+6. `Add item` ujednolicamy jako **inline-first** (Shopping + Backlog), CTA traktujemy jako skrot, nie osobny model.
+7. Naprawiamy `Settings` overlap i tab bar glass: chowamy dolne menu na ekranach detail + poprawiamy iOS26 glass transition.
+
+## Research Findings (stan obecny)
+1. `SettingsView` jest `List` bez dolnego insettingu pod custom tab bar; dlatego `Sign Out` wpada pod dolne menu.
+2. W `FloatingTabBar` iOS26 jest tylko przesuwany indicator z `.glassEffect`, ale bez struktury transition (`glassEffectID`/`matchedGeometry`), przez co efekt "kropli" jest slaby.
+3. `TasksView` nadal ma `Add task` i tworzy task bez assignee; obecny `TaskStore.canMoveToNext` zwraca `true` dla `nil assignee`, wiec WIP jest omijany.
+4. `BacklogStore.promoteItemToTask` usuwa item po promocji i opiera fallback o `store.error`; semantyka nie jest atomowa dla blokad WIP.
+5. `MoreView` nadal ma `Rooms / Areas` i `AreasManagementView`.
+6. `RepetitiveTasksView` dla `Frequency = Custom` nie pokazuje dodatkowych ustawien; UX sprawia wrazenie "nic sie nie dzieje".
 
 ## Important API / Interface Changes
-1. `FamilyTodo/Stores/HouseholdStore.swift`
-- Dodać:
-`renameCurrentHousehold(_:)`
-`leaveCurrentHousehold(userId:)`
-`deleteCurrentHousehold(requestedBy:)`
-`loadCurrentHouseholdAndMembership(userId:)`
-- Doprecyzować `joinHousehold(inviteCode:userId:displayName:)` o walidację błędów i pełny refresh danych po dołączeniu.
-2. `FamilyTodo/Stores/MemberStore.swift`
-- Wymusić reguły ról:
-tylko owner może zmieniać role i usuwać członków,
-zawsze minimum 1 owner,
-brak możliwości usunięcia samego siebie bez przekazania ownership.
-3. `FamilyTodo/Stores/TaskStore.swift`
-- Rozszerzyć API edycji:
-`createTask(...)` już jest, dodać pełny edit contract dla assignee/dueDate/notes/status z walidacją WIP.
-- Dodać operację promo z backlogu:
-`createTaskFromBacklogItem(...)`.
-4. `FamilyTodo/Stores/BacklogStore.swift`
-- Dodać:
-`renameCategory(...)`
-`reorderCategories(...)`
-`updateItem(...)`
-`promoteItemToTask(...)`.
-5. `FamilyTodo/Stores/RecurringChoreStore.swift` (nowy)
-- CRUD dla cyklicznych zadań + wyliczanie `nextScheduledDate`.
-6. `FamilyTodo/Views/MoreView.swift`
-- `CategoriesManagementView` przepiąć na `BacklogStore` (usunąć lokalne `@State [String]`).
-- `RepetitiveTasksView` zastąpić realnym managerem recurring tasks.
-- `SettingsView` podpiąć pod realne akcje sesji i notyfikacji.
-7. `FamilyTodo/Views/Onboarding/CreateHouseholdView.swift`
-- Implementacja realnego join flow z kodem zaproszenia.
-8. `FamilyTodo/FamilyTodoApp.swift`
-- Rozszerzyć schema o `CachedRecurringChore` (i opcjonalnie `CachedArea`, jeśli Areas wejdą do scope).
-9. `FamilyTodo/Views/Components/FloatingTabBar.swift`
-- Domknąć widoczny glass transition (jedna ruchoma warstwa indicatora, iOS 26 path bez tłumiących warstw nad glass).
+1. `FamilyTodo/Views/Components/FloatingTabBar.swift`
+- Dodac prawdziwy iOS26 transition:
+  - `GlassEffectContainer`
+  - `glassEffectID("activeTabDroplet", in: namespace)`
+  - `glassEffectTransition(.matchedGeometry)`
+- iOS17-25 fallback zostaje material + matched geometry.
+- Zachowac rowne hit area tabow i `allowsHitTesting(false)` dla warstw dekoracyjnych.
 
-## Implementation Plan
+2. `FamilyTodo/ContentView.swift` + nowy helper (np. `FamilyTodo/Views/Components/TabBarVisibility.swift`)
+- Wprowadzic preference-key do sterowania widocznoscia dolnego menu:
+  - `appTabBarVisibility(_ visible: Bool)`
+- `MainAppView` pokazuje tab bar tylko gdy:
+  - klawiatura schowana
+  - i aktywny ekran zgadza sie na widocznosc tab bara.
+- Detail screens (`Settings`, `Profile`, `Categories`, `RepetitiveTasks`) ustawiaja `appTabBarVisibility(false)`.
 
-## Faza 0: Spójny stan sesji i household (P0)
-1. Ujednolicić bootstrap stanu household:
-- `RootView`/`ContentView` ma zawsze jeden punkt prawdy: `UserSession.currentHouseholdID`.
-- Po zalogowaniu lub starcie guest: `HouseholdStore.loadCurrentHouseholdAndMembership(userId:)`.
-2. Zastąpić rozproszone fallbacki “No Household Selected” przez `GuidedEmptyStateView` w:
-`FamilyTodo/Views/ShoppingListView.swift`
-`FamilyTodo/Views/TasksView.swift`
-`FamilyTodo/Views/BacklogView.swift`.
-3. Usunąć funkcjonalne duplikaty onboardingu:
-- `FamilyTodo/Views/OnboardingView.swift` jest legacy i nie jest używany przez `RootView`; przenieść do docs/legacy planu lub usunąć po potwierdzeniu.
+3. `FamilyTodo/Views/TasksView.swift`
+- Usunac tworzenie taska z Tasks (`Add task` CTA + add sheet).
+- `Tasks` staje sie ekranem wykonawczym:
+  - sekcje: `NEXT`, `BACKLOG` (tylko taski systemowe/recurring), `DONE`.
+- Dla akcji przejscia do `NEXT`: wymagany assignee.
 
-## Faza 1: Full flow Tasks (P0)
-1. Dodać `TaskDetailSheet`:
-- edycja `title`, `status`, `assignee`, `dueDate`, `notes`.
-- szybki toggle done zostaje na checkboxie, ale tap w treść wiersza otwiera detail.
-2. W `TasksView`:
-- sekcje: Next, Backlog, Done (obecnie UI skupia się na Next/Done).
-- badge assignee i due-date (today/overdue) w wierszu.
-3. Wymusić WIP=3 w całym flow:
-- tworzenie,
-- edycja statusu do `.next`,
-- promocja z backlogu.
-4. Notyfikacje:
-- permission request dopiero przy ustawieniu due date albo aktywacji digest/suggestions.
+4. `FamilyTodo/Stores/TaskStore.swift`
+- Zmienic walidacje WIP:
+  - `canMoveToNext(assigneeId:)` zwraca `false` dla `nil` przy statusie `.next`.
+- Dodac jawny wynik walidacji (np. enum):
+  - `.ok`
+  - `.assigneeRequired`
+  - `.wipLimitReached(current: Int, limit: Int)`
+- `createTask` i `updateTask` zwracaja ten wynik (lub rzucaja typowany blad), zamiast polegania na `error` side effect.
 
-## Faza 2: Full flow Backlog (P0)
-1. Utrzymać category-first model:
-- item zawsze należy do kategorii.
-2. Dodać pełne operacje:
-- rename category,
-- reorder categories,
-- edycja itemu (title/notes),
-- usuwanie itemu,
-- confirm kasowania kategorii z itemami (już częściowo jest, trzeba utrzymać też w More).
-3. Dodać flow “Promote to Task”:
-- swipe action na backlog item,
-- tworzy task (domyślnie `.backlog` lub `.next` wg decyzji UX; default: `.next` jeśli WIP pozwala, inaczej `.backlog`),
-- usuwa/promuje item z backlogu.
+5. `FamilyTodo/Stores/BacklogStore.swift`
+- `promoteItemToTask` musi byc atomowe i jawne:
+  - przyjmuje `assigneeId`
+  - zwraca `PromotionResult` (`success`, `assigneeRequired`, `wipLimitReached`, `failed`)
+  - usuwa `BacklogItem` **tylko po sukcesie** utworzenia taska.
+- UI backlogu pokazuje inline banner przy blokadzie WIP.
 
-## Faza 3: More i Settings jako realne centrum aplikacji (P0)
-1. `More > Backlog Categories`:
-- przepięcie na `BacklogStore` danego `householdId`, zero lokalnego stanu.
-- pełny sync z zakładką Backlog.
-2. `More > Repetitive Tasks`:
-- wdrożenie widoku listy recurring chores + Add/Edit sheet.
-3. `More > Profile`:
-- household name,
-- member list,
-- wejście do `MemberManagementView`,
-- akcje ownera: invite, rename household, transfer ownership, remove member.
-4. `More > Settings`:
-- Appearance: zostaje.
-- Toggles: celebrations/suggestions zostają, ale podpięte do trwałej konfiguracji.
-- Notifications sekcja: task reminders, digest, sound.
-- Sign out: realne wywołanie `userSession.signOut()` + reset household selection + cleanup subscriptions.
+6. `FamilyTodo/Views/BacklogView.swift`
+- Dodac flow przydzialu przy promocji:
+  - np. sheet "Assign to" (member picker) przed promocja do `NEXT`.
+- `Add item` pozostaje inline per kategoria, ale stylowo zrownany z Shopping rapid-entry tokens (spacing, typography, icon sizing).
 
-## Faza 4: Shared household + invitation end-to-end (P0)
-1. Owner flow:
-- create household,
-- open invite (`ShareInviteView`),
-- wysyła link/kod.
-2. Joiner flow:
-- `CreateHouseholdView` join sheet realnie wywołuje `householdStore.joinHousehold(...)`.
-- Po sukcesie:
-`userSession.setCurrentHousehold(...)`,
-zamknięcie onboardingu,
-pełny reload stores.
-3. Membership consistency:
-- po join/load członkowie i role są odświeżane z cloud/cache.
-4. Error UX:
-- invalid invite code,
-- cloud disabled (`HPCloudKitEnabled=NO`),
-- notAuthenticated,
-- network failure.
-- Każdy przypadek z czytelnym komunikatem i recovery action.
+7. `FamilyTodo/Views/MoreView.swift`
+- Usunac link i ekran `Rooms / Areas`.
+- `SettingsView`: gwarantowany dolny odstęp (defensive), ale glowny fix to chowanie tab bara na detail.
+- `RepetitiveTasksView`:
+  - dla `Custom` pokazac realne pola (`Every N days`, `Stepper`/input).
+  - walidacja i podglad "next run".
 
-## Faza 5: Recurring chores i automatyzacja (P1)
-1. Dodać `RecurringChoreStore` + cache + sync.
-2. Wdrożyć generator cyklicznych tasków:
-- uruchamiany przy app foreground/launch,
-- tworzy taski po `nextScheduledDate`,
-- aktualizuje `lastGeneratedDate` i kolejny termin.
-3. Powiązać task z recurring source (`Task.recurringChoreId` już istnieje).
+8. `FamilyTodo/Models/LegacyStubs.swift` / scheduler
+- `ChoreScheduler` tworzy taski z:
+  - `taskType = .recurring`
+  - `recurringChoreId = chore.id`
+  - `status = .backlog`
+- `Custom` w v1: interpretacja jako "co N dni" (bez dodatkowych jednostek), zeby uniknac migracji modelu.
 
-## Faza 6: UX polish i stabilność interakcji (P1)
-1. Tab bar:
-- finalny glass transition na iOS 26+,
-- fallback material na iOS 17-25,
-- jednolity hit-area i brak nakładania z CTA/keyboard.
-2. Keyboard/chrome:
-- przy aktywnej klawiaturze chowamy floating tab bar + CTA (zachowanie natywne iOS).
-3. Accessibility:
-- pełne `accessibilityIdentifier` dla kluczowych flow (invite, member role change, recurring CRUD, backlog promote).
+9. `codex-TODO.md`
+- Docelowo zapisac ten plan jako single source dla tej iteracji (sekcje: P0/P1, DoD, test matrix, rollout).
 
-## Faza 7: Testy i release gate (P0/P1)
-1. Unit tests:
-- `HouseholdStore`: create/join/rename/leave/delete.
-- `MemberStore`: role guardrails.
-- `TaskStore`: WIP + backlog promotion.
-- `BacklogStore`: reorder/rename/promotion.
-- `RecurringChoreStore`: schedule calculations.
-2. UI tests:
-- onboarding create/join,
-- invite flow (w trybie cloud-enabled lane),
-- tasks full CRUD + due date + assignee,
-- backlog categories management z More i Backlog consistency,
-- settings sign out.
-3. CI:
-- PR: build+lint (jak obecnie).
-- Nightly/manual: pełne testy, plus lane `sync-enabled` dla household sharing.
-- Regression gate: brak merge jeśli E2E household/invite fail.
+## Implementation Steps (kolejnosc)
+1. P0 UX blocker:
+- Tab bar visibility preference + hide on detail screens.
+- Weryfikacja, ze `Sign Out` nie nachodzi na dolne menu.
 
-## Proponowane funkcje “ciekawe dla użytkownika” (P2)
-1. “Weekly Home Pulse”:
-- neutralny, nie-rywalizacyjny tygodniowy digest: co zrobione, co czeka.
-2. “Smart Restock Suggestions”:
-- na podstawie częstotliwości `restockCount`, podpowiedzi przy tworzeniu listy.
-3. “Backlog to Sprint”:
-- jednym kliknięciem wybór 1-3 backlog itemów jako plan tygodnia.
-4. Widgets:
-- small: Next tasks,
-- medium: Shopping To Buy.
-5. Siri Shortcuts / App Intents:
-- “Add milk to shopping list”, “What are my next tasks?”.
+2. P0 Product consistency:
+- Usunac `Add task` z `TasksView`.
+- Wdrozyc backlog-only intake + promocja z assignee pickerem.
+
+3. P0 WIP enforcement:
+- Refactor `TaskStore` walidacji i `BacklogStore.promoteItemToTask`.
+- Banner + blokada przy 4. tasku.
+
+4. P1 Recurring:
+- `Custom` frequency UI + walidacja.
+- Scheduler tworzy recurring taski do `Tasks.Backlog` z powiazaniem `recurringChoreId`.
+
+5. P1 Simplification:
+- Usunac `Rooms/Areas` z More.
+- Zostawic `areaId` technicznie w modelach (compat), bez UI.
+
+6. P1 Visual polish:
+- iOS26 glass transition refactor (GlassEffectContainer + glassEffectID + matchedGeometry).
+- fallback iOS17-25 bez regresji.
+
+7. Delivery:
+- `pre-commit run -a`
+- poprawki
+- commit/push.
 
 ## Test Cases and Scenarios
-1. `Onboarding_CreateHousehold_EndToEnd`
-- onboarding -> sync choice -> create -> main app z aktywnym household.
-2. `Onboarding_JoinHousehold_EndToEnd`
-- onboarding -> join code -> household active -> data visible.
-3. `InviteFlow_OwnerToMember`
-- owner generuje share, drugi user dołącza, member pojawia się w `MemberStore`.
-4. `Tasks_FullCRUD_WithWIP`
-- create/edit/complete/reopen/delete + blokada >3 next.
-5. `Backlog_FullCRUD_AndPromote`
-- add/rename/reorder/delete category + add/edit/delete item + promote do task.
-6. `More_CategoriesSync`
-- zmiana kategorii w More widoczna natychmiast w Backlog.
-7. `Settings_SignOut_AndSessionReset`
-- sign out czyści household context i przenosi do sign-in/onboarding.
-8. `RecurringChore_Generation`
-- task generuje się przy osiągnięciu `nextScheduledDate`.
-9. `TabBar_GlassAndHitArea`
-- widoczna animacja glass i poprawne klikanie wszystkich tabów.
-10. `Keyboard_ChromeBehavior`
-- przy klawiaturze tab bar i CTA ukryte, brak overlapu.
+1. `Settings_SignOutVisible_NoOverlap`
+- wejscie More -> Settings; `Sign Out` w pelni widoczne i klikalne; tab bar ukryty na detail.
+
+2. `TabBar_GlassTransition_iOS26`
+- na root tabach widoczny plynny ruch "droplet" miedzy tabami, bez utraty hit-area.
+
+3. `Tasks_NoDirectCreate`
+- w `Tasks` brak przycisku tworzenia nowych taskow.
+
+4. `Backlog_PromoteRequiresAssignee`
+- promocja bez assignee blokowana z komunikatem.
+- po wyborze assignee sukces tworzy task w `NEXT`.
+
+5. `WIP_PerAssignee_Strict`
+- przy 3 aktywnych taskach dla osoby:
+  - 4. promocja do `NEXT` zablokowana
+  - widoczny inline banner
+  - BacklogItem nie znika.
+
+6. `Recurring_CustomFrequency_Works`
+- `Custom` umozliwia ustawienie `N`.
+- scheduler generuje task wg interwalu.
+
+7. `Recurring_TaskMetadata`
+- wygenerowany task ma `taskType = .recurring` i `recurringChoreId`.
+
+8. `More_NoAreasEntry`
+- brak pozycji `Rooms/Areas` w More.
+
+9. `AddItem_InlineConsistency`
+- Shopping i Backlog maja spojny inline pattern dodawania (spojne spacing/typografia/hit area).
 
 ## Assumptions and Defaults
-1. iOS target zostaje 17; Liquid Glass tylko warunkowo dla iOS 26+.
-2. Jednocześnie wspieramy tylko 1 aktywny household na sesję użytkownika (multi-household jako późniejsza rozbudowa).
-3. Member delete to semantyka soft-deactivate (`isActive=false`) tam, gdzie potrzebna historia; hard delete tylko dla cleanup bez historii.
-4. WIP limit 3 jest nienegocjowalny i obowiązuje wszystkie wejścia do statusu `next`.
-5. Cloud sharing działa tylko przy `syncMode == .cloud`; guest mode ma jawny fallback i bez invite.
-6. Zakres “fully działa” = pełne flow: onboarding + household/invite + tasks/backlog + more/settings + recurring basics + test gates.
+1. iOS target zostaje 17; pelny Liquid Glass transition wymagamy dla iOS26+.
+2. WIP=3 to twarda regula produktowa per assignee.
+3. `NEXT` bez assignee jest niedozwolone.
+4. `Tasks.Backlog` pozostaje dla taskow systemowych/recurring; manualny intake tylko przez `Backlog` (kategorie).
+5. `Rooms/Areas` usuwamy z produktu na UI, ale nie robimy teraz migracji usuwajacej stare pola z modeli.
+6. `Custom` recurrence v1 = "co N dni" (minimalna, czytelna implementacja bez migracji).
+7. Ten dokument jest docelowa trescia do `codex-TODO.md` w kroku implementacyjnym.

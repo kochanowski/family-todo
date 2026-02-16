@@ -42,6 +42,7 @@ private struct TasksContent: View {
     @State private var pendingNextTask: Task?
     @State private var selectedAssigneeIdForNext: UUID?
     @State private var activeBanner: InlineBanner?
+    @AppStorage("hasSeenCompletedTasksInfo") private var hasSeenCompletedTasksInfo = false
 
     @EnvironmentObject private var userSession: UserSession
 
@@ -77,11 +78,12 @@ private struct TasksContent: View {
                     if !store.nextTasks.isEmpty {
                         sectionHeader("NEXT")
 
-                        ForEach(store.nextTasks) { task in
+                        ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
                             if taskBeingCompleted != task.id {
                                 TaskRow(
                                     task: task,
                                     assigneeName: assigneeName(for: task),
+                                    wipZone: wipZone(for: index),
                                     onToggle: { toggleTask(task) },
                                     onOpenDetail: { selectedTask = task }
                                 )
@@ -98,6 +100,7 @@ private struct TasksContent: View {
                             TaskRow(
                                 task: task,
                                 assigneeName: assigneeName(for: task),
+                                wipZone: .normal,
                                 onToggle: { toggleTask(task) },
                                 onOpenDetail: { selectedTask = task }
                             )
@@ -114,18 +117,24 @@ private struct TasksContent: View {
                         }
                     }
 
-                    if !store.doneTasks.isEmpty {
+                    if !store.recentlyDoneTasks.isEmpty {
                         sectionHeader("COMPLETED")
 
-                        ForEach(store.doneTasks) { task in
+                        ForEach(store.recentlyDoneTasks) { task in
                             TaskRow(
                                 task: task,
                                 assigneeName: assigneeName(for: task),
+                                wipZone: .normal,
                                 onToggle: { toggleTask(task) },
                                 onOpenDetail: { selectedTask = task }
                             )
                             .rowInsertAnimation()
                             .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                        }
+
+                        if !hasSeenCompletedTasksInfo {
+                            completedTasksInfoBanner
+                                .padding(.top, 12)
                         }
                     }
                 }
@@ -214,7 +223,7 @@ private struct TasksContent: View {
             Text("Tasks")
                 .font(.system(size: 28, weight: .bold))
 
-            if store.nextTasks.isEmpty, !store.doneTasks.isEmpty {
+            if store.nextTasks.isEmpty, !store.recentlyDoneTasks.isEmpty {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(.green)
@@ -227,14 +236,26 @@ private struct TasksContent: View {
     }
 
     private var focusRuleBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "target")
-                .font(.system(size: 18))
-                .foregroundStyle(.blue)
+        let count = store.nextTasks.count
+        let state: (color: Color, icon: String, text: String) = switch count {
+        case 0:
+            (.blue, "plus.circle", "Add tasks from Backlog to start")
+        case 1 ... TaskStore.recommendedWipLimit:
+            (.blue, "target", "\(count) of \(TaskStore.recommendedWipLimit) recommended slots used")
+        case 4 ... 5:
+            (.orange, "exclamationmark.circle", "\(count) active - consider finishing some first")
+        default:
+            (.red, "exclamationmark.triangle", "\(count) active - too many tasks reduces focus")
+        }
 
-            Text("Focus on max 3 active tasks")
-                .font(.system(size: 14))
-                .foregroundStyle(.primary)
+        HStack(spacing: 12) {
+            Image(systemName: state.icon)
+                .font(.system(size: 18))
+                .foregroundStyle(state.color)
+
+            Text(state.text)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
 
             Spacer()
         }
@@ -242,14 +263,18 @@ private struct TasksContent: View {
         .padding(.vertical, 12)
         .background {
             RoundedRectangle(cornerRadius: 12)
-                .fill(.blue.opacity(0.1))
+                .fill(state.color.opacity(0.1))
         }
     }
 
     private func startTaskFromBacklog(_ task: Task) {
         let members = activeMembers
-        guard !members.isEmpty else {
-            showBanner(.assigneeRequired)
+        if members.isEmpty {
+            if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
+                moveTaskToNext(task, assigneeId: assigneeId)
+            } else {
+                showBanner(.assigneeRequired)
+            }
             return
         }
 
@@ -288,9 +313,17 @@ private struct TasksContent: View {
                     HapticManager.warning()
                     return
                 }
+                moveTaskToNext(task, assigneeId: existingAssignee)
+                return
             } else {
                 let members = activeMembers
-                if members.count == 1, let assigneeId = members.first?.id {
+                if members.isEmpty {
+                    if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
+                        moveTaskToNext(task, assigneeId: assigneeId)
+                    } else {
+                        showBanner(.assigneeRequired)
+                    }
+                } else if members.count == 1, let assigneeId = members.first?.id {
                     var updatedTask = task
                     updatedTask.assigneeId = assigneeId
                     updatedTask.assigneeIds = [assigneeId]
@@ -381,6 +414,48 @@ private struct TasksContent: View {
             .padding(.bottom, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private func wipZone(for index: Int) -> TaskRow.WipZone {
+        if index < TaskStore.recommendedWipLimit {
+            return .normal
+        }
+        if index < TaskStore.recommendedWipLimit + 2 {
+            return .warning
+        }
+        return .danger
+    }
+
+    private var completedTasksInfoBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 14))
+                .foregroundStyle(.blue)
+
+            Text("Completed tasks move to More -> Completed Tasks after 24h")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                withAnimation(WowAnimation.easeOut) {
+                    hasSeenCompletedTasksInfo = true
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.blue.opacity(0.08))
+        }
+    }
 }
 
 private struct InlineStatusBanner: View {
@@ -455,8 +530,15 @@ private struct AssigneePickerSheet: View {
 }
 
 struct TaskRow: View {
+    enum WipZone {
+        case normal
+        case warning
+        case danger
+    }
+
     let task: Task
     let assigneeName: String?
+    let wipZone: WipZone
     let onToggle: () -> Void
     let onOpenDetail: () -> Void
 
@@ -473,49 +555,70 @@ struct TaskRow: View {
                                 .foregroundStyle(.green)
                         }
                     }
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             Button(action: onOpenDetail) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.title)
-                        .font(.system(size: 15))
-                        .foregroundStyle(isCompleted ? .secondary : .primary)
-                        .strikethrough(isCompleted)
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(task.title)
+                            .font(.system(size: 15))
+                            .foregroundStyle(isCompleted ? .secondary : .primary)
+                            .strikethrough(isCompleted)
 
-                    HStack(spacing: 8) {
-                        if task.taskType == .recurring {
-                            Label("Recurring", systemImage: "repeat")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.purple)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.purple.opacity(0.12)))
-                        }
+                        HStack(spacing: 8) {
+                            if task.taskType == .recurring {
+                                Label("Recurring", systemImage: "repeat")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.purple)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.purple.opacity(0.12)))
+                            }
 
-                        if let dueDate = task.dueDate {
-                            dueDateLabel(dueDate)
-                        }
+                            if let dueDate = task.dueDate {
+                                dueDateLabel(dueDate)
+                            }
 
-                        if let assigneeName {
-                            Text(assigneeName)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.secondary.opacity(0.14)))
+                            if let assigneeName {
+                                Text(assigneeName)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.secondary.opacity(0.14)))
+                            }
                         }
                     }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 12)
+        .overlay(alignment: .leading) {
+            switch wipZone {
+            case .normal:
+                EmptyView()
+            case .warning:
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.orange)
+                    .frame(width: 3)
+            case .danger:
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.red)
+                    .frame(width: 3)
+            }
+        }
     }
 
     private var isCompleted: Bool {
