@@ -46,7 +46,26 @@ struct FamilyTodoApp: App {
                     fatalError("Could not create CI ModelContainer: \(error)")
                 }
             #else
-                fatalError("Could not create ModelContainer: \(error)")
+                // Recovery path for incompatible/corrupted local SwiftData store.
+                // This prevents app launch crash on migration failures in TestFlight production data.
+                print("⚠️ ModelContainer migration failed: \(error)")
+                print("⚠️ Destroying local store and retrying...")
+
+                let appSupportURL =
+                    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                        ?? URL(fileURLWithPath: NSTemporaryDirectory())
+                let defaultStoreURL = appSupportURL.appendingPathComponent("default.store")
+                let storePath = defaultStoreURL.path
+
+                for suffix in ["", "-shm", "-wal"] {
+                    try? FileManager.default.removeItem(atPath: storePath + suffix)
+                }
+
+                do {
+                    return try ModelContainer(for: schema, configurations: [modelConfiguration])
+                } catch {
+                    fatalError("Could not create ModelContainer after reset: \(error)")
+                }
             #endif
         }
     }()

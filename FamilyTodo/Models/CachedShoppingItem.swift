@@ -13,7 +13,7 @@ final class CachedShoppingItem {
     var isBought: Bool
     var boughtAt: Date?
     var restockCount: Int
-    var sortOrder: Int
+    var sortOrder: Int = 0
     var createdAt: Date
     var updatedAt: Date
 

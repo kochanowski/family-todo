@@ -1095,3 +1095,140 @@ private var focusRuleBanner: some View {
 ```
 
 > To drugie rozwiązanie też wymaga `@ViewBuilder` jeśli jest `let` w computed property — więc użyj rozwiązania 1.
+
+---
+
+## 🔴 CRASH Fix — App nie uruchamia się na iPhone (fatalError w ModelContainer)
+
+### Crash log
+
+```
+Incident:     2C628A62-E67B-4F90-ADD7-E413CC3F236B
+Device:       iPhone15,4 · iOS 26.2.1 · Build 238 (TestFlight)
+Launch→Crash: 0.57s
+
+Exception Type: EXC_BREAKPOINT (SIGTRAP)
+Thread 0 Crashed:
+0  libswiftCore.dylib
+1  HousePulse - closure #1 in variable initialization expression of
+                FamilyTodoApp.sharedModelContainer + 1132 (FamilyTodoApp.swift:49)
+2  HousePulse - FamilyTodoApp.init() + 24 (FamilyTodoApp.swift:13)
+```
+
+### Root cause
+
+**`CachedShoppingItem.sortOrder: Int` (L16) — brak wartości domyślnej.**
+
+`FamilyTodoApp.swift:36` tworzy `ModelContainer(for: schema, configurations:)`. SwiftData używa **lightweight auto-migration** (brak `VersionedSchema` / `MigrationPlan` w projekcie). Kiedy SwiftData próbuje dodać kolumnę `sortOrder INTEGER NOT NULL` do istniejącej tabeli SQLite, która ma wiersze — SQLite odmawia, bo `NOT NULL` bez `DEFAULT` jest niewykonalne dla istniejących rekordów.
+
+```
+SQLite error: "Cannot add a NOT NULL column with default value NULL"
+→ ModelContainer(for:configurations:) throws
+→ catch block (L37-50) → fatalError (L49)
+→ EXC_BREAKPOINT
+```
+
+**To dotyczy TYLKO użytkowników z istniejącymi danymi** (TestFlight / App Store). Nowe instalacje i CI (in-memory store) działają poprawnie — dlatego build przechodzi, ale app crashuje na iPhone.
+
+### Zmiana 1 — Dodać default do sortOrder (KRYTYCZNE)
+
+**Plik:** `FamilyTodo/Models/CachedShoppingItem.swift`
+
+**Linia 16:**
+
+```swift
+// OBECNE:
+var sortOrder: Int
+
+// NOWE:
+var sortOrder: Int = 0
+```
+
+To pozwala SwiftData na lightweight migration: `ALTER TABLE CachedShoppingItem ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0`.
+
+### Zmiana 2 — FamilyTodoApp: recovery zamiast fatalError (KRYTYCZNE)
+
+**Plik:** `FamilyTodo/FamilyTodoApp.swift`
+
+**Linie 35-51** — zamienić `fatalError` na resiliency path:
+
+```swift
+// OBECNE (linie 35-51):
+do {
+    return try ModelContainer(for: schema, configurations: [modelConfiguration])
+} catch {
+    #if CI
+        do {
+            return try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+            )
+        } catch {
+            fatalError("Could not create CI ModelContainer: \(error)")
+        }
+    #else
+        fatalError("Could not create ModelContainer: \(error)")
+    #endif
+}
+
+// NOWE:
+do {
+    return try ModelContainer(for: schema, configurations: [modelConfiguration])
+} catch {
+    #if CI
+        do {
+            return try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+            )
+        } catch {
+            fatalError("Could not create CI ModelContainer: \(error)")
+        }
+    #else
+        // Migration failed — destroy corrupt/incompatible store and retry.
+        // User loses local data but app can launch. Cloud data will re-sync.
+        print("⚠️ ModelContainer migration failed: \(error)")
+        print("⚠️ Destroying local store and retrying...")
+
+        let storeURL = modelConfiguration.url
+        let storePath = storeURL.path()
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(atPath: storePath + suffix)
+        }
+
+        do {
+            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            fatalError("Could not create ModelContainer after reset: \(error)")
+        }
+    #endif
+}
+```
+
+> **UWAGA:** `modelConfiguration.url` zwraca URL do pliku SQLite. Trzeba też usunąć `-shm` i `-wal` (WAL journal files). Jeśli `ModelConfiguration` nie expo url, użyj:
+> ```swift
+> let defaultURL = URL.applicationSupportDirectory
+>     .appending(path: "default.store")
+> ```
+
+### Zmiana 3 — Sprawdzić inne @Model klasy (OPCJONALNIE)
+
+Przeszukać wszystkie `@Model` klasy pod kątem nowych non-optional properties bez defaultów. Wynik skanowania:
+
+| Model | Property | Default? | Status |
+|-------|----------|----------|--------|
+| `CachedShoppingItem` | `sortOrder: Int` | ❌ BRAK | 🔴 CRASH |
+| `CachedTask` | `completedAt: Date?` | ✅ Optional | OK |
+| `CachedTask` | `completedById: String?` | ✅ Optional | OK |
+| `CachedTask` | `notes: String?` | ✅ Optional | OK |
+| Inne modele | — | ✅ | OK |
+
+**Tylko `CachedShoppingItem.sortOrder` wymaga naprawy.**
+
+### Zasada na przyszłość
+
+> **Każdy nowy property w `@Model` MUSI mieć:**
+> - wartość domyślną (`= 0`, `= ""`, `= false`), **LUB**
+> - być Optional (`Type?`)
+>
+> Inaczej SwiftData lightweight migration zawsze crashnie na istniejących użytkownikach.
