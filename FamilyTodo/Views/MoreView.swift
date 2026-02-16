@@ -7,87 +7,77 @@ struct MoreView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.appTabBarHeight) private var tabBarHeight
 
     var body: some View {
-        GeometryReader { _ in
-            let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight
-            )
+        VStack(spacing: 0) {
+            // Header
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
 
-            NavigationStack {
-                VStack(spacing: 0) {
-                    // Header
-                    header
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .padding(.bottom, 12)
-
-                    // Menu items
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            // Profile card
-                            NavigationLink {
-                                ProfileView()
-                            } label: {
-                                ProfileCard()
-                            }
-                            .buttonStyle(.plain)
-
-                            // Settings group
-                            VStack(spacing: 0) {
-                                NavigationLink {
-                                    if let householdId = userSession.currentHouseholdID {
-                                        CategoriesManagementView(householdId: householdId, modelContext: modelContext)
-                                    } else {
-                                        GuidedEmptyStateView()
-                                    }
-                                } label: {
-                                    MoreRow(icon: "folder", title: "Backlog Categories")
-                                }
-                                .buttonStyle(.plain)
-
-                                Divider()
-                                    .padding(.leading, 52)
-
-                                NavigationLink {
-                                    if let householdId = userSession.currentHouseholdID {
-                                        RepetitiveTasksView(householdId: householdId, modelContext: modelContext)
-                                    } else {
-                                        GuidedEmptyStateView()
-                                    }
-                                } label: {
-                                    MoreRow(icon: "repeat", title: "Repetitive Tasks")
-                                }
-                                .buttonStyle(.plain)
-
-                                Divider()
-                                    .padding(.leading, 52)
-
-                                NavigationLink {
-                                    SettingsView()
-                                } label: {
-                                    MoreRow(icon: "gear", title: "Settings")
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("Settings")
-                            }
-                            .tint(.primary)
-                            .background {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(cardBackground)
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, listBottomInset)
+            // Menu items
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Profile card
+                    NavigationLink {
+                        ProfileView()
+                    } label: {
+                        ProfileCard()
                     }
+                    .buttonStyle(.plain)
 
-                    Spacer()
+                    // Settings group
+                    VStack(spacing: 0) {
+                        NavigationLink {
+                            if let householdId = userSession.currentHouseholdID {
+                                CategoriesManagementView(householdId: householdId, modelContext: modelContext)
+                            } else {
+                                GuidedEmptyStateView()
+                            }
+                        } label: {
+                            MoreRow(icon: "folder", title: "Backlog Categories")
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+                            .padding(.leading, 52)
+
+                        NavigationLink {
+                            if let householdId = userSession.currentHouseholdID {
+                                RepetitiveTasksView(householdId: householdId, modelContext: modelContext)
+                            } else {
+                                GuidedEmptyStateView()
+                            }
+                        } label: {
+                            MoreRow(icon: "repeat", title: "Repetitive Tasks")
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+                            .padding(.leading, 52)
+
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            MoreRow(icon: "gear", title: "Settings")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("Settings")
+                    }
+                    .tint(.primary)
+                    .background {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(cardBackground)
+                    }
                 }
-                .background(Color.clear)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Header
@@ -282,7 +272,6 @@ struct ProfileView: View {
         } message: {
             Text(actionErrorMessage ?? "Unknown error")
         }
-        .appTabBarVisibility(false)
     }
 
     private func renameHousehold() {
@@ -433,7 +422,6 @@ struct CategoriesManagementView: View {
                 renamingCategory = nil
             }
         }
-        .appTabBarVisibility(false)
     }
 
     private func addCategory() {
@@ -558,7 +546,6 @@ struct RepetitiveTasksView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadChores()
         }
-        .appTabBarVisibility(false)
     }
 
     private var weekdayOptions: [String] {
@@ -573,7 +560,6 @@ struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
-    @Environment(\.appTabBarHeight) private var tabBarHeight
     @StateObject private var notificationSettings = NotificationSettingsStore()
 
     var body: some View {
@@ -679,11 +665,6 @@ struct SettingsView: View {
                 await syncDailyDigest()
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear
-                .frame(height: AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight))
-        }
-        .appTabBarVisibility(false)
     }
 
     private func signOut() {

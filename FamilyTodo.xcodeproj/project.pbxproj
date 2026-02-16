@@ -61,7 +61,6 @@
 		NEWFILE0000000000000004 /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000014 /* MoreView.swift */; };
 		NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000015 /* FloatingTabBar.swift */; };
 		NEWFILE0000000000000006 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000016 /* ToastView.swift */; };
-		B16D1481F4AC4BBBA1A66C01 /* TabBarVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16D1481F4AC4BBBA1A66C02 /* TabBarVisibility.swift */; };
 		NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000017 /* BacklogCategory.swift */; };
 		NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000018 /* LegacyStubs.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
@@ -143,7 +142,6 @@
 		NEWFILE0000000000000014 /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000015 /* FloatingTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingTabBar.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000016 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
-		B16D1481F4AC4BBBA1A66C02 /* TabBarVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarVisibility.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000017 /* BacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogCategory.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000018 /* LegacyStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyStubs.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
@@ -347,7 +345,6 @@
 			children = (
 				848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
 				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
-				B16D1481F4AC4BBBA1A66C02 /* TabBarVisibility.swift */,
 				NEWFILE0000000000000016 /* ToastView.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
@@ -524,7 +521,6 @@
 				NEWFILE0000000000000003 /* BacklogView.swift in Sources */,
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
 				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
-				B16D1481F4AC4BBBA1A66C01 /* TabBarVisibility.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
 				NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */,
 				NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */,

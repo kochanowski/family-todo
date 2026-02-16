@@ -53,10 +53,9 @@ private struct ShoppingListContent: View {
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
+    @State private var isKeyboardVisible = false
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.appTabBarHeight) private var tabBarHeight
-    @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -69,10 +68,8 @@ private struct ShoppingListContent: View {
             let listBottomInset =
                 isKeyboardVisible
                     ? CGFloat(16)
-                    : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
-            let floatingButtonInset = AppChromeMetrics.floatingButtonBottomInset(
-                tabBarHeight: tabBarHeight
-            )
+                    : AppChromeMetrics.compactCTAHeight + 28
+            let floatingButtonInset: CGFloat = 16
             let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
 
             ZStack(alignment: .bottomTrailing) {
@@ -165,6 +162,12 @@ private struct ShoppingListContent: View {
         .onChange(of: isKeyboardVisible) { _, visible in
             guard !visible, let editingItem = currentEditingItem else { return }
             commitEditingItem(editingItem)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
         }
         .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
             Button("Cancel", role: .cancel) {}

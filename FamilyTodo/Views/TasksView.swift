@@ -44,8 +44,6 @@ private struct TasksContent: View {
     @State private var activeBanner: InlineBanner?
 
     @EnvironmentObject private var userSession: UserSession
-    @Environment(\.appTabBarHeight) private var tabBarHeight
-    @Environment(\.appKeyboardVisible) private var isKeyboardVisible
 
     init(householdId: UUID, modelContext: ModelContext) {
         let taskStore = TaskStore(modelContext: modelContext)
@@ -55,74 +53,32 @@ private struct TasksContent: View {
     }
 
     var body: some View {
-        GeometryReader { _ in
-            let listBottomInset = isKeyboardVisible
-                ? CGFloat(16)
-                : AppChromeMetrics.contentBottomInset(tabBarHeight: tabBarHeight)
+        let listBottomInset: CGFloat = 16
 
-            VStack(spacing: 0) {
-                header
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+
+            focusRuleBanner
+                .padding(.horizontal, 20)
+                .padding(.bottom, activeBanner == nil ? 16 : 8)
+
+            if let activeBanner {
+                InlineStatusBanner(text: activeBanner.text)
                     .padding(.horizontal, 20)
-                    .padding(.top, 16)
                     .padding(.bottom, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
-                focusRuleBanner
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, activeBanner == nil ? 16 : 8)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if !store.nextTasks.isEmpty {
+                        sectionHeader("NEXT")
 
-                if let activeBanner {
-                    InlineStatusBanner(text: activeBanner.text)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 12)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if !store.nextTasks.isEmpty {
-                            sectionHeader("NEXT")
-
-                            ForEach(store.nextTasks) { task in
-                                if taskBeingCompleted != task.id {
-                                    TaskRow(
-                                        task: task,
-                                        assigneeName: assigneeName(for: task),
-                                        onToggle: { toggleTask(task) },
-                                        onOpenDetail: { selectedTask = task }
-                                    )
-                                    .rowInsertAnimation()
-                                    .accessibilityIdentifier("taskRow_\(task.title)")
-                                }
-                            }
-                        }
-
-                        if !store.backlogTasks.isEmpty {
-                            sectionHeader("BACKLOG")
-
-                            ForEach(store.backlogTasks) { task in
-                                TaskRow(
-                                    task: task,
-                                    assigneeName: assigneeName(for: task),
-                                    onToggle: { toggleTask(task) },
-                                    onOpenDetail: { selectedTask = task }
-                                )
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button {
-                                        startTaskFromBacklog(task)
-                                    } label: {
-                                        Label("Start", systemImage: "play.fill")
-                                    }
-                                    .tint(.blue)
-                                }
-                                .rowInsertAnimation()
-                                .accessibilityIdentifier("taskRowBacklog_\(task.title)")
-                            }
-                        }
-
-                        if !store.doneTasks.isEmpty {
-                            sectionHeader("COMPLETED")
-
-                            ForEach(store.doneTasks) { task in
+                        ForEach(store.nextTasks) { task in
+                            if taskBeingCompleted != task.id {
                                 TaskRow(
                                     task: task,
                                     assigneeName: assigneeName(for: task),
@@ -130,22 +86,60 @@ private struct TasksContent: View {
                                     onOpenDetail: { selectedTask = task }
                                 )
                                 .rowInsertAnimation()
-                                .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                                .accessibilityIdentifier("taskRow_\(task.title)")
                             }
                         }
                     }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, listBottomInset)
-                .refreshable {
-                    store.setSyncMode(userSession.syncMode)
-                    memberStore.setSyncMode(userSession.syncMode)
-                    await store.loadTasks()
-                    await memberStore.loadMembers()
+
+                    if !store.backlogTasks.isEmpty {
+                        sectionHeader("BACKLOG")
+
+                        ForEach(store.backlogTasks) { task in
+                            TaskRow(
+                                task: task,
+                                assigneeName: assigneeName(for: task),
+                                onToggle: { toggleTask(task) },
+                                onOpenDetail: { selectedTask = task }
+                            )
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                Button {
+                                    startTaskFromBacklog(task)
+                                } label: {
+                                    Label("Start", systemImage: "play.fill")
+                                }
+                                .tint(.blue)
+                            }
+                            .rowInsertAnimation()
+                            .accessibilityIdentifier("taskRowBacklog_\(task.title)")
+                        }
+                    }
+
+                    if !store.doneTasks.isEmpty {
+                        sectionHeader("COMPLETED")
+
+                        ForEach(store.doneTasks) { task in
+                            TaskRow(
+                                task: task,
+                                assigneeName: assigneeName(for: task),
+                                onToggle: { toggleTask(task) },
+                                onOpenDetail: { selectedTask = task }
+                            )
+                            .rowInsertAnimation()
+                            .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                        }
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 20)
+            .padding(.bottom, listBottomInset)
+            .refreshable {
+                store.setSyncMode(userSession.syncMode)
+                memberStore.setSyncMode(userSession.syncMode)
+                await store.loadTasks()
+                await memberStore.loadMembers()
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             store.setSyncMode(userSession.syncMode)
             memberStore.setSyncMode(userSession.syncMode)

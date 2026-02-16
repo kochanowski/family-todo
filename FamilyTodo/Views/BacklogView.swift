@@ -38,7 +38,6 @@ private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
-    @Environment(\.appTabBarHeight) private var tabBarHeight
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -55,83 +54,79 @@ private struct BacklogContent: View {
     }
 
     var body: some View {
-        GeometryReader { _ in
-            let listBottomInset = AppChromeMetrics.contentBottomInset(
-                tabBarHeight: tabBarHeight
-            )
+        let listBottomInset: CGFloat = 16
 
-            VStack(spacing: 0) {
-                header
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, activeBanner == nil ? 12 : 8)
+
+            if let activeBanner {
+                BacklogStatusBanner(text: activeBanner.text)
                     .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, activeBanner == nil ? 12 : 8)
-
-                if let activeBanner {
-                    BacklogStatusBanner(text: activeBanner.text)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 12)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-
-                if store.isLoading, store.categories.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.bottom, listBottomInset)
-                } else if store.categories.isEmpty {
-                    emptyState
-                        .padding(.bottom, listBottomInset)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(store.categories) { category in
-                                CategoryCard(
-                                    category: category,
-                                    items: store.items(for: category.id),
-                                    assigneeNameFor: { assigneeId in
-                                        assigneeName(for: assigneeId)
-                                    },
-                                    onAddItem: { title in
-                                        HapticManager.lightTap()
-                                        _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
-                                    },
-                                    onDeleteItem: { item in
-                                        _ = _Concurrency.Task { await store.deleteItem(item) }
-                                    },
-                                    onEditItem: { item in
-                                        editingItem = item
-                                    },
-                                    onAssignItem: { item in
-                                        pendingAssignmentItem = item
-                                        selectedAssigneeIdForAssignment = item.assigneeId ?? currentMember?.id
-                                    },
-                                    onPromoteItem: { item in
-                                        promoteItem(item)
-                                    },
-                                    onRenameCategory: { newTitle in
-                                        _ = _Concurrency.Task { await store.renameCategory(category, newTitle: newTitle) }
-                                    },
-                                    onDeleteCategory: {
-                                        _ = _Concurrency.Task { await store.deleteCategory(category) }
-                                    }
-                                )
-                                .rowInsertAnimation()
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, listBottomInset)
-                    }
-                    .refreshable {
-                        store.setSyncMode(userSession.syncMode)
-                        memberStore.setSyncMode(userSession.syncMode)
-                        await store.loadData()
-                        await memberStore.loadMembers()
-                    }
-                }
-
-                Spacer()
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            if store.isLoading, store.categories.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.bottom, listBottomInset)
+            } else if store.categories.isEmpty {
+                emptyState
+                    .padding(.bottom, listBottomInset)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(store.categories) { category in
+                            CategoryCard(
+                                category: category,
+                                items: store.items(for: category.id),
+                                assigneeNameFor: { assigneeId in
+                                    assigneeName(for: assigneeId)
+                                },
+                                onAddItem: { title in
+                                    HapticManager.lightTap()
+                                    _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
+                                },
+                                onDeleteItem: { item in
+                                    _ = _Concurrency.Task { await store.deleteItem(item) }
+                                },
+                                onEditItem: { item in
+                                    editingItem = item
+                                },
+                                onAssignItem: { item in
+                                    pendingAssignmentItem = item
+                                    selectedAssigneeIdForAssignment = item.assigneeId ?? currentMember?.id
+                                },
+                                onPromoteItem: { item in
+                                    promoteItem(item)
+                                },
+                                onRenameCategory: { newTitle in
+                                    _ = _Concurrency.Task { await store.renameCategory(category, newTitle: newTitle) }
+                                },
+                                onDeleteCategory: {
+                                    _ = _Concurrency.Task { await store.deleteCategory(category) }
+                                }
+                            )
+                            .rowInsertAnimation()
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, listBottomInset)
+                }
+                .refreshable {
+                    store.setSyncMode(userSession.syncMode)
+                    memberStore.setSyncMode(userSession.syncMode)
+                    await store.loadData()
+                    await memberStore.loadMembers()
+                }
+            }
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             store.setSyncMode(userSession.syncMode)
             memberStore.setSyncMode(userSession.syncMode)
