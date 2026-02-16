@@ -2274,3 +2274,397 @@ TaskDetailSheet(
 Sprawdzić czy `BacklogStore` jest dostępny jako `@EnvironmentObject` w drzewie widoków zawierającym `TasksView`. Jeśli nie, dodać `.environmentObject(backlogStore)`.
 
 > **Efekt:** User wybiera "Backlog" w Picker → task znika z Tasks → pojawia się w Backlog w oryginalnej kategorii (lub pierwszej kategorii jako fallback). Notatki i assignee są zachowane.
+
+---
+
+# UX Round 3 — Tasks View Redesign (2026-02-16 15:56)
+
+> **Skills:** `swiftui-liquid-glass`, `swift-expert`, `swiftui-ui-patterns`
+
+## Spis zmian R3
+
+| # | Issue | Pliki | Effort |
+|---|-------|-------|--------|
+| R3-1 | Focus Rule banner z opisem i dynamiczną liczbą | `TasksView.swift` | 15 min |
+| R3-2 | Kolory kategorii Backlog (deterministyczne z ID hash) | `BacklogCategory+Color.swift` [NEW], `BacklogView.swift` | 30 min |
+| R3-3 | Task tag (kategoria + owner) pod tytułem w kolorze | `TasksView.swift` | 20 min |
+| R3-4 | Tasks globalne per household (brak filtrowania po user) | WERYFIKACJA — prawdopodobnie już OK | 5 min |
+| R3-5 | Active/Completed toggle z Liquid Glass + przeniesienie z More | `TasksView.swift`, `MoreView.swift` | 60 min |
+
+---
+
+## R3-1 — Focus Rule: banner z opisem i odliczaniem
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — `focusRuleBanner`
+
+Obecny banner to jednoliniowy HStack z ikoną i tekstem. Zmienić na:
+
+```swift
+@ViewBuilder
+private var focusRuleBanner: some View {
+    let count = store.nextTasks.count
+    let limit = normalizedWipLimit
+
+    VStack(alignment: .leading, spacing: 4) {
+        Text("Focus Rule: Max \(limit) active tasks per person to ensure quality and completion.")
+            .font(.system(size: 12, weight: .regular))
+            .foregroundStyle(.secondary)
+
+        HStack(spacing: 8) {
+            Image(systemName: "chart.bar.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(bannerColor(count: count, limit: limit))
+
+            Text("\(count) of \(limit) slots used")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(bannerColor(count: count, limit: limit))
+
+            Spacer()
+
+            if count == 0 {
+                Button("Go to Backlog") {
+                    selectedTab = .backlog
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.blue)
+            }
+        }
+    }
+    .padding(12)
+    .background {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(bannerColor(count: count, limit: limit).opacity(0.08))
+    }
+}
+
+private func bannerColor(count: Int, limit: Int) -> Color {
+    switch count {
+    case 0: .blue
+    case 1...limit: .blue
+    case (limit + 1)...(limit + 2): .orange
+    default: .red
+    }
+}
+```
+
+Zmiana ikony: `target` → `chart.bar.fill` (bardziej pasuje do „slots used").
+
+> **Zależność:** Musi uwzględniać `normalizedWipLimit` (dynamiczny z Settings).
+
+---
+
+## R3-2 — Kolory kategorii Backlog
+
+### Problem
+Kategorie w Backlog nie mają koloru. Chcemy radosne, eleganckie kolory — deterministycznie przypisane na podstawie `category.id` (żeby kolor był stabilny).
+
+### Zmiana 1 — Nowy plik z extension
+
+**Plik:** `FamilyTodo/Extensions/BacklogCategory+Color.swift` [NEW]
+
+```swift
+import SwiftUI
+
+extension BacklogCategory {
+    /// Palette of cheerful, elegant colors for category tags.
+    static let categoryPalette: [Color] = [
+        .purple,
+        .orange,
+        .teal,
+        .pink,
+        .indigo,
+        .mint,
+        .brown,
+        .cyan,
+        Color(red: 0.95, green: 0.4, blue: 0.3),  // coral
+        Color(red: 0.3, green: 0.7, blue: 0.4),    // emerald
+    ]
+
+    /// Deterministic color based on category ID hash.
+    var color: Color {
+        let hash = abs(id.hashValue)
+        return Self.categoryPalette[hash % Self.categoryPalette.count]
+    }
+}
+```
+
+### Zmiana 2 — Kolorowa kropka w BacklogView
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` — w `CategoryCard` header
+
+Dodać kolorową kropkę obok nazwy kategorii. Szukać obecnego header w `CategoryCard` i przed `Text(category.title)` dodać:
+
+```swift
+Circle()
+    .fill(category.color)
+    .frame(width: 10, height: 10)
+```
+
+> **UWAGA:** `CategoryCard` to prawdopodobnie subview w `BacklogView.swift`. Znaleźć dokładne linie i dodać kropkę.
+
+---
+
+## R3-3 — Task tag (kategoria + owner) pod tytułem w kolorze
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — `TaskRow`
+
+Obecny `HStack(spacing: 8)` pod tytułem zawiera Recurring badge, Due Date, Assignee. Zmienić na nowy layout z tagami w kolorze kategorii.
+
+#### Nowe parametry TaskRow:
+
+```swift
+struct TaskRow: View {
+    let task: Task
+    let assigneeName: String?
+    let categoryName: String?
+    let categoryColor: Color?     // NOWE — kolor kategorii
+    let wipZone: WipZone
+    let onToggle: () -> Void
+    let onOpenDetail: () -> Void
+```
+
+#### Pod tytułem — tagi w nowym stylu:
+
+```swift
+HStack(spacing: 6) {
+    // Category tag
+    if let categoryName, let categoryColor {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(categoryColor)
+                .frame(width: 6, height: 6)
+            Text(categoryName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(categoryColor)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(categoryColor.opacity(0.12)))
+    }
+
+    // Owner tag
+    if let assigneeName {
+        HStack(spacing: 4) {
+            Image(systemName: "person.fill")
+                .font(.system(size: 8))
+                .foregroundStyle(categoryColor ?? .secondary)
+            Text(assigneeName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(categoryColor ?? .secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill((categoryColor ?? .secondary).opacity(0.12)))
+    }
+
+    // Due date (zachować istniejący)
+    if let dueDate = task.dueDate {
+        dueDateLabel(dueDate)
+    }
+
+    // Recurring badge (zachować istniejący)
+    if task.taskType == .recurring {
+        Label("Recurring", systemImage: "repeat")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.purple)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.purple.opacity(0.12)))
+    }
+}
+```
+
+#### Przekazać categoryColor w ForEach:
+
+```swift
+TaskRow(
+    task: task,
+    assigneeName: assigneeName(for: task),
+    categoryName: categoryName(for: task),
+    categoryColor: categoryColor(for: task),  // NOWE
+    wipZone: wipZone(for: index),
+    onToggle: { toggleTask(task) },
+    onOpenDetail: { selectedTask = task }
+)
+```
+
+Helper:
+
+```swift
+private func categoryColor(for task: Task) -> Color? {
+    guard let categoryId = task.backlogCategoryId else { return nil }
+    return backlogStore.categories.first(where: { $0.id == categoryId })?.color
+}
+```
+
+> **Zależność:** wymaga R2-13 (backlogCategoryId na Task) i R3-2 (BacklogCategory.color).
+
+---
+
+## R3-4 — Tasks globalne per household
+
+### Weryfikacja
+
+`TaskStore.nextTasks` filtruje `tasks.filter { $0.status == .next }` — **nie filtruje** po `assigneeId` ani po current user. Wszystkie taski w household są widoczne.
+
+→ **Prawdopodobnie już działa poprawnie.** Zweryfikować po wdrożeniu R3-3 czy assignee taguje się poprawnie i czy widać zadania innych osób.
+
+---
+
+## R3-5 — Active/Completed toggle z Liquid Glass
+
+### Problem
+Completed Tasks jest w More → Task History. Chcemy przenieść do Tasks jako toggle „Active | Completed" z efektem Liquid Glass na iOS 26+.
+
+### Zmiana 1 — Stan toggle
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — `TasksContent`
+
+```swift
+private enum TasksFilter: String, CaseIterable {
+    case active = "Active"
+    case completed = "Completed"
+}
+
+@State private var activeFilter: TasksFilter = .active
+@Namespace private var glassNamespace   // dla morphing
+```
+
+### Zmiana 2 — Toggle UI z Liquid Glass
+
+Pod headerem, nad focusRuleBanner:
+
+```swift
+@ViewBuilder
+private var filterToggle: some View {
+    if #available(iOS 26, *) {
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(TasksFilter.allCases, id: \.self) { filter in
+                    Button {
+                        withAnimation(.snappy(duration: 0.3)) {
+                            activeFilter = filter
+                        }
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(activeFilter == filter ? .primary : .secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(
+                        activeFilter == filter
+                            ? .regular.interactive()
+                            : .regular.tint(.clear),
+                        in: .capsule
+                    )
+                    .glassEffectID(filter.rawValue, in: glassNamespace)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
+        .background {
+            Capsule()
+                .fill(Color(.systemGray6))
+        }
+    } else {
+        // Fallback pre-iOS 26: standard Picker
+        Picker("Filter", selection: $activeFilter) {
+            ForEach(TasksFilter.allCases, id: \.self) { filter in
+                Text(filter.rawValue).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+}
+```
+
+### Zmiana 3 — Warunkowe wyświetlanie treści
+
+W `body` ScrollView:
+
+```swift
+ScrollView {
+    LazyVStack(spacing: 0) {
+        if activeFilter == .active {
+            // NEXT section (obecna)
+            // BACKLOG section (obecna — ale rozważyć usunięcie)
+            // COMPLETED RECENTLY section (taski <24h)
+        } else {
+            // COMPLETED section — wyświetlić WSZYSTKIE doneTasks
+            // (nie tylko recentlyDone, ale WSZYSTKIE — przenieść z More)
+            ForEach(store.doneTasks) { task in
+                TaskRow(
+                    task: task,
+                    assigneeName: assigneeName(for: task),
+                    categoryName: categoryName(for: task),
+                    categoryColor: categoryColor(for: task),
+                    wipZone: .normal,
+                    onToggle: { toggleTask(task) },
+                    onOpenDetail: { selectedTask = task }
+                )
+                // swipe to archive, context menu etc.
+            }
+
+            if store.doneTasks.isEmpty {
+                ContentUnavailableView {
+                    Label("No Completed Tasks", systemImage: "checkmark.circle")
+                } description: {
+                    Text("Complete some tasks to see them here.")
+                }
+            }
+        }
+    }
+}
+```
+
+### Zmiana 4 — Focus Rule banner tylko w Active
+
+```swift
+if activeFilter == .active {
+    focusRuleBanner
+        .padding(.horizontal, 20)
+        .padding(.bottom, activeBanner == nil ? 16 : 8)
+}
+```
+
+### Zmiana 5 — Usunąć Completed Tasks z More
+
+**Plik:** `FamilyTodo/Views/MoreView.swift`
+
+Usunąć NavigationLink do `CompletedTasksView`:
+
+```swift
+// USUNĄĆ:
+NavigationLink {
+    CompletedTasksView()
+} label: {
+    MoreRow(icon: "checkmark.circle", title: "Task History")
+}
+.buttonStyle(.plain)
+.accessibilityIdentifier("CompletedTasks")
+```
+
+> **UWAGA:** `CompletedTasksView` i `CompletedTasksContent` w `MoreView.swift` mogą zostać usunięte albo zachowane jako dead code do przyszłego użytku. Rekomendacja: zachować ale zakomentować.
+
+### Zmiana 6 — Uwzględnić cleanup (R2-6) w Tasks
+
+Toolbar z opcjami cleanup (Clear All, Keep 7/30 days) przenieść do Tasks view (dostępny tylko w trybie "Completed").
+
+---
+
+## Kolejność wdrażania R3
+
+1. **R3-2** (kategorie kolory) — 30 min — brak zależności
+2. **R3-1** (Focus Rule banner) — 15 min — brak zależności
+3. **R3-4** (weryfikacja) — 5 min — sprawdzić
+4. **R3-3** (task tags) — 20 min — zależy od R2-13 + R3-2
+5. **R3-5** (Active/Completed toggle + Glass) — 60 min — największy refactor
+
+**Łączny effort: ~2.5h**
