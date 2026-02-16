@@ -51,6 +51,7 @@
 		B8F1C2D3E4F5061728394B5C /* AppColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */; };
 		C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65D304A5384580AD9E9724 /* OnboardingView.swift */; };
 		58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */; };
+		CELEB1000000000000000001 /* CelebrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB3000000000000000001 /* CelebrationManager.swift */; };
 		310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5698A6FED3C457788B6A60C /* CachedMember.swift */; };
 		DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */; };
 		004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */; };
@@ -61,6 +62,7 @@
 		NEWFILE0000000000000004 /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000014 /* MoreView.swift */; };
 		NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000015 /* FloatingTabBar.swift */; };
 		NEWFILE0000000000000006 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000016 /* ToastView.swift */; };
+		CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB4000000000000000001 /* CelebrationOverlay.swift */; };
 		NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000017 /* BacklogCategory.swift */; };
 		NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000018 /* LegacyStubs.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
@@ -131,6 +133,7 @@
 		F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
 		EC65D304A5384580AD9E9724 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		CELEB3000000000000000001 /* CelebrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationManager.swift; sourceTree = "<group>"; };
 		D5698A6FED3C457788B6A60C /* CachedMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedMember.swift; sourceTree = "<group>"; };
 		1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedShoppingItem.swift; sourceTree = "<group>"; };
 		AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
@@ -142,6 +145,7 @@
 		NEWFILE0000000000000014 /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000015 /* FloatingTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingTabBar.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000016 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
+		CELEB4000000000000000001 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationOverlay.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000017 /* BacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogCategory.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000018 /* LegacyStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyStubs.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
@@ -316,6 +320,7 @@
 			children = (
 				018556C9F7064BC3BAF7112E /* OnboardingState.swift */,
 				E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */,
+				CELEB3000000000000000001 /* CelebrationManager.swift */,
 				F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */,
 				36A73F3BC9DD4B4A97890EEC /* UserSession.swift */,
 			);
@@ -346,6 +351,7 @@
 				848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
 				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
 				NEWFILE0000000000000016 /* ToastView.swift */,
+				CELEB4000000000000000001 /* CelebrationOverlay.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
 			);
@@ -500,6 +506,7 @@
 				DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */,
 				004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */,
 				58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */,
+				CELEB1000000000000000001 /* CelebrationManager.swift in Sources */,
 				E3C9F1B3FAE44A9A91D2F23C /* ShoppingListStore.swift in Sources */,
 				C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */,
 				4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */,
@@ -522,6 +529,7 @@
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
 				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
+				CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */,
 				NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */,
 				NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */,
 				GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */,

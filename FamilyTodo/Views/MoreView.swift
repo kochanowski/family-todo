@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// More screen - hub for settings, profile, and configuration
 struct MoreView: View {
@@ -743,6 +744,63 @@ struct SettingsView: View {
                 Text("Appearance")
             }
 
+            // MARK: - Theme Section
+
+            Section {
+                ThemePresetSelector(selectedPreset: Binding(
+                    get: { themeStore.preset },
+                    set: {
+                        HapticManager.selection()
+                        themeStore.preset = $0
+                    }
+                ))
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.clear)
+            } header: {
+                Text("Theme")
+            }
+
+            // MARK: - Tab Color Section
+
+            Section {
+                HStack(spacing: 16) {
+                    ForEach(TabTintColor.allCases) { tint in
+                        Button {
+                            HapticManager.selection()
+                            themeStore.tabTintColor = tint
+                        } label: {
+                            VStack(spacing: 4) {
+                                Circle()
+                                    .fill(tint.color ?? .accentColor)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(
+                                                themeStore.tabTintColor == tint ? Color.primary : Color.clear,
+                                                lineWidth: 2
+                                            )
+                                    )
+                                    .overlay(
+                                        Image(systemName: tint.iconName)
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundStyle(.white.opacity(0.9))
+                                    )
+                                Text(tint.displayName)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(
+                                        themeStore.tabTintColor == tint ? .primary : .secondary
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
+                }
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+            } header: {
+                Text("Tab bar color")
+            }
+
             // MARK: - Toggles Section
 
             Section {
@@ -917,6 +975,68 @@ private struct AppearanceCard: View {
 
     private var secondaryBackground: Color {
         colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.93)
+    }
+}
+
+private struct ThemePresetSelector: View {
+    @Binding var selectedPreset: ThemePreset
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(ThemePreset.allCases) { preset in
+                    ThemePresetCard(
+                        preset: preset,
+                        isSelected: selectedPreset == preset
+                    ) {
+                        selectedPreset = preset
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ThemePresetCard: View {
+    let preset: ThemePreset
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: preset.palette.theme(for: .todo).gradientColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 56, height: 40)
+                    .overlay(
+                        Image(systemName: preset.iconName)
+                            .font(.system(size: 16))
+                            .foregroundStyle(preset.palette.theme(for: .todo).accentColor)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    )
+
+                Text(preset.displayName)
+                    .font(labelFont)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var labelFont: Font {
+        if let fontName = preset.fontName, UIFont(name: fontName, size: 11) != nil {
+            return .custom(fontName, size: 11)
+        }
+        return .system(size: 11, weight: isSelected ? .bold : .regular)
     }
 }
 

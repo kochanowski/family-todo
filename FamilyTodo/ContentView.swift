@@ -20,6 +20,7 @@ struct ContentView: View {
 struct MainAppView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
@@ -62,6 +63,7 @@ struct MainAppView: View {
                 }
             }
         }
+        .tint(themeStore.resolvedTabTint)
     }
 
     private var legacyTabView: some View {
@@ -98,6 +100,7 @@ struct MainAppView: View {
             }
             .tag(AppTab.more)
         }
+        .tint(themeStore.resolvedTabTint)
     }
 
     private func bootstrapHouseholdIfNeeded() async {

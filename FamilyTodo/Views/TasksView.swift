@@ -75,6 +75,8 @@ private struct TasksContent: View {
     @Namespace private var tasksFilterGlassNamespace
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var celebrationManager: CelebrationManager
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         let taskStore = TaskStore(modelContext: modelContext)
@@ -240,6 +242,7 @@ private struct TasksContent: View {
                     TaskRow(
                         task: task,
                         assigneeName: assigneeName(for: task),
+                        assigneeId: task.assigneeId,
                         categoryName: categoryName(for: task),
                         categoryColor: categoryColor(for: task),
                         wipZone: wipZone(for: index),
@@ -259,6 +262,7 @@ private struct TasksContent: View {
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
+                    assigneeId: task.assigneeId,
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -285,6 +289,7 @@ private struct TasksContent: View {
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
+                    assigneeId: task.assigneeId,
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -334,6 +339,7 @@ private struct TasksContent: View {
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
+                    assigneeId: task.assigneeId,
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -550,11 +556,29 @@ private struct TasksContent: View {
                     if willCompleteAll {
                         HapticManager.success()
                         showAllCompleteAnimation = true
+                        if themeStore.celebrationsEnabled {
+                            celebrationManager.celebrateAllTasksComplete()
+                            if activeMembers.count > 1, let name = currentMember?.displayName {
+                                celebrationManager.notifyPartner(
+                                    completedBy: name,
+                                    action: "Cleared all tasks! 🏡"
+                                )
+                            }
+                        }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             showAllCompleteAnimation = false
                         }
                     } else {
                         HapticManager.mediumTap()
+                        if themeStore.celebrationsEnabled {
+                            celebrationManager.celebrateTaskCompletion(taskTitle: task.title)
+                            if activeMembers.count > 1, let name = currentMember?.displayName {
+                                celebrationManager.notifyPartner(
+                                    completedBy: name,
+                                    action: "\(task.title) — done!"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -799,6 +823,7 @@ struct TaskRow: View {
 
     let task: Task
     let assigneeName: String?
+    let assigneeId: UUID?
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
@@ -840,18 +865,21 @@ struct TaskRow: View {
                             }
 
                             if let assigneeName {
-                                let ownerColor = categoryColor ?? .secondary
+                                let memberColor = Self.memberColor(for: assigneeId)
                                 HStack(spacing: 4) {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundStyle(ownerColor)
+                                    Text(String(assigneeName.prefix(1)).uppercased())
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(memberColor))
                                     Text(assigneeName)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(ownerColor)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(memberColor)
                                 }
-                                .padding(.horizontal, 8)
+                                .padding(.trailing, 8)
+                                .padding(.leading, 2)
                                 .padding(.vertical, 3)
-                                .background(Capsule().fill(ownerColor.opacity(0.12)))
+                                .background(Capsule().fill(memberColor.opacity(0.12)))
                             }
 
                             if let dueDate = task.dueDate {
@@ -934,6 +962,14 @@ struct TaskRow: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         return formatter
+    }
+
+    /// Deterministic color for a member based on their ID hash.
+    private static func memberColor(for id: UUID?) -> Color {
+        guard let id else { return .secondary }
+        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .indigo, .mint]
+        let hash = abs(id.hashValue)
+        return colors[hash % colors.count]
     }
 }
 

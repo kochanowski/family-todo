@@ -48,7 +48,46 @@ enum AppColors {
         cardShadow: Color.black.opacity(0.4)
     )
 
+    static let retro = AppColorPalette(
+        canvas: Color(hex: "0A0A1A"),
+        surface: Color(hex: "1A1A2E"),
+        surfaceElevated: Color(hex: "232345"),
+        ink: Color(hex: "00FF41"),
+        inkMuted: Color(hex: "00AA2A"),
+        borderLight: Color(hex: "333366"),
+        accent: Color(hex: "FFDD57"),
+        accentSoft: Color(hex: "FFE88A"),
+        tabBarBackground: Color(hex: "0F0F23"),
+        tabBarActivePill: Color(hex: "1A1A3E"),
+        tabBarShadow: Color.black.opacity(0.6),
+        cardShadow: Color.black.opacity(0.5)
+    )
+
+    static let chalk = AppColorPalette(
+        canvas: Color(hex: "243125"),
+        surface: Color(hex: "2C3E2D"),
+        surfaceElevated: Color(hex: "3A5240"),
+        ink: Color(hex: "F5F5DC"),
+        inkMuted: Color(hex: "C8C8A9"),
+        borderLight: Color(hex: "4A6B4E"),
+        accent: Color(hex: "FFEB99"),
+        accentSoft: Color(hex: "FFF5CC"),
+        tabBarBackground: Color(hex: "2A3A2A"),
+        tabBarActivePill: Color(hex: "3A5240"),
+        tabBarShadow: Color.black.opacity(0.4),
+        cardShadow: Color.black.opacity(0.3)
+    )
+
     static func palette(for preset: ThemePreset) -> AppColorPalette {
-        preset == .night ? night : light
+        switch preset {
+        case .night:
+            night
+        case .retro:
+            retro
+        case .chalk:
+            chalk
+        case .journal, .pastel, .soft, .paper:
+            light
+        }
     }
 }

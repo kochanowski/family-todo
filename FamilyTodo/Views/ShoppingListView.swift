@@ -43,6 +43,8 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var celebrationManager: CelebrationManager
 
     // Rapid entry state
     @State private var isRapidEntryActive = false
@@ -395,6 +397,7 @@ private struct ShoppingListContent: View {
 
     private func toggleItem(_ item: ShoppingItem) {
         HapticManager.lightTap()
+        let shouldCelebrateCompletion = store.toBuyItems.count == 1 && !item.isBought
 
         // Animate item removal
         withAnimation(WowAnimation.easeOut) {
@@ -412,6 +415,9 @@ private struct ShoppingListContent: View {
             _Concurrency.Task {
                 await store.toggleBought(item)
                 itemBeingRemoved = nil
+                if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
+                    celebrationManager.celebrateShoppingComplete()
+                }
             }
         }
     }
@@ -438,8 +444,12 @@ private struct ShoppingListContent: View {
     }
 
     private func clearToBuy() {
+        let hadItems = !store.toBuyItems.isEmpty
         _Concurrency.Task {
             await store.clearToBuy()
+            if hadItems, themeStore.celebrationsEnabled {
+                celebrationManager.celebrateShoppingComplete()
+            }
         }
         HapticManager.success()
     }

@@ -9,6 +9,7 @@ struct FamilyTodoApp: App {
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var onboardingState = OnboardingState()
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
+    @StateObject private var celebrationManager = CelebrationManager.shared
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -78,8 +79,12 @@ struct FamilyTodoApp: App {
                 .environmentObject(householdStore)
                 .environmentObject(onboardingState)
                 .environmentObject(subscriptionManager)
+                .environmentObject(celebrationManager)
                 .modelContainer(sharedModelContainer)
                 .preferredColorScheme(themeStore.colorScheme)
+                .overlay {
+                    CelebrationOverlay(manager: celebrationManager)
+                }
                 .task {
                     householdStore.setModelContext(sharedModelContainer.mainContext)
                     householdStore.setSyncMode(userSession.syncMode)
@@ -104,6 +109,23 @@ struct FamilyTodoApp: App {
                         modelContext: sharedModelContainer.mainContext,
                         syncMode: userSession.syncMode
                     )
+
+                    #if !CI
+                        // Re-schedule daily digest on every app launch.
+                        let notifSettings = NotificationSettingsStore()
+                        NotificationService.shared.setSettingsStore(notifSettings)
+                        await NotificationService.shared.checkAuthorizationStatus()
+                        if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
+                            let components = Calendar.current.dateComponents(
+                                [.hour, .minute],
+                                from: notifSettings.reminderTime
+                            )
+                            await NotificationService.shared.scheduleDailyDigest(
+                                at: components.hour ?? 8,
+                                minute: components.minute ?? 0
+                            )
+                        }
+                    #endif
                 }
         }
     }
