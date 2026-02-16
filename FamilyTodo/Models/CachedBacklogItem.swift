@@ -9,6 +9,7 @@ final class CachedBacklogItem {
     var categoryId: UUID
     var householdId: UUID
     var title: String
+    var assigneeId: UUID?
     var notes: String?
     var createdAt: Date
     var updatedAt: Date
@@ -24,6 +25,7 @@ final class CachedBacklogItem {
         categoryId = item.categoryId
         householdId = item.householdId
         title = item.title
+        assigneeId = item.assigneeId
         notes = item.notes
         createdAt = item.createdAt
         updatedAt = item.updatedAt
@@ -35,6 +37,7 @@ final class CachedBacklogItem {
         categoryId = item.categoryId
         householdId = item.householdId
         title = item.title
+        assigneeId = item.assigneeId
         notes = item.notes
         createdAt = item.createdAt
         updatedAt = item.updatedAt
@@ -48,6 +51,7 @@ final class CachedBacklogItem {
             categoryId: categoryId,
             householdId: householdId,
             title: title,
+            assigneeId: assigneeId,
             notes: notes,
             createdAt: createdAt,
             updatedAt: updatedAt

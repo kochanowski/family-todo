@@ -30,9 +30,6 @@ struct MainAppView: View {
     @State private var hasBootstrappedHousehold = false
     @State private var isTabBarVisibleForCurrentScreen = true
 
-    /// Animation state for tab transitions
-    @Namespace private var animation
-
     var body: some View {
         ZStack {
             // App-wide subtle background – gives the glass tab bar content to blur
@@ -45,14 +42,7 @@ struct MainAppView: View {
                 .onTabBarVisibilityChange { isVisible in
                     isTabBarVisibleForCurrentScreen = isVisible
                 }
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur),
-                        removal: .opacity.combined(with: .scale(scale: 0.99)).combined(with: .blur)
-                    )
-                )
                 .animation(.easeInOut(duration: 0.3), value: activeTab)
-                .id(activeTab)
         }
         .overlay(alignment: .bottom) {
             // Glass tab bar on top of content so material blur samples
@@ -104,25 +94,6 @@ struct MainAppView: View {
         if let household = householdStore.currentHousehold {
             userSession.setCurrentHousehold(household.id)
         }
-    }
-}
-
-// MARK: - Blur Transition Extension
-
-extension AnyTransition {
-    static var blur: AnyTransition {
-        .modifier(
-            active: BlurModifier(radius: 2),
-            identity: BlurModifier(radius: 0)
-        )
-    }
-}
-
-struct BlurModifier: ViewModifier {
-    let radius: CGFloat
-
-    func body(content: Content) -> some View {
-        content.blur(radius: radius)
     }
 }
 

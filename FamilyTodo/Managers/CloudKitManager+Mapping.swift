@@ -407,6 +407,9 @@ extension CloudKitManager {
         record["categoryId"] = reference(for: item.categoryId)
         record["householdId"] = reference(for: item.householdId)
         record["title"] = item.title as CKRecordValue
+        if let assigneeId = item.assigneeId {
+            record["assigneeId"] = reference(for: assigneeId)
+        }
         if let notes = item.notes {
             record["notes"] = notes as CKRecordValue
         }
@@ -435,6 +438,7 @@ extension CloudKitManager {
             categoryId: categoryId,
             householdId: householdId,
             title: title,
+            assigneeId: uuid(from: record["assigneeId"] as? CKRecord.Reference),
             notes: record["notes"] as? String,
             createdAt: createdAt,
             updatedAt: updatedAt

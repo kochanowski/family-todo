@@ -51,6 +51,8 @@ private struct ShoppingListContent: View {
     @State private var showRestock = false
     @State private var showClearToBuyConfirmation = false
     @State private var itemBeingRemoved: UUID?
+    @State private var editingItemId: UUID?
+    @State private var editingItemText = ""
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appTabBarHeight) private var tabBarHeight
@@ -96,11 +98,21 @@ private struct ShoppingListContent: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(store.toBuyItems) { item in
                                     if itemBeingRemoved != item.id {
-                                        ShoppingItemRow(
-                                            item: item,
-                                            onToggle: { toggleItem(item) }
-                                        )
-                                        .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                        if editingItemId == item.id {
+                                            ShoppingItemInlineEditRow(
+                                                text: $editingItemText,
+                                                onSubmit: { commitEditingItem(item) },
+                                                onCancel: cancelEditingItem
+                                            )
+                                            .accessibilityIdentifier("shoppingItemEdit_\(item.title)")
+                                        } else {
+                                            ShoppingItemRow(
+                                                item: item,
+                                                onToggle: { toggleItem(item) },
+                                                onEdit: { startEditingItem(item) }
+                                            )
+                                            .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                        }
                                     }
                                 }
 
@@ -150,6 +162,10 @@ private struct ShoppingListContent: View {
             await store.loadItems()
         }
         .newItemsBanner(manager: subscriptionManager)
+        .onChange(of: isKeyboardVisible) { _, visible in
+            guard !visible, let editingItem = currentEditingItem else { return }
+            commitEditingItem(editingItem)
+        }
         .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
@@ -267,6 +283,7 @@ private struct ShoppingListContent: View {
     // MARK: - Rapid Entry Logic
 
     private func startRapidEntry() {
+        cancelEditingItem()
         HapticManager.lightTap()
         withAnimation(WowAnimation.spring) {
             isRapidEntryActive = true
@@ -314,6 +331,36 @@ private struct ShoppingListContent: View {
         rapidEntryText = ""
         withAnimation(WowAnimation.spring) {
             isRapidEntryActive = false
+        }
+    }
+
+    private var currentEditingItem: ShoppingItem? {
+        guard let editingItemId else { return nil }
+        return store.toBuyItems.first(where: { $0.id == editingItemId })
+    }
+
+    private func startEditingItem(_ item: ShoppingItem) {
+        dismissRapidEntry()
+        editingItemId = item.id
+        editingItemText = item.title
+    }
+
+    private func cancelEditingItem() {
+        editingItemId = nil
+        editingItemText = ""
+    }
+
+    private func commitEditingItem(_ item: ShoppingItem) {
+        guard editingItemId == item.id else { return }
+        let trimmed = editingItemText.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { cancelEditingItem() }
+
+        guard !trimmed.isEmpty, trimmed != item.title else { return }
+
+        var updatedItem = item
+        updatedItem.title = trimmed
+        _ = _Concurrency.Task {
+            await store.updateItem(updatedItem)
         }
     }
 
@@ -380,13 +427,12 @@ private struct ShoppingListContent: View {
 struct ShoppingItemRow: View {
     let item: ShoppingItem
     let onToggle: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
+    let onEdit: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 10) {
-                // Circular checkbox
+        HStack(spacing: 10) {
+            // Circular checkbox
+            Button(action: onToggle) {
                 Circle()
                     .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
                     .frame(width: 20, height: 20)
@@ -397,19 +443,69 @@ struct ShoppingItemRow: View {
                                 .frame(width: 13, height: 13)
                         }
                     }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("shoppingToggle_\(item.title)")
 
+            Button(action: onEdit) {
                 Text(item.title)
                     .font(.system(size: 15))
                     .foregroundStyle(item.isBought ? .secondary : .primary)
                     .strikethrough(item.isBought)
                     .lineLimit(1)
-
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 6)
+            .buttonStyle(.plain)
+
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 6)
         .accessibilityIdentifier("shoppingItemRow_\(item.title)")
+    }
+}
+
+private struct ShoppingItemInlineEditRow: View {
+    @Binding var text: String
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    @FocusState private var isFocused: Bool
+    @State private var isCancelling = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+
+            TextField("Item name", text: $text)
+                .font(.system(size: 15))
+                .submitLabel(.done)
+                .focused($isFocused)
+                .onSubmit(onSubmit)
+                .onChange(of: isFocused) { _, focused in
+                    if !focused, !isCancelling {
+                        onSubmit()
+                    }
+                }
+                .autocorrectionDisabled()
+
+            Button {
+                isCancelling = true
+                onCancel()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 6)
+        .onAppear {
+            isCancelling = false
+            DispatchQueue.main.async {
+                isFocused = true
+            }
+        }
     }
 }
 

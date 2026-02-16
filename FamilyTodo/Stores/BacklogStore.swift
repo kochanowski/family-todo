@@ -307,13 +307,16 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Item Operations
 
-    func addItem(to categoryId: UUID, title: String) async {
+    func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil) async {
         guard let householdId else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
 
         let item = BacklogItem(
             categoryId: categoryId,
             householdId: householdId,
-            title: title
+            title: trimmedTitle,
+            assigneeId: assigneeId
         )
 
         // Optimistic UI
@@ -354,34 +357,61 @@ final class BacklogStore: ObservableObject {
         }
     }
 
-    func deleteItem(_ item: BacklogItem) async {
-        // Optimistic UI
+    @discardableResult
+    func deleteItem(_ item: BacklogItem) async -> Bool {
+        await deleteItemInternal(item, reloadOnFailure: true)
+    }
+
+    private func deleteItemInternal(_ item: BacklogItem, reloadOnFailure: Bool) async -> Bool {
+        guard let currentIndex = items.firstIndex(where: { $0.id == item.id }) else {
+            removeCachedItem(id: item.id)
+            return true
+        }
+
+        let removedItem = items[currentIndex]
+
         withAnimation {
-            items.removeAll { $0.id == item.id }
+            items.remove(at: currentIndex)
         }
 
-        // Cache
-        if let context = modelContext {
-            let descriptor = FetchDescriptor<CachedBacklogItem>(
-                predicate: #Predicate { $0.id == item.id }
-            )
-            if let cached = try? context.fetch(descriptor).first {
-                context.delete(cached)
-                try? context.save()
-            }
+        if !isCloudSyncEnabled {
+            removeCachedItem(id: item.id)
+            return true
         }
-
-        if !isCloudSyncEnabled { return }
 
         do {
             try await cloudKit.deleteBacklogItem(id: item.id)
+            removeCachedItem(id: item.id)
+            return true
         } catch {
             self.error = error
-            await loadData()
+            withAnimation {
+                let safeIndex = min(currentIndex, items.count)
+                items.insert(removedItem, at: safeIndex)
+            }
+            if reloadOnFailure {
+                await loadData()
+            }
+            return false
+        }
+    }
+
+    private func removeCachedItem(id: UUID) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            context.delete(cached)
+            try? context.save()
         }
     }
 
     func updateItem(_ item: BacklogItem, title: String, notes: String?) async {
+        await updateItem(item, title: title, notes: notes, assigneeId: item.assigneeId)
+    }
+
+    func updateItem(_ item: BacklogItem, title: String, notes: String?, assigneeId: UUID?) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
@@ -389,6 +419,7 @@ final class BacklogStore: ObservableObject {
         var updatedItem = items[index]
         updatedItem.title = trimmedTitle
         updatedItem.notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedItem.assigneeId = assigneeId
         updatedItem.updatedAt = Date()
 
         withAnimation {
@@ -432,17 +463,26 @@ final class BacklogStore: ObservableObject {
         taskStore.setHousehold(householdId)
 
         let createdTaskId = UUID()
+        let resolvedAssigneeId = assigneeId ?? item.assigneeId
         let validation = await taskStore.createTaskFromBacklogItem(
             title: item.title,
             notes: item.notes,
             preferredStatus: preferredStatus,
-            assigneeId: assigneeId,
+            assigneeId: resolvedAssigneeId,
             taskId: createdTaskId
         )
 
         switch validation {
         case .ok:
-            await deleteItem(item)
+            let didDeleteBacklogItem = await deleteItemInternal(item, reloadOnFailure: false)
+            guard didDeleteBacklogItem else {
+                if let createdTask = taskStore.tasks.first(where: { $0.id == createdTaskId }) {
+                    await taskStore.deleteTask(createdTask)
+                }
+                return .failed(
+                    "Couldn't remove item from Backlog. Promotion was rolled back."
+                )
+            }
             return .success(createdTaskId: createdTaskId)
         case .assigneeRequired:
             return .assigneeRequired

@@ -30,6 +30,7 @@ struct BacklogItem: Identifiable, Codable {
     let categoryId: UUID
     let householdId: UUID
     var title: String
+    var assigneeId: UUID?
     var notes: String?
     let createdAt: Date
     var updatedAt: Date
@@ -39,6 +40,7 @@ struct BacklogItem: Identifiable, Codable {
         categoryId: UUID,
         householdId: UUID,
         title: String,
+        assigneeId: UUID? = nil,
         notes: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -47,6 +49,7 @@ struct BacklogItem: Identifiable, Codable {
         self.categoryId = categoryId
         self.householdId = householdId
         self.title = title
+        self.assigneeId = assigneeId
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
