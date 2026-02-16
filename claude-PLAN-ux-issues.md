@@ -1972,3 +1972,305 @@ private var rowBackgroundColor: Color {
 ```
 
 > **Efekt:** Unchecked checkbox jest zielony/pomarańczowy/czerwony + wiersz ma delikatne kolorowe tło. Completed taski (`.normal`) nie mają żadnego tintowania. Bardzo subtelne, ale daje informację zwrotną.
+
+---
+
+## R2-13 — Tasks: wyświetlanie kategorii backloga jako tag (NOWE)
+
+### Problem
+W Tasks nie widać z jakiej kategorii Backlog pochodzi zadanie. User chce widzieć mały tag z nazwą kategorii obok tytułu taska.
+
+### Analiza modelu danych
+
+- `Task` ma pole `areaId: UUID?` — ale nie jest ono powiązane z `BacklogCategory`
+- `BacklogItem` ma `categoryId: UUID` → `BacklogCategory`
+- Przy promote (`promoteItemToTask` w `BacklogStore.swift:452`) `categoryId` jest **tracone** — nie jest przekazywane do nowego `Task`
+
+### Zmiana 1 — Dodać `backlogCategoryId` do Task
+
+**Plik:** `FamilyTodo/Models/Task.swift`
+
+```swift
+struct Task: Identifiable, Codable {
+    // ... istniejące pola ...
+    var backlogCategoryId: UUID?  // NOWE — link do BacklogCategory, z której pochodzi
+    // ...
+}
+```
+
+> ⚠️ **WAŻNE: SwiftData migration rule!** Pole MUSI być `Optional` (`UUID?`) — inaczej crash na istniejących danych (jak bug z `sortOrder`).
+
+Dodać do `init`:
+```swift
+init(
+    // ... istniejące parametry ...
+    backlogCategoryId: UUID? = nil,
+    // ...
+) {
+    // ...
+    self.backlogCategoryId = backlogCategoryId
+}
+```
+
+### Zmiana 2 — Dodać `backlogCategoryId` do CachedTask
+
+**Plik:** `FamilyTodo/Models/CachedTask.swift`
+
+```swift
+var backlogCategoryId: UUID?   // NOWE — musi mieć domyślny nil
+```
+
+Zaktualizować `init(from:)` i `toTask()` żeby mapowały to pole.
+
+### Zmiana 3 — Przekazać categoryId przy promote
+
+**Plik:** `FamilyTodo/Stores/BacklogStore.swift` — w `promoteItemToTask`
+
+Oraz **`FamilyTodo/Stores/TaskStore.swift`** — w `createTaskFromBacklogItem`:
+
+```swift
+// TaskStore.swift:
+func createTaskFromBacklogItem(
+    title: String,
+    notes: String? = nil,
+    preferredStatus: Task.TaskStatus = .next,
+    assigneeId: UUID? = nil,
+    taskType: Task.TaskType = .oneOff,
+    recurringChoreId: UUID? = nil,
+    taskId: UUID = UUID(),
+    backlogCategoryId: UUID? = nil   // NOWE
+) async -> NextTransitionValidation {
+    await createTask(
+        taskId: taskId,
+        title: title,
+        status: preferredStatus,
+        assigneeId: assigneeId,
+        assigneeIds: assigneeId.map { [$0] } ?? [],
+        notes: notes,
+        taskType: taskType,
+        recurringChoreId: recurringChoreId,
+        backlogCategoryId: backlogCategoryId  // NOWE
+    )
+}
+```
+
+```swift
+// BacklogStore.swift w promoteItemToTask:
+let validation = await taskStore.createTaskFromBacklogItem(
+    title: item.title,
+    notes: item.notes,
+    preferredStatus: preferredStatus,
+    assigneeId: resolvedAssigneeId,
+    taskId: createdTaskId,
+    backlogCategoryId: item.categoryId   // NOWE
+)
+```
+
+### Zmiana 4 — Wyświetlić tag kategorii w TaskRow
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — w `TaskRow`
+
+Dodać `categoryName: String?` jako nowy parametr:
+
+```swift
+struct TaskRow: View {
+    let task: Task
+    let assigneeName: String?
+    let categoryName: String?    // NOWE
+    let wipZone: WipZone
+    // ...
+}
+```
+
+W `body`, w `HStack(spacing: 8)` pod tytułem (obok Recurring, Due Date, Assignee):
+
+```swift
+if let categoryName {
+    Text(categoryName)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.blue)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.blue.opacity(0.12)))
+}
+```
+
+### Zmiana 5 — Przekazać categoryName w TasksContent
+
+W pętli `ForEach(store.nextTasks)` i `ForEach(store.recentlyDoneTasks)` trzeba resolve `categoryName` z `backlogCategoryId`:
+
+```swift
+TaskRow(
+    task: task,
+    assigneeName: assigneeName(for: task),
+    categoryName: categoryName(for: task),  // NOWE
+    wipZone: wipZone(for: index),
+    // ...
+)
+```
+
+Helper function:
+
+```swift
+private func categoryName(for task: Task) -> String? {
+    guard let categoryId = task.backlogCategoryId else { return nil }
+    // Potrzebny dostęp do BacklogStore lub lokalny cache kategorii
+    return backlogStore.categories.first(where: { $0.id == categoryId })?.title
+}
+```
+
+> **UWAGA:** To wymaga dostępu do `BacklogStore` z `TasksContent`. Sprawdzić czy jest dostępny przez `@EnvironmentObject` lub trzeba go dodać.
+
+---
+
+## R2-14 — Tasks: status Backlog w detail sheet → powrót do Backlog (BUG)
+
+### Problem
+Gdy w TaskDetailSheet zmienisz status na "Backlog" i klikniesz Save, task zmienia `status = .backlog` — ale zostaje obiektem `Task` (nie `BacklogItem`). Pojawia się sekcja "BACKLOG" w Tasks zamiast powrotu do Backlog tabu.
+
+### Root cause
+`save()` w `TaskDetailSheet` (L816-828) po prostu ustawia `updatedTask.status = .backlog` i woła `onSave`. `TaskStore.updateTask` persystuje to jako Task ze statusem `.backlog` → `store.backlogTasks` go wyświetla w Tasks.
+
+Ale Task to NIE jest BacklogItem — nie ma `categoryId` i nie jest widoczny w Backlog tabie.
+
+### DECYZJA: pełna democja — Task → BacklogItem
+
+Kiedy user zmienia status na "Backlog" w detail sheet, task musi:
+1. Zostać usunięty jako `Task`
+2. Zostać odtworzony jako `BacklogItem` w jego oryginalnej kategorii (`backlogCategoryId`)
+
+### Architektura: callback pattern
+
+`TaskDetailSheet` NIE ma dostępu do `BacklogStore`. Zamiast przekazywać store, użyjemy callbacku `onDemoteToBacklog`, a `TasksContent` obsłuży logikę.
+
+### Zmiana 1 — Dodać callback do TaskDetailSheet
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — `TaskDetailSheet`
+
+```swift
+private struct TaskDetailSheet: View {
+    let task: Task
+    let members: [Member]
+    let onSave: (Task) -> Void
+    let onDelete: (Task) -> Void
+    let onDemoteToBacklog: (Task) -> Void   // NOWE
+
+    // ... (init z nowym parametrem)
+```
+
+### Zmiana 2 — W `save()` wykryć demot
+
+```swift
+private func save() {
+    var updatedTask = task
+    updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    updatedTask.status = status
+    updatedTask.assigneeId = assigneeId
+    updatedTask.assigneeIds = assigneeId.map { [$0] } ?? []
+    updatedTask.dueDate = hasDueDate ? dueDate : nil
+    let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    updatedTask.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+
+    if status == .backlog {
+        // Demot: NIE wołamy onSave, wołamy onDemoteToBacklog
+        onDemoteToBacklog(updatedTask)
+    } else {
+        onSave(updatedTask)
+    }
+    dismiss()
+}
+```
+
+### Zmiana 3 — Dodać `addItem` z notes do BacklogStore
+
+**Plik:** `FamilyTodo/Stores/BacklogStore.swift`
+
+Obecny `addItem(to:title:assigneeId:)` nie przyjmuje `notes`. Dodać parametr:
+
+```swift
+func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil, notes: String? = nil) async {
+    guard let householdId else { return }
+    let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty else { return }
+
+    let item = BacklogItem(
+        categoryId: categoryId,
+        householdId: householdId,
+        title: trimmedTitle,
+        assigneeId: assigneeId,
+        notes: notes   // NOWE
+    )
+    // ... reszta bez zmian
+}
+```
+
+### Zmiana 4 — Obsłużyć demot w TasksContent
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` — `TasksContent`
+
+Potrzebny dostęp do BacklogStore. Dodać:
+
+```swift
+@EnvironmentObject private var backlogStore: BacklogStore
+```
+
+> ⚠️ **UWAGA:** Sprawdzić czy `BacklogStore` jest propagowany jako `@EnvironmentObject` z `ContentView`. Jeśli nie — trzeba go dodać w `ContentView`.
+
+Dodać handler:
+
+```swift
+private func demoteTaskToBacklog(_ task: Task) {
+    _ = _Concurrency.Task {
+        // 1. Ustalić categoryId — użyć backlogCategoryId lub pierwszej kategorii jako fallback
+        let categoryId: UUID
+        if let backlogCatId = task.backlogCategoryId,
+           backlogStore.categories.contains(where: { $0.id == backlogCatId }) {
+            categoryId = backlogCatId
+        } else if let firstCategory = backlogStore.categories.first {
+            categoryId = firstCategory.id
+        } else {
+            // Brak kategorii — nie można demotować
+            return
+        }
+
+        // 2. Dodać jako BacklogItem
+        await backlogStore.addItem(
+            to: categoryId,
+            title: task.title,
+            assigneeId: task.assigneeId,
+            notes: task.notes
+        )
+
+        // 3. Usunąć Task
+        await store.deleteTask(task)
+    }
+}
+```
+
+### Zmiana 5 — Przekazać callback do TaskDetailSheet
+
+W TasksContent, tam gdzie tworzy `TaskDetailSheet`:
+
+```swift
+TaskDetailSheet(
+    task: selectedTask,
+    members: members,
+    onSave: { updatedTask in
+        // ... istniejący kod save
+    },
+    onDelete: { task in
+        // ... istniejący kod delete
+    },
+    onDemoteToBacklog: { task in
+        demoteTaskToBacklog(task)   // NOWE
+    }
+)
+```
+
+### Zmiana 6 — Sprawdzić propagację BacklogStore
+
+**Plik:** `FamilyTodo/ContentView.swift`
+
+Sprawdzić czy `BacklogStore` jest dostępny jako `@EnvironmentObject` w drzewie widoków zawierającym `TasksView`. Jeśli nie, dodać `.environmentObject(backlogStore)`.
+
+> **Efekt:** User wybiera "Backlog" w Picker → task znika z Tasks → pojawia się w Backlog w oryginalnej kategorii (lub pierwszej kategorii jako fallback). Notatki i assignee są zachowane.

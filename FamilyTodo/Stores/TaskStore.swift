@@ -175,6 +175,7 @@ final class TaskStore: ObservableObject {
         status: Task.TaskStatus = .backlog,
         assigneeId: UUID? = nil,
         assigneeIds: [UUID] = [],
+        backlogCategoryId: UUID? = nil,
         areaId: UUID? = nil,
         dueDate: Date? = nil,
         notes: String? = nil,
@@ -207,6 +208,7 @@ final class TaskStore: ObservableObject {
             status: status,
             assigneeId: assigneeId,
             assigneeIds: resolvedAssigneeIds,
+            backlogCategoryId: backlogCategoryId,
             areaId: areaId,
             dueDate: dueDate,
             taskType: taskType,
@@ -387,7 +389,8 @@ final class TaskStore: ObservableObject {
         assigneeId: UUID? = nil,
         taskType: Task.TaskType = .oneOff,
         recurringChoreId: UUID? = nil,
-        taskId: UUID = UUID()
+        taskId: UUID = UUID(),
+        backlogCategoryId: UUID? = nil
     ) async -> NextTransitionValidation {
         await createTask(
             taskId: taskId,
@@ -395,6 +398,7 @@ final class TaskStore: ObservableObject {
             status: preferredStatus,
             assigneeId: assigneeId,
             assigneeIds: assigneeId.map { [$0] } ?? [],
+            backlogCategoryId: backlogCategoryId,
             notes: notes,
             taskType: taskType,
             recurringChoreId: recurringChoreId

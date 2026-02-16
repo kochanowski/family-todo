@@ -307,16 +307,18 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Item Operations
 
-    func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil) async {
+    func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil, notes: String? = nil) async {
         guard let householdId else { return }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
+        let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let item = BacklogItem(
             categoryId: categoryId,
             householdId: householdId,
             title: trimmedTitle,
-            assigneeId: assigneeId
+            assigneeId: assigneeId,
+            notes: trimmedNotes
         )
 
         // Optimistic UI
@@ -469,7 +471,8 @@ final class BacklogStore: ObservableObject {
             notes: item.notes,
             preferredStatus: preferredStatus,
             assigneeId: resolvedAssigneeId,
-            taskId: createdTaskId
+            taskId: createdTaskId,
+            backlogCategoryId: item.categoryId
         )
 
         switch validation {

@@ -156,6 +156,9 @@ extension CloudKitManager {
         if !task.assigneeIds.isEmpty {
             record["assigneeIds"] = references(from: task.assigneeIds) as CKRecordValue
         }
+        if let backlogCategoryId = task.backlogCategoryId {
+            record["backlogCategoryId"] = reference(for: backlogCategoryId)
+        }
         if let areaId = task.areaId {
             record["areaId"] = reference(for: areaId)
         }
@@ -204,6 +207,7 @@ extension CloudKitManager {
             status: status,
             assigneeId: uuid(from: record["assigneeId"] as? CKRecord.Reference),
             assigneeIds: uuidArray(from: record["assigneeIds"] as? [CKRecord.Reference]),
+            backlogCategoryId: uuid(from: record["backlogCategoryId"] as? CKRecord.Reference),
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             dueDate: record["dueDate"] as? Date,
             completedAt: record["completedAt"] as? Date,

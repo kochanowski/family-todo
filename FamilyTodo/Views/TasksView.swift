@@ -44,6 +44,7 @@ private struct TasksContent: View {
 
     @StateObject private var store: TaskStore
     @StateObject private var memberStore: MemberStore
+    @StateObject private var backlogStore: BacklogStore
 
     @State private var taskBeingCompleted: UUID?
     @State private var showAllCompleteAnimation = false
@@ -62,6 +63,7 @@ private struct TasksContent: View {
         taskStore.setHousehold(householdId)
         _store = StateObject(wrappedValue: taskStore)
         _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _backlogStore = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
         _selectedTab = selectedTab
     }
 
@@ -95,6 +97,7 @@ private struct TasksContent: View {
                                 TaskRow(
                                     task: task,
                                     assigneeName: assigneeName(for: task),
+                                    categoryName: categoryName(for: task),
                                     wipZone: wipZone(for: index),
                                     onToggle: { toggleTask(task) },
                                     onOpenDetail: { selectedTask = task }
@@ -112,6 +115,7 @@ private struct TasksContent: View {
                             TaskRow(
                                 task: task,
                                 assigneeName: assigneeName(for: task),
+                                categoryName: categoryName(for: task),
                                 wipZone: .normal,
                                 onToggle: { toggleTask(task) },
                                 onOpenDetail: { selectedTask = task }
@@ -136,6 +140,7 @@ private struct TasksContent: View {
                             TaskRow(
                                 task: task,
                                 assigneeName: assigneeName(for: task),
+                                categoryName: categoryName(for: task),
                                 wipZone: .normal,
                                 onToggle: { toggleTask(task) },
                                 onOpenDetail: { selectedTask = task }
@@ -177,16 +182,20 @@ private struct TasksContent: View {
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
                 memberStore.setSyncMode(userSession.syncMode)
+                backlogStore.setSyncMode(userSession.syncMode)
                 await store.loadTasks()
                 await memberStore.loadMembers()
+                await backlogStore.loadData()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             store.setSyncMode(userSession.syncMode)
             memberStore.setSyncMode(userSession.syncMode)
+            backlogStore.setSyncMode(userSession.syncMode)
             await store.loadTasks()
             await memberStore.loadMembers()
+            await backlogStore.loadData()
         }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(
@@ -202,6 +211,9 @@ private struct TasksContent: View {
                     _ = _Concurrency.Task {
                         await store.deleteTask(taskToDelete)
                     }
+                },
+                onDemoteToBacklog: { taskToDemote in
+                    demoteTaskToBacklog(taskToDemote)
                 }
             )
         }
@@ -454,6 +466,11 @@ private struct TasksContent: View {
         return memberStore.members.first(where: { $0.id == assigneeId })?.displayName
     }
 
+    private func categoryName(for task: Task) -> String? {
+        guard let backlogCategoryId = task.backlogCategoryId else { return nil }
+        return backlogStore.categories.first(where: { $0.id == backlogCategoryId })?.title
+    }
+
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 12, weight: .semibold))
@@ -483,6 +500,31 @@ private struct TasksContent: View {
         updatedTask.completedAt = Date().addingTimeInterval(-86401)
         _ = _Concurrency.Task {
             _ = await store.updateTask(updatedTask)
+        }
+    }
+
+    private func demoteTaskToBacklog(_ task: Task) {
+        _ = _Concurrency.Task {
+            let resolvedCategoryId: UUID? = if let backlogCategoryId = task.backlogCategoryId,
+                                               backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
+            {
+                backlogCategoryId
+            } else {
+                backlogStore.categories.first?.id
+            }
+
+            guard let resolvedCategoryId else {
+                return
+            }
+
+            await backlogStore.addItem(
+                to: resolvedCategoryId,
+                title: task.title,
+                assigneeId: task.assigneeId,
+                notes: task.notes
+            )
+
+            await store.deleteTask(task)
         }
     }
 
@@ -600,6 +642,7 @@ struct TaskRow: View {
 
     let task: Task
     let assigneeName: String?
+    let categoryName: String?
     let wipZone: WipZone
     let onToggle: () -> Void
     let onOpenDetail: () -> Void
@@ -631,6 +674,15 @@ struct TaskRow: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(Color.purple.opacity(0.12)))
+                            }
+
+                            if let categoryName {
+                                Text(categoryName)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.blue.opacity(0.12)))
                             }
 
                             if let dueDate = task.dueDate {
@@ -721,6 +773,7 @@ private struct TaskDetailSheet: View {
     let members: [Member]
     let onSave: (Task) -> Void
     let onDelete: (Task) -> Void
+    let onDemoteToBacklog: (Task) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -735,12 +788,14 @@ private struct TaskDetailSheet: View {
         task: Task,
         members: [Member],
         onSave: @escaping (Task) -> Void,
-        onDelete: @escaping (Task) -> Void
+        onDelete: @escaping (Task) -> Void,
+        onDemoteToBacklog: @escaping (Task) -> Void
     ) {
         self.task = task
         self.members = members
         self.onSave = onSave
         self.onDelete = onDelete
+        self.onDemoteToBacklog = onDemoteToBacklog
 
         _title = State(initialValue: task.title)
         _status = State(initialValue: task.status)
@@ -823,7 +878,11 @@ private struct TaskDetailSheet: View {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedTask.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
 
-        onSave(updatedTask)
+        if status == .backlog {
+            onDemoteToBacklog(updatedTask)
+        } else {
+            onSave(updatedTask)
+        }
         dismiss()
     }
 }
