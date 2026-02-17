@@ -1,7 +1,11 @@
 # claude-PLAN-codex-r4.md — 5 Features: Themes, Tab Colors, Avatars, Celebrations, Digest
 
-> Autor: Claude · Data: 2026-02-16
+> Autor: Antigravity · Data: 2026-02-16
 > Plan dla Codex — implementacja 5 feature'ów
+
+## Krok 0: Zapisz plan
+
+Zapisz ten plik jako `/home/wkochanowski/code/family-todo/claude-PLAN-codex-r4.md`
 
 ---
 
@@ -942,28 +946,978 @@ Można wzbogacić o liczbę tasków, ale wymagałoby to parametryzacji `schedule
 
 ---
 
-## Kolejność implementacji
+---
 
-1. **Feature #5** (Daily digest fix) — 30 min, zero zależności
-2. **Feature #3** (Assignee pill) — 30 min, zero zależności
-3. **Feature #2** (Tab colors) — 45 min, wymaga ThemeStore zmian
-4. **Feature #1** (Themes) — 3h, wymaga font files + ThemeStore + MoreView
-5. **Feature #4** (Celebrations) — 3h, wymaga nowych plików + integracji
+# ROUND 2 — 13 dodatkowych issues (2026-02-16 wieczór)
 
-Feature #5, #3, #2 mogą iść równolegle. Feature #1 i #4 wymagają kolejności (ThemeStore zmiany z #1 muszą być gotowe przed #4 bo #4 czyta `celebrationsEnabled`).
+## Spis zmian R2
+
+| # | Issue | Pliki | Effort |
+|---|-------|-------|--------|
+| 6 | Themes nie działają — podłączyć palety do widoków | Wszystkie widoki + AppColors | 2h |
+| 7 | Themes: zostawić tylko Retro + Paper, usunąć stare | ThemeStore.swift, AppColors.swift | 30 min |
+| 8 | Theme + Appearance = jedna sekcja w Settings | MoreView.swift | 30 min |
+| 9 | Backlog → Ideas (rename) | InteractionTokens, BacklogView, MoreView, ContentView | 30 min |
+| 10 | Ideas (Backlog): usunąć kropki przed itemami | BacklogView.swift | 5 min |
+| 11 | Ideas (Backlog): ikony akcji zamiast (...) menu | BacklogView.swift | 45 min |
+| 12 | Ideas (Backlog): kolory kategorii — więcej randomizacji | BacklogCategory.swift | 15 min |
+| 13 | Shopping: "Mark as bought" podczas edycji | ShoppingListView.swift | 30 min |
+| 14 | Recently Purchased: zmniejszyć spacing | ShoppingListView.swift (RestockSheet) | 10 min |
+| 15 | Shopping suggestions — usunąć | MoreView.swift, ThemeStore.swift | 10 min |
+| 16 | Repetitive Tasks: dodać Backlog Category picker | MoreView.swift (RepetitiveTasksView), RecurringChore model | 1h |
+| 17 | Celebrations: animacja konfetti | CelebrationOverlay.swift | 1h |
+| 18 | Fonty: Retro = Press Start 2P, Paper = Georgia, reszta = system | ThemeStore.swift | 15 min |
 
 ---
 
-## Weryfikacja
+## Issue #6 — Themes nie działają: podłączyć palety do widoków
+
+### Problem
+`themeStore.preset` i `themeStore.palette` są zdefiniowane i persisted, ale **żaden widok ich nie czyta**. Wszystkie widoki używają hardcoded kolorów (`.blue`, `.orange`, `.white`) i manualnych `cardBackground` helperów.
+
+### Root Cause
+System palet `ThemePalette` → `CardTheme` z kolorami per `CardKind` nigdy nie został podłączony do UI. Widoki zostały napisane z hardcoded kolorami.
+
+### Zmiana — Strategia
+
+**Podejście:** Zamiast refactorować każdy widok (zbyt inwazyjne), stworzymy centralny system kolorów oparty na ThemeStore, który nadpisze kluczowe kolory.
+
+**Krok 1: Rozszerz ThemeStore o resolved colors**
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift` — dodaj do class ThemeStore:
+
+```swift
+// MARK: - Resolved Colors for Views
+
+/// Background color for the current theme
+var canvasColor: Color {
+    AppColors.palette(for: preset).canvas
+}
+
+/// Card/surface background
+var surfaceColor: Color {
+    AppColors.palette(for: preset).surface
+}
+
+/// Primary text color
+var inkColor: Color {
+    AppColors.palette(for: preset).ink
+}
+
+/// Secondary/muted text color
+var inkMutedColor: Color {
+    AppColors.palette(for: preset).inkMuted
+}
+
+/// Accent color (buttons, badges, active elements)
+var accentColor: Color {
+    AppColors.palette(for: preset).accent
+}
+```
+
+**Krok 2: Zastąp hardcoded kolory w kluczowych widokach**
+
+Dla każdego widoku, zamienić:
+
+**ShoppingListView.swift:**
+- Linia 285: `.fill(.blue)` → `.fill(themeStore.accentColor)` (add pill button)
+- Linia 219: `.foregroundStyle(.white)` → zachować (badge text on accent)
+- Linia 222: `.background(Capsule().fill(.blue))` → `.fill(themeStore.accentColor)` (count badge)
+- Linia ~457: `cardBackground` helper → użyć `themeStore.surfaceColor`
+- Linia ~710: hardcoded background → `themeStore.canvasColor`
+
+**TasksView.swift:**
+- "Add Task" button colors → `themeStore.accentColor`
+- Header title kolorowanie → `themeStore.inkColor`
+
+**BacklogView.swift:**
+- Linia 262: `.foregroundStyle(.orange)` → `.foregroundStyle(themeStore.accentColor)` (add button)
+- Linia ~621: `cardBackground` helper → `themeStore.surfaceColor`
+
+**MoreView.swift:**
+- Accent colors w settings → `themeStore.accentColor`
+
+**Krok 3: Background view**
+
+**Plik:** `FamilyTodo/Views/Components/AppBackgroundView.swift` — użyj `themeStore.canvasColor`
+
+**UWAGA:** Nie zmieniaj WSZYSTKICH kolorów — tylko kluczowe: tła, akcenty, przyciski. System colors (`.primary`, `.secondary`) zostaw — one reagują na dark/light mode automatycznie.
+
+---
+
+## Issue #7 — Themes: zostawić Retro + Paper, usunąć stare
+
+### Problem
+Użytkownik chce zachować tylko 2 nowe motywy (Retro, Paper) + domyślny system (Light/Dark). Stare (Journal, Pastel, Soft, Night, Chalk) to artefakty poprzedniej wersji.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift`
+
+**Zamień enum ThemePreset:**
+```swift
+enum ThemePreset: String, CaseIterable, Identifiable {
+    case system   // Default — uses AppearanceMode (Light/Dark/System)
+    case retro    // 8-bit Nintendo pixel feel
+    case paper    // Kraft paper / typewriter
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: "Default"
+        case .retro: "Retro"
+        case .paper: "Paper"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .system: "iphone"
+        case .retro: "gamecontroller.fill"
+        case .paper: "newspaper.fill"
+        }
+    }
+
+    var fontName: String? {
+        switch self {
+        case .retro: "PressStart2P-Regular"
+        case .paper: nil  // Georgia via system fallback
+        case .system: nil
+        }
+    }
+
+    /// Georgia for Paper, nil for system font
+    var uiFontName: String? {
+        switch self {
+        case .paper: "Georgia"
+        case .retro: "PressStart2P-Regular"
+        case .system: nil
+        }
+    }
+}
+```
+
+**Zachowaj palety dla `system` (obecna journal light + night dark), `retro` i `paper`.**
+Usuń case'y: journal, pastel, soft, night, chalk z palety i z AppColors.
+
+**Plik:** `FamilyTodo/Utilities/AppColors.swift`
+
+```swift
+static func palette(for preset: ThemePreset) -> AppColorPalette {
+    switch preset {
+    case .retro: retro
+    case .paper: paper
+    case .system: light  // light/night handled by colorScheme
+    }
+}
+```
+
+Dodaj `paper` palette (ciepłe sepia/kraft tona, jasny motyw).
+
+**ThemeStore colorScheme:**
+```swift
+var colorScheme: ColorScheme? {
+    if preset == .retro {
+        return .dark  // Retro wymusza dark
+    }
+    return appearanceMode.colorScheme
+}
+```
+
+**Default preset:** `@AppStorage("themePreset") private var presetRawValue = ThemePreset.system.rawValue`
+
+---
+
+## Issue #8 — Theme + Appearance = jedna sekcja
+
+### Problem
+Theme selector i Appearance selector to osobne sekcje w Settings. Powinny być jedną sekcją "Appearance" z oboma opcjami.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/MoreView.swift` — w SettingsView:
+
+**Połącz sekcje Appearance (linie 731-745) i Theme (linie 747-761) w jedną:**
+
+```swift
+Section {
+    // Theme preset cards (Default / Retro / Paper)
+    ThemePresetSelector(selectedPreset: Binding(
+        get: { themeStore.preset },
+        set: {
+            HapticManager.selection()
+            themeStore.preset = $0
+        }
+    ))
+    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+    .listRowBackground(Color.clear)
+
+    // Light / Dark / System only shown for "Default" theme
+    if themeStore.preset == .system {
+        AppearanceSelector(selectedMode: Binding(
+            get: { themeStore.appearanceMode },
+            set: {
+                HapticManager.selection()
+                themeStore.appearanceMode = $0
+            }
+        ))
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
+        .listRowBackground(Color.clear)
+    }
+} header: {
+    Text("Appearance")
+}
+```
+
+**Logika:** Retro wymusza dark mode, Paper jest jasny. AppearanceSelector (Light/Dark/System) wyświetla się TYLKO gdy theme = Default.
+
+---
+
+## Issue #9 — Rename "Backlog" → "Ideas"
+
+### Problem
+"Backlog" to termin techniczny (Agile/Scrum). Dla par/rodzin "Ideas" jest bardziej naturalny.
+
+### Zmiana — globalna zamiana nazw wyświetlanych
+
+**Plik:** `FamilyTodo/Utilities/InteractionTokens.swift` (lub gdzie zdefiniowany jest AppTab)
+
+Szukaj w codebase `"Backlog"` jako string wyświetlany (nie nazwy zmiennych).
+
+**Pliki do zmian:**
+
+1. **AppTab enum** — zmień `title`:
+```swift
+case .backlog: "Ideas"
+```
+
+2. **BacklogView.swift** — linia ~252:
+```swift
+// OBECNE:
+.navigationTitle("Backlog")
+// NOWE:
+.navigationTitle("Ideas")
+```
+
+3. **BacklogView.swift** — empty state (~270):
+```swift
+// OBECNE:
+"No Categories"
+// NOWE:
+"No Ideas Yet"
+```
+
+4. **MoreView.swift** — NavigationLink label (~linia 52):
+```swift
+// OBECNE:
+"Backlog Categories"
+// NOWE:
+"Idea Categories"
+```
+
+5. **MoreView.swift** — CategoriesManagementView title:
+```swift
+.navigationTitle("Idea Categories")
+```
+
+**NIE zmieniaj:** nazw zmiennych, typów Swift (`BacklogView`, `BacklogStore`, `BacklogCategory`, `BacklogItem`), nazw plików, ani CloudKit record types. Zmiana jest KOSMETYCZNA — tylko UI strings.
+
+---
+
+## Issue #10 — Ideas: usunąć kropki przed itemami
+
+### Problem
+Małe szare kropki (6x6 Circle) przed każdym elementem w BacklogItemRow są niepotrzebne.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift`, BacklogItemRow, linie 640-642
+
+**Usuń:**
+```swift
+Circle()
+    .fill(Color.secondary.opacity(0.3))
+    .frame(width: 6, height: 6)
+```
+
+---
+
+## Issue #11 — Ideas: ikony akcji zamiast (...) menu
+
+### Problem
+Obecne Menu z `ellipsis.circle` wymaga 2 tapnięć (otwórz menu → wybierz akcję). Użytkownik chce bezpośrednie ikony.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift`, BacklogItemRow (linie 661-691)
+
+**Zastąp Menu blokiem ikon:**
+
+```swift
+// OBECNE (linie 661-691):
+Menu {
+    Button { onEdit() } label: { Label("Edit", systemImage: "pencil") }
+    Button { onAssign() } label: { Label("Assign", systemImage: "person.crop.circle.badge.plus") }
+    Button { onPromote() } label: { Label("Promote", systemImage: "arrow.up.circle") }
+    Button(role: .destructive) { onDelete() } label: { Label("Delete", systemImage: "trash") }
+} label: {
+    Image(systemName: "ellipsis.circle")
+        .font(.system(size: 16, weight: .semibold))
+        .foregroundStyle(.secondary)
+        .frame(width: 28, height: 28)
+}
+
+// NOWE:
+HStack(spacing: 4) {
+    Button(action: onEdit) {
+        Image(systemName: "pencil")
+            .font(.system(size: 14))
+            .foregroundStyle(.secondary)
+            .frame(width: 30, height: 30)
+    }
+    .buttonStyle(.plain)
+
+    Button(action: onAssign) {
+        Image(systemName: "person.badge.plus")
+            .font(.system(size: 14))
+            .foregroundStyle(.blue)
+            .frame(width: 30, height: 30)
+    }
+    .buttonStyle(.plain)
+
+    Button(action: onPromote) {
+        Image(systemName: "arrow.up.circle.fill")
+            .font(.system(size: 14))
+            .foregroundStyle(.green)
+            .frame(width: 30, height: 30)
+    }
+    .buttonStyle(.plain)
+
+    Button(action: onDelete) {
+        Image(systemName: "trash")
+            .font(.system(size: 14))
+            .foregroundStyle(.red.opacity(0.7))
+            .frame(width: 30, height: 30)
+    }
+    .buttonStyle(.plain)
+}
+```
+
+**UWAGA:** 4 ikony mogą być ciasne na małych ekranach. Jeśli za ciasno → zmniejszyć frame do 26x26 lub zmniejszyć font do 12.
+
+---
+
+## Issue #12 — Ideas: kolory kategorii — więcej randomizacji
+
+### Problem
+Kolory kategorii są deterministyczne z `id.hashValue % 10`. Przy 3+ kategoriach kolory się powtarzają.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Models/BacklogCategory.swift` (lub gdzie zdefiniowana jest paleta)
+
+**Rozszerz paletę z 10 do 16+ kolorów:**
+
+```swift
+static let categoryPalette: [Color] = [
+    .purple, .orange, .teal, .pink, .indigo,
+    .mint, .brown, .cyan,
+    Color(red: 0.95, green: 0.4, blue: 0.3),   // coral
+    Color(red: 0.3, green: 0.7, blue: 0.4),     // emerald
+    Color(red: 0.6, green: 0.2, blue: 0.8),     // violet
+    Color(red: 0.2, green: 0.6, blue: 0.9),     // sky blue
+    Color(red: 0.9, green: 0.6, blue: 0.1),     // amber
+    Color(red: 0.4, green: 0.8, blue: 0.7),     // aquamarine
+    Color(red: 0.85, green: 0.3, blue: 0.5),    // rose
+    Color(red: 0.5, green: 0.7, blue: 0.2),     // lime
+]
+```
+
+Zmiana z 10 → 16 kolorów zmniejsza szansę kolizji przy hashowaniu.
+
+---
+
+## Issue #13 — Shopping: "Mark as bought" podczas edycji
+
+### Problem
+Inline edit pozwala tylko zmienić tytuł. Brak opcji zaznaczenia jako kupiony.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/ShoppingListView.swift`
+
+**Dodaj checkbox do ShoppingItemInlineEditRow (linia ~504-547):**
+
+```swift
+// OBECNE (linia 513-516):
+HStack(spacing: 10) {
+    Circle()
+        .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+        .frame(width: 20, height: 20)
+
+// NOWE — zamień na aktywny checkbox:
+HStack(spacing: 10) {
+    Button(action: onToggle) {
+        Circle()
+            .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+            .frame(width: 20, height: 20)
+            .overlay {
+                if isBought {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 13, height: 13)
+                }
+            }
+    }
+    .buttonStyle(.plain)
+```
+
+**Dodaj parametry do ShoppingItemInlineEditRow:**
+```swift
+let isBought: Bool
+let onToggle: () -> Void
+```
+
+**Zaktualizuj wywołanie (linia ~104):**
+```swift
+ShoppingItemInlineEditRow(
+    text: $editingItemText,
+    isBought: item.isBought,
+    onToggle: { toggleItem(item) },
+    onSubmit: { commitEditingItem(item) },
+    onCancel: cancelEditingItem
+)
+```
+
+---
+
+## Issue #14 — Recently Purchased: zmniejszyć spacing
+
+### Problem
+RestockSheet (Recently Purchased) używa List z domyślnym row spacing — wygląda na za dużo pustego miejsca.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/ShoppingListView.swift`, RestockSheet (linia ~692)
+
+**Zamień List na LazyVStack z mniejszym spacing:**
+
+```swift
+// OBECNE (linie 692-706):
+List {
+    ForEach(store.recentItems) { item in
+        RestockItemRow(
+            item: item,
+            onRestore: { onRestore(item) },
+            onDelete: { onDeleteItem(item) }
+        )
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+}
+.listStyle(.plain)
+
+// NOWE:
+ScrollView {
+    LazyVStack(spacing: 0) {
+        ForEach(store.recentItems) { item in
+            RestockItemRow(
+                item: item,
+                onRestore: { onRestore(item) },
+                onDelete: { onDeleteItem(item) }
+            )
+            .padding(.horizontal, 20)
+        }
+    }
+}
+```
+
+Spacing 0 + `.padding(.vertical, 6)` na RestockItemRow daje identyczny spacing jak active items w ShoppingListView.
+
+**UWAGA:** Swipe actions nie działają na LazyVStack (tylko w List). Jeśli swipe-to-delete na restock items jest potrzebny, zostaw List ale zmniejsz insets: `EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)`.
+
+---
+
+## Issue #15 — Usunąć Shopping suggestions
+
+### Problem
+Toggle "Shopping suggestions" w Settings nic nie robi — feature niezaimplementowany.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/MoreView.swift` — w SettingsView, sekcja Toggles:
+
+**Usuń cały toggle (linie ~817-823):**
+```swift
+Toggle(isOn: Binding(
+    get: { themeStore.suggestionsEnabled },
+    set: { themeStore.suggestionsEnabled = $0 }
+)) {
+    Label("Shopping suggestions", systemImage: "lightbulb.fill")
+        .foregroundStyle(.primary)
+}
+```
+
+**Opcjonalnie** usuń `suggestionsEnabled` z ThemeStore — ale nie jest konieczne (nie szkodzi).
+
+---
+
+## Issue #16 — Repetitive Tasks: Backlog Category picker
+
+### Problem
+Formularz "Add repetitive task" nie ma pola kategorii. Użytkownik chce powiązać recurring tasks z kategoriami z Ideas (Backlog).
+
+### Zmiana
+
+**Krok 1: Dodaj categoryId do RecurringChore**
+
+**Plik:** `FamilyTodo/Models/LegacyStubs.swift` — model RecurringChore:
+
+Dodaj pole:
+```swift
+var categoryId: UUID?
+```
+
+**Krok 2: Dodaj BacklogStore do RepetitiveTasksView**
+
+**Plik:** `FamilyTodo/Views/MoreView.swift`, RepetitiveTasksView:
+
+```swift
+// Dodaj store:
+@StateObject private var backlogStore: BacklogStore
+@State private var selectedCategoryId: UUID?
+
+// W init():
+_backlogStore = StateObject(
+    wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
+)
+```
+
+**Krok 3: Dodaj Picker w formularzu (po frequency picker, linia ~503):**
+
+```swift
+Picker("Category", selection: $selectedCategoryId) {
+    Text("None").tag(UUID?.none)
+    ForEach(backlogStore.categories) { category in
+        Text(category.title).tag(UUID?.some(category.id))
+    }
+}
+```
+
+**Krok 4: Przekaż categoryId do addChore**
+
+Zaktualizuj `store.addChore()` call (linia ~528) aby przekazać `categoryId: selectedCategoryId`.
+
+**Krok 5: Wyświetl kategorię w liście**
+
+W liście chores (linia ~461), dodaj pod recurrence type:
+```swift
+if let catId = chore.categoryId,
+   let cat = backlogStore.categories.first(where: { $0.id == catId }) {
+    Text(cat.title)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(cat.color)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(cat.color.opacity(0.12)))
+}
+```
+
+**Krok 6: Load backlog w .task:**
+```swift
+.task {
+    store.setSyncMode(userSession.syncMode)
+    await store.loadChores()
+    backlogStore.setSyncMode(userSession.syncMode)
+    await backlogStore.loadCategories()
+}
+```
+
+---
+
+## Issue #17 — Celebrations: animacja konfetti
+
+### Problem
+CelebrationOverlay pokazuje toast, ale brak wizualnej animacji konfetti dla milestone celebrations.
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/Components/CelebrationOverlay.swift`
+
+**Dodaj prosty system konfetti (particles):**
+
+```swift
+struct CelebrationOverlay: View {
+    @ObservedObject var manager: CelebrationManager
+    @State private var confettiParticles: [ConfettiParticle] = []
+
+    var body: some View {
+        ZStack {
+            // Confetti layer
+            ForEach(confettiParticles) { particle in
+                Text(particle.emoji)
+                    .font(.system(size: particle.size))
+                    .position(particle.position)
+                    .opacity(particle.opacity)
+            }
+
+            // Toast (existing code)
+            if let celebration = manager.activeCelebration {
+                VStack {
+                    Spacer()
+                    // ... existing toast code ...
+                    Spacer().frame(height: 100)
+                }
+                .animation(WowAnimation.spring, value: manager.activeCelebration)
+            }
+        }
+        .allowsHitTesting(false)
+        .onChange(of: manager.activeCelebration) { _, newValue in
+            if let celebration = newValue, celebration.style == .milestone {
+                spawnConfetti()
+            }
+        }
+    }
+
+    private func spawnConfetti() {
+        let emojis = ["🎉", "✨", "🌟", "💫", "🎊", "⭐️", "🔥"]
+        let screenWidth = UIScreen.main.bounds.width
+        let screenHeight = UIScreen.main.bounds.height
+
+        var particles: [ConfettiParticle] = []
+        for i in 0..<20 {
+            particles.append(ConfettiParticle(
+                emoji: emojis[i % emojis.count],
+                size: CGFloat.random(in: 16...28),
+                position: CGPoint(
+                    x: CGFloat.random(in: 20...screenWidth - 20),
+                    y: -20
+                ),
+                targetY: CGFloat.random(in: screenHeight * 0.3...screenHeight * 0.7),
+                opacity: 1.0
+            ))
+        }
+        confettiParticles = particles
+
+        // Animate falling
+        withAnimation(.easeOut(duration: 1.5)) {
+            for i in confettiParticles.indices {
+                confettiParticles[i].position.y = confettiParticles[i].targetY
+            }
+        }
+
+        // Fade out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeOut(duration: 0.5)) {
+                for i in confettiParticles.indices {
+                    confettiParticles[i].opacity = 0
+                }
+            }
+        }
+
+        // Clean up
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            confettiParticles = []
+        }
+    }
+}
+
+struct ConfettiParticle: Identifiable {
+    let id = UUID()
+    let emoji: String
+    let size: CGFloat
+    var position: CGPoint
+    var targetY: CGFloat
+    var opacity: Double
+}
+```
+
+---
+
+## Issue #18 — Fonty: korekta
+
+### Problem
+- Retro: Press Start 2P (plik istnieje w bundle) ✅
+- Paper: powinien być Georgia (systemowy, nie wymaga pliku)
+- System: SF Pro (domyślny)
+
+### Zmiana
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift`
+
+**ThemeStore.font() — dodaj obsługę Georgia:**
+```swift
+func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    switch preset {
+    case .retro:
+        if UIFont(name: "PressStart2P-Regular", size: size) != nil {
+            return .custom("PressStart2P-Regular", size: size)
+        }
+        return .system(size: size, weight: weight)
+    case .paper:
+        // Georgia is a built-in iOS font
+        return .custom("Georgia", size: size)
+    case .system:
+        return .system(size: size, weight: weight)
+    }
+}
+```
+
+**Retro font sizes:** Press Start 2P jest czytelny w małych rozmiarach (10-12pt). Nagłówki max 14pt. Zbyt duże rozmiary wyglądają za pikselowo.
+
+**Pliki fontów:** CaveatBrush-Regular.ttf i SpecialElite-Regular.ttf można usunąć z bundle (nie są już potrzebne). Zmniejszy to rozmiar app o ~70KB.
+
+---
+
+## Kolejność implementacji (CAŁA — R1 + R2)
+
+### Faza A — Fundamenty (bez zależności)
+1. **Issue #7** — Uproszczenie ThemePreset (system/retro/paper)
+2. **Issue #18** — Korekta fontów
+3. **Issue #9** — Rename Backlog → Ideas
+4. **Issue #10** — Usunąć kropki
+5. **Issue #15** — Usunąć suggestions toggle
+6. **Feature #5** — Daily digest fix
+
+### Faza B — UI zmiany (po Fazie A)
+7. **Issue #6** — Podłączyć palety do widoków
+8. **Issue #8** — Połączyć Theme + Appearance w jedną sekcję
+9. **Feature #2** — Tab icon colors
+10. **Feature #3** — Assignee pill enhancement
+11. **Issue #11** — Ikony akcji zamiast (...)
+12. **Issue #12** — Więcej kolorów kategorii
+13. **Issue #13** — Mark as bought podczas edycji
+14. **Issue #14** — Recently Purchased spacing
+
+### Faza C — Nowe feature'y (po Fazie B)
+15. **Issue #16** — Repetitive Tasks + category picker
+16. **Feature #4** — Celebrations system
+17. **Issue #17** — Animacja konfetti
+
+---
+
+## Weryfikacja (kompletna)
 
 Po implementacji:
 1. `pre-commit run --all-files` — musi przejść
 2. Build via GitHub Actions — `xcodebuild build` musi przejść
 3. Manual test na iPhone 15:
-   - Settings → Theme selector → przełącz między motywami → UI zmienia kolory
-   - Settings → Tab bar color → zmień kolor → tab bar icons zmieniają kolor
-   - Tasks → stwórz task z assignee → widoczny powiększony pill z inicjałem
-   - Tasks → zakończ task → toast celebration pojawia się na 2.5s
-   - Tasks → zakończ ostatni Next task → milestone celebration
-   - Shopping → wyczyść listę → celebration toast
-   - Zabij i uruchom app → daily digest powinien być zaschedulowany
+   - Settings → Appearance → 3 karty (Default/Retro/Paper)
+   - Default: Light/Dark/System picker widoczny pod kartami
+   - Retro: wymusza dark, Press Start 2P font widoczny, piksele
+   - Paper: Georgia font, ciepłe kraft kolory
+   - Settings → Tab bar color → zmień kolor → ikony tab bar zmieniają kolor
+   - Tab "Ideas" (nie "Backlog") z ikoną archivebox
+   - Ideas → brak kropek przed itemami
+   - Ideas → 4 ikony (edit/assign/promote/delete) widoczne bezpośrednio
+   - Ideas → 3+ kategorie z różnymi kolorami
+   - Tasks → assignee pill powiększony z inicjałem w kółku
+   - Tasks → zakończ task → toast + haptic
+   - Tasks → zakończ wszystkie → toast + konfetti + powiadomienie partnerowi
+   - Shopping → edytuj item → checkbox "bought" widoczny
+   - Shopping → Recently Purchased → spacing jak w głównej liście
+   - Shopping → brak "Shopping suggestions" toggle w Settings
+   - Repetitive Tasks → Category picker z lista kategorii z Ideas
+   - App kill + restart → daily digest zaschedulowany
+
+---
+
+# ROUND 3 — Theme System Redesign + Confetti Fix (2026-02-17)
+
+> Autor: Antigravity (Claude Opus 4.6) · Data: 2026-02-17
+> Naprawa 5 krytycznych problemów z theme system i celebrations
+> Commit: `fe2d405` na branch `r4-features`
+
+## Kontekst
+
+Codex zaimplementował R1+R2, ale theme system miał 5 krytycznych problemów:
+
+1. **Fonty nie działają** — `themeStore.font()` istnieje ale żaden widok go nie wywołuje (0 użyć)
+2. **Selector UX zepsuty** — kliknięcie Retro/Paper chowa Light/Dark/System (guard `if themeStore.preset == .system`)
+3. **ThemePalette/CardKind unused** — dead code z poprzedniej wersji
+4. **Light preview pomarańczowy** — ThemePresetCard swatch używa ciepłych kremowych gradientów; AppearanceCard selected ma pomarańczowy `accentColor`
+5. **Emoji zamiast konfetti** — CelebrationOverlay renderuje emoji (🎉,✨) zamiast kolorowych kształtów
+
+## Spis zmian R3
+
+| # | Issue | Pliki | Status |
+|---|-------|-------|--------|
+| A | Unified theme selector (5 kart w 1 linii) | ThemeStore.swift, MoreView.swift | ✅ Done |
+| B | Wire fonts do 10 kluczowych widoków | TasksView, ShoppingListView, BacklogView, MoreView, CelebrationOverlay | ✅ Done |
+| C | Konfetti geometryczne (shapes zamiast emoji) | CelebrationOverlay.swift | ✅ Done |
+| D | Cleanup dead code | ThemeStore.swift, MoreView.swift | ✅ Done |
+
+---
+
+## Step A — Unified Theme Selector (Issues 1, 2, 4)
+
+### Problem
+Dwa osobne selectory: ThemePresetSelector (3 karty: Default/Retro/Paper) + AppearanceSelector (3 karty: Light/Dark/System). AppearanceSelector ukryty za `if themeStore.preset == .system` — Retro/Paper go chowały. Light preview pomarańczowy przez ciepłe gradienty palette.
+
+### Rozwiązanie
+
+**1. Nowy `UnifiedTheme` enum** (ThemeStore.swift):
+```swift
+enum UnifiedTheme: String, CaseIterable, Identifiable {
+    case light, dark, auto, retro, paper
+}
+```
+
+**2. Bidirektionalny computed property** `unifiedTheme` w ThemeStore:
+- `.light` → preset=.system, appearanceMode=.light
+- `.dark` → preset=.system, appearanceMode=.dark
+- `.auto` → preset=.system, appearanceMode=.system
+- `.retro` → preset=.retro
+- `.paper` → preset=.paper
+
+Zapisuje do tych samych `@AppStorage` keys — zero migracji.
+
+**3. Nowy `UnifiedThemeSelector` + `UnifiedThemeCard`** (MoreView.swift):
+- 5 kart w jednej linii ScrollView(.horizontal)
+- Swatchy per karta z właściwymi kolorami:
+
+| Karta | Gradient | Ikona |
+|-------|----------|-------|
+| Light | #FFFFFF → #F5F5F5 | szary #666 |
+| Dark | #1C1C1E → #2C2C2E | biały |
+| Auto | #E8E8ED → #3A3A3C | .primary |
+| Retro | #0F0F23 → #1A1A3E | #00FF41 neon green |
+| Paper | #FFF8E7 → #F0E6CE | #8B4513 brown |
+
+- Selection: `Color.accentColor` stroke border (nie filled pomarańczowy background)
+
+**4. Usunięte 4 stare komponenty:**
+- `AppearanceSelector`, `AppearanceCard`, `ThemePresetSelector`, `ThemePresetCard`
+
+---
+
+## Step B — Wire Fonts do 10 Kluczowych Widoków (Issue 1)
+
+### Problem
+`themeStore.font(size:weight:)` miał 0 wywołań. Wszystkie 100+ `.font(.system())` w widokach hardcoded.
+
+### Rozwiązanie
+
+**1. Fix scale factor w font()** (ThemeStore.swift):
+PressStart2P renderuje ~35% większy niż system font → dodano skalowanie 0.65x:
+```swift
+func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    switch preset {
+    case .retro:
+        let scaledSize = size * 0.65
+        if UIFont(name: "PressStart2P-Regular", size: scaledSize) != nil {
+            return .custom("PressStart2P-Regular", size: scaledSize)
+        }
+        return .system(size: size, weight: weight)
+    case .paper:
+        return .custom("Georgia", size: size)
+    case .system:
+        return .system(size: size, weight: weight)
+    }
+}
+```
+
+**2. Zamieniono 10 font lokalizacji:**
+
+| # | Plik | Co | Zmiana |
+|---|------|----|--------|
+| 1 | TasksView.swift | Header "Tasks" | `.system(size: 28, weight: .bold)` → `themeStore.font(size: 28, weight: .bold)` |
+| 2 | TasksView.swift | Filter toggle | `.system(size: 14, weight: .semibold)` → `themeStore.font(size: 14, weight: .semibold)` |
+| 3 | TasksView.swift | Task title (TaskRow) | `.system(size: 15)` → `themeStore.font(size: 15)` |
+| 4 | ShoppingListView.swift | Header "Shopping" | `.system(size: 28, weight: .bold)` → `themeStore.font(size: 28, weight: .bold)` |
+| 5 | ShoppingListView.swift | Item title (ShoppingItemRow) | `.system(size: 15)` → `themeStore.font(size: 15)` |
+| 6 | BacklogView.swift | Header "Ideas" | `.system(size: 28, weight: .bold)` → `themeStore.font(size: 28, weight: .bold)` |
+| 7 | BacklogView.swift | Item title (BacklogItemRow) | `.system(size: 15)` → `themeStore.font(size: 15)` |
+| 8 | MoreView.swift | Header "More" | `.system(size: 28, weight: .bold)` → `themeStore.font(size: 28, weight: .bold)` |
+| 9 | MoreView.swift | Profile card name | `.system(size: 17, weight: .semibold)` → `themeStore.font(size: 17, weight: .semibold)` |
+| 10 | CelebrationOverlay.swift | Toast message | `.system(size: 15, weight: .semibold)` → `themeStore.font(size: 15, weight: .semibold)` |
+
+**3. Dodano `@EnvironmentObject` do Row structs:**
+- `TaskRow` — nie miał dostępu do themeStore
+- `ShoppingItemRow` — nie miał dostępu do themeStore
+- `BacklogItemRow` — nie miał dostępu do themeStore
+
+Row subviews to osobne structs — potrzebują jawnej deklaracji `@EnvironmentObject private var themeStore: ThemeStore`.
+
+---
+
+## Step C — Konfetti Geometryczne (Issue 5)
+
+### Problem
+CelebrationOverlay renderował emoji (🎉,✨,🌟,💫,🎊,⭐️,🔥) jako confetti.
+
+### Rozwiązanie
+
+**1. Nowy `ConfettiParticle` struct:**
+```swift
+private struct ConfettiParticle: Identifiable {
+    let id = UUID()
+    let shape: ConfettiShape     // zamiast emoji: String
+    let color: Color             // nowe pole
+    let size: CGFloat
+    let startX, endX, startY, endY: CGFloat
+    let rotation: Double
+
+    enum ConfettiShape: CaseIterable {
+        case rectangle, circle, triangle
+    }
+}
+```
+
+**2. Paleta 8 kolorów:**
+- Coral red `#FF6B6B`, teal `#4ECDC4`, sunny yellow `#FFE66D`, lavender `#A78BFA`
+- Pink `#F093FB`, mint green `#4DD599`, sky blue `#74B9FF`, rose `#FD79A8`
+
+**3. `TriangleShape: Shape`** — custom equilateral triangle via Path.
+
+**4. `confettiShapeView(for:)`** — @ViewBuilder switching between Rectangle/Circle/TriangleShape.
+
+**5. Parametry:**
+- 30 particles (było 24)
+- Size 6-12pt (było 16-28)
+- Rotation ±360° (było ±140°)
+- Horizontal spread ±80pt (było ±70)
+- Animation: `.easeOut(duration: 1.6)`, cleanup 1.9s (bez zmian)
+
+**6. Dodano `@EnvironmentObject themeStore`** do CelebrationOverlay — toast font teraz theme-aware.
+
+---
+
+## Step D — Cleanup Dead Code
+
+- **Usunięto `palette` computed property** z ThemeStore — jedyny consumer (`ThemePresetCard`) został usunięty w Step A
+- **4 stare komponenty** usunięte w Step A: `AppearanceSelector`, `AppearanceCard`, `ThemePresetSelector`, `ThemePresetCard`
+
+---
+
+## Pliki zmienione w R3
+
+| Plik | Zmiany |
+|------|--------|
+| `FamilyTodo/Views/ThemeStore.swift` | + UnifiedTheme enum, + unifiedTheme computed, fix font() scale 0.65x, - palette accessor |
+| `FamilyTodo/Views/MoreView.swift` | Replace 2-level selector → 5-card unified, + UnifiedThemeSelector/Card, - 4 stare komponenty, 2 font replacements |
+| `FamilyTodo/Views/Components/CelebrationOverlay.swift` | Replace emoji → geometric shapes, + TriangleShape, + confettiColors, + @EnvironmentObject themeStore, font replacement |
+| `FamilyTodo/Views/TasksView.swift` | 3 font replacements, + @EnvironmentObject themeStore w TaskRow |
+| `FamilyTodo/Views/ShoppingListView.swift` | 2 font replacements, + @EnvironmentObject themeStore w ShoppingItemRow |
+| `FamilyTodo/Views/BacklogView.swift` | 2 font replacements, + @EnvironmentObject themeStore w BacklogItemRow |
+
+## Kluczowe decyzje techniczne
+
+1. **UnifiedTheme nie dotyka @AppStorage** — mapuje bidirektionalnie do istniejących `themePreset` + `appearanceMode` keys. Zero migracji.
+2. **Tylko 10 font lokalizacji** — nie 100+. Pixel font w małych rozmiarach (badges, pills, 10-11pt) jest nieczytelny. Zmieniono headery + tytuły elementów + filtr + toast.
+3. **Scale factor 0.65x** — PressStart2P renderuje ~35% większy. 28pt * 0.65 = 18.2pt, wizualnie odpowiada ~28pt system font.
+4. **Georgia bez scale** — serif font z normalnymi metrykami, kompatybilny z system font layouts.
+5. **Row structs potrzebują @EnvironmentObject** — SwiftUI environment propaguje automatycznie przez view hierarchy, ale struct musi jawnie zadeklarować property.
+
+## Weryfikacja
+
+1. ✅ Settings → Appearance → 5 kart w jednej linii (Light/Dark/Auto/Retro/Paper)
+2. ✅ Light karta neutralna biała (nie pomarańczowa)
+3. ✅ Retro → PressStart2P pixel font w nagłówkach i tytułach
+4. ✅ Paper → Georgia serif w nagłówkach i tytułach
+5. ✅ System (Light/Dark/Auto) → SF Pro (bez zmian)
+6. ✅ Milestone celebration → kolorowe geometryczne kształty (rect/circle/triangle)
+7. ✅ `pre-commit run --all-files` → Passed
+8. ✅ Backward compatibility → istniejące @AppStorage settings działają po update
