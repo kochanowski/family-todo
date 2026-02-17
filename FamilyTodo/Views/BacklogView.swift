@@ -251,7 +251,7 @@ private struct BacklogContent: View {
     private var header: some View {
         HStack {
             Text("Ideas")
-                .font(themeStore.font(size: 28, weight: .bold))
+                .font(themeStore.font(for: .screenHeader))
 
             Spacer()
 
@@ -642,7 +642,7 @@ struct BacklogItemRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(themeStore.font(size: 15))
+                    .font(themeStore.font(for: .listRowTitle))
                     .strikethrough(false)
 
                 if let assigneeName {

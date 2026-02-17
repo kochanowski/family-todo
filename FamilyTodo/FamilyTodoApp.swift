@@ -83,7 +83,11 @@ struct FamilyTodoApp: App {
                 .modelContainer(sharedModelContainer)
                 .preferredColorScheme(themeStore.colorScheme)
                 .overlay {
-                    CelebrationOverlay(manager: celebrationManager)
+                    CelebrationOverlay(
+                        manager: celebrationManager,
+                        messageFont: themeStore.font(for: .celebrationMessage),
+                        accentPalette: themeStore.confettiAccentPalette
+                    )
                 }
                 .task {
                     householdStore.setModelContext(sharedModelContainer.mainContext)

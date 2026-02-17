@@ -4,10 +4,21 @@ import UIKit
 /// Overlay view that shows celebration toasts and geometric confetti.
 struct CelebrationOverlay: View {
     @ObservedObject var manager: CelebrationManager
-    @EnvironmentObject private var themeStore: ThemeStore
+    let messageFont: Font
+    let accentPalette: [Color]?
 
     @State private var confettiParticles: [ConfettiParticle] = []
     @State private var confettiProgress: CGFloat = 0
+
+    init(
+        manager: CelebrationManager,
+        messageFont: Font = .system(size: 15, weight: .semibold),
+        accentPalette: [Color]? = nil
+    ) {
+        self.manager = manager
+        self.messageFont = messageFont
+        self.accentPalette = accentPalette
+    }
 
     var body: some View {
         ZStack {
@@ -22,7 +33,7 @@ struct CelebrationOverlay: View {
                             .font(.system(size: 24))
 
                         Text(celebration.message)
-                            .font(themeStore.font(size: 15, weight: .semibold))
+                            .font(messageFont)
                             .foregroundStyle(.primary)
                     }
                     .padding(.horizontal, 20)
@@ -81,7 +92,7 @@ struct CelebrationOverlay: View {
         }
     }
 
-    private static let confettiColors: [Color] = [
+    private static let defaultConfettiColors: [Color] = [
         Color(hex: "FF6B6B"), // coral red
         Color(hex: "4ECDC4"), // teal
         Color(hex: "FFE66D"), // sunny yellow
@@ -92,15 +103,23 @@ struct CelebrationOverlay: View {
         Color(hex: "FD79A8"), // rose
     ]
 
+    private var resolvedConfettiColors: [Color] {
+        if let accentPalette, !accentPalette.isEmpty {
+            return accentPalette
+        }
+        return Self.defaultConfettiColors
+    }
+
     private func spawnConfetti() {
         let screenWidth = UIScreen.main.bounds.width
         let screenHeight = UIScreen.main.bounds.height
+        let colors = resolvedConfettiColors
 
         confettiParticles = (0 ..< 30).map { _ in
             let startX = CGFloat.random(in: 16 ... (screenWidth - 16))
             return ConfettiParticle(
-                shape: ConfettiParticle.ConfettiShape.allCases.randomElement()!,
-                color: Self.confettiColors.randomElement()!,
+                shape: ConfettiParticle.ConfettiShape.allCases.randomElement() ?? .rectangle,
+                color: colors.randomElement() ?? .blue,
                 size: CGFloat.random(in: 6 ... 12),
                 startX: startX,
                 endX: startX + CGFloat.random(in: -80 ... 80),

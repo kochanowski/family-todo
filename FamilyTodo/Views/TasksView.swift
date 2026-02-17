@@ -374,7 +374,7 @@ private struct TasksContent: View {
     private var header: some View {
         HStack {
             Text("Tasks")
-                .font(themeStore.font(size: 28, weight: .bold))
+                .font(themeStore.font(for: .screenHeader))
 
             if store.nextTasks.isEmpty, !store.recentlyDoneTasks.isEmpty {
                 Image(systemName: "checkmark.circle.fill")
@@ -401,7 +401,7 @@ private struct TasksContent: View {
                     }
                 } label: {
                     Text(filter.rawValue)
-                        .font(themeStore.font(size: 14, weight: .semibold))
+                        .font(themeStore.font(for: .filterLabel))
                         .foregroundStyle(activeFilter == filter ? .primary : .secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -847,7 +847,7 @@ struct TaskRow: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
-                            .font(themeStore.font(size: 15))
+                            .font(themeStore.font(for: .listRowTitle))
                             .foregroundStyle(isCompleted ? .secondary : .primary)
                             .strikethrough(isCompleted)
 

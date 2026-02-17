@@ -628,11 +628,11 @@
 				INFOPLIST_KEY_HPCloudKitEnabled = NO;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIAppFonts = (
-					"Resources/Fonts/PressStart2P-Regular.ttf",
-					"Resources/Fonts/CaveatBrush-Regular.ttf",
-					"Resources/Fonts/SpecialElite-Regular.ttf",
-				);
+					INFOPLIST_KEY_UIAppFonts = (
+						"PressStart2P-Regular.ttf",
+						"CaveatBrush-Regular.ttf",
+						"SpecialElite-Regular.ttf",
+					);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -661,11 +661,11 @@
 				INFOPLIST_KEY_HPCloudKitEnabled = NO;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIAppFonts = (
-					"Resources/Fonts/PressStart2P-Regular.ttf",
-					"Resources/Fonts/CaveatBrush-Regular.ttf",
-					"Resources/Fonts/SpecialElite-Regular.ttf",
-				);
+					INFOPLIST_KEY_UIAppFonts = (
+						"PressStart2P-Regular.ttf",
+						"CaveatBrush-Regular.ttf",
+						"SpecialElite-Regular.ttf",
+					);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

@@ -1,6 +1,67 @@
 import SwiftUI
 import UIKit
 
+enum ThemeFontRole {
+    case display
+    case title
+    case body
+    case chip
+}
+
+enum ThemeFontToken {
+    case screenHeader
+    case filterLabel
+    case listRowTitle
+    case profileName
+    case celebrationMessage
+    case chip
+
+    var size: CGFloat {
+        switch self {
+        case .screenHeader:
+            28
+        case .filterLabel:
+            14
+        case .listRowTitle:
+            15
+        case .profileName:
+            17
+        case .celebrationMessage:
+            15
+        case .chip:
+            11
+        }
+    }
+
+    var weight: Font.Weight {
+        switch self {
+        case .screenHeader:
+            .bold
+        case .filterLabel:
+            .semibold
+        case .profileName, .celebrationMessage:
+            .semibold
+        case .chip:
+            .medium
+        case .listRowTitle:
+            .regular
+        }
+    }
+
+    var role: ThemeFontRole {
+        switch self {
+        case .screenHeader:
+            .display
+        case .profileName:
+            .title
+        case .chip:
+            .chip
+        case .filterLabel, .listRowTitle, .celebrationMessage:
+            .body
+        }
+    }
+}
+
 enum ThemePreset: String, CaseIterable, Identifiable {
     case system
     case retro
@@ -338,6 +399,10 @@ final class ThemeStore: ObservableObject {
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
     @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.system.rawValue
 
+    init() {
+        _ = verifyBundledFonts()
+    }
+
     var preset: ThemePreset {
         get { ThemePreset(rawValue: presetRawValue) ?? .system }
         set {
@@ -432,21 +497,91 @@ final class ThemeStore: ObservableObject {
         AppColors.palette(for: preset).accent
     }
 
+    var confettiAccentPalette: [Color]? {
+        switch preset {
+        case .system:
+            nil
+        case .retro:
+            [
+                Color(hex: "00FF41"),
+                Color(hex: "FFDD57"),
+                Color(hex: "FF6B9D"),
+                Color(hex: "00D4FF"),
+            ]
+        case .paper:
+            [
+                Color(hex: "8B4513"),
+                Color(hex: "A1887F"),
+                Color(hex: "DDB892"),
+                Color(hex: "6D4C41"),
+            ]
+        }
+    }
+
+    func font(for token: ThemeFontToken) -> Font {
+        font(size: token.size, weight: token.weight, role: token.role)
+    }
+
     /// Font resolved for current preset with graceful fallback.
-    /// PressStart2P renders ~35% larger than system font at the same pt size,
-    /// so we scale it down by 0.65 to keep layouts consistent.
-    func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    /// PressStart2P renders bigger than SF at same pt size, so we scale it down.
+    func font(size: CGFloat, weight: Font.Weight = .regular, role: ThemeFontRole = .body) -> Font {
         switch preset {
         case .retro:
-            let scaledSize = size * 0.65
-            if UIFont(name: "PressStart2P-Regular", size: scaledSize) != nil {
-                return .custom("PressStart2P-Regular", size: scaledSize)
-            }
-            return .system(size: size, weight: weight)
+            let scaledSize = scaledRetroSize(size, role: role)
+            return customFont("PressStart2P-Regular", size: scaledSize, fallbackWeight: weight)
         case .paper:
-            return .custom("Georgia", size: size)
+            switch role {
+            case .display, .title:
+                if UIFont(name: "SpecialElite-Regular", size: size) != nil {
+                    return .custom("SpecialElite-Regular", size: size)
+                }
+                return customFont("Georgia", size: size, fallbackWeight: weight)
+            case .body, .chip:
+                return customFont("Georgia", size: size, fallbackWeight: weight)
+            }
         case .system:
             return .system(size: size, weight: weight)
         }
+    }
+
+    @discardableResult
+    func verifyBundledFonts() -> [String: Bool] {
+        let registered: [String: Bool] = [
+            "PressStart2P-Regular": UIFont(name: "PressStart2P-Regular", size: 14) != nil,
+            "SpecialElite-Regular": UIFont(name: "SpecialElite-Regular", size: 14) != nil,
+            "CaveatBrush-Regular": UIFont(name: "CaveatBrush-Regular", size: 14) != nil,
+        ]
+
+        let status = registered
+            .map { "\($0.key)=\($0.value ? "ok" : "missing")" }
+            .sorted()
+            .joined(separator: ", ")
+
+        print("🧩 Theme fonts audit: \(status)")
+        print(
+            "🧩 Theme font map: system=SF, retro=PressStart2P-Regular, paper=SpecialElite-Regular(headline)+Georgia(body), caveat=reserved"
+        )
+        return registered
+    }
+
+    private func customFont(_ postScriptName: String, size: CGFloat, fallbackWeight: Font.Weight) -> Font {
+        if UIFont(name: postScriptName, size: size) != nil {
+            return .custom(postScriptName, size: size)
+        }
+        return .system(size: size, weight: fallbackWeight)
+    }
+
+    private func scaledRetroSize(_ base: CGFloat, role: ThemeFontRole) -> CGFloat {
+        let scale: CGFloat = switch role {
+        case .display:
+            0.62
+        case .title:
+            0.64
+        case .body:
+            0.66
+        case .chip:
+            0.68
+        }
+        return base * scale
     }
 }

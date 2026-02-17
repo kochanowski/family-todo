@@ -213,7 +213,7 @@ private struct ShoppingListContent: View {
     private var header: some View {
         HStack {
             Text("Shopping")
-                .font(themeStore.font(size: 28, weight: .bold))
+                .font(themeStore.font(for: .screenHeader))
 
             // Item count badge
             if !store.toBuyItems.isEmpty {
@@ -491,7 +491,7 @@ struct ShoppingItemRow: View {
 
             Button(action: onEdit) {
                 Text(item.title)
-                    .font(themeStore.font(size: 15))
+                    .font(themeStore.font(for: .listRowTitle))
                     .foregroundStyle(item.isBought ? .secondary : .primary)
                     .strikethrough(item.isBought)
                     .lineLimit(1)

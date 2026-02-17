@@ -86,7 +86,7 @@ struct MoreView: View {
     private var header: some View {
         HStack {
             Text("More")
-                .font(themeStore.font(size: 28, weight: .bold))
+                .font(themeStore.font(for: .screenHeader))
 
             Spacer()
         }
@@ -122,7 +122,7 @@ struct ProfileCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(userSession.displayName ?? "User")
-                    .font(themeStore.font(size: 17, weight: .semibold))
+                    .font(themeStore.font(for: .profileName))
 
                 Text(householdStore.currentHousehold?.name ?? "No Household")
                     .font(.system(size: 13))
@@ -769,6 +769,10 @@ struct SettingsView: View {
                 .listRowBackground(Color.clear)
             } header: {
                 Text("Appearance")
+            } footer: {
+                Text(
+                    "Retro uses Press Start 2P. Paper uses Special Elite for headlines and Georgia for body text. Caveat Brush is reserved for a future chalk theme."
+                )
             }
 
             // MARK: - Tab Color Section
