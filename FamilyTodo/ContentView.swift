@@ -34,6 +34,15 @@ struct MainAppView: View {
             }
         }
         .background(AppBackgroundView())
+        .onAppear {
+            TabBarTypographyManager.apply(themeStore: themeStore)
+        }
+        .onChange(of: themeStore.unifiedTheme) { _, _ in
+            TabBarTypographyManager.apply(themeStore: themeStore)
+        }
+        .onChange(of: themeStore.tabTintColor) { _, _ in
+            TabBarTypographyManager.apply(themeStore: themeStore)
+        }
         .task {
             await bootstrapHouseholdIfNeeded()
         }

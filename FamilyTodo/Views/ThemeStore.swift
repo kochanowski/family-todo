@@ -10,16 +10,30 @@ enum ThemeFontRole {
 
 enum ThemeFontToken {
     case screenHeader
+    case sectionHeader
+    case inlineTitle
+    case bodyStrong
+    case bodySmall
     case filterLabel
     case listRowTitle
     case profileName
     case celebrationMessage
     case chip
+    case tabLabel
+    case buttonLabel
 
     var size: CGFloat {
         switch self {
         case .screenHeader:
             28
+        case .sectionHeader:
+            12
+        case .inlineTitle:
+            16
+        case .bodyStrong:
+            15
+        case .bodySmall:
+            13
         case .filterLabel:
             14
         case .listRowTitle:
@@ -30,6 +44,10 @@ enum ThemeFontToken {
             15
         case .chip:
             11
+        case .tabLabel:
+            10
+        case .buttonLabel:
+            15
         }
     }
 
@@ -37,14 +55,39 @@ enum ThemeFontToken {
         switch self {
         case .screenHeader:
             .bold
+        case .sectionHeader:
+            .semibold
+        case .inlineTitle:
+            .medium
+        case .bodyStrong, .buttonLabel:
+            .semibold
+        case .bodySmall:
+            .regular
         case .filterLabel:
             .semibold
         case .profileName, .celebrationMessage:
             .semibold
-        case .chip:
+        case .chip, .tabLabel:
             .medium
         case .listRowTitle:
             .regular
+        }
+    }
+
+    var uiWeight: UIFont.Weight {
+        switch self {
+        case .screenHeader:
+            .bold
+        case .sectionHeader:
+            .semibold
+        case .inlineTitle:
+            .medium
+        case .bodyStrong, .buttonLabel, .filterLabel, .profileName, .celebrationMessage:
+            .semibold
+        case .bodySmall, .listRowTitle:
+            .regular
+        case .chip, .tabLabel:
+            .medium
         }
     }
 
@@ -52,11 +95,12 @@ enum ThemeFontToken {
         switch self {
         case .screenHeader:
             .display
-        case .profileName:
+        case .profileName, .inlineTitle:
             .title
-        case .chip:
+        case .chip, .tabLabel:
             .chip
-        case .filterLabel, .listRowTitle, .celebrationMessage:
+        case .sectionHeader, .bodyStrong, .bodySmall, .filterLabel, .listRowTitle, .celebrationMessage,
+             .buttonLabel:
             .body
         }
     }
@@ -526,6 +570,10 @@ final class ThemeStore: ObservableObject {
         font(size: token.size, weight: token.weight, role: token.role)
     }
 
+    func uiFont(for token: ThemeFontToken) -> UIFont {
+        uiFont(size: token.size, weight: token.uiWeight, role: token.role)
+    }
+
     /// Font resolved for current preset with graceful fallback.
     /// PressStart2P renders bigger than SF at same pt size, so we scale it down.
     func font(size: CGFloat, weight: Font.Weight = .regular, role: ThemeFontRole = .body) -> Font {
@@ -561,6 +609,47 @@ final class ThemeStore: ObservableObject {
             }
         case .system:
             return .system(size: baseSize, weight: weight)
+        }
+    }
+
+    func uiFont(size: CGFloat, weight: UIFont.Weight = .regular, role: ThemeFontRole = .body) -> UIFont {
+        let baseSize = size
+
+        switch preset {
+        case .retro:
+            let scaledCustomSize = scaledRetroSize(baseSize, role: role)
+            if let resolvedName = resolveCustomFontName(
+                postScriptName: "PressStart2P-Regular",
+                familyAliases: ["Press Start 2P"]
+            ),
+                let custom = UIFont(name: resolvedName, size: scaledCustomSize)
+            {
+                return custom
+            }
+            return .systemFont(ofSize: baseSize, weight: weight)
+        case .paper:
+            switch role {
+            case .display, .title:
+                if let resolvedName = resolveCustomFontName(
+                    postScriptName: "SpecialElite-Regular",
+                    familyAliases: ["Special Elite"]
+                ),
+                    let custom = UIFont(name: resolvedName, size: baseSize)
+                {
+                    return custom
+                }
+                if let georgia = UIFont(name: "Georgia", size: baseSize) {
+                    return georgia
+                }
+                return .systemFont(ofSize: baseSize, weight: weight)
+            case .body, .chip:
+                if let georgia = UIFont(name: "Georgia", size: baseSize) {
+                    return georgia
+                }
+                return .systemFont(ofSize: baseSize, weight: weight)
+            }
+        case .system:
+            return .systemFont(ofSize: baseSize, weight: weight)
         }
     }
 

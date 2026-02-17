@@ -70,6 +70,9 @@
 		NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000017 /* BacklogCategory.swift */; };
 		NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000018 /* LegacyStubs.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
+		TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABTYPO0000000000000002 /* TabBarTypographyManager.swift */; };
+		CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
+		SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,6 +160,9 @@
 		NEWFILE0000000000000017 /* BacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogCategory.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000018 /* LegacyStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyStubs.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
+		TABTYPO0000000000000002 /* TabBarTypographyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarTypographyManager.swift; sourceTree = "<group>"; };
+		CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
+		SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingCountBadge.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -362,6 +368,8 @@
 				848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
 				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
 				NEWFILE0000000000000016 /* ToastView.swift */,
+				CHECKBOX000000000000002 /* ThemedCheckbox.swift */,
+				SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */,
 				CELEB4000000000000000001 /* CelebrationOverlay.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
@@ -386,6 +394,7 @@
 			children = (
 				DA591D77C780445A82FEE9E0 /* HapticManager.swift */,
 				F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */,
+				TABTYPO0000000000000002 /* TabBarTypographyManager.swift */,
 				FONTREG0000000000000002 /* FontRegistrar.swift */,
 				26545708FFCD49269BCBA414 /* InteractionTokens.swift */,
 			);
@@ -543,12 +552,15 @@
 				NEWFILE0000000000000002 /* TasksView.swift in Sources */,
 				NEWFILE0000000000000003 /* BacklogView.swift in Sources */,
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
+				CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */,
+				SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
 				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
 				CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */,
 				NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */,
 				NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */,
 				GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */,
+				TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -436,7 +436,7 @@ private struct TasksContent: View {
 
         VStack(alignment: .leading, spacing: 4) {
             Text("Focus Rule: Max \(limit) active tasks per person to ensure quality and completion.")
-                .font(.system(size: 12, weight: .regular))
+                .font(themeStore.font(for: .chip))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
@@ -445,7 +445,7 @@ private struct TasksContent: View {
                     .foregroundStyle(color)
 
                 Text("\(count) of \(limit) slots used")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(color)
 
                 Spacer()
@@ -454,7 +454,7 @@ private struct TasksContent: View {
                     Button("Go to Ideas") {
                         selectedTab = .backlog
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(themeStore.font(for: .chip))
                     .foregroundStyle(themeStore.accentColor)
                 }
             }
@@ -635,7 +635,7 @@ private struct TasksContent: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
+            .font(themeStore.font(for: .sectionHeader))
             .foregroundStyle(.secondary)
             .padding(.top, 24)
             .padding(.bottom, 8)
@@ -743,6 +743,7 @@ private struct TasksContent: View {
 // swiftlint:enable type_body_length
 
 private struct InlineStatusBanner: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let text: String
 
     var body: some View {
@@ -752,7 +753,7 @@ private struct InlineStatusBanner: View {
                 .foregroundStyle(.orange)
 
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -767,6 +768,7 @@ private struct InlineStatusBanner: View {
 }
 
 private struct AssigneePickerSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let title: String
     let members: [Member]
     @Binding var selectedAssigneeId: UUID?
@@ -781,6 +783,7 @@ private struct AssigneePickerSheet: View {
                 } label: {
                     HStack {
                         Text(member.displayName)
+                            .font(themeStore.font(for: .inlineTitle))
                             .foregroundStyle(.primary)
                         Spacer()
                         if selectedAssigneeId == member.id {
@@ -803,7 +806,7 @@ private struct AssigneePickerSheet: View {
                     Button("Start") {
                         onConfirm()
                     }
-                    .fontWeight(.semibold)
+                    .font(themeStore.font(for: .buttonLabel))
                     .disabled(selectedAssigneeId == nil)
                 }
             }
@@ -834,14 +837,14 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onToggle) {
-                Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 22))
-                    .foregroundStyle(isCompleted ? .blue : uncheckedColor)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            ThemedCheckbox(
+                isChecked: isCompleted,
+                onToggle: onToggle,
+                size: 22,
+                style: .square,
+                checkedColor: .blue,
+                uncheckedColor: uncheckedColor
+            )
 
             Button(action: onOpenDetail) {
                 HStack {
@@ -858,7 +861,7 @@ struct TaskRow: View {
                                         .fill(categoryColor)
                                         .frame(width: 6, height: 6)
                                     Text(categoryName)
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(themeStore.font(for: .chip))
                                         .foregroundStyle(categoryColor)
                                 }
                                 .padding(.horizontal, 8)
@@ -875,7 +878,7 @@ struct TaskRow: View {
                                         .frame(width: 20, height: 20)
                                         .background(Circle().fill(memberColor))
                                     Text(assigneeName)
-                                        .font(.system(size: 13, weight: .medium))
+                                        .font(themeStore.font(for: .bodySmall))
                                         .foregroundStyle(memberColor)
                                 }
                                 .padding(.trailing, 8)
@@ -890,7 +893,7 @@ struct TaskRow: View {
 
                             if task.taskType == .recurring {
                                 Label("Recurring", systemImage: "repeat")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(themeStore.font(for: .chip))
                                     .foregroundStyle(.purple)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
@@ -953,7 +956,7 @@ struct TaskRow: View {
         let isOverdue = task.isOverdue
 
         Text(dateFormatter.string(from: date))
-            .font(.system(size: 11, weight: .medium))
+            .font(themeStore.font(for: .chip))
             .foregroundStyle(isOverdue ? .red : (isToday ? .orange : .secondary))
             .padding(.horizontal, 8)
             .padding(.vertical, 2)

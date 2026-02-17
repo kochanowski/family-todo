@@ -345,6 +345,7 @@ private struct BacklogContent: View {
 }
 
 private struct BacklogStatusBanner: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let text: String
 
     var body: some View {
@@ -354,7 +355,7 @@ private struct BacklogStatusBanner: View {
                 .foregroundStyle(.orange)
 
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -369,6 +370,7 @@ private struct BacklogStatusBanner: View {
 }
 
 private struct BacklogAssigneePickerSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let title: String
     let actionTitle: String
     let members: [Member]
@@ -403,6 +405,7 @@ private struct BacklogAssigneePickerSheet: View {
                     } label: {
                         HStack {
                             Text(member.displayName)
+                                .font(themeStore.font(for: .inlineTitle))
                                 .foregroundStyle(.primary)
                             Spacer()
                             if selectedAssigneeId == member.id {
@@ -426,7 +429,7 @@ private struct BacklogAssigneePickerSheet: View {
                     Button(actionTitle) {
                         onConfirm()
                     }
-                    .fontWeight(.semibold)
+                    .font(themeStore.font(for: .buttonLabel))
                     .disabled(!allowUnassigned && selectedAssigneeId == nil)
                 }
             }
@@ -465,7 +468,7 @@ struct CategoryCard: View {
                     .frame(width: 10, height: 10)
 
                 Text(category.title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(themeStore.font(for: .sectionHeader))
                     .foregroundStyle(.secondary)
 
                 Spacer()
@@ -538,7 +541,7 @@ struct CategoryCard: View {
                         .frame(width: 20, height: 20)
 
                     TextField("Add item", text: $newItemText)
-                        .font(.system(size: 15))
+                        .font(themeStore.font(for: .listRowTitle))
                         .onSubmit {
                             submitItem()
                         }
@@ -570,7 +573,7 @@ struct CategoryCard: View {
                             }
 
                         Text("Add item")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(themeStore.font(for: .buttonLabel))
                             .foregroundStyle(themeStore.accentColor)
 
                         Spacer()
@@ -647,7 +650,7 @@ struct BacklogItemRow: View {
 
                 if let assigneeName {
                     Text(assigneeName)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(themeStore.font(for: .chip))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)

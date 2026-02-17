@@ -64,12 +64,15 @@ struct CelebrationOverlay: View {
 
     private var confettiLayer: some View {
         ForEach(confettiParticles) { particle in
+            let time = confettiProgress * particle.flightDuration
             confettiShapeView(for: particle)
-                .rotationEffect(.degrees(particle.rotation * Double(confettiProgress)))
-                .opacity(Double(max(0, 1 - confettiProgress)))
+                .rotationEffect(
+                    .degrees(particle.rotationStart + particle.rotationVelocity * Double(time))
+                )
+                .opacity(Double(max(0, 1 - confettiProgress * 1.1)))
                 .position(
-                    x: particle.startX + (particle.endX - particle.startX) * confettiProgress,
-                    y: particle.startY + (particle.endY - particle.startY) * confettiProgress
+                    x: particle.originX + particle.velocityX * time,
+                    y: particle.originY - particle.velocityY * time + 0.5 * particle.gravity * time * time
                 )
         }
     }
@@ -93,48 +96,67 @@ struct CelebrationOverlay: View {
     }
 
     private static let defaultConfettiColors: [Color] = [
-        Color(hex: "FF6B6B"), // coral red
-        Color(hex: "4ECDC4"), // teal
-        Color(hex: "FFE66D"), // sunny yellow
-        Color(hex: "A78BFA"), // lavender
-        Color(hex: "F093FB"), // pink
-        Color(hex: "4DD599"), // mint green
-        Color(hex: "74B9FF"), // sky blue
-        Color(hex: "FD79A8"), // rose
+        Color(hex: "FF6B6B"),
+        Color(hex: "4ECDC4"),
+        Color(hex: "FFE66D"),
+        Color(hex: "A78BFA"),
+        Color(hex: "F093FB"),
+        Color(hex: "4DD599"),
+        Color(hex: "74B9FF"),
+        Color(hex: "FD79A8"),
+        Color(hex: "00C2FF"),
+        Color(hex: "C4F000"),
+        Color(hex: "FF9F1C"),
+        Color(hex: "9B5DE5"),
+        Color(hex: "00F5D4"),
+        Color(hex: "F15BB5"),
+        Color(hex: "FFC300"),
+        Color(hex: "3A86FF"),
+        Color(hex: "FB5607"),
+        Color(hex: "8338EC"),
     ]
 
     private var resolvedConfettiColors: [Color] {
         if let accentPalette, !accentPalette.isEmpty {
-            return accentPalette
+            return accentPalette + Self.defaultConfettiColors
         }
         return Self.defaultConfettiColors
     }
 
     private func spawnConfetti() {
-        let screenWidth = UIScreen.main.bounds.width
+        let screenMidX = UIScreen.main.bounds.width / 2
         let screenHeight = UIScreen.main.bounds.height
         let colors = resolvedConfettiColors
 
-        confettiParticles = (0 ..< 30).map { _ in
-            let startX = CGFloat.random(in: 16 ... (screenWidth - 16))
+        confettiParticles = (0 ..< 90).map { _ in
+            let emitterJitter = CGFloat.random(in: -10 ... 10)
+            let launchAngleDegrees = CGFloat.random(in: 70 ... 110)
+            let launchAngle = launchAngleDegrees * .pi / 180
+            let launchSpeed = CGFloat.random(in: 420 ... 760)
+            let velocityX = cos(launchAngle) * launchSpeed
+            let velocityY = sin(launchAngle) * launchSpeed
+
             return ConfettiParticle(
                 shape: ConfettiParticle.ConfettiShape.allCases.randomElement() ?? .rectangle,
                 color: colors.randomElement() ?? .blue,
-                size: CGFloat.random(in: 6 ... 12),
-                startX: startX,
-                endX: startX + CGFloat.random(in: -80 ... 80),
-                startY: -20,
-                endY: CGFloat.random(in: screenHeight * 0.25 ... screenHeight * 0.75),
-                rotation: Double.random(in: -360 ... 360)
+                size: CGFloat.random(in: 6 ... 13),
+                originX: screenMidX + emitterJitter,
+                originY: screenHeight + CGFloat.random(in: 6 ... 30),
+                velocityX: velocityX,
+                velocityY: velocityY,
+                gravity: CGFloat.random(in: 620 ... 860),
+                rotationStart: Double.random(in: 0 ... 360),
+                rotationVelocity: Double.random(in: -900 ... 900),
+                flightDuration: CGFloat.random(in: 1.4 ... 2.0)
             )
         }
 
         confettiProgress = 0
-        withAnimation(.easeOut(duration: 1.6)) {
+        withAnimation(.easeOut(duration: 1.9)) {
             confettiProgress = 1
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
             confettiParticles = []
             confettiProgress = 0
         }
@@ -148,11 +170,14 @@ private struct ConfettiParticle: Identifiable {
     let shape: ConfettiShape
     let color: Color
     let size: CGFloat
-    let startX: CGFloat
-    let endX: CGFloat
-    let startY: CGFloat
-    let endY: CGFloat
-    let rotation: Double
+    let originX: CGFloat
+    let originY: CGFloat
+    let velocityX: CGFloat
+    let velocityY: CGFloat
+    let gravity: CGFloat
+    let rotationStart: Double
+    let rotationVelocity: Double
+    let flightDuration: CGFloat
 
     enum ConfettiShape: CaseIterable {
         case rectangle, circle, triangle

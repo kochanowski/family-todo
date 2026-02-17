@@ -217,12 +217,7 @@ private struct ShoppingListContent: View {
 
             // Item count badge
             if !store.toBuyItems.isEmpty {
-                Text("\(store.toBuyItems.count)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(themeStore.accentColor))
+                ShoppingCountBadge(count: store.toBuyItems.count)
             }
 
             Spacer()
@@ -278,7 +273,7 @@ private struct ShoppingListContent: View {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .bold))
                 Text("Add item")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(themeStore.font(for: .buttonLabel))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
@@ -473,20 +468,12 @@ struct ShoppingItemRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // Circular checkbox
-            Button(action: onToggle) {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                    .frame(width: 20, height: 20)
-                    .overlay {
-                        if item.isBought {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 13, height: 13)
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
+            ThemedCheckbox(
+                isChecked: item.isBought,
+                onToggle: onToggle,
+                size: 20,
+                style: .circle
+            )
             .accessibilityIdentifier("shoppingToggle_\(item.title)")
 
             Button(action: onEdit) {
@@ -513,27 +500,21 @@ private struct ShoppingItemInlineEditRow: View {
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @FocusState private var isFocused: Bool
     @State private var isCancelling = false
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: onToggle) {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                    .frame(width: 20, height: 20)
-                    .overlay {
-                        if isBought {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 13, height: 13)
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
+            ThemedCheckbox(
+                isChecked: isBought,
+                onToggle: onToggle,
+                size: 20,
+                style: .circle
+            )
 
             TextField("Item name", text: $text)
-                .font(.system(size: 15))
+                .font(themeStore.font(for: .listRowTitle))
                 .submitLabel(.done)
                 .focused($isFocused)
                 .onSubmit(onSubmit)
@@ -735,6 +716,7 @@ struct RestockSheet: View {
                             showClearAllConfirmation = true
                         } label: {
                             Text("Clear All")
+                                .font(themeStore.font(for: .buttonLabel))
                         }
                     }
                 }
@@ -742,6 +724,7 @@ struct RestockSheet: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
                 }
             }
             .alert("Clear all recently purchased?", isPresented: $showClearAllConfirmation) {
@@ -767,7 +750,7 @@ private struct RestockItemRow: View {
     var body: some View {
         HStack {
             Text(item.title)
-                .font(.system(size: 15))
+                .font(themeStore.font(for: .listRowTitle))
                 .lineLimit(1)
 
             Spacer()

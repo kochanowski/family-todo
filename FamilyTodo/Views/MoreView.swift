@@ -125,7 +125,7 @@ struct ProfileCard: View {
                     .font(themeStore.font(for: .profileName))
 
                 Text(householdStore.currentHousehold?.name ?? "No Household")
-                    .font(.system(size: 13))
+                    .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(.secondary)
             }
 
@@ -151,6 +151,8 @@ struct ProfileCard: View {
 
 /// Standardized row for More menu items to ensure consistent icon sizing and styling.
 struct MoreRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let icon: String
     let title: String
     var subtitle: String?
@@ -166,12 +168,12 @@ struct MoreRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16))
+                    .font(themeStore.font(for: .inlineTitle))
                     .foregroundStyle(.primary)
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(themeStore.font(for: .bodySmall))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -191,6 +193,7 @@ struct MoreRow: View {
 // MARK: - Sub-screens
 
 struct ProfileView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
     @State private var editedHouseholdName = ""
@@ -240,6 +243,7 @@ struct ProfileView: View {
                 }
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Rename Household", isPresented: $showRenameHousehold) {
@@ -311,6 +315,7 @@ struct ProfileView: View {
 }
 
 struct MemberRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let name: String
     let initials: String
     let color: Color
@@ -327,7 +332,7 @@ struct MemberRow: View {
                 }
 
             Text(name)
-                .font(.system(size: 16))
+                .font(themeStore.font(for: .inlineTitle))
 
             Spacer()
         }
@@ -337,6 +342,7 @@ struct MemberRow: View {
 struct CategoriesManagementView: View {
     @StateObject private var store: BacklogStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var newCategoryName = ""
     @State private var renamingCategory: BacklogCategory?
     @State private var renamingTitle = ""
@@ -396,6 +402,7 @@ struct CategoriesManagementView: View {
                 }
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Idea Categories")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -439,6 +446,7 @@ struct RepetitiveTasksView: View {
     @StateObject private var store: RecurringChoreStore
     @StateObject private var backlogStore: BacklogStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var newTitle = ""
     @State private var recurrenceType: RecurringChore.RecurrenceType = .weekly
@@ -467,7 +475,7 @@ struct RepetitiveTasksView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(chore.title)
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(themeStore.font(for: .inlineTitle))
                                 Spacer()
                                 Toggle("", isOn: Binding(
                                     get: { chore.isActive },
@@ -483,14 +491,14 @@ struct RepetitiveTasksView: View {
                             }
 
                             Text(chore.recurrenceType.rawValue.capitalized)
-                                .font(.system(size: 12))
+                                .font(themeStore.font(for: .chip))
                                 .foregroundStyle(.secondary)
 
                             if let categoryId = chore.categoryId,
                                let category = backlogStore.categories.first(where: { $0.id == categoryId })
                             {
                                 Text(category.title)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(themeStore.font(for: .chip))
                                     .foregroundStyle(category.color)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -566,6 +574,7 @@ struct RepetitiveTasksView: View {
                 .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Repetitive Tasks")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -615,6 +624,7 @@ private struct CompletedTasksContent: View {
 
     @StateObject private var store: TaskStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var pendingCleanup: CleanupAction?
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -636,20 +646,20 @@ private struct CompletedTasksContent: View {
                     ForEach(store.archivedDoneTasks) { task in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(task.title)
-                                .font(.system(size: 15))
+                                .font(themeStore.font(for: .listRowTitle))
                                 .strikethrough(true)
                                 .foregroundStyle(.secondary)
 
                             if let notes = task.notes, !notes.isEmpty {
                                 Text(notes)
-                                    .font(.system(size: 13))
+                                    .font(themeStore.font(for: .bodySmall))
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(2)
                             }
 
                             if let completedAt = task.completedAt {
                                 Text(completedAt, style: .relative)
-                                    .font(.system(size: 11))
+                                    .font(themeStore.font(for: .chip))
                                     .foregroundStyle(.tertiary)
                             }
                         }
@@ -659,6 +669,7 @@ private struct CompletedTasksContent: View {
                 .listStyle(.plain)
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Task History")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -801,7 +812,7 @@ struct SettingsView: View {
                                             .foregroundStyle(.white.opacity(0.9))
                                     )
                                 Text(tint.displayName)
-                                    .font(.system(size: 10))
+                                    .font(themeStore.font(for: .tabLabel))
                                     .foregroundStyle(
                                         themeStore.tabTintColor == tint ? .primary : .secondary
                                     )
@@ -838,7 +849,7 @@ struct SettingsView: View {
 
                     Stepper(value: $recommendedWipLimit, in: 1 ... 7) {
                         Text("\(recommendedWipLimit)")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(themeStore.font(for: .bodyStrong))
                     }
                     .frame(width: 130)
                 }
@@ -890,6 +901,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -934,6 +946,7 @@ struct SettingsView: View {
 // MARK: - Unified Theme Selector
 
 private struct UnifiedThemeSelector: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     @Binding var selectedTheme: UnifiedTheme
 
     var body: some View {
@@ -946,6 +959,7 @@ private struct UnifiedThemeSelector: View {
                     ) {
                         selectedTheme = theme
                     }
+                    .environmentObject(themeStore)
                 }
             }
         }
@@ -953,6 +967,7 @@ private struct UnifiedThemeSelector: View {
 }
 
 private struct UnifiedThemeCard: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let theme: UnifiedTheme
     let isSelected: Bool
     let action: () -> Void
@@ -974,7 +989,7 @@ private struct UnifiedThemeCard: View {
                     )
 
                 Text(theme.displayName)
-                    .font(.system(size: 11, weight: isSelected ? .bold : .regular))
+                    .font(themeStore.font(for: .tabLabel))
                     .foregroundStyle(isSelected ? .primary : .secondary)
             }
         }
