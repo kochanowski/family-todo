@@ -32,14 +32,6 @@ enum TabBarTypographyManager {
                 to: &scrollEdge
             )
             tabBarAppearance.scrollEdgeAppearance = scrollEdge
-
-            var compact = tabBarAppearance.compactAppearance ?? standard
-            apply(
-                normalAttributes: normalAttributes,
-                selectedAttributes: selectedAttributes,
-                to: &compact
-            )
-            tabBarAppearance.compactAppearance = compact
         }
     }
 
