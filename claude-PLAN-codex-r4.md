@@ -1921,3 +1921,361 @@ private struct ConfettiParticle: Identifiable {
 6. ✅ Milestone celebration → kolorowe geometryczne kształty (rect/circle/triangle)
 7. ✅ `pre-commit run --all-files` → Passed
 8. ✅ Backward compatibility → istniejące @AppStorage settings działają po update
+
+---
+
+# ROUND 4 — Fix Custom Font Loading (PressStart2P + SpecialElite)
+
+> Autor: Antigravity (Claude Opus 4.6) · Data: 2026-02-17
+> Naprawa krytycznego buga: custom fonty (PressStart2P, SpecialElite, CaveatBrush) nie ładują się w runtime
+
+---
+
+## Kontekst
+
+Po wdrożeniu R3 (unified theme selector + font wiring) użytkownik zgłasza, że przełączenie na motyw **Retro** nie zmienia fontu — zamiast PressStart2P pixel font widać system font w zmniejszonym rozmiarze (~62-68% normalnego). Screenshoty z TestFlight potwierdzają problem na wszystkich ekranach (Shopping, Tasks, Ideas).
+
+### Objaw
+
+- Retro theme: tekst wygląda jak normalny system font, ale mniejszy (scale 0.62-0.68x się aplikuje, ale do system font zamiast PressStart2P)
+- Paper theme: wygląda OK bo SpecialElite-Regular fallbackuje do wbudowanego Georgia
+- Light/Dark/Auto: bez zmian (system font, brak skalowania)
+
+### Root Cause Analysis
+
+**`UIFont(name: "PressStart2P-Regular", size:)` zwraca `nil` w runtime**, co powoduje fallback do `.system(size: scaledSize)` w `customFont()` (ThemeStore.swift).
+
+Zbadano:
+1. **Font file istnieje**: `FamilyTodo/Resources/Fonts/PressStart2P-Regular.ttf` (116 KB, valid TrueType)
+2. **PostScript name poprawny**: `fc-scan` potwierdza `PressStart2P-Regular` (nameID=6)
+3. **Family name**: `Press Start 2P` (nameID=1), Full name: `Press Start 2P Regular` (nameID=4)
+4. **Xcode project konfiguracja**:
+   - `PBXBuildFile` — font w "Copy Bundle Resources" build phase ✅
+   - `PBXFileReference` — `path = "Resources/Fonts/PressStart2P-Regular.ttf"`, `sourceTree = "<group>"`, `lastKnownFileType = file`
+   - `INFOPLIST_KEY_UIAppFonts` — zawiera `"PressStart2P-Regular.ttf"` (bez ścieżki katalogu)
+   - Font files są bezpośrednimi dziećmi grupy `FamilyTodo` (nie mają osobnej grupy Fonts)
+
+**Prawdopodobna przyczyna**: Niezgodność ścieżki w bundle. `PBXFileReference.path` = `"Resources/Fonts/..."` może spowodować, że font trafia do `FamilyTodo.app/Resources/Fonts/PressStart2P-Regular.ttf` zamiast do korzenia bundle. Tymczasem `UIAppFonts` szuka `PressStart2P-Regular.ttf` w korzeniu.
+
+**Dotyczy WSZYSTKICH 3 custom fontów**: PressStart2P-Regular, CaveatBrush-Regular, SpecialElite-Regular — identyczna konfiguracja.
+
+---
+
+## Spis zmian R4
+
+| # | Zmiana | Plik | Status |
+|---|--------|------|--------|
+| 1 | Runtime diagnostyka fontów w bundle | ThemeStore.swift | ⬜ TODO |
+| 2 | UIAppFonts dual paths (root + subdirectory) | project.pbxproj | ⬜ TODO |
+| 3 | PBXFileReference dodaj `name` attribute | project.pbxproj | ⬜ TODO |
+| 4 | customFont() fallback na family name | ThemeStore.swift | ⬜ TODO |
+
+---
+
+## Step 1 — Runtime diagnostyka fontów
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift`, metoda `verifyBundledFonts()`
+
+Rozszerz obecną diagnostykę o:
+- Sprawdzenie czy font file jest w korzeniu bundle czy w subdirectory `Resources/Fonts/`
+- Wylistowanie zarejestrowanych font families pasujących do "Press"/"Elite"
+- Zmień "ok"/"missing" na "ok"/"MISSING" dla łatwiejszego wyszukiwania w logach
+
+### Obecny kod (linie 422-440):
+```swift
+@discardableResult
+func verifyBundledFonts() -> [String: Bool] {
+    let registered: [String: Bool] = [
+        "PressStart2P-Regular": UIFont(name: "PressStart2P-Regular", size: 14) != nil,
+        "SpecialElite-Regular": UIFont(name: "SpecialElite-Regular", size: 14) != nil,
+        "CaveatBrush-Regular": UIFont(name: "CaveatBrush-Regular", size: 14) != nil,
+    ]
+    let status = registered
+        .map { "\($0.key)=\($0.value ? "ok" : "missing")" }
+        .sorted()
+        .joined(separator: ", ")
+    print("🧩 Theme fonts audit: \(status)")
+    print("🧩 Theme font map: system=SF, retro=PressStart2P-Regular, paper=SpecialElite-Regular(headline)+Georgia(body), caveat=reserved")
+    return registered
+}
+```
+
+### Nowy kod:
+```swift
+@discardableResult
+func verifyBundledFonts() -> [String: Bool] {
+    // 1. Check font file presence in bundle (root vs subdirectory)
+    let fontFiles = ["PressStart2P-Regular", "CaveatBrush-Regular", "SpecialElite-Regular"]
+    for name in fontFiles {
+        let rootPath = Bundle.main.path(forResource: name, ofType: "ttf")
+        let subPath = Bundle.main.path(forResource: name, ofType: "ttf", inDirectory: "Resources/Fonts")
+        print("🧩 Font bundle: \(name).ttf root=\(rootPath != nil ? "FOUND" : "missing") subdir=\(subPath != nil ? "FOUND" : "missing")")
+    }
+
+    // 2. Check UIFont registration by PostScript name
+    let registered: [String: Bool] = [
+        "PressStart2P-Regular": UIFont(name: "PressStart2P-Regular", size: 14) != nil,
+        "SpecialElite-Regular": UIFont(name: "SpecialElite-Regular", size: 14) != nil,
+        "CaveatBrush-Regular": UIFont(name: "CaveatBrush-Regular", size: 14) != nil,
+    ]
+
+    // 3. Search registered font families for partial matches
+    let pressMatches = UIFont.familyNames.filter {
+        $0.lowercased().contains("press") || $0.lowercased().contains("start")
+    }
+    let eliteMatches = UIFont.familyNames.filter {
+        $0.lowercased().contains("elite") || $0.lowercased().contains("special")
+    }
+    if !pressMatches.isEmpty { print("🧩 Font families matching 'press/start': \(pressMatches)") }
+    if !eliteMatches.isEmpty { print("🧩 Font families matching 'elite/special': \(eliteMatches)") }
+
+    let status = registered
+        .map { "\($0.key)=\($0.value ? "ok" : "MISSING")" }
+        .sorted()
+        .joined(separator: ", ")
+    print("🧩 Theme fonts audit: \(status)")
+    return registered
+}
+```
+
+**Cel**: Po deploymencie na TestFlight, logi konsoli (`Xcode → Window → Devices and Simulators → Console`) pokażą:
+- Czy font file jest w korzeniu bundle (`root=FOUND`) czy w subdirectory (`subdir=FOUND`)
+- Jakie font families iOS zarejestrował (jeśli PostScript name jest inna)
+- Czy `UIFont(name:)` rozpoznaje font
+
+---
+
+## Step 2 — UIAppFonts dual paths w project.pbxproj
+
+**Plik:** `FamilyTodo.xcodeproj/project.pbxproj`
+
+Dodaj ścieżki z subdirectory `Resources/Fonts/` obok istniejących nazw root. iOS ignoruje nieistniejące wpisy w UIAppFonts (nie crashuje, nie loguje warningów). To gwarantuje że font się załaduje niezależnie od tego gdzie Xcode go umieści w bundle.
+
+### Debug config (linie 631-635):
+```
+// PRZED:
+INFOPLIST_KEY_UIAppFonts = (
+    "PressStart2P-Regular.ttf",
+    "CaveatBrush-Regular.ttf",
+    "SpecialElite-Regular.ttf",
+);
+
+// PO:
+INFOPLIST_KEY_UIAppFonts = (
+    "PressStart2P-Regular.ttf",
+    "CaveatBrush-Regular.ttf",
+    "SpecialElite-Regular.ttf",
+    "Resources/Fonts/PressStart2P-Regular.ttf",
+    "Resources/Fonts/CaveatBrush-Regular.ttf",
+    "Resources/Fonts/SpecialElite-Regular.ttf",
+);
+```
+
+### Release config (linie 664-668):
+Identyczna zmiana jak Debug.
+
+---
+
+## Step 3 — PBXFileReference: dodaj `name` attribute
+
+**Plik:** `FamilyTodo.xcodeproj/project.pbxproj` (linie 114-116)
+
+Dodaj `name = "filename.ttf"` do wszystkich 3 font file references. Xcode używa `name` do wyświetlania w navigator i do kopiowania do bundle. Bez `name`, Xcode może użyć pełnej `path` jako nazwy w bundle.
+
+```
+// PRZED (linia 114):
+FONTFILE0000000000000001 /* PressStart2P-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/Fonts/PressStart2P-Regular.ttf"; sourceTree = "<group>"; };
+
+// PO:
+FONTFILE0000000000000001 /* PressStart2P-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "PressStart2P-Regular.ttf"; path = "Resources/Fonts/PressStart2P-Regular.ttf"; sourceTree = "<group>"; };
+```
+
+Analogicznie dla linii 115 (CaveatBrush) i 116 (SpecialElite).
+
+---
+
+## Step 4 — customFont() fallback na family name
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift`, metoda `customFont()` (linia 442)
+
+iOS CoreText może rejestrować font pod family name (`Press Start 2P`) zamiast PostScript name (`PressStart2P-Regular`). Dodaj fallback próbujący obu wariantów.
+
+### Obecny kod:
+```swift
+private func customFont(_ postScriptName: String, size: CGFloat, fallbackWeight: Font.Weight) -> Font {
+    if UIFont(name: postScriptName, size: size) != nil {
+        return .custom(postScriptName, size: size)
+    }
+    return .system(size: size, weight: fallbackWeight)
+}
+```
+
+### Nowy kod:
+```swift
+private func customFont(_ postScriptName: String, size: CGFloat, fallbackWeight: Font.Weight) -> Font {
+    // Try PostScript name first (e.g. "PressStart2P-Regular")
+    if UIFont(name: postScriptName, size: size) != nil {
+        return .custom(postScriptName, size: size)
+    }
+    // Try family name (e.g. "Press Start 2P") — iOS may register under this name
+    let familyName = postScriptName
+        .replacingOccurrences(of: "-Regular", with: "")
+        .replacingOccurrences(of: "-", with: " ")
+    if UIFont(name: familyName, size: size) != nil {
+        return .custom(familyName, size: size)
+    }
+    return .system(size: size, weight: fallbackWeight)
+}
+```
+
+### Dodatkowa zmiana w font() dla Paper SpecialElite
+
+W metodzie `font(size:weight:role:)` (linia 402), linia SpecialElite też powinna używać `customFont()` zamiast bezpośredniego `UIFont(name:)` check:
+
+```swift
+// PRZED (linie 409-413):
+case .display, .title:
+    if UIFont(name: "SpecialElite-Regular", size: size) != nil {
+        return .custom("SpecialElite-Regular", size: size)
+    }
+    return customFont("Georgia", size: size, fallbackWeight: weight)
+
+// PO:
+case .display, .title:
+    let elite = customFont("SpecialElite-Regular", size: size, fallbackWeight: .regular)
+    if elite != .system(size: size, weight: .regular) {
+        return elite
+    }
+    return customFont("Georgia", size: size, fallbackWeight: weight)
+```
+
+Albo prostsze podejście — użyj `customFont()` bezpośrednio:
+```swift
+case .display, .title:
+    return customFont("SpecialElite-Regular", size: size, fallbackWeight: weight)
+```
+(Georgia jako fallback nie jest tu potrzebne bo `customFont()` sam spadnie do system font. Ale jeśli chcesz Georgia jako fallback zamiast system, zachowaj obecny if/else.)
+
+---
+
+## Pliki do zmiany
+
+| Plik | Zmiana |
+|------|--------|
+| `FamilyTodo.xcodeproj/project.pbxproj` | UIAppFonts: +3 entries z subdirectory path (Debug linia 631, Release linia 664). PBXFileReference: +`name` attribute (linie 114-116) |
+| `FamilyTodo/Views/ThemeStore.swift` | `verifyBundledFonts()`: bundle path diagnostics + family name search. `customFont()`: +family name fallback |
+
+---
+
+## Kolejność implementacji
+
+1. **Step 2** — UIAppFonts dual paths (project.pbxproj) — główna naprawa
+2. **Step 3** — PBXFileReference name (project.pbxproj) — w tym samym pliku
+3. **Step 1** — Runtime diagnostyka (ThemeStore.swift) — zrozumienie problemu
+4. **Step 4** — customFont() fallback (ThemeStore.swift) — resilience
+
+---
+
+## Weryfikacja
+
+1. `pre-commit run --all-files` przechodzi
+2. Push → GitHub Actions build succeeds
+3. TestFlight deploy → przełącz na Retro → **nagłówki wyświetlają PressStart2P pixel font** (nie zmniejszony system font)
+4. Sprawdź logi konsoli (`Xcode → Window → Devices`): szukaj `🧩 Font` entries — powinno być `root=FOUND` lub `subdir=FOUND`
+5. Przełącz na Paper → sprawdź czy SpecialElite renderuje się w nagłówkach (jeśli nie — Georgia fallback jest OK)
+6. Przełącz z powrotem na Auto/Light/Dark → system font wraca do normalnego rozmiaru (bez skalowania)
+
+---
+
+## Risk Assessment
+
+| Ryzyko | Prawdopodobieństwo | Mitygacja |
+|--------|--------------------|-----------|
+| Duplikaty w UIAppFonts powodują warning | Niskie | iOS ignoruje nieistniejące wpisy bez logów |
+| Font nadal nie ładuje się | Średnie | Diagnostyka (Step 1) pokaże dokładną przyczynę w logach — root vs subdir, family name |
+| Zmiana pbxproj psuje build | Niskie | Zmiany są addytywne (dodanie entries/attributes, nie modyfikacja istniejących) |
+| Family name fallback trafia w inny font | Bardzo niskie | "Press Start 2P" jest unikalną nazwą, nie koliduje z system fonts |
+
+---
+
+# IMPLEMENTATION STATUS UPDATE (Codex, 2026-02-17)
+
+## Round 4.1 — Font Loading Fix: DONE
+
+### Commit
+- `eba6301` — `fix: harden custom font registration and fallback sizing`
+
+### Wdrożone
+1. Dodano runtime rejestrację fontów przez CoreText:
+   - `FamilyTodo/Utilities/FontRegistrar.swift`
+2. Naprawiono fallback „mniejszy, ale ten sam”:
+   - fallback systemowy używa `baseSize` (nie `scaledSize`)
+   - retro scale działa wyłącznie gdy custom font jest faktycznie dostępny
+3. Rozszerzono diagnostykę fontów:
+   - log lokalizacji root/subdir
+   - status rejestracji
+   - wykryte family/font names
+4. Startowa rejestracja fontów na starcie aplikacji:
+   - `FamilyTodo/FamilyTodoApp.swift`
+5. Uporządkowano `UIAppFonts` + dodano ścieżki kompatybilności:
+   - `FamilyTodo.xcodeproj/project.pbxproj`
+
+### Dotknięte pliki
+- `FamilyTodo/Utilities/FontRegistrar.swift`
+- `FamilyTodo/Views/ThemeStore.swift`
+- `FamilyTodo/FamilyTodoApp.swift`
+- `FamilyTodo.xcodeproj/project.pbxproj`
+
+---
+
+## Plan v4.2 — Retro UI + Typography Coverage + Confetti Blast: DONE
+
+### Commit
+- `7b52dc2` — `feat: polish retro ui, global typography, and confetti blast`
+
+### Wdrożone
+1. Konfetti:
+   - 90 cząstek (3x)
+   - rozszerzona paleta (18 kolorów + theme accents)
+   - trajektoria blast z jednego emitera (dół-środek), nie opad z góry
+   - plik: `FamilyTodo/Views/Components/CelebrationOverlay.swift`
+2. Global typography:
+   - rozszerzone tokeny `ThemeFontToken` (`sectionHeader`, `inlineTitle`, `bodyStrong`, `bodySmall`, `tabLabel`, `buttonLabel`)
+   - dodane API `uiFont(for:)` dla UIKit/tabbara
+   - plik: `FamilyTodo/Views/ThemeStore.swift`
+3. Fonty w natywnym TabView:
+   - nowy `TabBarTypographyManager` oparty o `UITabBarAppearance` (`titleTextAttributes` only)
+   - podpięcie w `MainAppView` na `onAppear` + `onChange(theme/tabTint)`
+   - pliki:
+     - `FamilyTodo/Utilities/TabBarTypographyManager.swift`
+     - `FamilyTodo/ContentView.swift`
+4. Retro checkbox:
+   - nowy komponent `ThemedCheckbox` (retro pixel style dla preset `.retro`)
+   - wdrożony w Shopping + Tasks
+   - pliki:
+     - `FamilyTodo/Views/Components/ThemedCheckbox.swift`
+     - `FamilyTodo/Views/ShoppingListView.swift`
+     - `FamilyTodo/Views/TasksView.swift`
+5. Retro coin badge:
+   - nowy komponent `ShoppingCountBadge`
+   - użyty w headerze Shopping
+   - pliki:
+     - `FamilyTodo/Views/Components/ShoppingCountBadge.swift`
+     - `FamilyTodo/Views/ShoppingListView.swift`
+6. Typografia na kluczowych ekranach:
+   - Shopping (w tym Recently Purchased)
+   - Tasks
+   - Ideas/Backlog
+   - More/Settings/Profile/Repetitive
+   - pliki:
+     - `FamilyTodo/Views/ShoppingListView.swift`
+     - `FamilyTodo/Views/TasksView.swift`
+     - `FamilyTodo/Views/BacklogView.swift`
+     - `FamilyTodo/Views/MoreView.swift`
+7. Aktualizacja projektu o nowe pliki:
+   - `FamilyTodo.xcodeproj/project.pbxproj`
+
+### Walidacja
+1. `PRE_COMMIT_HOME=/tmp/pre-commit-cache pre-commit run -a` — Passed
+2. Push na branch:
+   - `r4-features` (`eba6301`, `7b52dc2`)
