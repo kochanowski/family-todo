@@ -24,7 +24,7 @@ struct ThemedCheckbox: View {
             }
         }
         .buttonStyle(.plain)
-        .frame(width: 44, height: 44)
+        .frame(width: 44)
         .contentShape(Rectangle())
     }
 
