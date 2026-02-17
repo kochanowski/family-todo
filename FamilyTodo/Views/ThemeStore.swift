@@ -394,13 +394,17 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
 
 @MainActor
 final class ThemeStore: ObservableObject {
+    @Published private(set) var fontRegistration: FontRegistrationReport
+
     @AppStorage("themePreset") private var presetRawValue = ThemePreset.system.rawValue
     @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
     @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.system.rawValue
 
-    init() {
-        _ = verifyBundledFonts()
+    init(initialFontReport: FontRegistrationReport? = nil) {
+        let report = initialFontReport ?? FontRegistrar.registerBundledFonts()
+        fontRegistration = report
+        logFontAudit(report)
     }
 
     var preset: ThemePreset {
@@ -525,50 +529,149 @@ final class ThemeStore: ObservableObject {
     /// Font resolved for current preset with graceful fallback.
     /// PressStart2P renders bigger than SF at same pt size, so we scale it down.
     func font(size: CGFloat, weight: Font.Weight = .regular, role: ThemeFontRole = .body) -> Font {
+        let baseSize = size
+
         switch preset {
         case .retro:
-            let scaledSize = scaledRetroSize(size, role: role)
-            return customFont("PressStart2P-Regular", size: scaledSize, fallbackWeight: weight)
+            let scaledCustomSize = scaledRetroSize(baseSize, role: role)
+            return customFont(
+                postScriptName: "PressStart2P-Regular",
+                baseSize: baseSize,
+                customSize: scaledCustomSize,
+                fallbackWeight: weight,
+                familyAliases: ["Press Start 2P"]
+            )
         case .paper:
             switch role {
             case .display, .title:
-                if UIFont(name: "SpecialElite-Regular", size: size) != nil {
-                    return .custom("SpecialElite-Regular", size: size)
-                }
-                return customFont("Georgia", size: size, fallbackWeight: weight)
+                return customFont(
+                    postScriptName: "SpecialElite-Regular",
+                    baseSize: baseSize,
+                    customSize: baseSize,
+                    fallbackWeight: weight,
+                    familyAliases: ["Special Elite"],
+                    fallbackUIFontName: "Georgia"
+                )
             case .body, .chip:
-                return customFont("Georgia", size: size, fallbackWeight: weight)
+                return namedOrSystemFont(
+                    uiFontName: "Georgia",
+                    baseSize: baseSize,
+                    fallbackWeight: weight
+                )
             }
         case .system:
-            return .system(size: size, weight: weight)
+            return .system(size: baseSize, weight: weight)
         }
     }
 
     @discardableResult
-    func verifyBundledFonts() -> [String: Bool] {
-        let registered: [String: Bool] = [
-            "PressStart2P-Regular": UIFont(name: "PressStart2P-Regular", size: 14) != nil,
-            "SpecialElite-Regular": UIFont(name: "SpecialElite-Regular", size: 14) != nil,
-            "CaveatBrush-Regular": UIFont(name: "CaveatBrush-Regular", size: 14) != nil,
-        ]
+    func verifyBundledFonts() -> FontRegistrationReport {
+        let report = FontRegistrar.registerBundledFonts()
+        fontRegistration = report
+        logFontAudit(report)
+        return report
+    }
 
-        let status = registered
-            .map { "\($0.key)=\($0.value ? "ok" : "missing")" }
-            .sorted()
-            .joined(separator: ", ")
+    private func customFont(
+        postScriptName: String,
+        baseSize: CGFloat,
+        customSize: CGFloat,
+        fallbackWeight: Font.Weight,
+        familyAliases: [String] = [],
+        fallbackUIFontName: String? = nil
+    ) -> Font {
+        if let resolvedName = resolveCustomFontName(
+            postScriptName: postScriptName,
+            familyAliases: familyAliases
+        ) {
+            return .custom(resolvedName, size: customSize)
+        }
 
-        print("🧩 Theme fonts audit: \(status)")
+        if let fallbackUIFontName,
+           UIFont(name: fallbackUIFontName, size: baseSize) != nil
+        {
+            return .custom(fallbackUIFontName, size: baseSize)
+        }
+
+        return .system(size: baseSize, weight: fallbackWeight)
+    }
+
+    private func namedOrSystemFont(
+        uiFontName: String,
+        baseSize: CGFloat,
+        fallbackWeight: Font.Weight
+    ) -> Font {
+        if UIFont(name: uiFontName, size: baseSize) != nil {
+            return .custom(uiFontName, size: baseSize)
+        }
+        return .system(size: baseSize, weight: fallbackWeight)
+    }
+
+    private func resolveCustomFontName(
+        postScriptName: String,
+        familyAliases: [String]
+    ) -> String? {
+        if fontRegistration.isFontAvailable(postScriptName: postScriptName) ||
+            UIFont(name: postScriptName, size: 12) != nil
+        {
+            return postScriptName
+        }
+
+        for familyName in familyAliases {
+            let familyFonts = UIFont.fontNames(forFamilyName: familyName)
+            if let exactMatch = familyFonts.first(where: {
+                $0.caseInsensitiveCompare(postScriptName) == .orderedSame
+            }) {
+                return exactMatch
+            }
+            if let firstAvailable = familyFonts.first {
+                return firstAvailable
+            }
+        }
+
+        if let item = fontRegistration.item(for: postScriptName) {
+            if let exactMatch = item.availableFontNames.first(where: {
+                $0.caseInsensitiveCompare(postScriptName) == .orderedSame
+            }) {
+                return exactMatch
+            }
+            if let firstAvailable = item.availableFontNames.first {
+                return firstAvailable
+            }
+        }
+
+        return nil
+    }
+
+    private func logFontAudit(_ report: FontRegistrationReport) {
+        print("🧩 Theme fonts audit: \(report.statusSummary)")
+        for item in report.items {
+            let location = switch (item.foundInRootBundle, item.foundInResourcesFonts) {
+            case (true, true):
+                "root+Resources/Fonts"
+            case (true, false):
+                "root"
+            case (false, true):
+                "Resources/Fonts"
+            case (false, false):
+                "missing"
+            }
+
+            let registrationState = item.registrationAttempted
+                ? (item.registrationSuccess ? "registered" : "register_failed")
+                : "not_attempted"
+            let availableFonts = item.availableFontNames.isEmpty
+                ? "none"
+                : item.availableFontNames.joined(separator: "|")
+            let errorMessage = item.registrationError.map { " error=\($0)" } ?? ""
+
+            print(
+                "🧩 Font[\(item.postScriptName)] file=\(item.fileName) location=\(location) state=\(registrationState) detected=\(item.postScriptDetected) fonts=\(availableFonts)\(errorMessage)"
+            )
+        }
         print(
             "🧩 Theme font map: system=SF, retro=PressStart2P-Regular, paper=SpecialElite-Regular(headline)+Georgia(body), caveat=reserved"
         )
-        return registered
-    }
-
-    private func customFont(_ postScriptName: String, size: CGFloat, fallbackWeight: Font.Weight) -> Font {
-        if UIFont(name: postScriptName, size: size) != nil {
-            return .custom(postScriptName, size: size)
-        }
-        return .system(size: size, weight: fallbackWeight)
     }
 
     private func scaledRetroSize(_ base: CGFloat, role: ThemeFontRole) -> CGFloat {

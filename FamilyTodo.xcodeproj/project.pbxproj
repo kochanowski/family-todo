@@ -52,6 +52,7 @@
 		6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */; };
 		C3D4E5F60718293A4B5C6D7E /* ThemeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */; };
 		B8F1C2D3E4F5061728394B5C /* AppColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */; };
+		FONTREG0000000000000001 /* FontRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = FONTREG0000000000000002 /* FontRegistrar.swift */; };
 		C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65D304A5384580AD9E9724 /* OnboardingView.swift */; };
 		58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */; };
 		CELEB1000000000000000001 /* CelebrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB3000000000000000001 /* CelebrationManager.swift */; };
@@ -137,6 +138,7 @@
 		F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeStore.swift; sourceTree = "<group>"; };
 		F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
+		FONTREG0000000000000002 /* FontRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontRegistrar.swift; sourceTree = "<group>"; };
 		EC65D304A5384580AD9E9724 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		CELEB3000000000000000001 /* CelebrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationManager.swift; sourceTree = "<group>"; };
@@ -384,6 +386,7 @@
 			children = (
 				DA591D77C780445A82FEE9E0 /* HapticManager.swift */,
 				F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */,
+				FONTREG0000000000000002 /* FontRegistrar.swift */,
 				26545708FFCD49269BCBA414 /* InteractionTokens.swift */,
 			);
 			path = Utilities;
@@ -525,6 +528,7 @@
 				6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */,
 				C3D4E5F60718293A4B5C6D7E /* ThemeStore.swift in Sources */,
 				B8F1C2D3E4F5061728394B5C /* AppColors.swift in Sources */,
+				FONTREG0000000000000001 /* FontRegistrar.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B91 /* Member.swift in Sources */,
@@ -628,11 +632,14 @@
 				INFOPLIST_KEY_HPCloudKitEnabled = NO;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-					INFOPLIST_KEY_UIAppFonts = (
-						"PressStart2P-Regular.ttf",
-						"CaveatBrush-Regular.ttf",
-						"SpecialElite-Regular.ttf",
-					);
+				INFOPLIST_KEY_UIAppFonts = (
+					"PressStart2P-Regular.ttf",
+					"CaveatBrush-Regular.ttf",
+					"SpecialElite-Regular.ttf",
+					"Resources/Fonts/PressStart2P-Regular.ttf",
+					"Resources/Fonts/CaveatBrush-Regular.ttf",
+					"Resources/Fonts/SpecialElite-Regular.ttf",
+				);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -661,11 +668,14 @@
 				INFOPLIST_KEY_HPCloudKitEnabled = NO;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-					INFOPLIST_KEY_UIAppFonts = (
-						"PressStart2P-Regular.ttf",
-						"CaveatBrush-Regular.ttf",
-						"SpecialElite-Regular.ttf",
-					);
+				INFOPLIST_KEY_UIAppFonts = (
+					"PressStart2P-Regular.ttf",
+					"CaveatBrush-Regular.ttf",
+					"SpecialElite-Regular.ttf",
+					"Resources/Fonts/PressStart2P-Regular.ttf",
+					"Resources/Fonts/CaveatBrush-Regular.ttf",
+					"Resources/Fonts/SpecialElite-Regular.ttf",
+				);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

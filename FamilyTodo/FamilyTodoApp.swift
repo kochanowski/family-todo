@@ -5,11 +5,18 @@ import SwiftUI
 @main
 struct FamilyTodoApp: App {
     @StateObject private var userSession = UserSession.shared
-    @StateObject private var themeStore = ThemeStore()
+    @StateObject private var themeStore: ThemeStore
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var onboardingState = OnboardingState()
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
+
+    init() {
+        let fontRegistrationReport = FontRegistrar.registerBundledFonts()
+        _themeStore = StateObject(
+            wrappedValue: ThemeStore(initialFontReport: fontRegistrationReport)
+        )
+    }
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
