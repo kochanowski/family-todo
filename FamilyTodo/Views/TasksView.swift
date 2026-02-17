@@ -256,7 +256,7 @@ private struct TasksContent: View {
         }
 
         if !store.backlogTasks.isEmpty {
-            sectionHeader("BACKLOG")
+            sectionHeader("IDEAS")
 
             ForEach(store.backlogTasks) { task in
                 TaskRow(
@@ -275,7 +275,7 @@ private struct TasksContent: View {
                     } label: {
                         Label("Start", systemImage: "play.fill")
                     }
-                    .tint(.blue)
+                    .tint(themeStore.accentColor)
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowBacklog_\(task.title)")
@@ -451,11 +451,11 @@ private struct TasksContent: View {
                 Spacer()
 
                 if count == 0 {
-                    Button("Go to Backlog") {
+                    Button("Go to Ideas") {
                         selectedTab = .backlog
                     }
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(themeStore.accentColor)
                 }
             }
         }
@@ -1016,7 +1016,7 @@ private struct TaskDetailSheet: View {
                 Section("Task") {
                     TextField("Title", text: $title)
                     Picker("Status", selection: $status) {
-                        Text("Backlog").tag(Task.TaskStatus.backlog)
+                        Text("Ideas").tag(Task.TaskStatus.backlog)
                         Text("Next").tag(Task.TaskStatus.next)
                         Text("Done").tag(Task.TaskStatus.done)
                     }

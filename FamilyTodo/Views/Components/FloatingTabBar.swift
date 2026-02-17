@@ -23,7 +23,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .shopping: "Shopping"
         case .tasks: "Tasks"
-        case .backlog: "Backlog"
+        case .backlog: "Ideas"
         case .more: "More"
         }
     }

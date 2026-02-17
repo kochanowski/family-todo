@@ -2,13 +2,9 @@ import SwiftUI
 import UIKit
 
 enum ThemePreset: String, CaseIterable, Identifiable {
-    case journal
-    case pastel
-    case soft
-    case night
+    case system
     case retro
     case paper
-    case chalk
 
     var id: String {
         rawValue
@@ -16,61 +12,52 @@ enum ThemePreset: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .journal:
-            "Journal"
-        case .pastel:
-            "Pastel"
-        case .soft:
-            "Soft"
-        case .night:
-            "Night"
+        case .system:
+            "Default"
         case .retro:
             "Retro"
         case .paper:
             "Paper"
-        case .chalk:
-            "Chalk"
         }
     }
 
     var iconName: String {
         switch self {
-        case .journal:
-            "book.fill"
-        case .pastel:
-            "paintpalette.fill"
-        case .soft:
-            "cloud.fill"
-        case .night:
-            "moon.stars.fill"
+        case .system:
+            "iphone"
         case .retro:
             "gamecontroller.fill"
         case .paper:
             "newspaper.fill"
-        case .chalk:
-            "pencil.and.outline"
         }
     }
 
-    /// Preferred font for the selected preset.
-    /// Custom fonts gracefully fall back to system if unavailable in bundle.
+    /// Custom bundled font names.
+    /// Use `uiFontName` for built-in fonts like Georgia.
     var fontName: String? {
         switch self {
         case .retro:
             "PressStart2P-Regular"
+        case .paper, .system:
+            nil
+        }
+    }
+
+    /// UIFont names (system or bundled).
+    var uiFontName: String? {
+        switch self {
         case .paper:
-            "SpecialElite-Regular"
-        case .chalk:
-            "CaveatBrush-Regular"
-        case .journal, .pastel, .soft, .night:
+            "Georgia"
+        case .retro:
+            "PressStart2P-Regular"
+        case .system:
             nil
         }
     }
 
     var palette: ThemePalette {
         switch self {
-        case .journal:
-            // Warm journal palette to match the reference UI.
+        case .system:
             ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
                     gradientColors: [Color(hex: "FDF7F1"), Color(hex: "F5E9DE")],
@@ -113,142 +100,6 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "9A8F86"),
                     primaryTextColor: Color(hex: "4E4741"),
                     secondaryTextColor: Color(hex: "6E655E")
-                ),
-            ])
-        case .pastel:
-            // Soft Aurora palette - Redesign 2026-01-28
-            ThemePalette(cardThemes: [
-                .shoppingList: CardTheme(
-                    gradientColors: [Color(hex: "F3E8FF"), Color(hex: "E9D5FF")],
-                    accentColor: Color(hex: "A855F7"),
-                    primaryTextColor: Color(hex: "6B21A8"),
-                    secondaryTextColor: Color(hex: "7E22CE")
-                ),
-                .todo: CardTheme(
-                    gradientColors: [Color(hex: "ECFDF5"), Color(hex: "D1FAE5")],
-                    accentColor: Color(hex: "10B981"),
-                    primaryTextColor: Color(hex: "065F46"),
-                    secondaryTextColor: Color(hex: "047857")
-                ),
-                .backlog: CardTheme(
-                    gradientColors: [Color(hex: "FEF3C7"), Color(hex: "FDE68A")],
-                    accentColor: Color(hex: "F59E0B"),
-                    primaryTextColor: Color(hex: "92400E"),
-                    secondaryTextColor: Color(hex: "B45309")
-                ),
-                .recurring: CardTheme(
-                    gradientColors: [Color(hex: "FFEDD5"), Color(hex: "FED7AA")],
-                    accentColor: Color(hex: "F97316"),
-                    primaryTextColor: Color(hex: "9A3412"),
-                    secondaryTextColor: Color(hex: "C2410C")
-                ),
-                .household: CardTheme(
-                    gradientColors: [Color(hex: "EFF6FF"), Color(hex: "BFDBFE")],
-                    accentColor: Color(hex: "3B82F6"),
-                    primaryTextColor: Color(hex: "1E40AF"),
-                    secondaryTextColor: Color(hex: "1D4ED8")
-                ),
-                .areas: CardTheme(
-                    gradientColors: [Color(hex: "F0FDFA"), Color(hex: "99F6E4")],
-                    accentColor: Color(hex: "14B8A6"),
-                    primaryTextColor: Color(hex: "115E59"),
-                    secondaryTextColor: Color(hex: "0F766E")
-                ),
-                .settings: CardTheme(
-                    gradientColors: [Color(hex: "F8FAFC"), Color(hex: "E2E8F0")],
-                    accentColor: Color(hex: "64748B"),
-                    primaryTextColor: Color(hex: "334155"),
-                    secondaryTextColor: Color(hex: "475569")
-                ),
-            ])
-        case .soft:
-            ThemePalette(cardThemes: [
-                .shoppingList: CardTheme(
-                    gradientColors: [Color(hex: "F3E8FF"), Color(hex: "EDE9FE")],
-                    accentColor: Color(hex: "A855F7"),
-                    primaryTextColor: Color(hex: "6B21A8"),
-                    secondaryTextColor: Color(hex: "7E22CE")
-                ),
-                .todo: CardTheme(
-                    gradientColors: [Color(hex: "DCFCE7"), Color(hex: "D1FAE5")],
-                    accentColor: Color(hex: "22C55E"),
-                    primaryTextColor: Color(hex: "166534"),
-                    secondaryTextColor: Color(hex: "16A34A")
-                ),
-                .backlog: CardTheme(
-                    gradientColors: [Color(hex: "FEF3C7"), Color(hex: "FDE68A")],
-                    accentColor: Color(hex: "F59E0B"),
-                    primaryTextColor: Color(hex: "78350F"),
-                    secondaryTextColor: Color(hex: "B45309")
-                ),
-                .recurring: CardTheme(
-                    gradientColors: [Color(hex: "FFE4D2"), Color(hex: "FDBA8C")],
-                    accentColor: Color(hex: "F97316"),
-                    primaryTextColor: Color(hex: "9A3412"),
-                    secondaryTextColor: Color(hex: "C2410C")
-                ),
-                .household: CardTheme(
-                    gradientColors: [Color(hex: "E6FFFB"), Color(hex: "B2F5EA")],
-                    accentColor: Color(hex: "14B8A6"),
-                    primaryTextColor: Color(hex: "115E59"),
-                    secondaryTextColor: Color(hex: "0F766E")
-                ),
-                .areas: CardTheme(
-                    gradientColors: [Color(hex: "E0F2FE"), Color(hex: "BAE6FD")],
-                    accentColor: Color(hex: "0EA5E9"),
-                    primaryTextColor: Color(hex: "075985"),
-                    secondaryTextColor: Color(hex: "0284C7")
-                ),
-                .settings: CardTheme(
-                    gradientColors: [Color(hex: "FFE4E6"), Color(hex: "FECDD3")],
-                    accentColor: Color(hex: "F43F5E"),
-                    primaryTextColor: Color(hex: "9F1239"),
-                    secondaryTextColor: Color(hex: "BE123C")
-                ),
-            ])
-        case .night:
-            ThemePalette(cardThemes: [
-                .shoppingList: CardTheme(
-                    gradientColors: [Color(hex: "1E1B4B"), Color(hex: "312E81")],
-                    accentColor: Color(hex: "A78BFA"),
-                    primaryTextColor: Color(hex: "EDE9FE"),
-                    secondaryTextColor: Color(hex: "C4B5FD")
-                ),
-                .todo: CardTheme(
-                    gradientColors: [Color(hex: "052E16"), Color(hex: "14532D")],
-                    accentColor: Color(hex: "4ADE80"),
-                    primaryTextColor: Color(hex: "DCFCE7"),
-                    secondaryTextColor: Color(hex: "86EFAC")
-                ),
-                .backlog: CardTheme(
-                    gradientColors: [Color(hex: "422006"), Color(hex: "713F12")],
-                    accentColor: Color(hex: "FACC15"),
-                    primaryTextColor: Color(hex: "FEF3C7"),
-                    secondaryTextColor: Color(hex: "FDE68A")
-                ),
-                .recurring: CardTheme(
-                    gradientColors: [Color(hex: "431407"), Color(hex: "7C2D12")],
-                    accentColor: Color(hex: "FB923C"),
-                    primaryTextColor: Color(hex: "FFEDD5"),
-                    secondaryTextColor: Color(hex: "FDBA74")
-                ),
-                .household: CardTheme(
-                    gradientColors: [Color(hex: "042F2E"), Color(hex: "134E4A")],
-                    accentColor: Color(hex: "2DD4BF"),
-                    primaryTextColor: Color(hex: "CCFBF1"),
-                    secondaryTextColor: Color(hex: "5EEAD4")
-                ),
-                .areas: CardTheme(
-                    gradientColors: [Color(hex: "0C4A6E"), Color(hex: "155E75")],
-                    accentColor: Color(hex: "38BDF8"),
-                    primaryTextColor: Color(hex: "E0F2FE"),
-                    secondaryTextColor: Color(hex: "7DD3FC")
-                ),
-                .settings: CardTheme(
-                    gradientColors: [Color(hex: "4C0519"), Color(hex: "881337")],
-                    accentColor: Color(hex: "FB7185"),
-                    primaryTextColor: Color(hex: "FFE4E6"),
-                    secondaryTextColor: Color(hex: "FDA4AF")
                 ),
             ])
         case .retro:
@@ -339,51 +190,6 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "8D6E63"),
                     primaryTextColor: Color(hex: "3E2723"),
                     secondaryTextColor: Color(hex: "5D4037")
-                ),
-            ])
-        case .chalk:
-            ThemePalette(cardThemes: [
-                .shoppingList: CardTheme(
-                    gradientColors: [Color(hex: "2C3E2D"), Color(hex: "3A5240")],
-                    accentColor: Color(hex: "FFEB99"),
-                    primaryTextColor: Color(hex: "F5F5DC"),
-                    secondaryTextColor: Color(hex: "C8C8A9")
-                ),
-                .todo: CardTheme(
-                    gradientColors: [Color(hex: "2A3A2A"), Color(hex: "354E38")],
-                    accentColor: Color(hex: "FFB3B3"),
-                    primaryTextColor: Color(hex: "FFFFFF"),
-                    secondaryTextColor: Color(hex: "D5D5C0")
-                ),
-                .backlog: CardTheme(
-                    gradientColors: [Color(hex: "2E3D2F"), Color(hex: "3C5041")],
-                    accentColor: Color(hex: "ADD8E6"),
-                    primaryTextColor: Color(hex: "F0F0E0"),
-                    secondaryTextColor: Color(hex: "C0C0A8")
-                ),
-                .recurring: CardTheme(
-                    gradientColors: [Color(hex: "2B3B2C"), Color(hex: "384D3C")],
-                    accentColor: Color(hex: "98FB98"),
-                    primaryTextColor: Color(hex: "FFFACD"),
-                    secondaryTextColor: Color(hex: "D4D4B0")
-                ),
-                .household: CardTheme(
-                    gradientColors: [Color(hex: "303E31"), Color(hex: "3F5343")],
-                    accentColor: Color(hex: "FFA07A"),
-                    primaryTextColor: Color(hex: "F5F5F0"),
-                    secondaryTextColor: Color(hex: "CCCCB8")
-                ),
-                .areas: CardTheme(
-                    gradientColors: [Color(hex: "2D3D2E"), Color(hex: "3B5040")],
-                    accentColor: Color(hex: "B0E0E6"),
-                    primaryTextColor: Color(hex: "FFFAF0"),
-                    secondaryTextColor: Color(hex: "D0D0BC")
-                ),
-                .settings: CardTheme(
-                    gradientColors: [Color(hex: "2F3F30"), Color(hex: "3D5242")],
-                    accentColor: Color(hex: "DDA0DD"),
-                    primaryTextColor: Color(hex: "F5F5E8"),
-                    secondaryTextColor: Color(hex: "C5C5B0")
                 ),
             ])
         }
@@ -495,14 +301,13 @@ enum TabTintColor: String, CaseIterable, Identifiable {
 
 @MainActor
 final class ThemeStore: ObservableObject {
-    @AppStorage("themePreset") private var presetRawValue = ThemePreset.journal.rawValue
+    @AppStorage("themePreset") private var presetRawValue = ThemePreset.system.rawValue
     @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
-    @AppStorage("suggestionsEnabled") var suggestionsEnabled = true
     @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.system.rawValue
 
     var preset: ThemePreset {
-        get { ThemePreset(rawValue: presetRawValue) ?? .journal }
+        get { ThemePreset(rawValue: presetRawValue) ?? .system }
         set {
             presetRawValue = newValue.rawValue
             objectWillChange.send()
@@ -533,21 +338,52 @@ final class ThemeStore: ObservableObject {
         tabTintColor.color
     }
 
+    /// Retro always stays dark. Paper stays light.
     var colorScheme: ColorScheme? {
-        if preset == .retro || preset == .chalk {
-            return .dark
+        switch preset {
+        case .retro:
+            .dark
+        case .paper:
+            .light
+        case .system:
+            appearanceMode.colorScheme
         }
-        return appearanceMode.colorScheme
+    }
+
+    // MARK: - Resolved Colors for Views
+
+    var canvasColor: Color {
+        AppColors.palette(for: preset).canvas
+    }
+
+    var surfaceColor: Color {
+        AppColors.palette(for: preset).surface
+    }
+
+    var inkColor: Color {
+        AppColors.palette(for: preset).ink
+    }
+
+    var inkMutedColor: Color {
+        AppColors.palette(for: preset).inkMuted
+    }
+
+    var accentColor: Color {
+        AppColors.palette(for: preset).accent
     }
 
     /// Font resolved for current preset with graceful fallback.
     func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        guard
-            let fontName = preset.fontName,
-            UIFont(name: fontName, size: size) != nil
-        else {
+        switch preset {
+        case .retro:
+            if UIFont(name: "PressStart2P-Regular", size: size) != nil {
+                return .custom("PressStart2P-Regular", size: size)
+            }
+            return .system(size: size, weight: weight)
+        case .paper:
+            return .custom("Georgia", size: size)
+        case .system:
             return .system(size: size, weight: weight)
         }
-        return .custom(fontName, size: size)
     }
 }

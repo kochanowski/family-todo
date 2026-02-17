@@ -247,6 +247,9 @@ extension CloudKitManager {
         if let areaId = chore.areaId {
             record["areaId"] = reference(for: areaId)
         }
+        if let categoryId = chore.categoryId {
+            record["categoryId"] = reference(for: categoryId)
+        }
         record["isActive"] = (chore.isActive ? 1 : 0) as CKRecordValue
         if let lastGeneratedDate = chore.lastGeneratedDate {
             record["lastGeneratedDate"] = lastGeneratedDate as CKRecordValue
@@ -300,6 +303,7 @@ extension CloudKitManager {
             recurrenceInterval: intervalValue,
             defaultAssigneeIds: resolvedAssigneeIds,
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
+            categoryId: uuid(from: record["categoryId"] as? CKRecord.Reference),
             isActive: isActiveValue == 1,
             lastGeneratedDate: record["lastGeneratedDate"] as? Date,
             nextScheduledDate: record["nextScheduledDate"] as? Date,

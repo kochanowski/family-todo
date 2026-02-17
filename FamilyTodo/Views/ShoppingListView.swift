@@ -59,8 +59,6 @@ private struct ShoppingListContent: View {
     @State private var isKeyboardVisible = false
     @State private var draggedItem: ShoppingItem?
 
-    @Environment(\.colorScheme) private var colorScheme
-
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
             wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
@@ -103,6 +101,11 @@ private struct ShoppingListContent: View {
                                             if editingItemId == item.id {
                                                 ShoppingItemInlineEditRow(
                                                     text: $editingItemText,
+                                                    isBought: item.isBought,
+                                                    onToggle: {
+                                                        cancelEditingItem()
+                                                        toggleItem(item)
+                                                    },
                                                     onSubmit: { commitEditingItem(item) },
                                                     onCancel: cancelEditingItem
                                                 )
@@ -219,7 +222,7 @@ private struct ShoppingListContent: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Capsule().fill(.blue))
+                    .background(Capsule().fill(themeStore.accentColor))
             }
 
             Spacer()
@@ -282,8 +285,8 @@ private struct ShoppingListContent: View {
             .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
-                    .fill(.blue)
-                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .fill(themeStore.accentColor)
+                    .shadow(color: themeStore.accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)
@@ -455,7 +458,7 @@ private struct ShoppingListContent: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
@@ -503,6 +506,8 @@ struct ShoppingItemRow: View {
 
 private struct ShoppingItemInlineEditRow: View {
     @Binding var text: String
+    let isBought: Bool
+    let onToggle: () -> Void
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
@@ -511,9 +516,19 @@ private struct ShoppingItemInlineEditRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Circle()
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                .frame(width: 20, height: 20)
+            Button(action: onToggle) {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                    .frame(width: 20, height: 20)
+                    .overlay {
+                        if isBought {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 13, height: 13)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
 
             TextField("Item name", text: $text)
                 .font(.system(size: 15))
@@ -675,7 +690,7 @@ struct RestockSheet: View {
     let onDeleteItem: (ShoppingItem) -> Void
     let onClearAll: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var showClearAllConfirmation = false
 
     var body: some View {
@@ -697,7 +712,7 @@ struct RestockSheet: View {
                                 onDelete: { onDeleteItem(item) }
                             )
                             .listRowInsets(
-                                EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+                                EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
                             )
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -707,7 +722,7 @@ struct RestockSheet: View {
                 }
             }
             .background(
-                (colorScheme == .dark ? Color.black : Color(hex: "F9F9F9")).ignoresSafeArea()
+                themeStore.canvasColor.ignoresSafeArea()
             )
             .navigationTitle("Recently Purchased")
             .navigationBarTitleDisplayMode(.inline)
@@ -745,6 +760,7 @@ private struct RestockItemRow: View {
     let item: ShoppingItem
     let onRestore: () -> Void
     let onDelete: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         HStack {
@@ -759,10 +775,10 @@ private struct RestockItemRow: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(themeStore.accentColor)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
@@ -809,4 +825,5 @@ private struct ShoppingItemReorderDropDelegate: DropDelegate {
 #Preview {
     ShoppingListView()
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

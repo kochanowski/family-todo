@@ -76,6 +76,7 @@ struct RecurringChore: Identifiable, Codable {
     var recurrenceInterval: Int?
     var defaultAssigneeIds: [UUID]
     var areaId: UUID?
+    var categoryId: UUID?
     var isActive: Bool
     var lastGeneratedDate: Date?
     var nextScheduledDate: Date?
@@ -97,6 +98,7 @@ struct RecurringChore: Identifiable, Codable {
         recurrenceInterval: Int? = 1,
         defaultAssigneeIds: [UUID] = [],
         areaId: UUID? = nil,
+        categoryId: UUID? = nil,
         isActive: Bool = true,
         lastGeneratedDate: Date? = nil,
         nextScheduledDate: Date? = nil,
@@ -117,6 +119,7 @@ struct RecurringChore: Identifiable, Codable {
         self.recurrenceInterval = recurrenceInterval
         self.defaultAssigneeIds = defaultAssigneeIds
         self.areaId = areaId
+        self.categoryId = categoryId
         self.isActive = isActive
         self.lastGeneratedDate = lastGeneratedDate
         self.nextScheduledDate = nextScheduledDate
@@ -404,7 +407,8 @@ final class RecurringChoreStore: ObservableObject {
         recurrenceInterval: Int? = 1,
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
-        defaultAssigneeIds: [UUID] = []
+        defaultAssigneeIds: [UUID] = [],
+        categoryId: UUID? = nil
     ) async {
         guard let householdId else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -417,7 +421,8 @@ final class RecurringChoreStore: ObservableObject {
             recurrenceDay: recurrenceDay,
             recurrenceDayOfMonth: recurrenceDayOfMonth,
             recurrenceInterval: recurrenceInterval,
-            defaultAssigneeIds: defaultAssigneeIds
+            defaultAssigneeIds: defaultAssigneeIds,
+            categoryId: categoryId
         )
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
         chores.append(chore)
@@ -539,6 +544,7 @@ final class ChoreScheduler {
                     status: .backlog,
                     assigneeId: chore.defaultAssigneeIds.first,
                     assigneeIds: chore.defaultAssigneeIds,
+                    backlogCategoryId: chore.categoryId,
                     areaId: chore.areaId,
                     dueDate: nextDate,
                     notes: chore.notes,
@@ -653,6 +659,7 @@ final class CachedRecurringChore {
     @Attribute(.unique) var id: UUID
     var householdId: UUID
     var title: String
+    var categoryId: UUID?
     var frequencyDays: Int
     var createdAt: Date
     var updatedAt: Date
@@ -661,6 +668,7 @@ final class CachedRecurringChore {
         id: UUID = UUID(),
         householdId: UUID = UUID(),
         title: String = "",
+        categoryId: UUID? = nil,
         frequencyDays: Int = 7,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -668,6 +676,7 @@ final class CachedRecurringChore {
         self.id = id
         self.householdId = householdId
         self.title = title
+        self.categoryId = categoryId
         self.frequencyDays = frequencyDays
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -678,6 +687,7 @@ final class CachedRecurringChore {
             id: chore.id,
             householdId: chore.householdId,
             title: chore.title,
+            categoryId: chore.categoryId,
             frequencyDays: max(chore.recurrenceInterval ?? 1, 1),
             createdAt: chore.createdAt,
             updatedAt: chore.updatedAt
@@ -687,6 +697,7 @@ final class CachedRecurringChore {
     func update(from chore: RecurringChore) {
         householdId = chore.householdId
         title = chore.title
+        categoryId = chore.categoryId
         frequencyDays = max(chore.recurrenceInterval ?? 1, 1)
         createdAt = chore.createdAt
         updatedAt = chore.updatedAt
@@ -699,6 +710,7 @@ final class CachedRecurringChore {
             title: title,
             recurrenceType: .custom,
             recurrenceInterval: max(frequencyDays, 1),
+            categoryId: categoryId,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

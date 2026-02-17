@@ -483,7 +483,7 @@ final class BacklogStore: ObservableObject {
                     await taskStore.deleteTask(createdTask)
                 }
                 return .failed(
-                    "Couldn't remove item from Backlog. Promotion was rolled back."
+                    "Couldn't remove item from Ideas. Promotion was rolled back."
                 )
             }
             return .success(createdTaskId: createdTaskId)

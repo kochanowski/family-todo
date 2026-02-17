@@ -6,8 +6,8 @@ import UIKit
 /// More screen - hub for settings, profile, and configuration
 struct MoreView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,7 +37,7 @@ struct MoreView: View {
                                 GuidedEmptyStateView()
                             }
                         } label: {
-                            MoreRow(icon: "folder", title: "Backlog Categories")
+                            MoreRow(icon: "folder", title: "Idea Categories")
                         }
                         .buttonStyle(.plain)
 
@@ -93,14 +93,14 @@ struct MoreView: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
 // MARK: - Profile Card
 
 struct ProfileCard: View {
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
 
@@ -109,7 +109,7 @@ struct ProfileCard: View {
             // Avatar stack
             ZStack {
                 Circle()
-                    .fill(.blue)
+                    .fill(themeStore.accentColor)
                     .frame(width: 44, height: 44)
                     .overlay {
                         Text(String(userSession.displayName?.prefix(1) ?? "U"))
@@ -143,7 +143,7 @@ struct ProfileCard: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
@@ -396,7 +396,7 @@ struct CategoriesManagementView: View {
                 }
             }
         }
-        .navigationTitle("Backlog Categories")
+        .navigationTitle("Idea Categories")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -437,6 +437,7 @@ struct CategoriesManagementView: View {
 
 struct RepetitiveTasksView: View {
     @StateObject private var store: RecurringChoreStore
+    @StateObject private var backlogStore: BacklogStore
     @EnvironmentObject private var userSession: UserSession
 
     @State private var newTitle = ""
@@ -444,10 +445,14 @@ struct RepetitiveTasksView: View {
     @State private var recurrenceDay = 2
     @State private var recurrenceDayOfMonth = 1
     @State private var recurrenceInterval = 1
+    @State private var selectedCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
             wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
+        )
+        _backlogStore = StateObject(
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
     }
 
@@ -480,6 +485,17 @@ struct RepetitiveTasksView: View {
                             Text(chore.recurrenceType.rawValue.capitalized)
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
+
+                            if let categoryId = chore.categoryId,
+                               let category = backlogStore.categories.first(where: { $0.id == categoryId })
+                            {
+                                Text(category.title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(category.color)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(category.color.opacity(0.12)))
+                            }
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -521,6 +537,13 @@ struct RepetitiveTasksView: View {
                     }
                 }
 
+                Picker("Category", selection: $selectedCategoryId) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(backlogStore.categories) { category in
+                        Text(category.title).tag(UUID?.some(category.id))
+                    }
+                }
+
                 Button {
                     let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !title.isEmpty else { return }
@@ -530,11 +553,13 @@ struct RepetitiveTasksView: View {
                             recurrenceType: recurrenceType,
                             recurrenceInterval: recurrenceType == .custom ? recurrenceInterval : 1,
                             recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
-                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil
+                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
+                            categoryId: selectedCategoryId
                         )
                     }
                     newTitle = ""
                     recurrenceInterval = 1
+                    selectedCategoryId = nil
                 } label: {
                     Label("Add repetitive task", systemImage: "plus.circle.fill")
                 }
@@ -545,7 +570,9 @@ struct RepetitiveTasksView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             store.setSyncMode(userSession.syncMode)
+            backlogStore.setSyncMode(userSession.syncMode)
             await store.loadChores()
+            await backlogStore.loadData()
         }
     }
 
@@ -728,23 +755,7 @@ struct SettingsView: View {
 
     var body: some View {
         List {
-            // MARK: - Appearance Section
-
-            Section {
-                AppearanceSelector(selectedMode: Binding(
-                    get: { themeStore.appearanceMode },
-                    set: {
-                        HapticManager.selection()
-                        themeStore.appearanceMode = $0
-                    }
-                ))
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                .listRowBackground(Color.clear)
-            } header: {
-                Text("Appearance")
-            }
-
-            // MARK: - Theme Section
+            // MARK: - Theme + Appearance Section
 
             Section {
                 ThemePresetSelector(selectedPreset: Binding(
@@ -756,8 +767,20 @@ struct SettingsView: View {
                 ))
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
+
+                if themeStore.preset == .system {
+                    AppearanceSelector(selectedMode: Binding(
+                        get: { themeStore.appearanceMode },
+                        set: {
+                            HapticManager.selection()
+                            themeStore.appearanceMode = $0
+                        }
+                    ))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(Color.clear)
+                }
             } header: {
-                Text("Theme")
+                Text("Appearance")
             }
 
             // MARK: - Tab Color Section
@@ -812,15 +835,6 @@ struct SettingsView: View {
                         .foregroundStyle(.primary)
                 }
                 .accessibilityIdentifier("settingsToggle_celebrations")
-
-                Toggle(isOn: Binding(
-                    get: { themeStore.suggestionsEnabled },
-                    set: { themeStore.suggestionsEnabled = $0 }
-                )) {
-                    Label("Shopping suggestions", systemImage: "lightbulb.fill")
-                        .foregroundStyle(.primary)
-                }
-                .accessibilityIdentifier("settingsToggle_suggestions")
             }
 
             Section("Tasks") {
@@ -951,6 +965,7 @@ private struct AppearanceCard: View {
     let isSelected: Bool
     let colorScheme: ColorScheme
     let action: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         Button(action: action) {
@@ -966,7 +981,7 @@ private struct AppearanceCard: View {
             .foregroundStyle(isSelected ? .white : .primary)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue : secondaryBackground)
+                    .fill(isSelected ? themeStore.accentColor : secondaryBackground)
             )
         }
         .buttonStyle(.plain)
@@ -1033,6 +1048,9 @@ private struct ThemePresetCard: View {
     }
 
     private var labelFont: Font {
+        if let fontName = preset.uiFontName, UIFont(name: fontName, size: 11) != nil {
+            return .custom(fontName, size: 11)
+        }
         if let fontName = preset.fontName, UIFont(name: fontName, size: 11) != nil {
             return .custom(fontName, size: 11)
         }

@@ -38,6 +38,7 @@ private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -249,7 +250,7 @@ private struct BacklogContent: View {
 
     private var header: some View {
         HStack {
-            Text("Backlog")
+            Text("Ideas")
                 .font(.system(size: 28, weight: .bold))
 
             Spacer()
@@ -259,7 +260,7 @@ private struct BacklogContent: View {
             } label: {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 20))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(themeStore.accentColor)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
         }
@@ -267,15 +268,15 @@ private struct BacklogContent: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No Categories", systemImage: "archivebox")
+            Label("No Ideas Yet", systemImage: "archivebox")
         } description: {
-            Text("Create a category to start organizing your backlog items.")
+            Text("Create a category to start organizing your ideas.")
         } actions: {
             Button("Create Category") {
                 isAddingCategory = true
             }
             .buttonStyle(.borderedProminent)
-            .tint(.orange)
+            .tint(themeStore.accentColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -449,7 +450,7 @@ struct CategoryCard: View {
     let onRenameCategory: (String) -> Void
     let onDeleteCategory: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var isAddingItem = false
     @State private var newItemText = ""
     @State private var showDeleteConfirmation = false
@@ -560,17 +561,17 @@ struct CategoryCard: View {
                 } label: {
                     HStack(spacing: 10) {
                         Circle()
-                            .stroke(Color.orange.opacity(0.55), lineWidth: 1.5)
+                            .stroke(themeStore.accentColor.opacity(0.55), lineWidth: 1.5)
                             .frame(width: 20, height: 20)
                             .overlay {
                                 Image(systemName: "plus")
                                     .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(themeStore.accentColor)
                             }
 
                         Text("Add item")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(themeStore.accentColor)
 
                         Spacer()
                     }
@@ -619,7 +620,7 @@ struct CategoryCard: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
@@ -637,10 +638,6 @@ struct BacklogItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.secondary.opacity(0.3))
-                .frame(width: 6, height: 6)
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.system(size: 15))
@@ -658,37 +655,39 @@ struct BacklogItemRow: View {
 
             Spacer()
 
-            Menu {
-                Button {
-                    onEdit()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
+            HStack(spacing: 4) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
                 }
+                .buttonStyle(.plain)
 
-                Button {
-                    onAssign()
-                } label: {
-                    Label("Assign", systemImage: "person.crop.circle.badge.plus")
+                Button(action: onAssign) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.blue)
+                        .frame(width: 30, height: 30)
                 }
+                .buttonStyle(.plain)
 
-                Button {
-                    onPromote()
-                } label: {
-                    Label("Promote", systemImage: "arrow.up.circle")
+                Button(action: onPromote) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.green)
+                        .frame(width: 30, height: 30)
                 }
+                .buttonStyle(.plain)
 
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red.opacity(0.7))
+                        .frame(width: 30, height: 30)
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -758,7 +757,7 @@ private struct BacklogItemEditSheet: View {
                     }
                 }
             }
-            .navigationTitle("Backlog Item")
+            .navigationTitle("Idea Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -799,4 +798,5 @@ private struct BacklogItemEditSheet: View {
 #Preview {
     BacklogView()
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

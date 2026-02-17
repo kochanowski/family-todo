@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AppColorPalette {
     let canvas: Color
@@ -16,36 +17,27 @@ struct AppColorPalette {
 }
 
 enum AppColors {
-    /// Warm, paper-like background used across the app to match the reference UI.
-    static let light = AppColorPalette(
-        canvas: Color(hex: "F6F1EC"),
-        surface: Color(hex: "FFFFFF"),
-        surfaceElevated: Color(hex: "FFF7EE"),
-        ink: Color(hex: "1F1B17"),
-        inkMuted: Color(hex: "8C8378"),
-        borderLight: Color(hex: "E8DFD6"),
-        accent: Color(hex: "F7B21A"),
-        accentSoft: Color(hex: "FDE5A6"),
-        tabBarBackground: Color(hex: "F3EDE6"),
-        tabBarActivePill: Color(hex: "E9E1D8"),
-        tabBarShadow: Color.black.opacity(0.1),
-        cardShadow: Color.black.opacity(0.06)
-    )
-
-    /// Dark palette for night theme.
-    static let night = AppColorPalette(
-        canvas: Color(hex: "0E0C0A"),
-        surface: Color(hex: "1B1713"),
-        surfaceElevated: Color(hex: "241F1A"),
-        ink: Color(hex: "F3EDE5"),
-        inkMuted: Color(hex: "C9BFB2"),
-        borderLight: Color(hex: "2F2822"),
-        accent: Color(hex: "F7B21A"),
-        accentSoft: Color(hex: "F2D089"),
-        tabBarBackground: Color(hex: "1B1713"),
-        tabBarActivePill: Color(hex: "2A241E"),
-        tabBarShadow: Color.black.opacity(0.45),
-        cardShadow: Color.black.opacity(0.4)
+    static let system = AppColorPalette(
+        canvas: dynamicColor(lightHex: "F6F1EC", darkHex: "0E0C0A"),
+        surface: dynamicColor(lightHex: "FFFFFF", darkHex: "1B1713"),
+        surfaceElevated: dynamicColor(lightHex: "FFF7EE", darkHex: "241F1A"),
+        ink: dynamicColor(lightHex: "1F1B17", darkHex: "F3EDE5"),
+        inkMuted: dynamicColor(lightHex: "8C8378", darkHex: "C9BFB2"),
+        borderLight: dynamicColor(lightHex: "E8DFD6", darkHex: "2F2822"),
+        accent: dynamicColor(lightHex: "F7B21A", darkHex: "F2D089"),
+        accentSoft: dynamicColor(lightHex: "FDE5A6", darkHex: "6E5628"),
+        tabBarBackground: dynamicColor(lightHex: "F3EDE6", darkHex: "1B1713"),
+        tabBarActivePill: dynamicColor(lightHex: "E9E1D8", darkHex: "2A241E"),
+        tabBarShadow: Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor.black.withAlphaComponent(0.45)
+                : UIColor.black.withAlphaComponent(0.1)
+        }),
+        cardShadow: Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor.black.withAlphaComponent(0.4)
+                : UIColor.black.withAlphaComponent(0.06)
+        })
     )
 
     static let retro = AppColorPalette(
@@ -63,31 +55,60 @@ enum AppColors {
         cardShadow: Color.black.opacity(0.5)
     )
 
-    static let chalk = AppColorPalette(
-        canvas: Color(hex: "243125"),
-        surface: Color(hex: "2C3E2D"),
-        surfaceElevated: Color(hex: "3A5240"),
-        ink: Color(hex: "F5F5DC"),
-        inkMuted: Color(hex: "C8C8A9"),
-        borderLight: Color(hex: "4A6B4E"),
-        accent: Color(hex: "FFEB99"),
-        accentSoft: Color(hex: "FFF5CC"),
-        tabBarBackground: Color(hex: "2A3A2A"),
-        tabBarActivePill: Color(hex: "3A5240"),
-        tabBarShadow: Color.black.opacity(0.4),
-        cardShadow: Color.black.opacity(0.3)
+    static let paper = AppColorPalette(
+        canvas: Color(hex: "F7F0E3"),
+        surface: Color(hex: "FFF9EE"),
+        surfaceElevated: Color(hex: "F3E8D5"),
+        ink: Color(hex: "2F241C"),
+        inkMuted: Color(hex: "6D5B4C"),
+        borderLight: Color(hex: "E2D2BD"),
+        accent: Color(hex: "8B4513"),
+        accentSoft: Color(hex: "DDB892"),
+        tabBarBackground: Color(hex: "F1E6D4"),
+        tabBarActivePill: Color(hex: "E8D8BF"),
+        tabBarShadow: Color.black.opacity(0.12),
+        cardShadow: Color.black.opacity(0.08)
     )
 
     static func palette(for preset: ThemePreset) -> AppColorPalette {
         switch preset {
-        case .night:
-            night
         case .retro:
             retro
-        case .chalk:
-            chalk
-        case .journal, .pastel, .soft, .paper:
-            light
+        case .paper:
+            paper
+        case .system:
+            system
         }
+    }
+
+    private static func dynamicColor(lightHex: String, darkHex: String) -> Color {
+        Color(uiColor: UIColor { traits in
+            UIColor(hex: traits.userInterfaceStyle == .dark ? darkHex : lightHex)
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+
+        let r, g, b: UInt64
+        switch hex.count {
+        case 3:
+            (r, g, b) = ((int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6:
+            (r, g, b) = (int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (0, 0, 0)
+        }
+
+        self.init(
+            red: CGFloat(r) / 255,
+            green: CGFloat(g) / 255,
+            blue: CGFloat(b) / 255,
+            alpha: 1
+        )
     }
 }
