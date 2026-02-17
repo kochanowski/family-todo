@@ -86,7 +86,7 @@ struct MoreView: View {
     private var header: some View {
         HStack {
             Text("More")
-                .font(.system(size: 28, weight: .bold))
+                .font(themeStore.font(size: 28, weight: .bold))
 
             Spacer()
         }
@@ -122,7 +122,7 @@ struct ProfileCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(userSession.displayName ?? "User")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(themeStore.font(size: 17, weight: .semibold))
 
                 Text(householdStore.currentHousehold?.name ?? "No Household")
                     .font(.system(size: 13))
@@ -758,27 +758,15 @@ struct SettingsView: View {
             // MARK: - Theme + Appearance Section
 
             Section {
-                ThemePresetSelector(selectedPreset: Binding(
-                    get: { themeStore.preset },
+                UnifiedThemeSelector(selectedTheme: Binding(
+                    get: { themeStore.unifiedTheme },
                     set: {
                         HapticManager.selection()
-                        themeStore.preset = $0
+                        themeStore.unifiedTheme = $0
                     }
                 ))
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
-
-                if themeStore.preset == .system {
-                    AppearanceSelector(selectedMode: Binding(
-                        get: { themeStore.appearanceMode },
-                        set: {
-                            HapticManager.selection()
-                            themeStore.appearanceMode = $0
-                        }
-                    ))
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
-                    .listRowBackground(Color.clear)
-                }
             } header: {
                 Text("Appearance")
             }
@@ -939,72 +927,20 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Appearance Card Selector
+// MARK: - Unified Theme Selector
 
-private struct AppearanceSelector: View {
-    @Binding var selectedMode: AppearanceMode
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(AppearanceMode.allCases) { mode in
-                AppearanceCard(
-                    mode: mode,
-                    isSelected: selectedMode == mode,
-                    colorScheme: colorScheme
-                ) {
-                    selectedMode = mode
-                }
-            }
-        }
-    }
-}
-
-private struct AppearanceCard: View {
-    let mode: AppearanceMode
-    let isSelected: Bool
-    let colorScheme: ColorScheme
-    let action: () -> Void
-    @EnvironmentObject private var themeStore: ThemeStore
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: mode.iconName)
-                    .font(.system(size: 24, weight: .medium))
-
-                Text(mode.displayName)
-                    .font(.system(size: 13, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .foregroundStyle(isSelected ? .white : .primary)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? themeStore.accentColor : secondaryBackground)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("appearanceCard_\(mode.displayName)")
-    }
-
-    private var secondaryBackground: Color {
-        colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.93)
-    }
-}
-
-private struct ThemePresetSelector: View {
-    @Binding var selectedPreset: ThemePreset
+private struct UnifiedThemeSelector: View {
+    @Binding var selectedTheme: UnifiedTheme
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(ThemePreset.allCases) { preset in
-                    ThemePresetCard(
-                        preset: preset,
-                        isSelected: selectedPreset == preset
+                ForEach(UnifiedTheme.allCases) { theme in
+                    UnifiedThemeCard(
+                        theme: theme,
+                        isSelected: selectedTheme == theme
                     ) {
-                        selectedPreset = preset
+                        selectedTheme = theme
                     }
                 }
             }
@@ -1012,8 +948,8 @@ private struct ThemePresetSelector: View {
     }
 }
 
-private struct ThemePresetCard: View {
-    let preset: ThemePreset
+private struct UnifiedThemeCard: View {
+    let theme: UnifiedTheme
     let isSelected: Bool
     let action: () -> Void
 
@@ -1021,40 +957,59 @@ private struct ThemePresetCard: View {
         Button(action: action) {
             VStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(
-                        LinearGradient(
-                            colors: preset.palette.theme(for: .todo).gradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(swatchGradient)
                     .frame(width: 56, height: 40)
                     .overlay(
-                        Image(systemName: preset.iconName)
+                        Image(systemName: theme.iconName)
                             .font(.system(size: 16))
-                            .foregroundStyle(preset.palette.theme(for: .todo).accentColor)
+                            .foregroundStyle(iconColor)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                            .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
                     )
 
-                Text(preset.displayName)
-                    .font(labelFont)
+                Text(theme.displayName)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
             }
         }
         .buttonStyle(.plain)
     }
 
-    private var labelFont: Font {
-        if let fontName = preset.uiFontName, UIFont(name: fontName, size: 11) != nil {
-            return .custom(fontName, size: 11)
+    private var swatchGradient: LinearGradient {
+        let colors: [Color] = switch theme {
+        case .light:
+            [Color(hex: "FFFFFF"), Color(hex: "F5F5F5")]
+        case .dark:
+            [Color(hex: "1C1C1E"), Color(hex: "2C2C2E")]
+        case .auto:
+            [Color(hex: "E8E8ED"), Color(hex: "3A3A3C")]
+        case .retro:
+            [Color(hex: "0F0F23"), Color(hex: "1A1A3E")]
+        case .paper:
+            [Color(hex: "FFF8E7"), Color(hex: "F0E6CE")]
         }
-        if let fontName = preset.fontName, UIFont(name: fontName, size: 11) != nil {
-            return .custom(fontName, size: 11)
+        return LinearGradient(
+            colors: colors,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var iconColor: Color {
+        switch theme {
+        case .light:
+            Color(hex: "666666")
+        case .dark:
+            .white
+        case .auto:
+            .primary
+        case .retro:
+            Color(hex: "00FF41")
+        case .paper:
+            Color(hex: "8B4513")
         }
-        return .system(size: 11, weight: isSelected ? .bold : .regular)
     }
 }
 

@@ -251,7 +251,7 @@ private struct BacklogContent: View {
     private var header: some View {
         HStack {
             Text("Ideas")
-                .font(.system(size: 28, weight: .bold))
+                .font(themeStore.font(size: 28, weight: .bold))
 
             Spacer()
 
@@ -627,6 +627,8 @@ struct CategoryCard: View {
 // MARK: - Backlog Item Row
 
 struct BacklogItemRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let item: BacklogItem
     let assigneeName: String?
     let onTap: () -> Void
@@ -640,7 +642,7 @@ struct BacklogItemRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.system(size: 15))
+                    .font(themeStore.font(size: 15))
                     .strikethrough(false)
 
                 if let assigneeName {

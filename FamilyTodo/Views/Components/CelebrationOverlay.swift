@@ -1,9 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// Overlay view that shows celebration toasts.
+/// Overlay view that shows celebration toasts and geometric confetti.
 struct CelebrationOverlay: View {
     @ObservedObject var manager: CelebrationManager
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var confettiParticles: [ConfettiParticle] = []
     @State private var confettiProgress: CGFloat = 0
@@ -21,7 +22,7 @@ struct CelebrationOverlay: View {
                             .font(.system(size: 24))
 
                         Text(celebration.message)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(themeStore.font(size: 15, weight: .semibold))
                             .foregroundStyle(.primary)
                     }
                     .padding(.horizontal, 20)
@@ -48,10 +49,11 @@ struct CelebrationOverlay: View {
         }
     }
 
+    // MARK: - Confetti Layer
+
     private var confettiLayer: some View {
         ForEach(confettiParticles) { particle in
-            Text(particle.emoji)
-                .font(.system(size: particle.size))
+            confettiShapeView(for: particle)
                 .rotationEffect(.degrees(particle.rotation * Double(confettiProgress)))
                 .opacity(Double(max(0, 1 - confettiProgress)))
                 .position(
@@ -61,21 +63,50 @@ struct CelebrationOverlay: View {
         }
     }
 
+    @ViewBuilder
+    private func confettiShapeView(for particle: ConfettiParticle) -> some View {
+        switch particle.shape {
+        case .rectangle:
+            Rectangle()
+                .fill(particle.color)
+                .frame(width: particle.size, height: particle.size * 0.6)
+        case .circle:
+            Circle()
+                .fill(particle.color)
+                .frame(width: particle.size, height: particle.size)
+        case .triangle:
+            TriangleShape()
+                .fill(particle.color)
+                .frame(width: particle.size, height: particle.size)
+        }
+    }
+
+    private static let confettiColors: [Color] = [
+        Color(hex: "FF6B6B"), // coral red
+        Color(hex: "4ECDC4"), // teal
+        Color(hex: "FFE66D"), // sunny yellow
+        Color(hex: "A78BFA"), // lavender
+        Color(hex: "F093FB"), // pink
+        Color(hex: "4DD599"), // mint green
+        Color(hex: "74B9FF"), // sky blue
+        Color(hex: "FD79A8"), // rose
+    ]
+
     private func spawnConfetti() {
-        let emojis = ["🎉", "✨", "🌟", "💫", "🎊", "⭐️", "🔥"]
         let screenWidth = UIScreen.main.bounds.width
         let screenHeight = UIScreen.main.bounds.height
 
-        confettiParticles = (0 ..< 24).map { index in
+        confettiParticles = (0 ..< 30).map { _ in
             let startX = CGFloat.random(in: 16 ... (screenWidth - 16))
             return ConfettiParticle(
-                emoji: emojis[index % emojis.count],
-                size: CGFloat.random(in: 16 ... 28),
+                shape: ConfettiParticle.ConfettiShape.allCases.randomElement()!,
+                color: Self.confettiColors.randomElement()!,
+                size: CGFloat.random(in: 6 ... 12),
                 startX: startX,
-                endX: startX + CGFloat.random(in: -70 ... 70),
-                startY: -24,
-                endY: CGFloat.random(in: screenHeight * 0.28 ... screenHeight * 0.72),
-                rotation: Double.random(in: -140 ... 140)
+                endX: startX + CGFloat.random(in: -80 ... 80),
+                startY: -20,
+                endY: CGFloat.random(in: screenHeight * 0.25 ... screenHeight * 0.75),
+                rotation: Double.random(in: -360 ... 360)
             )
         }
 
@@ -91,13 +122,31 @@ struct CelebrationOverlay: View {
     }
 }
 
+// MARK: - Confetti Shapes
+
 private struct ConfettiParticle: Identifiable {
     let id = UUID()
-    let emoji: String
+    let shape: ConfettiShape
+    let color: Color
     let size: CGFloat
     let startX: CGFloat
     let endX: CGFloat
     let startY: CGFloat
     let endY: CGFloat
     let rotation: Double
+
+    enum ConfettiShape: CaseIterable {
+        case rectangle, circle, triangle
+    }
+}
+
+private struct TriangleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
 }

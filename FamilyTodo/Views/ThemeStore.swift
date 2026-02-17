@@ -299,6 +299,38 @@ enum TabTintColor: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Unified Theme (Settings UI)
+
+enum UnifiedTheme: String, CaseIterable, Identifiable {
+    case light, dark, auto, retro, paper
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .light: "Light"
+        case .dark: "Dark"
+        case .auto: "Auto"
+        case .retro: "Retro"
+        case .paper: "Paper"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .light: "sun.max.fill"
+        case .dark: "moon.fill"
+        case .auto: "circle.lefthalf.filled"
+        case .retro: "gamecontroller.fill"
+        case .paper: "newspaper.fill"
+        }
+    }
+}
+
+// MARK: - Theme Store
+
 @MainActor
 final class ThemeStore: ObservableObject {
     @AppStorage("themePreset") private var presetRawValue = ThemePreset.system.rawValue
@@ -330,8 +362,36 @@ final class ThemeStore: ObservableObject {
         }
     }
 
-    var palette: ThemePalette {
-        preset.palette
+    var unifiedTheme: UnifiedTheme {
+        get {
+            switch preset {
+            case .retro: .retro
+            case .paper: .paper
+            case .system:
+                switch appearanceMode {
+                case .light: .light
+                case .dark: .dark
+                case .system: .auto
+                }
+            }
+        }
+        set {
+            switch newValue {
+            case .light:
+                preset = .system
+                appearanceMode = .light
+            case .dark:
+                preset = .system
+                appearanceMode = .dark
+            case .auto:
+                preset = .system
+                appearanceMode = .system
+            case .retro:
+                preset = .retro
+            case .paper:
+                preset = .paper
+            }
+        }
     }
 
     var resolvedTabTint: Color? {
@@ -373,11 +433,14 @@ final class ThemeStore: ObservableObject {
     }
 
     /// Font resolved for current preset with graceful fallback.
+    /// PressStart2P renders ~35% larger than system font at the same pt size,
+    /// so we scale it down by 0.65 to keep layouts consistent.
     func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         switch preset {
         case .retro:
-            if UIFont(name: "PressStart2P-Regular", size: size) != nil {
-                return .custom("PressStart2P-Regular", size: size)
+            let scaledSize = size * 0.65
+            if UIFont(name: "PressStart2P-Regular", size: scaledSize) != nil {
+                return .custom("PressStart2P-Regular", size: scaledSize)
             }
             return .system(size: size, weight: weight)
         case .paper:
