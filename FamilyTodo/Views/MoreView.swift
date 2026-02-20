@@ -780,10 +780,6 @@ struct SettingsView: View {
                 .listRowBackground(Color.clear)
             } header: {
                 Text("Appearance")
-            } footer: {
-                Text(
-                    "Retro uses Press Start 2P. Paper uses Special Elite for headlines and Georgia for body text. Caveat Brush is reserved for a future chalk theme."
-                )
             }
 
             // MARK: - Paper Font Section

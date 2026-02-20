@@ -130,9 +130,9 @@ enum PaperVariant: String, CaseIterable, Identifiable {
         case .b: "SpecialElite + CaveatBrush"
         case .c: "CaveatBrush + Baskerville"
         case .d: "CaveatBrush + Georgia"
-        case .e: "System Serif + System"
+        case .e: "System Serif + System Serif"
         case .f: "Georgia + Georgia"
-        case .g: "CaveatBrush + System"
+        case .g: "CaveatBrush + CaveatBrush"
         }
     }
 
@@ -156,9 +156,9 @@ enum PaperVariant: String, CaseIterable, Identifiable {
     var bodyFontName: String {
         switch self {
         case .a, .d, .f: "Georgia"
-        case .b: "CaveatBrush-Regular"
+        case .b, .g: "CaveatBrush-Regular"
         case .c: "Baskerville"
-        case .e, .g: "System"
+        case .e: "SystemSerif" // Intercepted
         }
     }
 }
@@ -439,10 +439,11 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 }
 
 enum TabTintColor: String, CaseIterable, Identifiable {
-    case system
-    case green
-    case red
-    case blue
+    case automatic
+    case coral
+    case rust
+    case sand
+    case forest
 
     var id: String {
         rawValue
@@ -450,36 +451,28 @@ enum TabTintColor: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .system:
-            "Default"
-        case .green:
-            "Green"
-        case .red:
-            "Red"
-        case .blue:
-            "Blue"
+        case .automatic: "Automatic"
+        case .coral: "Coral"
+        case .rust: "Rust"
+        case .sand: "Warm Sand"
+        case .forest: "Forest Green"
         }
     }
 
     var color: Color? {
         switch self {
-        case .system:
-            nil
-        case .green:
-            .green
-        case .red:
-            .red
-        case .blue:
-            .blue
+        case .automatic: nil
+        case .coral: Color(hex: "FF7F50")
+        case .rust: Color(hex: "b7410e")
+        case .sand: Color(hex: "dcb881")
+        case .forest: Color(hex: "2E8B57")
         }
     }
 
     var iconName: String {
         switch self {
-        case .system:
-            "circle.lefthalf.filled"
-        case .green, .red, .blue:
-            "circle.fill"
+        case .automatic: "circle.lefthalf.filled"
+        case .coral, .rust, .sand, .forest: "circle.fill"
         }
     }
 }
@@ -523,7 +516,7 @@ final class ThemeStore: ObservableObject {
     @AppStorage("themePreset") private var presetRawValue = ThemePreset.system.rawValue
     @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
-    @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.system.rawValue
+    @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.automatic.rawValue
     @AppStorage("paperVariant") private var paperVariantRawValue = PaperVariant.a.rawValue
     @AppStorage("paperFontScale") private var paperFontScaleRawValue = FontSizeScale.regular.rawValue
     @AppStorage("retroFontScale") private var retroFontScaleRawValue = FontSizeScale.regular.rawValue
@@ -551,7 +544,7 @@ final class ThemeStore: ObservableObject {
     }
 
     var tabTintColor: TabTintColor {
-        get { TabTintColor(rawValue: tabTintColorRawValue) ?? .system }
+        get { TabTintColor(rawValue: tabTintColorRawValue) ?? .automatic }
         set {
             tabTintColorRawValue = newValue.rawValue
             objectWillChange.send()
@@ -608,9 +601,17 @@ final class ThemeStore: ObservableObject {
     var resolvedTabTint: Color? {
         switch preset {
         case .retro:
-            Color(hex: "E94560")
-        case .paper, .system:
-            tabTintColor.color
+            return Color(hex: "E94560")
+        case .paper:
+            if tabTintColor == .automatic {
+                return Color(hex: "8B4513") // Warm default for paper
+            }
+            return tabTintColor.color
+        case .system:
+            if tabTintColor == .automatic {
+                return Color(hex: "D9A259") // Warm default for system theme
+            }
+            return tabTintColor.color
         }
     }
 
@@ -714,6 +715,8 @@ final class ThemeStore: ObservableObject {
             case .body, .chip:
                 if variant.bodyFontName == "System" {
                     return .system(size: baseSize * scale, weight: weight)
+                } else if variant.bodyFontName == "SystemSerif" {
+                    return .system(size: baseSize * scale, weight: weight, design: .serif)
                 }
                 return namedOrSystemFont(
                     uiFontName: variant.bodyFontName,
@@ -773,6 +776,12 @@ final class ThemeStore: ObservableObject {
                 }
             case .body, .chip:
                 if variant.bodyFontName == "System" {
+                    return .systemFont(ofSize: baseSize * scale, weight: weight)
+                } else if variant.bodyFontName == "SystemSerif" {
+                    let desc = UIFont.systemFont(ofSize: baseSize * scale, weight: weight).fontDescriptor
+                    if let serifDesc = desc.withDesign(.serif) {
+                        return UIFont(descriptor: serifDesc, size: baseSize * scale)
+                    }
                     return .systemFont(ofSize: baseSize * scale, weight: weight)
                 }
                 if let font = UIFont(name: variant.bodyFontName, size: baseSize * scale) {
