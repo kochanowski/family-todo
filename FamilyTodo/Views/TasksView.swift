@@ -856,10 +856,7 @@ struct TaskRow: View {
 
                         HStack(spacing: 6) {
                             if let categoryName, let categoryColor {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(categoryColor)
-                                        .frame(width: 6, height: 6)
+                                HStack(spacing: 0) {
                                     Text(categoryName)
                                         .font(themeStore.font(for: .chip))
                                         .foregroundStyle(categoryColor)

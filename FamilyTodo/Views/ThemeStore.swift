@@ -163,6 +163,34 @@ enum PaperVariant: String, CaseIterable, Identifiable {
     }
 }
 
+enum RetroVariant: String, CaseIterable, Identifiable {
+    case a, b
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .a: "A – Classic (Press Start 2P)"
+        case .b: "B – Thin (VT323)"
+        }
+    }
+
+    var fontName: String {
+        switch self {
+        case .a: "PressStart2P-Regular"
+        case .b: "VT323-Regular"
+        }
+    }
+
+    var familyAliases: [String] {
+        switch self {
+        case .a: ["Press Start 2P"]
+        case .b: ["VT323"]
+        }
+    }
+}
+
 enum FontSizeScale: String, CaseIterable, Identifiable {
     case small, regular, large
     var id: String {
@@ -222,7 +250,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
     var fontName: String? {
         switch self {
         case .retro:
-            "PressStart2P-Regular"
+            "PressStart2P-Regular" // Default lookup
         case .paper, .system:
             nil
         }
@@ -518,8 +546,10 @@ final class ThemeStore: ObservableObject {
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
     @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.automatic.rawValue
     @AppStorage("paperVariant") private var paperVariantRawValue = PaperVariant.a.rawValue
+    @AppStorage("retroVariant") private var retroVariantRawValue = RetroVariant.a.rawValue
     @AppStorage("paperFontScale") private var paperFontScaleRawValue = FontSizeScale.regular.rawValue
     @AppStorage("retroFontScale") private var retroFontScaleRawValue = FontSizeScale.regular.rawValue
+    @AppStorage("systemFontScale") private var systemFontScaleRawValue = FontSizeScale.regular.rawValue
 
     init(initialFontReport: FontRegistrationReport? = nil) {
         let report = initialFontReport ?? FontRegistrar.registerBundledFonts()
@@ -556,6 +586,11 @@ final class ThemeStore: ObservableObject {
         set { paperVariantRawValue = newValue.rawValue; objectWillChange.send() }
     }
 
+    var retroVariant: RetroVariant {
+        get { RetroVariant(rawValue: retroVariantRawValue) ?? .a }
+        set { retroVariantRawValue = newValue.rawValue; objectWillChange.send() }
+    }
+
     var paperFontScale: FontSizeScale {
         get { FontSizeScale(rawValue: paperFontScaleRawValue) ?? .regular }
         set { paperFontScaleRawValue = newValue.rawValue; objectWillChange.send() }
@@ -564,6 +599,11 @@ final class ThemeStore: ObservableObject {
     var retroFontScale: FontSizeScale {
         get { FontSizeScale(rawValue: retroFontScaleRawValue) ?? .regular }
         set { retroFontScaleRawValue = newValue.rawValue; objectWillChange.send() }
+    }
+
+    var systemFontScale: FontSizeScale {
+        get { FontSizeScale(rawValue: systemFontScaleRawValue) ?? .regular }
+        set { systemFontScaleRawValue = newValue.rawValue; objectWillChange.send() }
     }
 
     var unifiedTheme: UnifiedTheme {
@@ -685,13 +725,14 @@ final class ThemeStore: ObservableObject {
 
         switch preset {
         case .retro:
+            let variant = retroVariant
             let scaledCustomSize = scaledRetroSize(baseSize, role: role) * retroFontScale.multiplier
             return customFont(
-                postScriptName: "PressStart2P-Regular",
+                postScriptName: variant.fontName,
                 baseSize: baseSize,
                 customSize: scaledCustomSize,
                 fallbackWeight: weight,
-                familyAliases: ["Press Start 2P"]
+                familyAliases: variant.familyAliases
             )
         case .paper:
             let variant = paperVariant
@@ -725,7 +766,7 @@ final class ThemeStore: ObservableObject {
                 )
             }
         case .system:
-            return .system(size: baseSize, weight: weight)
+            return .system(size: baseSize * systemFontScale.multiplier, weight: weight)
         }
     }
 
@@ -734,10 +775,11 @@ final class ThemeStore: ObservableObject {
 
         switch preset {
         case .retro:
+            let variant = retroVariant
             let scaledCustomSize = scaledRetroSize(baseSize, role: role) * retroFontScale.multiplier
             if let resolvedName = resolveCustomFontName(
-                postScriptName: "PressStart2P-Regular",
-                familyAliases: ["Press Start 2P"]
+                postScriptName: variant.fontName,
+                familyAliases: variant.familyAliases
             ),
                 let custom = UIFont(name: resolvedName, size: scaledCustomSize)
             {
@@ -790,7 +832,7 @@ final class ThemeStore: ObservableObject {
                 return .systemFont(ofSize: baseSize * scale, weight: weight)
             }
         case .system:
-            return .systemFont(ofSize: baseSize, weight: weight)
+            return .systemFont(ofSize: baseSize * systemFontScale.multiplier, weight: weight)
         }
     }
 

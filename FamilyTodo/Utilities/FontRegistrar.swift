@@ -61,6 +61,11 @@ enum FontRegistrar {
             postScriptName: "CaveatBrush-Regular",
             familyAliases: ["Caveat Brush"]
         ),
+        Asset(
+            fileName: "VT323-Regular.ttf",
+            postScriptName: "VT323-Regular",
+            familyAliases: ["VT323"]
+        ),
     ]
 
     static func registerBundledFonts() -> FontRegistrationReport {

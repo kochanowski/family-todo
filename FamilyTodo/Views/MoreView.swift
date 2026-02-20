@@ -782,7 +782,7 @@ struct SettingsView: View {
                 Text("Appearance")
             }
 
-            // MARK: - Paper Font Section
+            // MARK: - Font Management Settings Section
 
             if themeStore.preset == .paper {
                 Section {
@@ -816,6 +816,16 @@ struct SettingsView: View {
                 }
             } else if themeStore.preset == .retro {
                 Section {
+                    Picker("Font Style", selection: Binding(
+                        get: { themeStore.retroVariant },
+                        set: { HapticManager.selection(); themeStore.retroVariant = $0 }
+                    )) {
+                        ForEach(RetroVariant.allCases) { variant in
+                            Text(variant.displayName).tag(variant)
+                        }
+                    }
+                    .pickerStyle(.inline)
+
                     Picker("Font Size", selection: Binding(
                         get: { themeStore.retroFontScale },
                         set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
@@ -826,9 +836,23 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: {
-                    Text("Retro Font Size")
+                    Text("Retro Font")
                 } footer: {
-                    Text("Scales PressStart2P. Regular is the default.")
+                    Text("Regular is the default font size.")
+                }
+            } else if themeStore.preset == .system {
+                Section {
+                    Picker("Font Size", selection: Binding(
+                        get: { themeStore.systemFontScale },
+                        set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
+                    )) {
+                        ForEach(FontSizeScale.allCases) { scale in
+                            Text(scale.displayName).tag(scale)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("System Font Size")
                 }
             }
 
@@ -996,17 +1020,15 @@ private struct UnifiedThemeSelector: View {
     @Binding var selectedTheme: UnifiedTheme
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(UnifiedTheme.allCases) { theme in
-                    UnifiedThemeCard(
-                        theme: theme,
-                        isSelected: selectedTheme == theme
-                    ) {
-                        selectedTheme = theme
-                    }
-                    .environmentObject(themeStore)
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(UnifiedTheme.allCases) { theme in
+                UnifiedThemeCard(
+                    theme: theme,
+                    isSelected: selectedTheme == theme
+                ) {
+                    selectedTheme = theme
                 }
+                .environmentObject(themeStore)
             }
         }
     }
@@ -1020,22 +1042,35 @@ private struct UnifiedThemeCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(swatchGradient)
-                    .frame(width: 56, height: 40)
-                    .overlay(
+            VStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(swatchGradient)
+                        .frame(maxWidth: .infinity, minHeight: 64)
+
+                    if theme == .auto {
+                        HStack(spacing: 0) {
+                            Image(systemName: "sun.max.fill").padding(.trailing, 4)
+                            Image(systemName: "moon.fill").padding(.leading, 4)
+                        }
+                        .font(.system(size: 20))
+                        .foregroundStyle(iconColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.primary.opacity(0.1)))
+                    } else {
                         Image(systemName: theme.iconName)
-                            .font(.system(size: 16))
+                            .font(.system(size: 24))
                             .foregroundStyle(iconColor)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
-                    )
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isSelected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isSelected ? 3 : 1)
+                )
 
                 Text(theme.displayName)
-                    .font(themeStore.font(for: .tabLabel))
+                    .font(themeStore.font(for: .bodyStrong))
                     .foregroundStyle(isSelected ? .primary : .secondary)
             }
         }
