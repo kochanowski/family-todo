@@ -508,7 +508,12 @@ final class ThemeStore: ObservableObject {
     }
 
     var resolvedTabTint: Color? {
-        tabTintColor.color
+        switch preset {
+        case .retro:
+            Color(hex: "E94560")
+        case .paper, .system:
+            tabTintColor.color
+        }
     }
 
     /// Retro always stays dark. Paper stays light.

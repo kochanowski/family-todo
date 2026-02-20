@@ -14,7 +14,7 @@ Based on the `swiftui-ui-patterns` and `swift-expert` guidelines, the following 
 *   **`TasksView.swift`:** Uses an awkward `.sheet(isPresented: Binding(get: { pendingNextTask != nil } ...))` instead of the cleaner `.sheet(item: $pendingNextTask)` pattern.
 
 ## 3. iOS 26 Tab Bar Typography
-**Issue:** Custom fonts (Retro, Paper) are not applying to the native  on iOS 18+. 
+**Issue:** Custom fonts (Retro, Paper) are not applying to the native  on iOS 18+.
 
 *   **`ContentView.swift`**: Currently uses the new  syntax introduced in iOS 18 (up to iOS 26). The  settings applied via  do not natively affect the title text attributes of these new  elements.
 *   **Solution Path**: To get the custom font applying properly for an iOS 26 target (iPhone 15), we should either:
