@@ -786,6 +786,56 @@ struct SettingsView: View {
                 )
             }
 
+            // MARK: - Paper Font Section
+
+            if themeStore.preset == .paper {
+                Section {
+                    Picker("Font Style", selection: Binding(
+                        get: { themeStore.paperVariant },
+                        set: { HapticManager.selection(); themeStore.paperVariant = $0 }
+                    )) {
+                        ForEach(PaperVariant.allCases) { variant in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(variant.displayName)
+                                Text(variant.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .tag(variant)
+                        }
+                    }
+                    .pickerStyle(.inline)
+
+                    Picker("Font Size", selection: Binding(
+                        get: { themeStore.paperFontScale },
+                        set: { HapticManager.selection(); themeStore.paperFontScale = $0 }
+                    )) {
+                        ForEach(FontSizeScale.allCases) { scale in
+                            Text(scale.displayName).tag(scale)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Paper Font")
+                }
+            } else if themeStore.preset == .retro {
+                Section {
+                    Picker("Font Size", selection: Binding(
+                        get: { themeStore.retroFontScale },
+                        set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
+                    )) {
+                        ForEach(FontSizeScale.allCases) { scale in
+                            Text(scale.displayName).tag(scale)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Retro Font Size")
+                } footer: {
+                    Text("Scales PressStart2P. Regular is the default.")
+                }
+            }
+
             // MARK: - Tab Color Section
 
             Section {

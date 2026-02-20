@@ -37,6 +37,9 @@ struct MainAppView: View {
             .onChange(of: themeStore.tabTintColor) { _, _ in
                 TabBarTypographyManager.apply(themeStore: themeStore)
             }
+            .onChange(of: themeStore.retroFontScale) { _, _ in
+                TabBarTypographyManager.apply(themeStore: themeStore)
+            }
             .task {
                 await bootstrapHouseholdIfNeeded()
             }

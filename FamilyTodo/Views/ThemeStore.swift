@@ -106,6 +106,77 @@ enum ThemeFontToken {
     }
 }
 
+enum PaperVariant: String, CaseIterable, Identifiable {
+    case a, b, c, d
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .a: "A – Classic"
+        case .b: "B – Notebook"
+        case .c: "C – Literary"
+        case .d: "D – Journal"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .a: "SpecialElite + Georgia"
+        case .b: "SpecialElite + CaveatBrush"
+        case .c: "CaveatBrush + Baskerville"
+        case .d: "CaveatBrush + Georgia"
+        }
+    }
+
+    var headerPostScriptName: String {
+        switch self {
+        case .a, .b: "SpecialElite-Regular"
+        case .c, .d: "CaveatBrush-Regular"
+        }
+    }
+
+    var headerFamilyAliases: [String] {
+        switch self {
+        case .a, .b: ["Special Elite"]
+        case .c, .d: ["Caveat Brush"]
+        }
+    }
+
+    var bodyFontName: String {
+        switch self {
+        case .a: "Georgia"
+        case .b: "CaveatBrush-Regular"
+        case .c: "Baskerville"
+        case .d: "Georgia"
+        }
+    }
+}
+
+enum FontSizeScale: String, CaseIterable, Identifiable {
+    case small, regular, large
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .small: "Small"
+        case .regular: "Regular"
+        case .large: "Large"
+        }
+    }
+
+    var multiplier: CGFloat {
+        switch self {
+        case .small: 0.85
+        case .regular: 1.0
+        case .large: 1.15
+        }
+    }
+}
+
 enum ThemePreset: String, CaseIterable, Identifiable {
     case system
     case retro
@@ -444,6 +515,9 @@ final class ThemeStore: ObservableObject {
     @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
     @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.system.rawValue
+    @AppStorage("paperVariant") private var paperVariantRawValue = PaperVariant.a.rawValue
+    @AppStorage("paperFontScale") private var paperFontScaleRawValue = FontSizeScale.regular.rawValue
+    @AppStorage("retroFontScale") private var retroFontScaleRawValue = FontSizeScale.regular.rawValue
 
     init(initialFontReport: FontRegistrationReport? = nil) {
         let report = initialFontReport ?? FontRegistrar.registerBundledFonts()
@@ -473,6 +547,21 @@ final class ThemeStore: ObservableObject {
             tabTintColorRawValue = newValue.rawValue
             objectWillChange.send()
         }
+    }
+
+    var paperVariant: PaperVariant {
+        get { PaperVariant(rawValue: paperVariantRawValue) ?? .a }
+        set { paperVariantRawValue = newValue.rawValue; objectWillChange.send() }
+    }
+
+    var paperFontScale: FontSizeScale {
+        get { FontSizeScale(rawValue: paperFontScaleRawValue) ?? .regular }
+        set { paperFontScaleRawValue = newValue.rawValue; objectWillChange.send() }
+    }
+
+    var retroFontScale: FontSizeScale {
+        get { FontSizeScale(rawValue: retroFontScaleRawValue) ?? .regular }
+        set { retroFontScaleRawValue = newValue.rawValue; objectWillChange.send() }
     }
 
     var unifiedTheme: UnifiedTheme {
@@ -586,7 +675,7 @@ final class ThemeStore: ObservableObject {
 
         switch preset {
         case .retro:
-            let scaledCustomSize = scaledRetroSize(baseSize, role: role)
+            let scaledCustomSize = scaledRetroSize(baseSize, role: role) * retroFontScale.multiplier
             return customFont(
                 postScriptName: "PressStart2P-Regular",
                 baseSize: baseSize,
@@ -595,20 +684,22 @@ final class ThemeStore: ObservableObject {
                 familyAliases: ["Press Start 2P"]
             )
         case .paper:
+            let variant = paperVariant
+            let scale = paperFontScale.multiplier
             switch role {
             case .display, .title:
                 return customFont(
-                    postScriptName: "SpecialElite-Regular",
+                    postScriptName: variant.headerPostScriptName,
                     baseSize: baseSize,
-                    customSize: baseSize,
+                    customSize: baseSize * scale,
                     fallbackWeight: weight,
-                    familyAliases: ["Special Elite"],
+                    familyAliases: variant.headerFamilyAliases,
                     fallbackUIFontName: "Georgia"
                 )
             case .body, .chip:
                 return namedOrSystemFont(
-                    uiFontName: "Georgia",
-                    baseSize: baseSize,
+                    uiFontName: variant.bodyFontName,
+                    baseSize: baseSize * scale,
                     fallbackWeight: weight
                 )
             }
@@ -622,7 +713,7 @@ final class ThemeStore: ObservableObject {
 
         switch preset {
         case .retro:
-            let scaledCustomSize = scaledRetroSize(baseSize, role: role)
+            let scaledCustomSize = scaledRetroSize(baseSize, role: role) * retroFontScale.multiplier
             if let resolvedName = resolveCustomFontName(
                 postScriptName: "PressStart2P-Regular",
                 familyAliases: ["Press Start 2P"]
@@ -633,25 +724,27 @@ final class ThemeStore: ObservableObject {
             }
             return .systemFont(ofSize: baseSize, weight: weight)
         case .paper:
+            let variant = paperVariant
+            let scale = paperFontScale.multiplier
             switch role {
             case .display, .title:
                 if let resolvedName = resolveCustomFontName(
-                    postScriptName: "SpecialElite-Regular",
-                    familyAliases: ["Special Elite"]
+                    postScriptName: variant.headerPostScriptName,
+                    familyAliases: variant.headerFamilyAliases
                 ),
-                    let custom = UIFont(name: resolvedName, size: baseSize)
+                    let custom = UIFont(name: resolvedName, size: baseSize * scale)
                 {
                     return custom
                 }
-                if let georgia = UIFont(name: "Georgia", size: baseSize) {
+                if let georgia = UIFont(name: "Georgia", size: baseSize * scale) {
                     return georgia
                 }
-                return .systemFont(ofSize: baseSize, weight: weight)
+                return .systemFont(ofSize: baseSize * scale, weight: weight)
             case .body, .chip:
-                if let georgia = UIFont(name: "Georgia", size: baseSize) {
-                    return georgia
+                if let font = UIFont(name: variant.bodyFontName, size: baseSize * scale) {
+                    return font
                 }
-                return .systemFont(ofSize: baseSize, weight: weight)
+                return .systemFont(ofSize: baseSize * scale, weight: weight)
             }
         case .system:
             return .systemFont(ofSize: baseSize, weight: weight)
