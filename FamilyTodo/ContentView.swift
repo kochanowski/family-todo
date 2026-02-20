@@ -26,53 +26,20 @@ struct MainAppView: View {
     @State private var hasBootstrappedHousehold = false
 
     var body: some View {
-        Group {
-            if #available(iOS 18.0, *) {
-                modernTabView
-            } else {
-                legacyTabView
+        legacyTabView
+            .background(AppBackgroundView())
+            .onAppear {
+                TabBarTypographyManager.apply(themeStore: themeStore)
             }
-        }
-        .background(AppBackgroundView())
-        .onAppear {
-            TabBarTypographyManager.apply(themeStore: themeStore)
-        }
-        .onChange(of: themeStore.unifiedTheme) { _, _ in
-            TabBarTypographyManager.apply(themeStore: themeStore)
-        }
-        .onChange(of: themeStore.tabTintColor) { _, _ in
-            TabBarTypographyManager.apply(themeStore: themeStore)
-        }
-        .task {
-            await bootstrapHouseholdIfNeeded()
-        }
-    }
-
-    @available(iOS 18.0, *)
-    private var modernTabView: some View {
-        TabView(selection: $activeTab) {
-            Tab(AppTab.shopping.title, systemImage: AppTab.shopping.icon, value: .shopping) {
-                NavigationStack {
-                    ShoppingListView()
-                }
+            .onChange(of: themeStore.unifiedTheme) { _, _ in
+                TabBarTypographyManager.apply(themeStore: themeStore)
             }
-            Tab(AppTab.tasks.title, systemImage: AppTab.tasks.icon, value: .tasks) {
-                NavigationStack {
-                    TasksView(selectedTab: $activeTab)
-                }
+            .onChange(of: themeStore.tabTintColor) { _, _ in
+                TabBarTypographyManager.apply(themeStore: themeStore)
             }
-            Tab(AppTab.backlog.title, systemImage: AppTab.backlog.icon, value: .backlog) {
-                NavigationStack {
-                    BacklogView()
-                }
+            .task {
+                await bootstrapHouseholdIfNeeded()
             }
-            Tab(AppTab.more.title, systemImage: AppTab.more.icon, value: .more) {
-                NavigationStack {
-                    MoreView()
-                }
-            }
-        }
-        .tint(themeStore.resolvedTabTint)
     }
 
     private var legacyTabView: some View {
