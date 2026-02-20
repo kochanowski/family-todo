@@ -107,7 +107,7 @@ enum ThemeFontToken {
 }
 
 enum PaperVariant: String, CaseIterable, Identifiable {
-    case a, b, c, d
+    case a, b, c, d, e, f, g
     var id: String {
         rawValue
     }
@@ -118,6 +118,9 @@ enum PaperVariant: String, CaseIterable, Identifiable {
         case .b: "B – Notebook"
         case .c: "C – Literary"
         case .d: "D – Journal"
+        case .e: "E – Premium Editorial"
+        case .f: "F – Modern Classic"
+        case .g: "G – Handwritten Planner"
         }
     }
 
@@ -127,29 +130,35 @@ enum PaperVariant: String, CaseIterable, Identifiable {
         case .b: "SpecialElite + CaveatBrush"
         case .c: "CaveatBrush + Baskerville"
         case .d: "CaveatBrush + Georgia"
+        case .e: "System Serif + System"
+        case .f: "Georgia + Georgia"
+        case .g: "CaveatBrush + System"
         }
     }
 
     var headerPostScriptName: String {
         switch self {
         case .a, .b: "SpecialElite-Regular"
-        case .c, .d: "CaveatBrush-Regular"
+        case .c, .d, .g: "CaveatBrush-Regular"
+        case .e: "SystemSerif" // Intercepted
+        case .f: "Georgia" // Intercepted
         }
     }
 
     var headerFamilyAliases: [String] {
         switch self {
         case .a, .b: ["Special Elite"]
-        case .c, .d: ["Caveat Brush"]
+        case .c, .d, .g: ["Caveat Brush"]
+        case .e, .f: []
         }
     }
 
     var bodyFontName: String {
         switch self {
-        case .a: "Georgia"
+        case .a, .d, .f: "Georgia"
         case .b: "CaveatBrush-Regular"
         case .c: "Baskerville"
-        case .d: "Georgia"
+        case .e, .g: "System"
         }
     }
 }
@@ -688,15 +697,24 @@ final class ThemeStore: ObservableObject {
             let scale = paperFontScale.multiplier
             switch role {
             case .display, .title:
-                return customFont(
-                    postScriptName: variant.headerPostScriptName,
-                    baseSize: baseSize,
-                    customSize: baseSize * scale,
-                    fallbackWeight: weight,
-                    familyAliases: variant.headerFamilyAliases,
-                    fallbackUIFontName: "Georgia"
-                )
+                if variant == .e {
+                    return .system(size: baseSize * scale, weight: weight, design: .serif)
+                } else if variant == .f {
+                    return namedOrSystemFont(uiFontName: "Georgia", baseSize: baseSize * scale, fallbackWeight: weight)
+                } else {
+                    return customFont(
+                        postScriptName: variant.headerPostScriptName,
+                        baseSize: baseSize,
+                        customSize: baseSize * scale,
+                        fallbackWeight: weight,
+                        familyAliases: variant.headerFamilyAliases,
+                        fallbackUIFontName: "Georgia"
+                    )
+                }
             case .body, .chip:
+                if variant.bodyFontName == "System" {
+                    return .system(size: baseSize * scale, weight: weight)
+                }
                 return namedOrSystemFont(
                     uiFontName: variant.bodyFontName,
                     baseSize: baseSize * scale,
@@ -728,19 +746,35 @@ final class ThemeStore: ObservableObject {
             let scale = paperFontScale.multiplier
             switch role {
             case .display, .title:
-                if let resolvedName = resolveCustomFontName(
-                    postScriptName: variant.headerPostScriptName,
-                    familyAliases: variant.headerFamilyAliases
-                ),
-                    let custom = UIFont(name: resolvedName, size: baseSize * scale)
-                {
-                    return custom
+                if variant == .e {
+                    let desc = UIFont.systemFont(ofSize: baseSize * scale, weight: weight).fontDescriptor
+                    if let serifDesc = desc.withDesign(.serif) {
+                        return UIFont(descriptor: serifDesc, size: baseSize * scale)
+                    }
+                    return .systemFont(ofSize: baseSize * scale, weight: weight)
+                } else if variant == .f {
+                    if let georgia = UIFont(name: "Georgia", size: baseSize * scale) {
+                        return georgia
+                    }
+                    return .systemFont(ofSize: baseSize * scale, weight: weight)
+                } else {
+                    if let resolvedName = resolveCustomFontName(
+                        postScriptName: variant.headerPostScriptName,
+                        familyAliases: variant.headerFamilyAliases
+                    ),
+                        let custom = UIFont(name: resolvedName, size: baseSize * scale)
+                    {
+                        return custom
+                    }
+                    if let georgia = UIFont(name: "Georgia", size: baseSize * scale) {
+                        return georgia
+                    }
+                    return .systemFont(ofSize: baseSize * scale, weight: weight)
                 }
-                if let georgia = UIFont(name: "Georgia", size: baseSize * scale) {
-                    return georgia
-                }
-                return .systemFont(ofSize: baseSize * scale, weight: weight)
             case .body, .chip:
+                if variant.bodyFontName == "System" {
+                    return .systemFont(ofSize: baseSize * scale, weight: weight)
+                }
                 if let font = UIFont(name: variant.bodyFontName, size: baseSize * scale) {
                     return font
                 }
