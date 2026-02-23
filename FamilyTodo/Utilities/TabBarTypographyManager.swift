@@ -8,7 +8,7 @@ enum TabBarTypographyManager {
             font: themeStore.uiFont(for: .tabLabel),
             color: .secondaryLabel
         )
-        let selectedColor = themeStore.resolvedTabTint.map(UIColor.init) ?? .label
+        let selectedColor = UIColor(themeStore.resolvedTabTint)
         let selectedAttributes = makeAttributes(
             font: themeStore.uiFont(for: .tabLabel),
             color: selectedColor

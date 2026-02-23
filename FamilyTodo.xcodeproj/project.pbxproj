@@ -64,6 +64,7 @@
 		NEWFILE0000000000000002 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000012 /* TasksView.swift */; };
 		NEWFILE0000000000000003 /* BacklogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000013 /* BacklogView.swift */; };
 		NEWFILE0000000000000004 /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000014 /* MoreView.swift */; };
+		SETTVIEW000000000000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SETTVIEW000000000000002 /* SettingsView.swift */; };
 		NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000015 /* FloatingTabBar.swift */; };
 		NEWFILE0000000000000006 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000016 /* ToastView.swift */; };
 		CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB4000000000000000001 /* CelebrationOverlay.swift */; };
@@ -154,6 +155,7 @@
 		NEWFILE0000000000000012 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000013 /* BacklogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000014 /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
+		SETTVIEW000000000000002 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000015 /* FloatingTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingTabBar.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000016 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		CELEB4000000000000000001 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationOverlay.swift; sourceTree = "<group>"; };
@@ -353,6 +355,7 @@
 				NEWFILE0000000000000012 /* TasksView.swift */,
 				NEWFILE0000000000000013 /* BacklogView.swift */,
 				NEWFILE0000000000000014 /* MoreView.swift */,
+				SETTVIEW000000000000002 /* SettingsView.swift */,
 				NEWGROUP000000000000001 /* Components */,
 				AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
@@ -552,6 +555,7 @@
 				NEWFILE0000000000000002 /* TasksView.swift in Sources */,
 				NEWFILE0000000000000003 /* BacklogView.swift in Sources */,
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
+				SETTVIEW000000000000001 /* SettingsView.swift in Sources */,
 				CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */,
 				SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
 				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,

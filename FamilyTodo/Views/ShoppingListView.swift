@@ -293,6 +293,8 @@ private struct ShoppingListContent: View {
             Circle()
                 .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
                 .frame(width: 20, height: 20)
+                // Keep the same leading slot width as ShoppingItemRow's checkbox.
+                .frame(width: 44)
 
             RapidEntryTextField(
                 text: $rapidEntryText,

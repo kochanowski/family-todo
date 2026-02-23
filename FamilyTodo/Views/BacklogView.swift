@@ -454,6 +454,7 @@ struct CategoryCard: View {
     let onDeleteCategory: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isAddingItem = false
     @State private var newItemText = ""
     @State private var showDeleteConfirmation = false
@@ -584,6 +585,16 @@ struct CategoryCard: View {
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(cardBorder, lineWidth: colorScheme == .light ? 1 : 0)
+                }
+                .shadow(
+                    color: colorScheme == .light ? themeStore.borderLightColor.opacity(0.35) : .clear,
+                    radius: colorScheme == .light ? 6 : 0,
+                    x: 0,
+                    y: colorScheme == .light ? 2 : 0
+                )
         }
         .confirmationDialog(
             "Delete \"\(category.title)\"?",
@@ -619,7 +630,11 @@ struct CategoryCard: View {
     }
 
     private var cardBackground: Color {
-        themeStore.surfaceColor
+        colorScheme == .light ? themeStore.surfaceElevatedColor : themeStore.surfaceColor
+    }
+
+    private var cardBorder: Color {
+        colorScheme == .light ? themeStore.borderLightColor : .clear
     }
 }
 

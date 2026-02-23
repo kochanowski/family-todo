@@ -19,39 +19,36 @@ struct ShoppingCountBadge: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Capsule().fill(themeStore.accentColor))
+            .background(Capsule().fill(themeStore.resolvedTabTint))
     }
 
     private var retroCoin: some View {
         let label = "\(count)"
+        let isWide = label.count > 1
 
-        return Text(label)
-            .font(themeStore.font(for: .chip))
-            .foregroundStyle(.black)
-            .padding(.horizontal, label.count > 1 ? 6 : 0)
-            .frame(minWidth: 22, minHeight: 22)
-            .background {
-                Group {
-                    if label.count > 1 {
+        return ZStack {
+            if isWide {
+                Capsule()
+                    .fill(Color(hex: "F7D51D"))
+                    .overlay {
                         Capsule()
-                            .fill(Color(hex: "F7D51D"))
-                    } else {
-                        Circle()
-                            .fill(Color(hex: "F7D51D"))
+                            .strokeBorder(Color.black, lineWidth: 2)
                     }
-                }
-            }
-            .overlay {
-                Group {
-                    if label.count > 1 {
-                        Capsule()
-                            .stroke(Color.black, lineWidth: 2)
-                    } else {
+            } else {
+                Circle()
+                    .fill(Color(hex: "F7D51D"))
+                    .overlay {
                         Circle()
-                            .stroke(Color.black, lineWidth: 2)
+                            .strokeBorder(Color.black, lineWidth: 2)
                     }
-                }
             }
-            .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)
+
+            Text(label)
+                .font(themeStore.font(for: .chip))
+                .foregroundStyle(.black)
+                .padding(.horizontal, isWide ? 6 : 0)
+        }
+        .frame(minWidth: 24, minHeight: 24)
+        .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)
     }
 }

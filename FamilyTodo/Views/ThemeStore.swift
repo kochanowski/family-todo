@@ -107,58 +107,42 @@ enum ThemeFontToken {
 }
 
 enum PaperVariant: String, CaseIterable, Identifiable {
-    case a, b, c, d, e, f, g
+    case a, b
     var id: String {
         rawValue
     }
 
     var displayName: String {
         switch self {
-        case .a: "A – Classic"
-        case .b: "B – Notebook"
-        case .c: "C – Literary"
-        case .d: "D – Journal"
-        case .e: "E – Premium Editorial"
-        case .f: "F – Modern Classic"
-        case .g: "G – Handwritten Planner"
+        case .a: "A – Premium Editorial"
+        case .b: "B – Modern Classic"
         }
     }
 
     var description: String {
         switch self {
-        case .a: "SpecialElite + Georgia"
-        case .b: "SpecialElite + CaveatBrush"
-        case .c: "CaveatBrush + Baskerville"
-        case .d: "CaveatBrush + Georgia"
-        case .e: "System Serif + System Serif"
-        case .f: "Georgia + Georgia"
-        case .g: "CaveatBrush + CaveatBrush"
+        case .a: "System Serif + System Serif"
+        case .b: "Georgia + Georgia"
         }
     }
 
     var headerPostScriptName: String {
         switch self {
-        case .a, .b: "SpecialElite-Regular"
-        case .c, .d, .g: "CaveatBrush-Regular"
-        case .e: "SystemSerif" // Intercepted
-        case .f: "Georgia" // Intercepted
+        case .a: "SystemSerif" // Intercepted
+        case .b: "Georgia" // Intercepted
         }
     }
 
     var headerFamilyAliases: [String] {
         switch self {
-        case .a, .b: ["Special Elite"]
-        case .c, .d, .g: ["Caveat Brush"]
-        case .e, .f: []
+        case .a, .b: []
         }
     }
 
     var bodyFontName: String {
         switch self {
-        case .a, .d, .f: "Georgia"
-        case .b, .g: "CaveatBrush-Regular"
-        case .c: "Baskerville"
-        case .e: "SystemSerif" // Intercepted
+        case .a: "SystemSerif" // Intercepted
+        case .b: "Georgia"
         }
     }
 }
@@ -467,11 +451,10 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 }
 
 enum TabTintColor: String, CaseIterable, Identifiable {
-    case automatic
-    case coral
-    case rust
-    case sand
-    case forest
+    case defaultGreen
+    case blue
+    case red
+    case black
 
     var id: String {
         rawValue
@@ -479,28 +462,19 @@ enum TabTintColor: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .automatic: "Automatic"
-        case .coral: "Coral"
-        case .rust: "Rust"
-        case .sand: "Warm Sand"
-        case .forest: "Forest Green"
+        case .defaultGreen: "Default"
+        case .blue: "Blue"
+        case .red: "Red"
+        case .black: "Black"
         }
     }
 
-    var color: Color? {
+    var color: Color {
         switch self {
-        case .automatic: nil
-        case .coral: Color(hex: "FF7F50")
-        case .rust: Color(hex: "b7410e")
-        case .sand: Color(hex: "dcb881")
-        case .forest: Color(hex: "2E8B57")
-        }
-    }
-
-    var iconName: String {
-        switch self {
-        case .automatic: "circle.lefthalf.filled"
-        case .coral, .rust, .sand, .forest: "circle.fill"
+        case .defaultGreen: Color(hex: "34C759")
+        case .blue: Color(hex: "007AFF")
+        case .red: Color(hex: "FF3B30")
+        case .black: Color(hex: "1C1C1E")
         }
     }
 }
@@ -544,7 +518,7 @@ final class ThemeStore: ObservableObject {
     @AppStorage("themePreset") private var presetRawValue = ThemePreset.system.rawValue
     @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
-    @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.automatic.rawValue
+    @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.defaultGreen.rawValue
     @AppStorage("paperVariant") private var paperVariantRawValue = PaperVariant.a.rawValue
     @AppStorage("retroVariant") private var retroVariantRawValue = RetroVariant.a.rawValue
     @AppStorage("paperFontScale") private var paperFontScaleRawValue = FontSizeScale.regular.rawValue
@@ -574,7 +548,21 @@ final class ThemeStore: ObservableObject {
     }
 
     var tabTintColor: TabTintColor {
-        get { TabTintColor(rawValue: tabTintColorRawValue) ?? .automatic }
+        get {
+            if let resolved = TabTintColor(rawValue: tabTintColorRawValue) {
+                return resolved
+            }
+
+            // Backward-compatible mapping from older palette values.
+            switch tabTintColorRawValue {
+            case "automatic", "forest", "sand":
+                return .defaultGreen
+            case "coral", "rust":
+                return .red
+            default:
+                return .defaultGreen
+            }
+        }
         set {
             tabTintColorRawValue = newValue.rawValue
             objectWillChange.send()
@@ -582,7 +570,19 @@ final class ThemeStore: ObservableObject {
     }
 
     var paperVariant: PaperVariant {
-        get { PaperVariant(rawValue: paperVariantRawValue) ?? .a }
+        get {
+            if let resolved = PaperVariant(rawValue: paperVariantRawValue) {
+                return resolved
+            }
+
+            // Backward-compatible mapping from older paper variants.
+            switch paperVariantRawValue {
+            case "f":
+                return .b
+            default:
+                return .a
+            }
+        }
         set { paperVariantRawValue = newValue.rawValue; objectWillChange.send() }
     }
 
@@ -638,21 +638,8 @@ final class ThemeStore: ObservableObject {
         }
     }
 
-    var resolvedTabTint: Color? {
-        switch preset {
-        case .retro:
-            return Color(hex: "E94560")
-        case .paper:
-            if tabTintColor == .automatic {
-                return Color(hex: "8B4513") // Warm default for paper
-            }
-            return tabTintColor.color
-        case .system:
-            if tabTintColor == .automatic {
-                return Color(hex: "D9A259") // Warm default for system theme
-            }
-            return tabTintColor.color
-        }
+    var resolvedTabTint: Color {
+        tabTintColor.color
     }
 
     /// Retro always stays dark. Paper stays light.
@@ -677,12 +664,20 @@ final class ThemeStore: ObservableObject {
         AppColors.palette(for: preset).surface
     }
 
+    var surfaceElevatedColor: Color {
+        AppColors.palette(for: preset).surfaceElevated
+    }
+
     var inkColor: Color {
         AppColors.palette(for: preset).ink
     }
 
     var inkMutedColor: Color {
         AppColors.palette(for: preset).inkMuted
+    }
+
+    var borderLightColor: Color {
+        AppColors.palette(for: preset).borderLight
     }
 
     var accentColor: Color {
@@ -739,20 +734,12 @@ final class ThemeStore: ObservableObject {
             let scale = paperFontScale.multiplier
             switch role {
             case .display, .title:
-                if variant == .e {
+                if variant == .a {
                     return .system(size: baseSize * scale, weight: weight, design: .serif)
-                } else if variant == .f {
+                } else if variant == .b {
                     return namedOrSystemFont(uiFontName: "Georgia", baseSize: baseSize * scale, fallbackWeight: weight)
-                } else {
-                    return customFont(
-                        postScriptName: variant.headerPostScriptName,
-                        baseSize: baseSize,
-                        customSize: baseSize * scale,
-                        fallbackWeight: weight,
-                        familyAliases: variant.headerFamilyAliases,
-                        fallbackUIFontName: "Georgia"
-                    )
                 }
+                return .system(size: baseSize * scale, weight: weight, design: .serif)
             case .body, .chip:
                 if variant.bodyFontName == "System" {
                     return .system(size: baseSize * scale, weight: weight)
@@ -791,31 +778,19 @@ final class ThemeStore: ObservableObject {
             let scale = paperFontScale.multiplier
             switch role {
             case .display, .title:
-                if variant == .e {
+                if variant == .a {
                     let desc = UIFont.systemFont(ofSize: baseSize * scale, weight: weight).fontDescriptor
                     if let serifDesc = desc.withDesign(.serif) {
                         return UIFont(descriptor: serifDesc, size: baseSize * scale)
                     }
                     return .systemFont(ofSize: baseSize * scale, weight: weight)
-                } else if variant == .f {
-                    if let georgia = UIFont(name: "Georgia", size: baseSize * scale) {
-                        return georgia
-                    }
-                    return .systemFont(ofSize: baseSize * scale, weight: weight)
-                } else {
-                    if let resolvedName = resolveCustomFontName(
-                        postScriptName: variant.headerPostScriptName,
-                        familyAliases: variant.headerFamilyAliases
-                    ),
-                        let custom = UIFont(name: resolvedName, size: baseSize * scale)
-                    {
-                        return custom
-                    }
+                } else if variant == .b {
                     if let georgia = UIFont(name: "Georgia", size: baseSize * scale) {
                         return georgia
                     }
                     return .systemFont(ofSize: baseSize * scale, weight: weight)
                 }
+                return .systemFont(ofSize: baseSize * scale, weight: weight)
             case .body, .chip:
                 if variant.bodyFontName == "System" {
                     return .systemFont(ofSize: baseSize * scale, weight: weight)
@@ -942,7 +917,7 @@ final class ThemeStore: ObservableObject {
             )
         }
         print(
-            "🧩 Theme font map: system=SF, retro=PressStart2P-Regular, paper=SpecialElite-Regular(headline)+Georgia(body), caveat=reserved"
+            "🧩 Theme font map: system=SF, retro=PressStart2P-Regular, paper=A(system serif)+B(Georgia), caveat=reserved"
         )
     }
 
