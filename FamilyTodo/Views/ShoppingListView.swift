@@ -266,7 +266,6 @@ private struct ShoppingListContent: View {
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
-        let pillColor = themeStore.selectedTabColor
         Button {
             startRapidEntry()
         } label: {
@@ -281,8 +280,8 @@ private struct ShoppingListContent: View {
             .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
-                    .fill(pillColor)
-                    .shadow(color: pillColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .fill(themeStore.selectedTabColor)
+                    .shadow(color: themeStore.selectedTabColor.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)
