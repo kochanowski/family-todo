@@ -249,6 +249,15 @@ private struct TasksContent: View {
                         onToggle: { toggleTask(task) },
                         onOpenDetail: { selectedTask = task }
                     )
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button {
+                            HapticManager.lightTap()
+                            demoteTaskToBacklog(task)
+                        } label: {
+                            Label("Ideas", systemImage: "archivebox.fill")
+                        }
+                        .tint(.indigo)
+                    }
                     .rowInsertAnimation()
                     .accessibilityIdentifier("taskRow_\(task.title)")
                 }

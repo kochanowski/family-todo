@@ -266,6 +266,7 @@ private struct ShoppingListContent: View {
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
+        let pillColor = themeStore.selectedTabColor
         Button {
             startRapidEntry()
         } label: {
@@ -280,8 +281,8 @@ private struct ShoppingListContent: View {
             .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
-                    .fill(themeStore.accentColor)
-                    .shadow(color: themeStore.accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .fill(pillColor)
+                    .shadow(color: pillColor.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)
@@ -300,6 +301,7 @@ private struct ShoppingListContent: View {
                 text: $rapidEntryText,
                 isFocused: $rapidEntryFocused,
                 placeholder: "Add item",
+                actionColor: UIColor(themeStore.selectedTabColor),
                 onSubmit: handleRapidEntrySubmit,
                 onDone: commitOrDismissRapidEntry
             )
@@ -550,6 +552,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let placeholder: String
+    let actionColor: UIColor
     let onSubmit: () -> Void
     let onDone: () -> Void
 
@@ -629,7 +632,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
             button.setTitle("Done", for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
             button.setTitleColor(.white, for: .normal)
-            button.backgroundColor = UIColor.systemBlue
+            button.backgroundColor = parent.actionColor
             button.layer.cornerRadius = buttonHeight / 2
             button.contentEdgeInsets = UIEdgeInsets(
                 top: 0,
@@ -640,7 +643,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
             button.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
 
             // Shadow matching the Add item pill
-            button.layer.shadowColor = UIColor.systemBlue.withAlphaComponent(0.3).cgColor
+            button.layer.shadowColor = parent.actionColor.withAlphaComponent(0.3).cgColor
             button.layer.shadowRadius = 8
             button.layer.shadowOffset = CGSize(width: 0, height: 4)
             button.layer.shadowOpacity = 1.0

@@ -502,8 +502,8 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         switch self {
         case .light: "sun.max.fill"
         case .dark: "moon.fill"
-        case .auto: "circle.lefthalf.filled"
-        case .retro: "gamecontroller.fill"
+        case .auto: "sparkles"
+        case .retro: "dpad.fill"
         case .paper: "newspaper.fill"
         }
     }
@@ -640,6 +640,10 @@ final class ThemeStore: ObservableObject {
 
     var resolvedTabTint: Color {
         tabTintColor.color
+    }
+
+    var selectedTabColor: Color {
+        resolvedTabTint
     }
 
     /// Retro always stays dark. Paper stays light.

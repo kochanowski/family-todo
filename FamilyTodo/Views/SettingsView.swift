@@ -84,7 +84,8 @@ struct SettingsView: View {
                         selectedScale: Binding(
                             get: { themeStore.systemFontScale },
                             set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
-                        )
+                        ),
+                        showSelectionPill: false
                     )
                 } header: {
                     Text("System Font Size")
@@ -352,10 +353,11 @@ private struct UnifiedThemeCard: View {
 private struct FontScaleSelector: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Binding var selectedScale: FontSizeScale
+    var showSelectionPill = true
     @Namespace private var selectorNamespace
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
             ForEach(FontSizeScale.allCases) { scale in
                 Button {
                     selectedScale = scale
@@ -366,10 +368,13 @@ private struct FontScaleSelector: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
                         .background {
-                            if selectedScale == scale {
-                                RoundedRectangle(cornerRadius: 10)
+                            if selectedScale == scale, showSelectionPill {
+                                Capsule()
                                     .fill(themeStore.surfaceColor)
-                                    .matchedGeometryEffect(id: "font_scale_indicator", in: selectorNamespace)
+                                    .matchedGeometryEffect(
+                                        id: "font_scale_indicator",
+                                        in: selectorNamespace
+                                    )
                             }
                         }
                 }
@@ -378,10 +383,10 @@ private struct FontScaleSelector: View {
         }
         .padding(4)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            Capsule()
                 .fill(themeStore.surfaceElevatedColor)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 12)
+                    Capsule()
                         .stroke(themeStore.borderLightColor.opacity(0.45), lineWidth: 1)
                 }
         )
