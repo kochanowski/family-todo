@@ -630,7 +630,7 @@ struct CategoryCard: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .light ? themeStore.surfaceElevatedColor : themeStore.surfaceColor
+        themeStore.surfaceColor
     }
 
     private var cardBorder: Color {
@@ -665,7 +665,11 @@ struct BacklogItemRow: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.secondary.opacity(0.14)))
+                        .background(
+                            Capsule().fill(
+                                Color.secondary.opacity(colorScheme == .dark ? 0.2 : 0.12)
+                            )
+                        )
                 }
             }
 
@@ -683,7 +687,7 @@ struct BacklogItemRow: View {
                 Button(action: onAssign) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 14))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.secondary)
                         .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
@@ -691,7 +695,7 @@ struct BacklogItemRow: View {
                 Button(action: onPromote) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.secondary)
                         .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)

@@ -2279,3 +2279,900 @@ case .display, .title:
 1. `PRE_COMMIT_HOME=/tmp/pre-commit-cache pre-commit run -a` — Passed
 2. Push na branch:
    - `r4-features` (`eba6301`, `7b52dc2`)
+
+---
+
+## R5: Bug Fixes & UI Cleanup (2026-02-23)
+
+> **Skills:** `swift-expert`, `swiftui-ui-patterns`
+> Bugs identified from device screenshots. Each item includes the exact file, root cause, and the fix.
+
+---
+
+### R5-1: Shopping badge — zły kolor w ciemnym trybie
+
+**Problem:** W dark mode licznik itemów (Shopping header badge) jest żółty, niezgodny z kolorem tab bar.
+
+**Root cause:** `ShoppingCountBadge.standardBadge` używa `themeStore.accentColor`, który w dark mode dla theme `system` jest żółty/złoty.
+
+**Fix:** `standardBadge` powinien używać `themeStore.tabTintColor` color (aktualnie wybrany kolor tab bara).
+Jeśli `tabTintColor.color == nil` (automatic), użyć `themeStore.accentColor` jako fallback.
+
+**Plik:** `FamilyTodo/Views/Components/ShoppingCountBadge.swift`
+
+```swift
+private var standardBadge: some View {
+    let badgeColor = themeStore.tabTint?.color ?? themeStore.accentColor  // Fix: use tab tint
+    return Text("\(count)")
+        .font(themeStore.font(for: .chip))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(badgeColor))
+}
+```
+
+> Needs `themeStore.tabTint: TabTintColor` as a computed property if not already public.
+
+---
+
+### R5-2: Shopping — missaligned "Add item" row
+
+**Problem:** Pole "Add item" (rapidEntryRow) jest przesuniete w prawo relatywnie do istniejących itemów.
+
+**Root cause:** `rapidEntryRow` (L291-L308 `ShoppingListView.swift`) ma stałe paddingi, które nie odpowiadają paddingom w `ShoppingItemRow` (L470-L493). Checkbox (Circle, 20pt) w `rapidEntryRow` ma `spacing: 10` w HStack, ale jest wstawiony bez wyrównania z checkboxem w `ShoppingItemRow`.
+
+**Fix:** Sprawdzić i ujednolicić poziomy padding/inset w obu wierszach. Obie struktory powinny mieć identyczne `HStack(spacing: 10)` z tym samym leading padding.
+
+**Plik:** `FamilyTodo/Views/ShoppingListView.swift`
+
+- `rapidEntryRow` — upewnić się, że jest renderowany w tym samym kontenerze i z tym samym `.padding(.horizontal)` co `ShoppingItemRow`
+- Jeśli lista ma `.padding(.horizontal, 20)` na ScrollView, a `rapidEntryRow` dodaje własny padding — usunąć duplikowany padding z `rapidEntryRow`
+
+```swift
+// rapidEntryRow: upewnić się, że NIE ma własnego horizontal paddingu
+// gdy ScrollView/LazyVStack już go dostarcza
+private var rapidEntryRow: some View {
+    HStack(spacing: 10) {
+        Circle()
+            .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+            .frame(width: 20, height: 20)
+        RapidEntryTextField(...)
+    }
+    .padding(.vertical, 6)
+    // BRAK dodatkowego .padding(.horizontal) tutaj
+}
+```
+
+---
+
+### R5-3: Ideas — kategorie niewidoczne w jasnym motywie
+
+**Problem:** W light mode karty kategorii w backlogu (Ideas) są niewidoczne / brak kontrastu. W dark mode widać je dobrze.
+
+**Root cause:** `CategoryCard` (L584-L587 `BacklogView.swift`) używa `.fill(cardBackground)` gdzie `cardBackground = themeStore.surfaceColor`. W light mode `surfaceColor` jest prawdopodobnie zbyt zbliżony do tła ekranu.
+
+**Fix:** W `CategoryCard.cardBackground` — dodać `Color(.systemGray6)` jako fallback dla light mode, lub dodać subtelny cień, lub upewnić się że `surfaceColor` jest wyraźnie odróżnialny od `canvasColor`.
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` (struct `CategoryCard`)
+
+```swift
+private var cardBackground: Color {
+    // Upewnić się że karta ma wyraźne tło w light i dark mode
+    themeStore.cardSurface  // lub użyć Color(.secondarySystemGroupedBackground)
+}
+```
+
+**Alternatywnie** — dodać cień do karty:
+```swift
+.background {
+    RoundedRectangle(cornerRadius: 12)
+        .fill(themeStore.surfaceColor)
+        .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+}
+```
+
+Sprawdzić w `ThemeStore` jak wylicza się `surfaceColor` dla preset `.system` w light mode i upewnić się, że różni się od `canvasColor`.
+
+---
+
+### R5-4: System Font Size — owal w owalu
+
+**Problem:** W light i dark mode selektor "System Font Size" wygląda jak owal w owalu — błąd podwójnego tła.
+
+**Root cause:** Komponent wyświetlający `FontSizeScale` (Small/Regular/Large) najprawdopodobniej ma dwa zagnieżdżone elementy z `background` + `Capsule()`. Prawdopodobnie zarówno kontener (`.background(Capsule().fill(...))`) jak i wybrany element mają tło kapsułkowe.
+
+**Fix:** Sprawdzić widok renderujący `systemFontScale` picker w `SettingsView` (MoreView.swift lub plik w którym renderowane są te 3 przyciski). Upewnić się, że:
+- Kontenera ma jedną kapsułkę jako tło (`Color(.systemGray5)` lub `Color(.systemGray6)`)
+- Wybrany element ma drugą kapsułkę (`.ultraThinMaterial` lub white)
+- Nie ma tercjowego tła ani nakładki
+
+Wzorzec do zastosowania (z TasksView filterToggle):
+```swift
+HStack(spacing: 0) {
+    ForEach(FontSizeScale.allCases) { scale in
+        Button { themeStore.systemFontScale = scale } label: {
+            Text(scale.displayName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(themeStore.systemFontScale == scale ? .primary : .secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+        }
+        .buttonStyle(.plain)
+        .background {
+            if themeStore.systemFontScale == scale {
+                Capsule()
+                    .fill(.white)  // lub .ultraThinMaterial
+                    .matchedGeometryEffect(id: "font-scale-indicator", in: ns)
+            }
+        }
+    }
+}
+.padding(4)
+.background(Capsule().fill(Color(.systemGray5)))
+```
+
+---
+
+### R5-5: Retro shopping badge — dwa kółka nachodzą
+
+**Problem:** W Retro theme licznik itemów w Shopping wyświetla dwa nakładające się kółka (fill + stroke) i tekst jest nieczytelny.
+
+**Root cause:** W `retroCoin` (L25-L56 `ShoppingCountBadge.swift`) używane są dwie warstwy:
+```swift
+.background { Circle().fill(Color(hex: "F7D51D")) }
+.overlay { Circle().stroke(Color.black, lineWidth: 2) }
+```
+Na monofoncie `PressStart2P` oba kółka renderują się na identycznym rozmiarze, powodując wrażenie nakładania.
+
+**Fix:** Zamiast `.background` + `.overlay`, użyć jednego `ZStack` z kontrolowanymi rozmiarami:
+
+```swift
+private var retroCoin: some View {
+    let label = "\(count)"
+    let isWide = label.count > 1
+
+    return ZStack {
+        if isWide {
+            Capsule()
+                .strokeBorder(Color.black, lineWidth: 2)
+                .background(Capsule().fill(Color(hex: "F7D51D")))
+        } else {
+            Circle()
+                .strokeBorder(Color.black, lineWidth: 2)
+                .background(Circle().fill(Color(hex: "F7D51D")))
+        }
+        Text(label)
+            .font(themeStore.font(for: .chip))
+            .foregroundStyle(.black)
+    }
+    .frame(minWidth: 26, minHeight: 26)
+    .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)
+}
+```
+
+> Kluczowe: `strokeBorder` rysuje obrys **wewnątrz** kształtu — nie nakłada się na fill. To eliminuje efekt podwójnego kółka.
+
+---
+
+### R5-6: Paper theme — zostawić tylko warianty E i F
+
+**Problem:** W Settings pokazują się warianty A–G papierowego motywu. Użytkownik chce tylko E i F.
+
+**Warianty do zachowania:**
+- **E – Premium Editorial** (`System Serif + System Serif`)
+- **F – Modern Classic** (`Georgia + Georgia`)
+
+**Pliki do zmiany:**
+
+**1. `FamilyTodo/Views/ThemeStore.swift` — enum `PaperVariant`:**
+
+```swift
+enum PaperVariant: String, CaseIterable, Identifiable {
+    case e, f   // USUNĄĆ: a, b, c, d, g
+
+    var displayName: String {
+        switch self {
+        case .e: "Premium Editorial"
+        case .f: "Modern Classic"
+        }
+    }
+    // description, headerPostScriptName, headerFamilyAliases, bodyFontName
+    // zostawić tylko case .e i case .f — usunąć pozostałe
+}
+```
+
+**2. Domyślna wartość w `ThemeStore`:**
+```swift
+@AppStorage("paperVariant") private var paperVariantRawValue = PaperVariant.e.rawValue
+```
+
+**3. Zaktualizować `switch self` we wszystkich computed properties `PaperVariant`** — usunąć case `.a`, `.b`, `.c`, `.d`, `.g`.
+
+> ⚠️ Sprawdzić czy gdzieś w kodzie nie ma hardcoded `PaperVariant.a` lub `.b` — zastąpić `.e`.
+
+---
+
+### R5-7: Tab bar color — usunąć Automatic, Default = zielony
+
+**Problem:** "Automatic" jako opcja nie jest potrzebna. Default powinien być zielony (oryginalny kolor aplikacji).
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift` — enum `TabTintColor`
+
+```swift
+enum TabTintColor: String, CaseIterable, Identifiable {
+    case defaultGreen   // NOWA NAZWA zamiast "automatic"
+    case blue
+    case red
+    case black
+
+    var color: Color {  // Non-optional teraz — zawsze zwraca kolor
+        switch self {
+        case .defaultGreen: Color(hex: "34C759")   // iOS system green = oryginalny kolor app
+        case .blue:         Color(hex: "007AFF")   // iOS system blue
+        case .red:          Color(hex: "FF3B30")   // iOS system red
+        case .black:        Color(hex: "1C1C1E")   // iOS near-black
+        }
+    }
+}
+```
+
+**W `ThemeStore`:**
+```swift
+@AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.defaultGreen.rawValue
+```
+
+**Zmienić wszystkie referencia:** `TabTintColor.automatic` → `TabTintColor.defaultGreen`.
+
+---
+
+### R5-8: Tab bar color — kółka → prostokąty
+
+**Problem:** Selektor kolorów w Settings używa kółek. Zmienić na prostokąty z zaokrąglonymi rogami.
+
+**Lokalizacja UI:** Komponent renderujący `TabTintColor.allCases` (w SettingsView lub AppearanceSelector w MoreView) — szukać gdzie iteruje `TabTintColor.allCases` i renderuje ikony/kółka.
+
+**Fix:** Zamienić `Circle()` na `RoundedRectangle(cornerRadius: 8)`:
+
+```swift
+// PRZED (kółka):
+Image(systemName: tint.iconName)  // "circle.fill"
+    .font(.system(size: 28))
+    .foregroundStyle(tint.color ?? .secondary)
+
+// PO (prostokąty):
+RoundedRectangle(cornerRadius: 8)
+    .fill(tint.color)
+    .frame(width: 44, height: 32)
+    .overlay {
+        if themeStore.tabTint == tint {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.white, lineWidth: 2.5)
+        }
+    }
+    .shadow(color: tint.color.opacity(0.3), radius: 4, x: 0, y: 2)
+```
+
+**Pełny komponent (zastąpić istniejący picker):**
+
+```swift
+// Tab bar color section in SettingsView
+HStack(spacing: 10) {
+    ForEach(TabTintColor.allCases) { tint in
+        Button {
+            HapticManager.selection()
+            themeStore.tabTint = tint
+        } label: {
+            VStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(tint.color)
+                    .frame(width: 50, height: 34)
+                    .overlay {
+                        if themeStore.tabTint == tint {
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.white, lineWidth: 2.5)
+                        }
+                    }
+                    .shadow(color: tint.color.opacity(0.35), radius: 4, x: 0, y: 2)
+
+                Text(tint.displayName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(themeStore.tabTint == tint ? .primary : .secondary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+.padding(.vertical, 4)
+```
+
+**Wymagana zmiana w `TabTintColor.displayName`:**
+```swift
+var displayName: String {
+    switch self {
+    case .defaultGreen: "Default"
+    case .blue:         "Blue"
+    case .red:          "Red"
+    case .black:        "Black"
+    }
+}
+```
+
+---
+
+### Kolejność implementacji R5
+
+| # | Priorytet | Plik główny |
+|---|-----------|-------------|
+| R5-7 | Wysoki | `ThemeStore.swift` — usuń Automatic, dodaj 4 kolory |
+| R5-8 | Wysoki | `MoreView.swift` / `SettingsView` — prostokąty |
+| R5-6 | Wysoki | `ThemeStore.swift` — PaperVariant E+F only |
+| R5-5 | Średni | `ShoppingCountBadge.swift` — strokeBorder fix |
+| R5-1 | Średni | `ShoppingCountBadge.swift` — tabTint color |
+| R5-3 | Średni | `BacklogView.swift` — card shadow/background |
+| R5-4 | Niski | `MoreView.swift` / `SettingsView` — fix owal w owalu |
+| R5-2 | Niski | `ShoppingListView.swift` — alignment fix |
+
+> **Ważne:** R5-7 i R5-8 są ze sobą powiązane — najpierw zmienić enum, potem UI. R5-6 jest niezależne.
+
+---
+
+## R6: Bug Fixes & UI Improvements — Round 2 (2026-02-23)
+
+> **Skills:** `swift-expert`, `swiftui-ui-patterns`
+
+---
+
+### R6-1: Shopping — "Add Item" pill kolor = tab bar color
+
+**Problem:** Przycisk "Add item" (pill) używa `themeStore.accentColor` we wszystkich themach, a nie koloru tab bara.
+
+**Root cause:** `addPillButton` w `ShoppingListView.swift` (L282-L284):
+```swift
+.fill(themeStore.accentColor)
+.shadow(color: themeStore.accentColor.opacity(0.3), ...)
+```
+
+**Fix:** Zastąpić `themeStore.accentColor` przez `themeStore.tabTintUIColor` (lub `themeStore.selectedTabColor`) — ten sam kolor co badge i tab bar.
+
+W `ThemeStore` dodać computed property jeśli nie istnieje:
+```swift
+var selectedTabColor: Color {
+    tabTint.color  // Po R5-7 tabTint.color jest non-optional
+}
+```
+
+**Plik:** `FamilyTodo/Views/ShoppingListView.swift`
+
+```swift
+private var addPillButton: some View {
+    let pillColor = themeStore.selectedTabColor  // Zmiana z accentColor
+    Button { startRapidEntry() } label: {
+        HStack(spacing: 6) {
+            Image(systemName: "plus").font(.system(size: 14, weight: .bold))
+            Text("Add item").font(themeStore.font(for: .buttonLabel))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
+        .frame(height: AppChromeMetrics.compactCTAHeight)
+        .background {
+            Capsule()
+                .fill(pillColor)
+                .shadow(color: pillColor.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("shoppingAddItemButton")
+}
+```
+
+> Dotyczy też `makeAccessoryToolbar()` w `RapidEntryTextField` (L629-L644) — zmienić `UIColor.systemBlue` na kolor ze `themeStore` (przekazać przez `ThemeStore` lub przez parameter do konstruktora).
+
+---
+
+### R6-2: Shopping — Retro badge OGROMNY (krytyczny fix)
+
+**Problem:** W Retro theme badge z liczbą itemów zajmuje pół ekranu — jest gigantyczny.
+
+**Root cause PRAWDZIWY:**
+Dwie niezależne przyczyny sumują się:
+1. `minWidth: 22, minHeight: 22` to **minimalne** wymiary — nie ograniczają rozmiaru w górę. PressStart2P ma proporcje bitmap fontu z lat 80. (~10–12pt rozmiaru wizualnego = ~80pt bounding box), więc `Text("8")` przy `chip` = 11pt daje olbrzymi frame.
+2. Jednocześnie `.background { Circle() }` i `.overlay { Circle().stroke() }` renderują się na tym samym ogromnym rozmiarze co Text bounding box.
+
+**Fix — STAŁY frame + mały font size dla badge:**
+
+Plik: `FamilyTodo/Views/Components/ShoppingCountBadge.swift`
+
+```swift
+private var retroCoin: some View {
+    let label = "\(count)"
+    let isWide = label.count > 1
+
+    return ZStack {
+        // Tło: fill + border w jednym ZStack (bez background+overlay)
+        if isWide {
+            Capsule().fill(Color(hex: "F7D51D"))
+            Capsule().strokeBorder(Color.black, lineWidth: 2)
+        } else {
+            Circle().fill(Color(hex: "F7D51D"))
+            Circle().strokeBorder(Color.black, lineWidth: 2)
+        }
+
+        // Tekst z HARDCODED małym rozmiarem — NIE używać themeStore.font(for: .chip)
+        // bo PressStart2P na 11pt ma gigantyczny bounding box
+        Text(label)
+            .font(.custom("PressStart2P-Regular", size: 8))  // Mały, stały rozmiar
+            .minimumScaleFactor(0.5)
+            .foregroundStyle(.black)
+    }
+    // STAŁY frame — nie min, nie max — bo min nie ogranicza w górę
+    .frame(width: isWide ? 30 : 22, height: 22)
+    .shadow(color: .black.opacity(0.85), radius: 0, x: 1.5, y: 1.5)
+}
+
+// Do tego, w body, potrzebujemy dostępu do `isWide` → wyciągnąć do computed:
+private var isWide: Bool { count > 9 }
+```
+
+**Rozwiązanie alternatywne** (prostsze, jeśli powyższe się kompiluje z błędem):
+```swift
+private var retroCoin: some View {
+    Text("\(count)")
+        .font(.system(size: 10, weight: .bold, design: .monospaced))  // System mono zamiast custom
+        .foregroundStyle(.black)
+        .frame(width: 22, height: 22)   // STAŁY rozmiar
+        .background(Circle().fill(Color(hex: "F7D51D")))
+        .overlay(Circle().strokeBorder(Color.black, lineWidth: 2))
+        .shadow(color: .black.opacity(0.85), radius: 0, x: 1.5, y: 1.5)
+}
+```
+
+> ⚠️ **Kluczowe:** `.frame(width: X, height: Y)` (stały) zamiast `.frame(minWidth: X, minHeight: Y)` (bez górnego limitu). To jest root cause gigantycznego rozmiaru.
+>
+> `minimumScaleFactor(0.5)` pozwala tekstowi się zmniejszyć jeśli i tak jest za duży.
+
+**Plik:** `FamilyTodo/Views/Components/ShoppingCountBadge.swift`
+
+---
+
+### R6-3: Settings — inne ikonki dla Retro i Auto
+
+**Problem:** Obecne ikonki tematów:
+- **Retro** → `"gamecontroller.fill"` — zmienić na bardziej 8-bitowy symbol
+- **Auto** → `"circle.lefthalf.filled"` — zmienić na symbol systemu
+
+**Sugerowane ikonki (SF Symbols):**
+
+| Theme | Obecna | Nowa | Powód |
+|-------|--------|------|-------|
+| Retro | `gamecontroller.fill` | `arcade.stick.console.fill` lub `dpad.fill` | Bardziej retro/NES feel |
+| Auto  | `circle.lefthalf.filled` | `sparkles` lub `wand.and.stars` | "Auto" = magiczne/automatyczne |
+
+**Uwaga:** Sprawdzić dostępność SF Symbols — `arcade.stick.console.fill` jest dostępny od iOS 16, `dpad.fill` od iOS 14.
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift` — `UnifiedTheme.iconName`
+
+```swift
+var iconName: String {
+    switch self {
+    case .light: "sun.max.fill"
+    case .dark:  "moon.fill"
+    case .auto:  "sparkles"              // Zmiana z "circle.lefthalf.filled"
+    case .retro: "dpad.fill"            // Zmiana z "gamecontroller.fill"
+    case .paper: "newspaper.fill"
+    }
+}
+```
+
+> Opcjonalnie: sprawdzić czy SF Symbols `arcade.stick` lub `joystick` są dostępne na iOS 16+. Jeśli nie — `dpad.fill` jest najbezpieczniejszy.
+
+---
+
+### R6-4: System Font Size — fix owalu (poprawiona wersja)
+
+**Problem:** Selektor Small/Regular/Large nadal wygląda jak "owal w owalu" — zewnętrzny container + wewnętrzny wybrany element obydwa mają pełne tło kapsułkowe.
+
+**Fix:** Zbudować picker dokładnie wg wzorca `filterToggle` z `TasksView` (L388-L422), który działa poprawnie — jeden container Capsule + `matchedGeometryEffect` dla wybranego elementu.
+
+**Znaleźć** komponent renderujący FontSizeScale w Settings (szukać w MoreView.swift lub osobnym pliku widoku AppearanceSelector) i zastąpić jego implementację:
+
+```swift
+struct FontSizePicker: View {
+    @Binding var selected: FontSizeScale
+    @Namespace private var ns
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(FontSizeScale.allCases) { scale in
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        selected = scale
+                    }
+                } label: {
+                    Text(scale.displayName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(selected == scale ? .primary : .secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(alignment: .center) {
+                    if selected == scale {
+                        Capsule()
+                            .fill(.white)   // lub .ultraThinMaterial w dark mode
+                            .matchedGeometryEffect(id: "font-scale", in: ns)
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background {
+            Capsule()
+                .fill(Color(.systemGray5))
+        }
+    }
+}
+```
+
+**Kluczowa zasada:**
+- ✅ Jeden `Capsule` jako tło kontenera (`Color(.systemGray5)`)
+- ✅ Jeden `Capsule` jako tło wybranego elementu (`.fill(.white)`)
+- ❌ NIE używać `.overlay` ani dodatkowego tła na kontenerze
+- ❌ NIE zagnieżdżać `background { background { } }`
+
+---
+
+### R6-5: Tasks — swipe w prawo = przenieś do Ideas (Backlog)
+
+**Problem:** Sliding w prawo na tasku w sekcji NEXT nie robi nic (lub nie istnieje). Użytkownik chce móc łatwo cofnąć task do Backlog/Ideas.
+
+**Mechanizm demote:** W `TasksView` istnieje już `TaskDetailSheet` z `onDemoteToBacklog` callbackiem który woła `demoteTaskToBacklog`. Ta logika powinna być dostępna też przez swipe.
+
+**Fix:** Dodać `.swipeActions(edge: .leading)` do tasków w sekcji **NEXT** w `activeTasksContent`:
+
+**Plik:** `FamilyTodo/Views/TasksView.swift`
+
+```swift
+// W activeTasksContent, ForEach dla store.nextTasks:
+ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
+    if taskBeingCompleted != task.id {
+        TaskRow(...)
+            .rowInsertAnimation()
+            .accessibilityIdentifier("taskRow_\(task.title)")
+            // NOWE: swipe w prawo = cofnij do Ideas
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                Button {
+                    withAnimation {
+                        demoteTaskToBacklog(task)
+                    }
+                } label: {
+                    Label("Ideas", systemImage: "archivebox.fill")
+                }
+                .tint(.indigo)
+            }
+    }
+}
+```
+
+> **Uwaga:** `.swipeActions(edge: .leading)` = swipe **w prawo** (od lewej krawędzi).
+
+**Implementacja `demoteTaskToBacklog` w `TasksContent`:**
+
+Funkcja powinna już istnieć (dodana w R2-14). Jeśli nie — dodać:
+
+```swift
+private func demoteTaskToBacklog(_ task: Task) {
+    Task {
+        if let categoryId = task.backlogCategoryId {
+            await backlogStore.addItem(
+                to: categoryId,
+                title: task.title,
+                assigneeId: task.assigneeId,
+                notes: task.notes
+            )
+        } else {
+            // Brak kategorii — dodać do pierwszej dostępnej lub pominąć
+            guard let firstCategory = backlogStore.categories.first else { return }
+            await backlogStore.addItem(
+                to: firstCategory.id,
+                title: task.title,
+                assigneeId: task.assigneeId,
+                notes: task.notes
+            )
+        }
+        await store.deleteTask(task)
+    }
+}
+```
+
+**Pliki:** `FamilyTodo/Views/TasksView.swift`
+
+---
+
+### Kolejność implementacji R6
+
+| # | Plik | Zmiana |
+|---|------|--------|
+| R6-3 | `ThemeStore.swift` | Zmiana iconName dla Retro i Auto |
+| R6-5 | `TasksView.swift` | `.swipeActions(edge: .leading)` na NEXT tasks |
+| R6-1 | `ShoppingListView.swift` | `addPillButton` kolor = `selectedTabColor` |
+| R6-2 | `ShoppingCountBadge.swift` | Zmniejszyć retroCoin do rozmiaru standardBadge |
+| R6-4 | `MoreView.swift` / AppearanceSelector | Fix `FontSizePicker` — jeden owal |
+
+> R6-3 jest najprostsze i niezależne. R6-5 wymaga sprawdzenia czy `demoteTaskToBacklog` jest dostępne w scope TasksContent – jeśli nie, dodać. R6-1 zależy od R5-7 (non-optional `tabTint.color`).
+
+---
+
+## R7: Globalny Accent Color + Light2/Dark2 Themes + Ideas Cleanup (2026-02-23)
+
+> **Skills:** `swift-expert`, `swiftui-ui-patterns`
+>
+> **Kontekst kodu:**
+> - `MainAppView` (ContentView.swift L82) już ma `.tint(themeStore.resolvedTabTint)` na `TabView` ✅
+> - `TabTintColor` po R5-7: `defaultGreen`, `blue`, `red`, `black`
+> - `UnifiedTheme`: `light`, `dark`, `auto`, `retro`, `paper`
+> - `ThemePreset`: `system`, `retro`, `paper`
+> - `BacklogItemRow`: pencil=`.secondary`, assign=`.blue`, promote=`.green`, trash=`.red`
+> - FAB "Add item": `themeStore.accentColor` → po R6-1: `themeStore.selectedTabColor`
+
+---
+
+### R7-1: Rename "Tab bar color" → "Accent Color" + rozszerzyć do 6 kolorów
+
+**Zmiana w ThemeStore.swift — enum `TabTintColor`:**
+
+Dodać `orange` i `purple` do istniejących 4 kolorów (defaultGreen, blue, red, black):
+
+```swift
+enum TabTintColor: String, CaseIterable, Identifiable {
+    case defaultGreen
+    case blue
+    case orange
+    case pink
+    case purple
+    case monochrome   // Color.primary — czarny w light, biały w dark
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .defaultGreen: "Green"
+        case .blue:         "Blue"
+        case .orange:       "Orange"
+        case .pink:         "Pink"
+        case .purple:       "Purple"
+        case .monochrome:   "Mono"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .defaultGreen: Color(hex: "34C759")
+        case .blue:         Color.blue
+        case .orange:       Color.orange
+        case .pink:         Color.pink
+        case .purple:       Color.purple
+        case .monochrome:   Color.primary
+        }
+    }
+}
+```
+
+**W ThemeStore — dodać computed property `accentTabColor`:**
+```swift
+var accentTabColor: Color {
+    tabTint.color  // Używane globalnie jako .tint() + FAB + Badge
+}
+```
+
+**Zmiana nazwy w Settings UI:**
+- Znaleźć sekcję "Tab bar color" w MoreView lub AppearanceSelector
+- Zmienić title sekcji na `"Accent Color"`
+- Rozszerzyć HStack pickera do 6 kolorów (3+3 w dwóch rzędach jeśli nie mieszczą się w jednej linii)
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift`, `FamilyTodo/Views/MoreView.swift`
+
+---
+
+### R7-2: Nowe warianty Light 2 i Dark 2 (czyste tła)
+
+**Kontekst:** Aktualnie `light`/`dark` to tryby w `AppearanceMode`, nie osobne tematy. `ThemePreset` kontroluje fonty i kolory kart. Nie ma "light2" i "dark2" — trzeba je dodać.
+
+**Podejście:** Dodać dwa nowe case do `UnifiedTheme` (i zmapować je do `ThemePreset.system` + nowe `AppearanceMode` lub osobny `ThemeVariant`).
+
+**Prostsze podejście:** Dodać `light2` i `dark2` jako nowe `UnifiedTheme` case które wymuszają `ThemePreset.system` + odpowiednie `ColorScheme`, ale z innymi wartościami `surfaceColor` / `canvasColor`.
+
+**Zmiana w `ThemeStore.swift`:**
+
+```swift
+// 1. Dodać do UnifiedTheme:
+enum UnifiedTheme: String, CaseIterable, Identifiable {
+    case light, dark, auto
+    case light2  // NEW: czyste białe tło
+    case dark2   // NEW: czyste czarne tło
+    case retro, paper
+
+    var displayName: String {
+        switch self {
+        case .light:  "Light"
+        case .dark:   "Dark"
+        case .auto:   "Auto"
+        case .light2: "Light 2"
+        case .dark2:  "Dark 2"
+        case .retro:  "Retro"
+        case .paper:  "Paper"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .light:  "sun.max.fill"
+        case .dark:   "moon.fill"
+        case .auto:   "sparkles"         // z R6-3
+        case .light2: "sun.max"          // Outline = "czyste"
+        case .dark2:  "moon"             // Outline = "czyste"
+        case .retro:  "dpad.fill"        // z R6-3
+        case .paper:  "newspaper.fill"
+        }
+    }
+}
+
+// 2. W ThemeStore, rozszerzyć canvasColor / surfaceColor dla light2 / dark2:
+var canvasColor: Color {
+    switch unifiedTheme {
+    // ...istniejące case...
+    case .light2: Color(uiColor: .systemBackground)     // Pure White = #FFFFFF w light
+    case .dark2:  Color(uiColor: .systemBackground)     // Pure Black = #000000 w dark
+    // Żeby light2 wymusił light mode, a dark2 dark mode — patrz punkt 3
+    }
+}
+
+var surfaceColor: Color {
+    switch unifiedTheme {
+    // ...istniejące case...
+    case .light2: Color(uiColor: .secondarySystemGroupedBackground)  // #F2F2F7 — jasny szary
+    case .dark2:  Color(uiColor: .secondarySystemGroupedBackground)  // #1C1C1E — ciemny szary
+    }
+}
+```
+
+**3. Wymuszenie ColorScheme dla light2 i dark2:**
+
+W `ThemeStore` dodać computed property:
+```swift
+var preferredColorScheme: ColorScheme? {
+    switch unifiedTheme {
+    case .light, .light2: .light
+    case .dark, .dark2:   .dark
+    case .auto, .retro, .paper:
+        // Retro i Paper mają własne appearanceMode
+        appearanceMode.colorScheme
+    }
+}
+```
+
+W `FamilyTodoApp.swift` lub `MainAppView` zastosować:
+```swift
+.preferredColorScheme(themeStore.preferredColorScheme)
+```
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift`, `FamilyTodo/FamilyTodoApp.swift`
+
+---
+
+### R7-3: Ideas — wyciszenie kolorów ikon akcji
+
+**Problem:** `BacklogItemRow` (BacklogView.swift L674-L704) używa:
+- `pencil` → `.secondary` ✅ (już OK)
+- `person.badge.plus` → `.blue` ❌ → zmienić na `.secondary`
+- `arrow.up.circle.fill` → `.green` ❌ → zmienić na `.secondary`
+- `trash` → `.red.opacity(0.7)` ✅ (zachować)
+
+**Fix:**
+```swift
+// BacklogItemRow body, HStack z ikonami:
+Button(action: onAssign) {
+    Image(systemName: "person.badge.plus")
+        .font(.system(size: 14))
+        .foregroundStyle(.secondary)   // Zmiana z .blue
+        .frame(width: 30, height: 30)
+}
+
+Button(action: onPromote) {
+    Image(systemName: "arrow.up.circle.fill")
+        .font(.system(size: 14))
+        .foregroundStyle(.secondary)   // Zmiana z .green
+        .frame(width: 30, height: 30)
+}
+```
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` (struct `BacklogItemRow`, L683-L697)
+
+---
+
+### R7-4: Ideas — tła kart dla light2/dark2
+
+`CategoryCard.cardBackground` już używa `themeStore.surfaceColor` po R5-3. Po dodaniu `surfaceColor` dla `.light2` i `.dark2` w R7-2 — karty będą automatycznie poprawne.
+
+Jednak dla czytelności dodać też cień w light mode (z R5-3):
+
+```swift
+private var cardBackground: Color {
+    themeStore.surfaceColor  // Automatycznie poprawny dla wszystkich themów po R7-2
+}
+
+// W body CategoryCard, .background modifier:
+.background {
+    RoundedRectangle(cornerRadius: 12)
+        .fill(cardBackground)
+        .shadow(
+            color: colorScheme == .light ? .black.opacity(0.06) : .clear,
+            radius: 4, x: 0, y: 2
+        )
+}
+```
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` (struct `CategoryCard`, L584-L587)
+
+---
+
+### R7-5: Ideas — tagi assignee z lepszym kontrastem
+
+`BacklogItemRow` L662-L669 ma tag z `Color.secondary.opacity(0.14)` — niski kontrast. Dla light2/dark2 poprawić:
+
+```swift
+if let assigneeName {
+    Text(assigneeName)
+        .font(themeStore.font(for: .chip))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(
+            Capsule().fill(Color.secondary.opacity(colorScheme == .dark ? 0.2 : 0.12))
+        )
+}
+```
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` (struct `BacklogItemRow`, L662-L669)
+
+---
+
+### R7-6: FAB "Add Item" + Badge = Accent Color (konsolidacja z R6-1)
+
+> R6-1 już to planuje — R7-6 jest potwierdzeniem że po R7-1 (non-optional `tabTint.color`) R6-1 staje się trywialne.
+
+**Plik:** `FamilyTodo/Views/ShoppingListView.swift`
+
+```swift
+// addPillButton:
+let pillColor = themeStore.accentTabColor  // Z R7-1
+```
+
+**ShoppingCountBadge** (standardBadge):
+```swift
+let badgeColor = themeStore.accentTabColor  // Z R7-1
+```
+
+---
+
+### Tabela zmian R7
+
+| # | Plik | Zmiana |
+|---|------|--------|
+| R7-1 | `ThemeStore.swift` | `TabTintColor` → 6 kolorów; Settings: rename do "Accent Color" |
+| R7-2 | `ThemeStore.swift`, `FamilyTodoApp.swift` | `UnifiedTheme.light2/dark2`, `canvasColor`/`surfaceColor` per theme, `preferredColorScheme` |
+| R7-3 | `BacklogView.swift` | assign+promote ikony → `.secondary` |
+| R7-4 | `BacklogView.swift` | cień na CategoryCard w light mode |
+| R7-5 | `BacklogView.swift` | tag opacity adaptacyjny light/dark |
+| R7-6 | `ShoppingListView.swift`, `ShoppingCountBadge.swift` | FAB + badge używają `accentTabColor` |
+
+### Kolejność implementacji R7
+
+1. **R7-1** — rozszerzenie `TabTintColor` (niezależne, nowy `color` zawsze non-optional)
+2. **R7-2** — `UnifiedTheme.light2/dark2` + `surfaceColor`/`canvasColor` + `preferredColorScheme`
+3. **R7-3** — trivialny fix ikon (2 linie)
+4. **R7-4 + R7-5** — karty i tagi (przy okazji R7-3, ten sam plik)
+5. **R7-6** — FAB + badge (po R7-1 trivial)
+
+> **Uwaga:** R7-2 wymaga ostrożnego mapowania `unifiedTheme` → `ColorScheme`. Sprawdzić czy `FamilyTodoApp.swift` już aplikuje `preferredColorScheme`, czy jest to w `MainAppView`.

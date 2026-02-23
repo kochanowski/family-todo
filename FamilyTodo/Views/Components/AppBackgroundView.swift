@@ -29,7 +29,17 @@ struct AppBackgroundView: View {
                 .init(color: Color(hex: "E9D9BF"), location: 1.0),
             ]
         case .system:
-            if colorScheme == .dark {
+            if themeStore.unifiedTheme == .dark2 {
+                [
+                    .init(color: Color(hex: "000000"), location: 0),
+                    .init(color: Color(hex: "000000"), location: 1.0),
+                ]
+            } else if themeStore.unifiedTheme == .light2 {
+                [
+                    .init(color: Color(hex: "FFFFFF"), location: 0),
+                    .init(color: Color(hex: "FFFFFF"), location: 1.0),
+                ]
+            } else if colorScheme == .dark {
                 [
                     .init(color: Color(hex: "0E0C0A"), location: 0),
                     .init(color: Color(hex: "15110F"), location: 0.74),

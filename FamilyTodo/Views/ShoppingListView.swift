@@ -280,8 +280,8 @@ private struct ShoppingListContent: View {
             .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
-                    .fill(themeStore.selectedTabColor)
-                    .shadow(color: themeStore.selectedTabColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .fill(themeStore.accentTabColor)
+                    .shadow(color: themeStore.accentTabColor.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)
@@ -300,7 +300,7 @@ private struct ShoppingListContent: View {
                 text: $rapidEntryText,
                 isFocused: $rapidEntryFocused,
                 placeholder: "Add item",
-                actionColor: UIColor(themeStore.selectedTabColor),
+                actionColor: UIColor(themeStore.accentTabColor),
                 onSubmit: handleRapidEntrySubmit,
                 onDone: commitOrDismissRapidEntry
             )

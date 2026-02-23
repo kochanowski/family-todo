@@ -85,7 +85,8 @@ struct SettingsView: View {
                             get: { themeStore.systemFontScale },
                             set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
                         ),
-                        showSelectionPill: false
+                        showSelectionPill: false,
+                        showBorder: false
                     )
                 } header: {
                     Text("System Font Size")
@@ -95,7 +96,14 @@ struct SettingsView: View {
             // MARK: - Tab Color Section
 
             Section {
-                HStack(spacing: 16) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                    ],
+                    spacing: 12
+                ) {
                     ForEach(TabTintColor.allCases) { tint in
                         Button {
                             HapticManager.selection()
@@ -104,7 +112,7 @@ struct SettingsView: View {
                             VStack(spacing: 6) {
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(tint.color)
-                                    .frame(width: 54, height: 34)
+                                    .frame(height: 34)
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(
@@ -124,14 +132,14 @@ struct SettingsView: View {
                                         themeStore.tabTintColor == tint ? .primary : .secondary
                                     )
                             }
+                            .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
                     }
-                    Spacer()
                 }
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
             } header: {
-                Text("Tab bar color")
+                Text("Accent Color")
             }
 
             // MARK: - Toggles Section
@@ -284,22 +292,9 @@ private struct UnifiedThemeCard: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(swatchGradient)
                         .frame(maxWidth: .infinity, minHeight: 64)
-
-                    if theme == .auto {
-                        HStack(spacing: 0) {
-                            Image(systemName: "sun.max.fill").padding(.trailing, 4)
-                            Image(systemName: "moon.fill").padding(.leading, 4)
-                        }
-                        .font(.system(size: 20))
+                    Image(systemName: theme.iconName)
+                        .font(.system(size: 24))
                         .foregroundStyle(iconColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.primary.opacity(0.1)))
-                    } else {
-                        Image(systemName: theme.iconName)
-                            .font(.system(size: 24))
-                            .foregroundStyle(iconColor)
-                    }
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -322,6 +317,10 @@ private struct UnifiedThemeCard: View {
             [Color(hex: "1C1C1E"), Color(hex: "2C2C2E")]
         case .auto:
             [Color(hex: "E8E8ED"), Color(hex: "3A3A3C")]
+        case .light2:
+            [Color(hex: "FFFFFF"), Color(hex: "FFFFFF")]
+        case .dark2:
+            [Color(hex: "000000"), Color(hex: "000000")]
         case .retro:
             [Color(hex: "0F0F23"), Color(hex: "1A1A3E")]
         case .paper:
@@ -342,6 +341,10 @@ private struct UnifiedThemeCard: View {
             .white
         case .auto:
             .primary
+        case .light2:
+            Color(hex: "5A5A5A")
+        case .dark2:
+            .white
         case .retro:
             Color(hex: "00FF41")
         case .paper:
@@ -354,6 +357,7 @@ private struct FontScaleSelector: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Binding var selectedScale: FontSizeScale
     var showSelectionPill = true
+    var showBorder = true
     @Namespace private var selectorNamespace
 
     var body: some View {
@@ -386,8 +390,10 @@ private struct FontScaleSelector: View {
             Capsule()
                 .fill(themeStore.surfaceElevatedColor)
                 .overlay {
-                    Capsule()
-                        .stroke(themeStore.borderLightColor.opacity(0.45), lineWidth: 1)
+                    if showBorder {
+                        Capsule()
+                            .stroke(themeStore.borderLightColor.opacity(0.45), lineWidth: 1)
+                    }
                 }
         )
     }

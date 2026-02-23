@@ -254,7 +254,7 @@ private struct TasksContent: View {
                             HapticManager.lightTap()
                             demoteTaskToBacklog(task)
                         } label: {
-                            Label("Ideas", systemImage: "archivebox.fill")
+                            Label("Move to Ideas", systemImage: "archivebox.fill")
                         }
                         .tint(.indigo)
                     }

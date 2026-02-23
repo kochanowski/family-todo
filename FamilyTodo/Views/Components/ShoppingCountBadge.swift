@@ -19,13 +19,13 @@ struct ShoppingCountBadge: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Capsule().fill(themeStore.selectedTabColor))
+            .background(Capsule().fill(themeStore.accentTabColor))
     }
 
     private var retroCoin: some View {
         let label = "\(count)"
         let isWide = count > 9
-        let fillColor = themeStore.selectedTabColor
+        let fillColor = themeStore.accentTabColor
 
         return ZStack {
             if isWide {
