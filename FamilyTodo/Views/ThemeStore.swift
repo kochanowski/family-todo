@@ -724,7 +724,7 @@ final class ThemeStore: ObservableObject {
                 return Color(uiColor: .systemBackground)
             }
         }
-        AppColors.palette(for: preset).canvas
+        return AppColors.palette(for: preset).canvas
     }
 
     var surfaceColor: Color {
@@ -738,7 +738,7 @@ final class ThemeStore: ObservableObject {
                 return Color(uiColor: .secondarySystemGroupedBackground)
             }
         }
-        AppColors.palette(for: preset).surface
+        return AppColors.palette(for: preset).surface
     }
 
     var surfaceElevatedColor: Color {
@@ -752,7 +752,7 @@ final class ThemeStore: ObservableObject {
                 return Color(uiColor: .tertiarySystemGroupedBackground)
             }
         }
-        AppColors.palette(for: preset).surfaceElevated
+        return AppColors.palette(for: preset).surfaceElevated
     }
 
     var inkColor: Color {
