@@ -20,9 +20,25 @@ on:
           - sync-enabled
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Notify: build started
+  # ─────────────────────────────────────────────────────────────────────────
+  notify-start:
+    name: Notify Start (Telegram)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram start message
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '\360\237\232\200 <b>Build started</b>\nBranch: <code>${{ github.ref_name }}</code>\nCommit: <code>${{ github.sha }}</code>\n<a href="%s">Sledz postep</a>' "${JOB_URL}")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
+  # ─────────────────────────────────────────────────────────────────────────
   # Build and Test
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
   build-and-test:
     name: Build and Test
     runs-on: macos-15
@@ -147,6 +163,16 @@ jobs:
       #     name: HousePulse-TestResults
       #     path: TestResults.xcresult
 
+      - name: Notify build success
+        if: success()
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '\342\234\205 <b>Build OK</b>\nBranch: <code>${{ github.ref_name }}</code>\n<a href="%s">Szczegoly</a>' "${JOB_URL}")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
   # ─────────────────────────────────────────────────────────────
@@ -163,6 +189,16 @@ jobs:
 
       - name: Run SwiftLint
         run: swiftlint lint --reporter github-actions-logging
+
+      - name: Notify SwiftLint success
+        if: success()
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '\342\234\205 <b>SwiftLint OK</b>\nBranch: <code>${{ github.ref_name }}</code>\n<a href="%s">Szczegoly</a>' "${JOB_URL}")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
 
   # ─────────────────────────────────────────────────────────────
   # Deploy to TestFlight (Fastlane)
