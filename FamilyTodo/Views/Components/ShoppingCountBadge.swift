@@ -25,36 +25,24 @@ struct ShoppingCountBadge: View {
 
     private var retroCoin: some View {
         let label = "\(count)"
-        let isWide = count > 9
         let fillColor = themeStore.accentTabColor
 
         return ZStack {
-            Group {
-                if isWide {
-                    Capsule()
-                        .fill(fillColor)
-                        .overlay {
-                            Capsule()
-                                .strokeBorder(Color.black, lineWidth: 2)
-                        }
-                } else {
+            Circle()
+                .fill(fillColor)
+                .overlay {
                     Circle()
-                        .fill(fillColor)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(Color.black, lineWidth: 2)
-                        }
+                        .strokeBorder(Color.black, lineWidth: 1.7)
                 }
-            }
-            .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)
 
             Text(label)
-                .font(.system(size: isWide ? 11 : 12, weight: .heavy, design: .rounded))
+                .font(.system(size: 10.5, weight: .heavy, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.55)
                 .foregroundStyle(themeStore.foregroundOnAccent(for: fillColor, colorScheme: colorScheme))
+                .padding(.horizontal, 2)
         }
-        .frame(width: isWide ? 30 : 22, height: 22)
+        .frame(width: 22, height: 22)
     }
 }
