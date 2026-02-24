@@ -778,6 +778,34 @@ final class ThemeStore: ObservableObject {
         AppColors.palette(for: preset).accent
     }
 
+    var contentPrimaryColor: Color {
+        if preset == .paper {
+            return Color(red: 0.17, green: 0.14, blue: 0.11)
+        }
+        return .primary
+    }
+
+    var contentSecondaryColor: Color {
+        if preset == .paper {
+            return Color(red: 0.42, green: 0.34, blue: 0.27)
+        }
+        return .secondary
+    }
+
+    var separatorColor: Color {
+        if preset == .paper {
+            return Color(red: 0.85, green: 0.80, blue: 0.72)
+        }
+        return .secondary.opacity(0.3)
+    }
+
+    var checkboxEmptyColor: Color {
+        if preset == .paper {
+            return Color(red: 0.85, green: 0.80, blue: 0.72)
+        }
+        return .secondary.opacity(0.35)
+    }
+
     var confettiAccentPalette: [Color]? {
         switch preset {
         case .system:

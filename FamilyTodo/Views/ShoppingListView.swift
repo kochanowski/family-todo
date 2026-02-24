@@ -213,16 +213,19 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Text("Shopping")
-                .font(themeStore.font(for: .screenHeader))
+        HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("Shopping")
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
-            // Item count badge
-            if !store.toBuyItems.isEmpty {
-                ShoppingCountBadge(count: store.toBuyItems.count)
+                // Item count badge
+                if !store.toBuyItems.isEmpty {
+                    ShoppingCountBadge(count: store.toBuyItems.count)
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 12)
 
             HStack(spacing: 14) {
                 // Clear To Buy button
@@ -233,7 +236,7 @@ private struct ShoppingListContent: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
@@ -247,7 +250,7 @@ private struct ShoppingListContent: View {
                 } label: {
                     Image(systemName: "clock.badge.checkmark")
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -262,6 +265,7 @@ private struct ShoppingListContent: View {
                     )
                 }
             }
+            .padding(.top, 2)
         }
     }
 
@@ -295,7 +299,7 @@ private struct ShoppingListContent: View {
     private var rapidEntryRow: some View {
         HStack(spacing: 10) {
             Circle()
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
                 .frame(width: 20, height: 20)
                 // Keep the same leading slot width as ShoppingItemRow's checkbox.
                 .frame(width: 44)
@@ -483,7 +487,7 @@ struct ShoppingItemRow: View {
             Button(action: onEdit) {
                 Text(item.title)
                     .font(themeStore.font(for: .listRowTitle))
-                    .foregroundStyle(item.isBought ? .secondary : .primary)
+                    .foregroundStyle(item.isBought ? themeStore.contentSecondaryColor : themeStore.contentPrimaryColor)
                     .strikethrough(item.isBought)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -723,7 +727,9 @@ struct RestockSheet: View {
                         } label: {
                             Text("Clear All")
                                 .font(themeStore.font(for: .buttonLabel))
+                                .foregroundStyle(.red)
                         }
+                        .tint(.red)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -731,6 +737,8 @@ struct RestockSheet: View {
                         dismiss()
                     }
                     .font(themeStore.font(for: .buttonLabel))
+                    .fontWeight(.bold)
+                    .tint(themeStore.accentTabColor)
                 }
             }
             .sheet(isPresented: $showClearAllConfirmation) {
@@ -758,6 +766,7 @@ private struct RestockItemRow: View {
         HStack {
             Text(item.title)
                 .font(themeStore.font(for: .listRowTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
                 .lineLimit(1)
 
             Spacer()

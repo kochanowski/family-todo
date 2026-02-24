@@ -292,6 +292,7 @@ private struct BacklogContent: View {
         HStack(alignment: .firstTextBaseline) {
             Text("Ideas")
                 .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
 
@@ -612,7 +613,7 @@ struct CategoryCard: View {
             HStack {
                 Text(category.title.uppercased())
                     .font(themeStore.font(for: .sectionHeader))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(themeStore.contentSecondaryColor)
 
                 Spacer()
 
@@ -652,7 +653,6 @@ struct CategoryCard: View {
                         item: item,
                         assigneeName: assigneeNameFor(item.assigneeId),
                         onTap: { onEditItem(item) },
-                        onEdit: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
                         onPromote: { onPromoteItem(item) },
                         onDelete: { onDeleteItem(item) }
@@ -680,11 +680,12 @@ struct CategoryCard: View {
             if isAddingItem {
                 HStack(spacing: 10) {
                     Circle()
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
+                        .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
                         .frame(width: 20, height: 20)
 
                     TextField("Add item", text: $newItemText)
                         .font(themeStore.font(for: .listRowTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                         .focused(focusedComposerCategoryId, equals: category.id)
                         .onSubmit {
                             onSubmitItem()
@@ -701,7 +702,7 @@ struct CategoryCard: View {
                         onCancelItem()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -790,7 +791,6 @@ struct BacklogItemRow: View {
     let item: BacklogItem
     let assigneeName: String?
     let onTap: () -> Void
-    let onEdit: () -> Void
     let onAssign: () -> Void
     let onPromote: () -> Void
     let onDelete: () -> Void
@@ -801,12 +801,13 @@ struct BacklogItemRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
                     .strikethrough(false)
 
                 if let assigneeName {
                     Text(assigneeName)
                         .font(themeStore.font(for: .chip))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(
@@ -819,28 +820,20 @@ struct BacklogItemRow: View {
 
             Spacer()
 
-            HStack(spacing: 4) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.plain)
-
+            HStack(spacing: 16) {
                 Button(action: onAssign) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30, height: 30)
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
 
                 Button(action: onPromote) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30, height: 30)
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
 
@@ -848,7 +841,7 @@ struct BacklogItemRow: View {
                     Image(systemName: "trash")
                         .font(.system(size: 14))
                         .foregroundStyle(.red.opacity(0.7))
-                        .frame(width: 30, height: 30)
+                        .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
             }

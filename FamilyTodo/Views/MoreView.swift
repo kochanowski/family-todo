@@ -13,9 +13,9 @@ struct MoreView: View {
         VStack(spacing: 0) {
             // Header
             header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
             // Menu items
             ScrollView {
@@ -84,9 +84,10 @@ struct MoreView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text("More")
                 .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
         }
@@ -169,12 +170,12 @@ struct MoreRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(themeStore.font(for: .inlineTitle))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
                 if let subtitle {
                     Text(subtitle)
                         .font(themeStore.font(for: .bodySmall))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
             }
 

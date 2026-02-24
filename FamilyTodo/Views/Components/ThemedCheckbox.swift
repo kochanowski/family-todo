@@ -13,7 +13,7 @@ struct ThemedCheckbox: View {
     var size: CGFloat = 22
     var style: ThemedCheckboxStyle = .circle
     var checkedColor: Color = .green
-    var uncheckedColor: Color = .secondary.opacity(0.35)
+    var uncheckedColor: Color?
 
     var body: some View {
         Button(action: onToggle) {
@@ -30,10 +30,12 @@ struct ThemedCheckbox: View {
 
     @ViewBuilder
     private var defaultCheckbox: some View {
+        let resolvedUncheckedColor = uncheckedColor ?? themeStore.checkboxEmptyColor
+
         switch style {
         case .circle:
             Circle()
-                .stroke(uncheckedColor, lineWidth: 1.5)
+                .stroke(resolvedUncheckedColor, lineWidth: 1.5)
                 .frame(width: size, height: size)
                 .overlay {
                     if isChecked {
@@ -45,7 +47,7 @@ struct ThemedCheckbox: View {
         case .square:
             Image(systemName: isChecked ? "checkmark.square.fill" : "square")
                 .font(.system(size: size))
-                .foregroundStyle(isChecked ? checkedColor : uncheckedColor)
+                .foregroundStyle(isChecked ? checkedColor : resolvedUncheckedColor)
         }
     }
 

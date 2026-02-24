@@ -91,7 +91,6 @@ struct ConfettiCannon: UIViewRepresentable {
 
             let binding = $isActive
             let workItem = DispatchWorkItem {
-                uiView.stopBurst()
                 context.coordinator.isRunning = false
                 if binding.wrappedValue {
                     binding.wrappedValue = false
@@ -118,6 +117,7 @@ final class ConfettiEmitterView: UIView {
     private let rightEmitter = CAEmitterLayer()
 
     private var accentColor = UIColor.systemGreen
+    private var burstStopWorkItem: DispatchWorkItem?
 
     private static let rectangleImage = ConfettiShapeRenderer.rectangleImage()
     private static let circleImage = ConfettiShapeRenderer.circleImage()
@@ -151,15 +151,24 @@ final class ConfettiEmitterView: UIView {
 
     func fireBurst() {
         let palette: [UIColor] = [accentColor, .systemYellow, .systemPink, .white]
+        burstStopWorkItem?.cancel()
 
         leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
         rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
 
         leftEmitter.birthRate = 1
         rightEmitter.birthRate = 1
+
+        let stopWorkItem = DispatchWorkItem { [weak self] in
+            self?.stopBurst()
+        }
+        burstStopWorkItem = stopWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: stopWorkItem)
     }
 
     func stopBurst() {
+        burstStopWorkItem?.cancel()
+        burstStopWorkItem = nil
         leftEmitter.birthRate = 0
         rightEmitter.birthRate = 0
     }
@@ -181,15 +190,15 @@ final class ConfettiEmitterView: UIView {
                     image: Self.rectangleImage,
                     color: color,
                     baseAngle: baseAngle,
-                    xAcceleration: isLeftCannon ? 18 : -18,
-                    scale: 0.76
+                    xAcceleration: isLeftCannon ? 32 : -32,
+                    scale: 0.3
                 ),
                 makeCell(
                     image: Self.circleImage,
                     color: color,
                     baseAngle: baseAngle,
-                    xAcceleration: isLeftCannon ? 18 : -18,
-                    scale: 0.62
+                    xAcceleration: isLeftCannon ? 32 : -32,
+                    scale: 0.34
                 ),
             ]
         }
@@ -206,27 +215,27 @@ final class ConfettiEmitterView: UIView {
         cell.contents = image
         cell.color = color.cgColor
 
-        cell.birthRate = 18
-        cell.lifetime = 4.2
-        cell.lifetimeRange = 1.0
+        cell.birthRate = 85
+        cell.lifetime = 3.0
+        cell.lifetimeRange = 0.9
 
-        cell.velocity = 390
-        cell.velocityRange = 150
-        cell.yAcceleration = 285
+        cell.velocity = 720
+        cell.velocityRange = 170
+        cell.yAcceleration = 900
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle
-        cell.emissionRange = .pi / 7
+        cell.emissionRange = .pi / 8
 
-        cell.spin = 4.0
-        cell.spinRange = 6.0
+        cell.spin = 7.0
+        cell.spinRange = 8.0
 
         cell.scale = scale
-        cell.scaleRange = 0.35
-        cell.scaleSpeed = -0.06
+        cell.scaleRange = 0.2
+        cell.scaleSpeed = -0.08
 
-        cell.alphaRange = 0.18
-        cell.alphaSpeed = -0.2
+        cell.alphaRange = 0.3
+        cell.alphaSpeed = -0.28
         return cell
     }
 }

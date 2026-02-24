@@ -64,7 +64,6 @@ private struct TasksContent: View {
     @StateObject private var backlogStore: BacklogStore
 
     @State private var taskBeingCompleted: UUID?
-    @State private var showAllCompleteAnimation = false
     @State private var selectedTask: Task?
     @State private var pendingNextTask: Task?
     @State private var selectedAssigneeIdForNext: UUID?
@@ -397,14 +396,7 @@ private struct TasksContent: View {
         HStack(alignment: .firstTextBaseline) {
             Text("Tasks")
                 .font(themeStore.font(for: .screenHeader))
-
-            if store.nextTasks.isEmpty, !store.recentlyDoneTasks.isEmpty {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(themeStore.accentTabColor)
-                    .scaleEffect(showAllCompleteAnimation ? 1.2 : 1.0)
-                    .animation(WowAnimation.spring, value: showAllCompleteAnimation)
-            }
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
 
@@ -458,14 +450,14 @@ private struct TasksContent: View {
         return HStack {
             Text("Active Tasks")
                 .font(themeStore.font(for: .sectionHeader))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(themeStore.contentSecondaryColor)
 
             Spacer()
 
             Text("\(count) / \(limit)")
                 .font(themeStore.font(for: .bodySmall))
                 .fontWeight(overLimit ? .bold : .regular)
-                .foregroundStyle(overLimit ? .red : .secondary)
+                .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
                 .monospacedDigit()
         }
     }
@@ -559,7 +551,6 @@ private struct TasksContent: View {
 
                     if willCompleteAll {
                         HapticManager.success()
-                        showAllCompleteAnimation = true
                         if themeStore.celebrationsEnabled {
                             celebrationManager.celebrateAllTasksComplete()
                             if activeMembers.count > 1, let name = currentMember?.displayName {
@@ -568,9 +559,6 @@ private struct TasksContent: View {
                                     action: "Cleared all tasks! 🏡"
                                 )
                             }
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            showAllCompleteAnimation = false
                         }
                     } else {
                         HapticManager.mediumTap()
@@ -640,7 +628,7 @@ private struct TasksContent: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(themeStore.font(for: .sectionHeader))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(themeStore.contentSecondaryColor)
             .padding(.top, 24)
             .padding(.bottom, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -649,16 +637,16 @@ private struct TasksContent: View {
     private var overLimitSeparator: some View {
         HStack(spacing: 10) {
             Rectangle()
-                .fill(Color.secondary.opacity(0.2))
+                .fill(themeStore.separatorColor)
                 .frame(height: 1)
 
             Text("Over limit")
                 .font(themeStore.font(for: .chip))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(themeStore.contentSecondaryColor)
                 .fixedSize()
 
             Rectangle()
-                .fill(Color.secondary.opacity(0.2))
+                .fill(themeStore.separatorColor)
                 .frame(height: 1)
         }
         .padding(.vertical, 6)
@@ -1031,9 +1019,9 @@ struct TaskRow: View {
 
     private var taskTitleColor: Color {
         if isCompleted || isDimmedOverLimit {
-            return .secondary
+            return themeStore.contentSecondaryColor
         }
-        return .primary
+        return themeStore.contentPrimaryColor
     }
 
     private var checkedColor: Color {
@@ -1043,9 +1031,9 @@ struct TaskRow: View {
     private var uncheckedColor: Color {
         switch wipZone {
         case .safe, .normal:
-            .secondary.opacity(0.3)
+            themeStore.checkboxEmptyColor
         case .warning, .danger:
-            .secondary.opacity(0.25)
+            themeStore.checkboxEmptyColor.opacity(0.85)
         }
     }
 
