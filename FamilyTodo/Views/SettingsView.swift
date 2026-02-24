@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var notificationSettings = NotificationSettingsStore()
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
 
@@ -30,22 +31,6 @@ struct SettingsView: View {
 
             if themeStore.preset == .paper {
                 Section {
-                    Picker("Font Style", selection: Binding(
-                        get: { themeStore.paperVariant },
-                        set: { HapticManager.selection(); themeStore.paperVariant = $0 }
-                    )) {
-                        ForEach(PaperVariant.allCases) { variant in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(variant.displayName)
-                                Text(variant.description)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .tag(variant)
-                        }
-                    }
-                    .pickerStyle(.inline)
-
                     FontScaleSelector(
                         selectedScale: Binding(
                             get: { themeStore.paperFontScale },
@@ -57,16 +42,6 @@ struct SettingsView: View {
                 }
             } else if themeStore.preset == .retro {
                 Section {
-                    Picker("Font Style", selection: Binding(
-                        get: { themeStore.retroVariant },
-                        set: { HapticManager.selection(); themeStore.retroVariant = $0 }
-                    )) {
-                        ForEach(RetroVariant.allCases) { variant in
-                            Text(variant.displayName).tag(variant)
-                        }
-                    }
-                    .pickerStyle(.inline)
-
                     FontScaleSelector(
                         selectedScale: Binding(
                             get: { themeStore.retroFontScale },
@@ -84,15 +59,8 @@ struct SettingsView: View {
                         selectedScale: Binding(
                             get: { themeStore.systemFontScale },
                             set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
-                        ),
-                        showSelectionPill: false,
-                        showBorder: false
+                        )
                     )
-                    .padding(12)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(themeStore.surfaceColor)
-                    }
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                     .listRowBackground(Color.clear)
                 } header: {
@@ -159,6 +127,7 @@ struct SettingsView: View {
                     Label("Celebrations", systemImage: "party.popper.fill")
                         .foregroundStyle(.primary)
                 }
+                .tint(themeStore.settingsToggleTint(for: colorScheme))
                 .accessibilityIdentifier("settingsToggle_celebrations")
             }
 
@@ -208,6 +177,7 @@ struct SettingsView: View {
                 Toggle("Notification sound", isOn: $notificationSettings.soundEnabled)
                     .disabled(!notificationSettings.isEnabled)
             }
+            .tint(themeStore.settingsToggleTint(for: colorScheme))
 
             // MARK: - Sign Out
 
@@ -322,10 +292,6 @@ private struct UnifiedThemeCard: View {
             [Color(hex: "1C1C1E"), Color(hex: "2C2C2E")]
         case .auto:
             [Color(hex: "D1D1D6"), Color(hex: "D1D1D6")]
-        case .light2:
-            [Color(hex: "FFFFFF"), Color(hex: "FFFFFF")]
-        case .dark2:
-            [Color(hex: "000000"), Color(hex: "000000")]
         case .retro:
             [Color(hex: "0F0F23"), Color(hex: "1A1A3E")]
         case .paper:
@@ -361,10 +327,6 @@ private struct UnifiedThemeCard: View {
             .white
         case .auto:
             .primary
-        case .light2:
-            Color(hex: "5A5A5A")
-        case .dark2:
-            .white
         case .retro:
             Color(hex: "00FF41")
         case .paper:

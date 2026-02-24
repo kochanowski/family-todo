@@ -236,8 +236,6 @@ private struct TasksContent: View {
     @ViewBuilder
     private var activeTasksContent: some View {
         if !store.nextTasks.isEmpty {
-            sectionHeader("NEXT")
-
             ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
                 if taskBeingCompleted != task.id {
                     if index == normalizedWipLimit, store.nextTasks.count > normalizedWipLimit {
@@ -254,7 +252,7 @@ private struct TasksContent: View {
                         onToggle: { toggleTask(task) },
                         onOpenDetail: { selectedTask = task }
                     )
-                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button {
                             HapticManager.lightTap()
                             demoteTaskToBacklog(task)

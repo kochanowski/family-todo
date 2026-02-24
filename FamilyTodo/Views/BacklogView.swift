@@ -457,6 +457,7 @@ struct CategoryCard: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isAddingItem = false
     @State private var newItemText = ""
+    @FocusState private var isItemFieldFocused: Bool
     @State private var showDeleteConfirmation = false
     @State private var showRenameAlert = false
     @State private var renameCategoryText = ""
@@ -539,6 +540,7 @@ struct CategoryCard: View {
 
                     TextField("Add item", text: $newItemText)
                         .font(themeStore.font(for: .listRowTitle))
+                        .focused($isItemFieldFocused)
                         .onSubmit {
                             submitItem()
                         }
@@ -546,6 +548,7 @@ struct CategoryCard: View {
                         .autocorrectionDisabled()
 
                     Button {
+                        isItemFieldFocused = false
                         isAddingItem = false
                         newItemText = ""
                     } label: {
@@ -617,15 +620,26 @@ struct CategoryCard: View {
                 onRenameCategory(renameCategoryText)
             }
         }
+        .onChange(of: isAddingItem) { _, isAdding in
+            if isAdding {
+                DispatchQueue.main.async {
+                    isItemFieldFocused = true
+                }
+            } else {
+                isItemFieldFocused = false
+            }
+        }
     }
 
     private func submitItem() {
         guard !newItemText.isEmpty else {
+            isItemFieldFocused = false
             isAddingItem = false
             return
         }
         onAddItem(newItemText)
         newItemText = ""
+        isItemFieldFocused = false
         isAddingItem = false
     }
 

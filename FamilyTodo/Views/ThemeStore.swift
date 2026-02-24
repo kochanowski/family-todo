@@ -485,19 +485,10 @@ enum TabTintColor: String, CaseIterable, Identifiable {
     }
 }
 
-enum SystemThemeVariant: String, CaseIterable, Identifiable {
-    case classic
-    case clean
-
-    var id: String {
-        rawValue
-    }
-}
-
 // MARK: - Unified Theme (Settings UI)
 
 enum UnifiedTheme: String, CaseIterable, Identifiable {
-    case light, dark, auto, light2, dark2, retro, paper
+    case light, dark, auto, retro, paper
 
     var id: String {
         rawValue
@@ -508,8 +499,6 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         case .light: "Light"
         case .dark: "Dark"
         case .auto: "Auto"
-        case .light2: "Light 2"
-        case .dark2: "Dark 2"
         case .retro: "Retro"
         case .paper: "Paper"
         }
@@ -520,8 +509,6 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         case .light: "sun.max.fill"
         case .dark: "moon.fill"
         case .auto: "circle.lefthalf.filled"
-        case .light2: "sun.max"
-        case .dark2: "moon"
         case .retro: "floppy.disk"
         case .paper: "newspaper.fill"
         }
@@ -538,7 +525,6 @@ final class ThemeStore: ObservableObject {
     @AppStorage("appearanceMode") private var appearanceModeRawValue = AppearanceMode.system.rawValue
     @AppStorage("celebrationsEnabled") var celebrationsEnabled = true
     @AppStorage("tabTintColor") private var tabTintColorRawValue = TabTintColor.defaultGreen.rawValue
-    @AppStorage("systemThemeVariant") private var systemThemeVariantRawValue = SystemThemeVariant.classic.rawValue
     @AppStorage("paperVariant") private var paperVariantRawValue = PaperVariant.a.rawValue
     @AppStorage("retroVariant") private var retroVariantRawValue = RetroVariant.a.rawValue
     @AppStorage("paperFontScale") private var paperFontScaleRawValue = FontSizeScale.regular.rawValue
@@ -593,32 +579,28 @@ final class ThemeStore: ObservableObject {
 
     var paperVariant: PaperVariant {
         get {
-            if let resolved = PaperVariant(rawValue: paperVariantRawValue) {
-                return resolved
+            if paperVariantRawValue != PaperVariant.b.rawValue {
+                paperVariantRawValue = PaperVariant.b.rawValue
             }
-
-            // Backward-compatible mapping from older paper variants.
-            switch paperVariantRawValue {
-            case "f":
-                return .b
-            default:
-                return .a
-            }
+            return .b
         }
-        set { paperVariantRawValue = newValue.rawValue; objectWillChange.send() }
-    }
-
-    var systemThemeVariant: SystemThemeVariant {
-        get { SystemThemeVariant(rawValue: systemThemeVariantRawValue) ?? .classic }
         set {
-            systemThemeVariantRawValue = newValue.rawValue
+            paperVariantRawValue = PaperVariant.b.rawValue
             objectWillChange.send()
         }
     }
 
     var retroVariant: RetroVariant {
-        get { RetroVariant(rawValue: retroVariantRawValue) ?? .a }
-        set { retroVariantRawValue = newValue.rawValue; objectWillChange.send() }
+        get {
+            if retroVariantRawValue != RetroVariant.a.rawValue {
+                retroVariantRawValue = RetroVariant.a.rawValue
+            }
+            return .a
+        }
+        set {
+            retroVariantRawValue = RetroVariant.a.rawValue
+            objectWillChange.send()
+        }
     }
 
     var paperFontScale: FontSizeScale {
@@ -642,18 +624,10 @@ final class ThemeStore: ObservableObject {
             case .retro: .retro
             case .paper: .paper
             case .system:
-                if systemThemeVariant == .clean {
-                    switch appearanceMode {
-                    case .light: .light2
-                    case .dark: .dark2
-                    case .system: .auto
-                    }
-                } else {
-                    switch appearanceMode {
-                    case .light: .light
-                    case .dark: .dark
-                    case .system: .auto
-                    }
+                switch appearanceMode {
+                case .light: .light
+                case .dark: .dark
+                case .system: .auto
                 }
             }
         }
@@ -662,23 +636,12 @@ final class ThemeStore: ObservableObject {
             case .light:
                 preset = .system
                 appearanceMode = .light
-                systemThemeVariant = .classic
             case .dark:
                 preset = .system
                 appearanceMode = .dark
-                systemThemeVariant = .classic
             case .auto:
                 preset = .system
                 appearanceMode = .system
-                systemThemeVariant = .classic
-            case .light2:
-                preset = .system
-                appearanceMode = .light
-                systemThemeVariant = .clean
-            case .dark2:
-                preset = .system
-                appearanceMode = .dark
-                systemThemeVariant = .clean
             case .retro:
                 preset = .retro
             case .paper:
@@ -699,6 +662,13 @@ final class ThemeStore: ObservableObject {
         resolvedTabTint
     }
 
+    func settingsToggleTint(for colorScheme: ColorScheme) -> Color {
+        if tabTintColor == .monochrome, colorScheme == .dark {
+            return Color(uiColor: .systemGray3)
+        }
+        return resolvedTabTint
+    }
+
     /// Retro always stays dark. Paper stays light.
     var colorScheme: ColorScheme? {
         switch preset {
@@ -714,7 +684,7 @@ final class ThemeStore: ObservableObject {
     // MARK: - Resolved Colors for Views
 
     var canvasColor: Color {
-        if preset == .system, systemThemeVariant == .clean {
+        if preset == .system {
             switch appearanceMode {
             case .dark:
                 return Color(hex: "000000")
@@ -728,7 +698,7 @@ final class ThemeStore: ObservableObject {
     }
 
     var surfaceColor: Color {
-        if preset == .system, systemThemeVariant == .clean {
+        if preset == .system {
             switch appearanceMode {
             case .dark:
                 return Color(hex: "1C1C1E")
@@ -742,7 +712,7 @@ final class ThemeStore: ObservableObject {
     }
 
     var surfaceElevatedColor: Color {
-        if preset == .system, systemThemeVariant == .clean {
+        if preset == .system {
             switch appearanceMode {
             case .dark:
                 return Color(hex: "2C2C2E")

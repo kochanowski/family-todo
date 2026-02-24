@@ -29,27 +29,15 @@ struct AppBackgroundView: View {
                 .init(color: Color(hex: "E9D9BF"), location: 1.0),
             ]
         case .system:
-            if themeStore.unifiedTheme == .dark2 {
+            if colorScheme == .dark {
                 [
                     .init(color: Color(hex: "000000"), location: 0),
                     .init(color: Color(hex: "000000"), location: 1.0),
                 ]
-            } else if themeStore.unifiedTheme == .light2 {
+            } else {
                 [
                     .init(color: Color(hex: "FFFFFF"), location: 0),
                     .init(color: Color(hex: "FFFFFF"), location: 1.0),
-                ]
-            } else if colorScheme == .dark {
-                [
-                    .init(color: Color(hex: "0E0C0A"), location: 0),
-                    .init(color: Color(hex: "15110F"), location: 0.74),
-                    .init(color: Color(hex: "241B14"), location: 1.0),
-                ]
-            } else {
-                [
-                    .init(color: Color(hex: "FAFAF9"), location: 0),
-                    .init(color: Color(hex: "F5F1EB"), location: 0.78),
-                    .init(color: Color(hex: "EDE4D9"), location: 1.0),
                 ]
             }
         }
