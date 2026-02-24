@@ -278,16 +278,39 @@ jobs:
           retention-days: 30
 
   # ─────────────────────────────────────────────────────────────
-  # Notify on failure
+  # Notify: failure (build, lint, OR deploy)
   # ─────────────────────────────────────────────────────────────
   notify-failure:
-    name: Notify on Failure
+    name: Notify Failure (Telegram)
     runs-on: ubuntu-latest
-    needs: [build-and-test, swiftlint]
+    needs: [build-and-test, swiftlint, deploy-testflight]
     if: failure()
 
     steps:
-      - name: Log failure
+      - name: Send Telegram failure message
         run: |
-          echo "Build or tests failed!"
-          echo "Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '❌ <b>Build failed</b>\nBranch: <code>${{ github.ref_name }}</code>\nCommit: <code>${{ github.sha }}</code>\n<a href="'"${JOB_URL}"'">Zobacz logi →</a>')
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
+  # ─────────────────────────────────────────────────────────────
+  # Notify: TestFlight deploy success
+  # ─────────────────────────────────────────────────────────────
+  notify-success:
+    name: Notify Success (Telegram)
+    runs-on: ubuntu-latest
+    needs: [deploy-testflight]
+    if: success()
+
+    steps:
+      - name: Send Telegram success message
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '✅ <b>TestFlight deploy OK</b>\nBranch: <code>${{ github.ref_name }}</code>\nBuild: <code>#${{ github.run_number }}</code>\n<a href="'"${JOB_URL}"'">Szczegóły →</a>')
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
