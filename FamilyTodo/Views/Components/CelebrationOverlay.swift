@@ -116,7 +116,7 @@ struct ConfettiCannon: UIViewRepresentable {
     }
 }
 
-private final class ConfettiEmitterView: UIView {
+final class ConfettiEmitterView: UIView {
     private let leftEmitter = CAEmitterLayer()
     private let rightEmitter = CAEmitterLayer()
 
