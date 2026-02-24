@@ -984,22 +984,33 @@ struct TaskRow: View {
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
         let isOverdue = task.isOverdue
+        let dueColor: Color =
+            if isDimmedOverLimit {
+                .secondary
+            } else if isOverdue {
+                .red
+            } else if isToday {
+                .orange
+            } else {
+                .secondary
+            }
+        let dueBackgroundColor: Color =
+            if isDimmedOverLimit {
+                .secondary
+            } else if isOverdue {
+                .red
+            } else {
+                .orange
+            }
 
         Text(dateFormatter.string(from: date))
             .font(themeStore.font(for: .chip))
-            .foregroundStyle(
-                isDimmedOverLimit ? .secondary :
-                    (isOverdue ? .red : (isToday ? .orange : .secondary))
-            )
+            .foregroundStyle(dueColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(
                 Capsule()
-                    .fill(
-                        isDimmedOverLimit
-                            ? Color.secondary.opacity(0.12)
-                            : (isOverdue ? Color.red : Color.orange).opacity(0.12)
-                    )
+                    .fill(dueBackgroundColor.opacity(0.12))
             )
     }
 
