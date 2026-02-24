@@ -15,6 +15,7 @@ struct ToastView: View {
     }
 
     @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
 
     let message: String
     var messageFont: Font?
@@ -27,6 +28,7 @@ struct ToastView: View {
             if let leadingText {
                 Text(leadingText)
                     .font(.system(size: 18))
+                    .foregroundStyle(messageColor)
                     .accessibilityHidden(true)
             }
 
@@ -34,7 +36,7 @@ struct ToastView: View {
                 .font(messageFont ?? themeStore.font(for: .bodySmall))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .foregroundStyle(.primary)
+                .foregroundStyle(messageColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let actionTitle, let action {
@@ -52,13 +54,29 @@ struct ToastView: View {
         .frame(height: Metrics.height)
         .background {
             Capsule()
-                .fill(.ultraThinMaterial)
+                .fill(backgroundColor)
                 .overlay {
                     Capsule()
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.6)
+                        .stroke(strokeColor, lineWidth: 0.8)
                 }
-                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+                .shadow(color: shadowColor, radius: 10, x: 0, y: 5)
         }
+    }
+
+    private var backgroundColor: Color {
+        colorScheme == .light ? Color(uiColor: .darkGray) : Color(uiColor: .systemGray5)
+    }
+
+    private var messageColor: Color {
+        colorScheme == .light ? .white : .black
+    }
+
+    private var strokeColor: Color {
+        colorScheme == .light ? .white.opacity(0.2) : .black.opacity(0.12)
+    }
+
+    private var shadowColor: Color {
+        colorScheme == .light ? .black.opacity(0.32) : .black.opacity(0.12)
     }
 }
 

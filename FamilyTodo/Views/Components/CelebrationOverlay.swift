@@ -21,27 +21,30 @@ struct CelebrationOverlay: View {
     }
 
     var body: some View {
-        ZStack {
-            if let celebration = manager.activeCelebration {
-                VStack {
-                    Spacer()
+        GeometryReader { proxy in
+            ZStack {
+                if let celebration = manager.activeCelebration {
+                    VStack {
+                        Spacer()
 
-                    ToastView(
-                        message: celebration.message,
-                        messageFont: messageFont,
-                        leadingText: celebration.emoji
-                    )
-                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 34)
-                    .transition(ToastView.AnimationTokens.transition)
+                        ToastView(
+                            message: celebration.message,
+                            messageFont: messageFont,
+                            leadingText: celebration.emoji
+                        )
+                        .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                        .padding(.bottom, toastBottomInset(for: proxy))
+                        .transition(ToastView.AnimationTokens.transition)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .celebrate(trigger: $showConfetti, accentColor: resolvedAccentColor)
         .allowsHitTesting(false)
         .animation(ToastView.AnimationTokens.curve, value: manager.activeCelebration?.id)
         .onChange(of: manager.activeCelebration) { _, newValue in
-            guard newValue != nil else { return }
+            guard let newValue, newValue.style == .milestone else { return }
             showConfetti = true
         }
     }
@@ -51,6 +54,13 @@ struct CelebrationOverlay: View {
             return first
         }
         return .yellow
+    }
+
+    private func toastBottomInset(for proxy: GeometryProxy) -> CGFloat {
+        let safeAreaBottom = proxy.safeAreaInsets.bottom
+        let minimumFloatingClearance: CGFloat = 90
+        let chromeAwareInset = AppChromeMetrics.compactCTAHeight + safeAreaBottom + 46
+        return max(minimumFloatingClearance, chromeAwareInset)
     }
 }
 
@@ -140,18 +150,13 @@ final class ConfettiEmitterView: UIView {
     }
 
     func fireBurst() {
-        let palette: [UIColor] = [accentColor, .systemYellow, .white]
+        let palette: [UIColor] = [accentColor, .systemYellow, .systemPink, .white]
 
         leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
         rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
 
         leftEmitter.birthRate = 1
         rightEmitter.birthRate = 1
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            self?.leftEmitter.birthRate = 0
-            self?.rightEmitter.birthRate = 0
-        }
     }
 
     func stopBurst() {
@@ -201,27 +206,27 @@ final class ConfettiEmitterView: UIView {
         cell.contents = image
         cell.color = color.cgColor
 
-        cell.birthRate = 34
-        cell.lifetime = 3.2
-        cell.lifetimeRange = 0.9
+        cell.birthRate = 18
+        cell.lifetime = 4.2
+        cell.lifetimeRange = 1.0
 
-        cell.velocity = 420
-        cell.velocityRange = 130
-        cell.yAcceleration = 330
+        cell.velocity = 390
+        cell.velocityRange = 150
+        cell.yAcceleration = 285
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle
-        cell.emissionRange = .pi / 8
+        cell.emissionRange = .pi / 7
 
-        cell.spin = 3.2
-        cell.spinRange = 4.8
+        cell.spin = 4.0
+        cell.spinRange = 6.0
 
         cell.scale = scale
         cell.scaleRange = 0.35
-        cell.scaleSpeed = -0.08
+        cell.scaleSpeed = -0.06
 
         cell.alphaRange = 0.18
-        cell.alphaSpeed = -0.24
+        cell.alphaSpeed = -0.2
         return cell
     }
 }

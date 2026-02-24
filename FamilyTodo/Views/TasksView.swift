@@ -74,6 +74,7 @@ private struct TasksContent: View {
     @State private var pendingDeletedTask: Task?
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
+    @State private var hiddenMovedToIdeasIds: Set<UUID> = []
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
@@ -127,6 +128,7 @@ private struct TasksContent: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
+            .animation(.easeInOut(duration: 0.22), value: visibleNextTasks.map(\.id))
             .padding(.bottom, listBottomInset)
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
@@ -676,7 +678,9 @@ private struct TasksContent: View {
     }
 
     private var visibleNextTasks: [Task] {
-        store.nextTasks.filter { !hiddenPendingDeleteIds.contains($0.id) }
+        store.nextTasks.filter {
+            !hiddenPendingDeleteIds.contains($0.id) && !hiddenMovedToIdeasIds.contains($0.id)
+        }
     }
 
     private var taskListRowInsets: EdgeInsets {
@@ -755,6 +759,10 @@ private struct TasksContent: View {
     }
 
     private func demoteTaskToBacklog(_ task: Task) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            hiddenMovedToIdeasIds.insert(task.id)
+        }
+
         _ = _Concurrency.Task {
             let resolvedCategoryId: UUID? = if let backlogCategoryId = task.backlogCategoryId,
                                                backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
@@ -765,6 +773,11 @@ private struct TasksContent: View {
             }
 
             guard let resolvedCategoryId else {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        hiddenMovedToIdeasIds.remove(task.id)
+                    }
+                }
                 return
             }
 
@@ -776,6 +789,9 @@ private struct TasksContent: View {
             )
 
             await store.deleteTask(task)
+            await MainActor.run {
+                hiddenMovedToIdeasIds.remove(task.id)
+            }
         }
     }
 

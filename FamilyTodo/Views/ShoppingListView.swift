@@ -450,12 +450,8 @@ private struct ShoppingListContent: View {
     }
 
     private func clearToBuy() {
-        let hadItems = !store.toBuyItems.isEmpty
         _Concurrency.Task {
             await store.clearToBuy()
-            if hadItems, themeStore.celebrationsEnabled {
-                celebrationManager.celebrateShoppingComplete()
-            }
         }
         HapticManager.success()
     }

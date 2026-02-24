@@ -50,8 +50,8 @@ private struct BacklogContent: View {
     @State private var editingItem: BacklogItem?
     @State private var activeComposerCategoryId: UUID?
     @State private var composerText = ""
-    @State private var pendingDeletedItem: BacklogItem?
-    @State private var pendingDeleteTask: _Concurrency.Task<Void, Never>?
+    @State private var pendingDeletionItem: BacklogItem?
+    @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
 
@@ -257,19 +257,19 @@ private struct BacklogContent: View {
             )
         }
         .overlay(alignment: .bottom) {
-            if let pendingDeletedItem {
+            if let pendingDeletionItem {
                 ToastView(
-                    message: "\"\(pendingDeletedItem.title)\" deleted",
+                    message: "\"\(pendingDeletionItem.title)\" deleted",
                     actionTitle: "Undo",
                     action: undoPendingDeleteItem
                 )
                 .padding(.horizontal, ToastView.Metrics.horizontalInset)
                 .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
                 .transition(ToastView.AnimationTokens.transition)
-                .id(pendingDeletedItem.id)
+                .id(pendingDeletionItem.id)
             }
         }
-        .animation(ToastView.AnimationTokens.curve, value: pendingDeletedItem?.id)
+        .animation(ToastView.AnimationTokens.curve, value: pendingDeletionItem?.id)
     }
 
     private var activeMembers: [Member] {
@@ -440,11 +440,11 @@ private struct BacklogContent: View {
     }
 
     private func queueDeleteItem(_ item: BacklogItem) {
-        if let previous = pendingDeletedItem {
-            pendingDeleteTask?.cancel()
-            pendingDeleteTask = nil
+        if let previous = pendingDeletionItem {
+            deletionTask?.cancel()
+            deletionTask = nil
             withAnimation(ToastView.AnimationTokens.curve) {
-                pendingDeletedItem = nil
+                pendingDeletionItem = nil
                 hiddenPendingDeleteIds.remove(previous.id)
             }
 
@@ -454,34 +454,34 @@ private struct BacklogContent: View {
         }
 
         withAnimation(ToastView.AnimationTokens.curve) {
-            pendingDeletedItem = item
+            pendingDeletionItem = item
             hiddenPendingDeleteIds.insert(item.id)
         }
         HapticManager.lightTap()
 
-        pendingDeleteTask = _Concurrency.Task {
-            try? await _Concurrency.Task.sleep(nanoseconds: 5_000_000_000)
+        deletionTask = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(for: .seconds(5))
             guard !_Concurrency.Task.isCancelled else { return }
             _ = await store.deleteItem(item)
             await MainActor.run {
                 withAnimation(ToastView.AnimationTokens.curve) {
-                    if pendingDeletedItem?.id == item.id {
-                        pendingDeletedItem = nil
+                    if pendingDeletionItem?.id == item.id {
+                        pendingDeletionItem = nil
                     }
                     hiddenPendingDeleteIds.remove(item.id)
                 }
-                pendingDeleteTask = nil
+                deletionTask = nil
             }
         }
     }
 
     private func undoPendingDeleteItem() {
-        guard let pendingDeletedItem else { return }
-        pendingDeleteTask?.cancel()
-        pendingDeleteTask = nil
+        guard let pendingDeletionItem else { return }
+        deletionTask?.cancel()
+        deletionTask = nil
         withAnimation(ToastView.AnimationTokens.curve) {
-            hiddenPendingDeleteIds.remove(pendingDeletedItem.id)
-            self.pendingDeletedItem = nil
+            hiddenPendingDeleteIds.remove(pendingDeletionItem.id)
+            self.pendingDeletionItem = nil
         }
         HapticManager.lightTap()
     }
