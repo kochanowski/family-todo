@@ -87,9 +87,9 @@ private struct ShoppingListContent: View {
                 VStack(spacing: 0) {
                     // Header
                     header
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .padding(.bottom, 12)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                        .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
                     // Items list with rapid entry
                     ScrollViewReader { proxy in
@@ -148,7 +148,7 @@ private struct ShoppingListContent: View {
                                         .id("rapidEntry")
                                 }
                             }
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                             .padding(.bottom, listBottomInset)
                         }
                         .scrollDismissesKeyboard(.interactively)
@@ -211,13 +211,16 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text("Shopping")
                 .font(themeStore.font(for: .screenHeader))
 
             // Item count badge
             if !store.toBuyItems.isEmpty {
                 ShoppingCountBadge(count: store.toBuyItems.count)
+                    .alignmentGuide(.firstTextBaseline) { dimensions in
+                        dimensions[VerticalAlignment.center]
+                    }
             }
 
             Spacer()
@@ -764,7 +767,7 @@ private struct RestockItemRow: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(themeStore.accentColor)
+                    .foregroundStyle(themeStore.accentTabColor)
             }
         }
         .padding(.vertical, 4)

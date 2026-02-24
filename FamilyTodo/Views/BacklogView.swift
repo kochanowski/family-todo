@@ -59,13 +59,13 @@ private struct BacklogContent: View {
 
         VStack(spacing: 0) {
             header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, activeBanner == nil ? 12 : 8)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                .padding(.bottom, activeBanner == nil ? AppChromeMetrics.screenHeaderBottomPadding : 8)
 
             if let activeBanner {
                 BacklogStatusBanner(text: activeBanner.text)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.bottom, 12)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -114,7 +114,7 @@ private struct BacklogContent: View {
                             .rowInsertAnimation()
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.bottom, listBottomInset)
                 }
                 .refreshable {
@@ -249,7 +249,7 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text("Ideas")
                 .font(themeStore.font(for: .screenHeader))
 
@@ -561,17 +561,17 @@ struct CategoryCard: View {
                 } label: {
                     HStack(spacing: 10) {
                         Circle()
-                            .stroke(themeStore.accentColor.opacity(0.55), lineWidth: 1.5)
+                            .stroke(themeStore.accentTabColor.opacity(0.55), lineWidth: 1.5)
                             .frame(width: 20, height: 20)
                             .overlay {
                                 Image(systemName: "plus")
                                     .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(themeStore.accentColor)
+                                    .foregroundStyle(themeStore.accentTabColor)
                             }
 
                         Text("Add item")
                             .font(themeStore.font(for: .buttonLabel))
-                            .foregroundStyle(themeStore.accentColor)
+                            .foregroundStyle(themeStore.accentTabColor)
 
                         Spacer()
                     }

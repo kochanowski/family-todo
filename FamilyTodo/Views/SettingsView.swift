@@ -88,6 +88,13 @@ struct SettingsView: View {
                         showSelectionPill: false,
                         showBorder: false
                     )
+                    .padding(12)
+                    .background {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(themeStore.surfaceColor)
+                    }
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(Color.clear)
                 } header: {
                     Text("System Font Size")
                 }
@@ -292,9 +299,7 @@ private struct UnifiedThemeCard: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(swatchGradient)
                         .frame(maxWidth: .infinity, minHeight: 64)
-                    Image(systemName: theme.iconName)
-                        .font(.system(size: 24))
-                        .foregroundStyle(iconColor)
+                    themeIcon
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -316,7 +321,7 @@ private struct UnifiedThemeCard: View {
         case .dark:
             [Color(hex: "1C1C1E"), Color(hex: "2C2C2E")]
         case .auto:
-            [Color(hex: "E8E8ED"), Color(hex: "3A3A3C")]
+            [Color(hex: "D1D1D6"), Color(hex: "D1D1D6")]
         case .light2:
             [Color(hex: "FFFFFF"), Color(hex: "FFFFFF")]
         case .dark2:
@@ -331,6 +336,21 @@ private struct UnifiedThemeCard: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+
+    @ViewBuilder
+    private var themeIcon: some View {
+        if theme == .auto {
+            Image(systemName: "circle.lefthalf.filled")
+                .font(.system(size: 26, weight: .regular))
+                .rotationEffect(.degrees(-45))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.black.opacity(0.8), .white.opacity(0.9))
+        } else {
+            Image(systemName: theme.iconName)
+                .font(.system(size: 24))
+                .foregroundStyle(iconColor)
+        }
     }
 
     private var iconColor: Color {

@@ -223,7 +223,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
         case .system:
             "iphone"
         case .retro:
-            "gamecontroller.fill"
+            "floppy.disk"
         case .paper:
             "newspaper.fill"
         }
@@ -519,10 +519,10 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         switch self {
         case .light: "sun.max.fill"
         case .dark: "moon.fill"
-        case .auto: "sparkles"
+        case .auto: "circle.lefthalf.filled"
         case .light2: "sun.max"
         case .dark2: "moon"
-        case .retro: "dpad.fill"
+        case .retro: "floppy.disk"
         case .paper: "newspaper.fill"
         }
     }

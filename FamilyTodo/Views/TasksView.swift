@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+// swiftlint:disable file_length
 /// Tasks screen - execution board for tasks promoted from Backlog
 struct TasksView: View {
     @EnvironmentObject private var userSession: UserSession
@@ -92,22 +93,22 @@ private struct TasksContent: View {
 
         VStack(spacing: 0) {
             header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
             filterToggle
-                .padding(.horizontal, 20)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.bottom, 12)
 
             if activeFilter == .active {
                 focusRuleBanner
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.bottom, activeBanner == nil ? 16 : 8)
 
                 if let activeBanner {
                     InlineStatusBanner(text: activeBanner.text)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                         .padding(.bottom, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
@@ -122,7 +123,7 @@ private struct TasksContent: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
             .padding(.bottom, listBottomInset)
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
@@ -239,6 +240,10 @@ private struct TasksContent: View {
 
             ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
                 if taskBeingCompleted != task.id {
+                    if index == normalizedWipLimit, store.nextTasks.count > normalizedWipLimit {
+                        overLimitSeparator
+                    }
+
                     TaskRow(
                         task: task,
                         assigneeName: assigneeName(for: task),
@@ -381,7 +386,7 @@ private struct TasksContent: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text("Tasks")
                 .font(themeStore.font(for: .screenHeader))
 
@@ -651,15 +656,31 @@ private struct TasksContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var overLimitSeparator: some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.2))
+                .frame(height: 1)
+
+            Text("Over limit")
+                .font(themeStore.font(for: .chip))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+
+            Rectangle()
+                .fill(Color.secondary.opacity(0.2))
+                .frame(height: 1)
+        }
+        .padding(.vertical, 6)
+        .accessibilityIdentifier("tasksOverLimitSeparator")
+    }
+
     private func wipZone(for index: Int) -> TaskRow.WipZone {
         let limit = normalizedWipLimit
         if index < limit {
-            return .safe
+            return .normal
         }
-        if index < limit + 2 {
-            return .warning
-        }
-        return .danger
+        return .warning
     }
 
     private var normalizedWipLimit: Int {
@@ -851,7 +872,7 @@ struct TaskRow: View {
                 onToggle: onToggle,
                 size: 22,
                 style: .square,
-                checkedColor: .blue,
+                checkedColor: checkedColor,
                 uncheckedColor: uncheckedColor
             )
 
@@ -860,7 +881,7 @@ struct TaskRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
                             .font(themeStore.font(for: .listRowTitle))
-                            .foregroundStyle(isCompleted ? .secondary : .primary)
+                            .foregroundStyle(taskTitleColor)
                             .strikethrough(isCompleted)
 
                         HStack(spacing: 6) {
@@ -918,6 +939,7 @@ struct TaskRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .opacity(isDimmedOverLimit ? 0.72 : 1.0)
         }
         .padding(.vertical, 2)
         .background {
@@ -930,30 +952,32 @@ struct TaskRow: View {
         task.status == .done
     }
 
+    private var isDimmedOverLimit: Bool {
+        !isCompleted && (wipZone == .warning || wipZone == .danger)
+    }
+
+    private var taskTitleColor: Color {
+        if isCompleted || isDimmedOverLimit {
+            return .secondary
+        }
+        return .primary
+    }
+
+    private var checkedColor: Color {
+        isDimmedOverLimit ? .secondary.opacity(0.55) : themeStore.accentTabColor
+    }
+
     private var uncheckedColor: Color {
         switch wipZone {
-        case .safe:
-            .green.opacity(0.5)
-        case .normal:
+        case .safe, .normal:
             .secondary.opacity(0.3)
-        case .warning:
-            .orange
-        case .danger:
-            .red
+        case .warning, .danger:
+            .secondary.opacity(0.25)
         }
     }
 
     private var rowBackgroundColor: Color {
-        switch wipZone {
-        case .safe:
-            .green.opacity(0.04)
-        case .normal:
-            .clear
-        case .warning:
-            .orange.opacity(0.06)
-        case .danger:
-            .red.opacity(0.08)
-        }
+        .clear
     }
 
     @ViewBuilder
@@ -963,10 +987,20 @@ struct TaskRow: View {
 
         Text(dateFormatter.string(from: date))
             .font(themeStore.font(for: .chip))
-            .foregroundStyle(isOverdue ? .red : (isToday ? .orange : .secondary))
+            .foregroundStyle(
+                isDimmedOverLimit ? .secondary :
+                    (isOverdue ? .red : (isToday ? .orange : .secondary))
+            )
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
-            .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.12)))
+            .background(
+                Capsule()
+                    .fill(
+                        isDimmedOverLimit
+                            ? Color.secondary.opacity(0.12)
+                            : (isOverdue ? Color.red : Color.orange).opacity(0.12)
+                    )
+            )
     }
 
     private var dateFormatter: DateFormatter {
@@ -1107,3 +1141,5 @@ private struct TaskDetailSheet: View {
     TasksView(selectedTab: .constant(.tasks))
         .environmentObject(UserSession.shared)
 }
+
+// swiftlint:enable file_length
