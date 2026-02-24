@@ -679,9 +679,7 @@ struct CategoryCard: View {
 
             if isAddingItem {
                 HStack(spacing: 10) {
-                    Circle()
-                        .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
-                        .frame(width: 20, height: 20)
+                    composerPlaceholderIcon
 
                     TextField("Add item", text: $newItemText)
                         .font(themeStore.font(for: .listRowTitle))
@@ -712,14 +710,7 @@ struct CategoryCard: View {
                     onActivateComposer()
                 } label: {
                     HStack(spacing: 10) {
-                        Circle()
-                            .stroke(themeStore.accentTabColor.opacity(0.55), lineWidth: 1.5)
-                            .frame(width: 20, height: 20)
-                            .overlay {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(themeStore.accentTabColor)
-                            }
+                        addItemPlaceholderIcon
 
                         Text("Add item")
                             .font(themeStore.font(for: .buttonLabel))
@@ -780,6 +771,47 @@ struct CategoryCard: View {
 
     private var cardBorder: Color {
         colorScheme == .light ? themeStore.borderLightColor : .clear
+    }
+
+    @ViewBuilder
+    private var composerPlaceholderIcon: some View {
+        if themeStore.preset == .retro {
+            Rectangle()
+                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Rectangle()
+                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                        .padding(0.8)
+                }
+        } else {
+            Circle()
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+        }
+    }
+
+    @ViewBuilder
+    private var addItemPlaceholderIcon: some View {
+        if themeStore.preset == .retro {
+            Rectangle()
+                .stroke(themeStore.accentTabColor.opacity(0.9), lineWidth: 2.2)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(themeStore.accentTabColor)
+                }
+        } else {
+            Circle()
+                .stroke(themeStore.accentTabColor.opacity(0.55), lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(themeStore.accentTabColor)
+                }
+        }
     }
 }
 

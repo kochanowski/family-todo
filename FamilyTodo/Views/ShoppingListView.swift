@@ -298,11 +298,7 @@ private struct ShoppingListContent: View {
 
     private var rapidEntryRow: some View {
         HStack(spacing: 10) {
-            Circle()
-                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
-                .frame(width: 20, height: 20)
-                // Keep the same leading slot width as ShoppingItemRow's checkbox.
-                .frame(width: 44)
+            rapidEntryPlaceholderIcon
 
             RapidEntryTextField(
                 text: $rapidEntryText,
@@ -317,6 +313,26 @@ private struct ShoppingListContent: View {
         }
         .padding(.vertical, 6)
         .background(cardBackground.opacity(0.01)) // Tap target
+    }
+
+    @ViewBuilder
+    private var rapidEntryPlaceholderIcon: some View {
+        if themeStore.preset == .retro {
+            Rectangle()
+                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Rectangle()
+                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                        .padding(0.8)
+                }
+                .frame(width: 44)
+        } else {
+            Circle()
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+                .frame(width: 44)
+        }
     }
 
     // MARK: - Rapid Entry Logic

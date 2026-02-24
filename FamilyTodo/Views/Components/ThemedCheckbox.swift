@@ -52,22 +52,37 @@ struct ThemedCheckbox: View {
     }
 
     private var retroCheckbox: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color(hex: "F7D51D"))
-                .frame(width: size + 2, height: size + 2)
-                .overlay {
-                    Rectangle()
-                        .stroke(Color.black, lineWidth: 3)
-                }
-                .shadow(color: .black, radius: 0, x: 3, y: 3)
-
+        Group {
             if isChecked {
-                Image(systemName: "star.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: size * 0.52, height: size * 0.52)
-                    .foregroundStyle(.black)
+                ZStack {
+                    Rectangle()
+                        .fill(Color(hex: "F7D51D"))
+                        .frame(width: size + 2, height: size + 2)
+                        .overlay {
+                            Rectangle()
+                                .stroke(Color.black, lineWidth: 3)
+                        }
+                        .shadow(color: .black, radius: 0, x: 3, y: 3)
+
+                    Image(systemName: "star.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: size * 0.52, height: size * 0.52)
+                        .foregroundStyle(.black)
+                }
+            } else {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(width: size + 2, height: size + 2)
+                    .overlay {
+                        Rectangle()
+                            .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                    }
+                    .overlay {
+                        Rectangle()
+                            .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                            .padding(0.8)
+                    }
             }
         }
     }
