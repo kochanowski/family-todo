@@ -1,54 +1,64 @@
 import SwiftUI
 
-/// Toast notification with glassmorphism and undo action
+/// Shared toast/snackbar used across Ideas/Tasks undo and celebrations.
 struct ToastView: View {
+    enum Metrics {
+        static let height: CGFloat = 52
+        static let horizontalInset: CGFloat = 20
+        static let horizontalPadding: CGFloat = 16
+        static let verticalPadding: CGFloat = 12
+    }
+
+    enum AnimationTokens {
+        static let transition: AnyTransition = .move(edge: .bottom).combined(with: .opacity)
+        static let curve: Animation = .spring(response: 0.34, dampingFraction: 0.86)
+    }
+
     @EnvironmentObject private var themeStore: ThemeStore
 
     let message: String
-    var undoAction: (() -> Void)?
-    var onDismiss: (() -> Void)?
-    var displayDuration: TimeInterval = 4
-
-    @State private var isVisible = true
+    var messageFont: Font?
+    var leadingText: String?
+    var actionTitle: String?
+    var action: (() -> Void)?
 
     var body: some View {
-        if isVisible {
-            HStack(spacing: 12) {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
+        HStack(spacing: 12) {
+            if let leadingText {
+                Text(leadingText)
+                    .font(.system(size: 18))
+                    .accessibilityHidden(true)
+            }
 
-                if let undoAction {
-                    Button("Undo") {
-                        undoAction()
-                        dismiss()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .fontWeight(.bold)
-                    .foregroundStyle(themeStore.accentTabColor)
+            Text(message)
+                .font(messageFont ?? themeStore.font(for: .bodySmall))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let actionTitle, let action {
+                Button(actionTitle) {
+                    action()
                 }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + displayDuration) {
-                    dismiss()
-                }
+                .font(themeStore.font(for: .buttonLabel))
+                .fontWeight(.bold)
+                .foregroundStyle(themeStore.accentTabColor)
             }
         }
-    }
-
-    private func dismiss() {
-        withAnimation(.easeOut(duration: 0.3)) {
-            isVisible = false
+        .padding(.horizontal, Metrics.horizontalPadding)
+        .padding(.vertical, Metrics.verticalPadding)
+        .frame(maxWidth: .infinity)
+        .frame(height: Metrics.height)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.6)
+                }
+                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
         }
-        onDismiss?()
     }
 }
 
@@ -59,7 +69,7 @@ struct ToastView: View {
 
         VStack {
             Spacer()
-            ToastView(message: "3 items cleared", undoAction: { print("Undo!") })
+            ToastView(message: "3 items cleared", actionTitle: "Undo", action: { print("Undo!") })
                 .padding(.bottom, 100)
         }
     }

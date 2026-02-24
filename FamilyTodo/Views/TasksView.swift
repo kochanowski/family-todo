@@ -71,6 +71,9 @@ private struct TasksContent: View {
     @State private var activeBanner: InlineBanner?
     @State private var activeFilter: TasksFilter = .active
     @State private var pendingCleanupAction: CompletedCleanupAction?
+    @State private var pendingDeletedTask: Task?
+    @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
+    @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
@@ -201,6 +204,20 @@ private struct TasksContent: View {
                 )
             }
         }
+        .overlay(alignment: .bottom) {
+            if let pendingDeletedTask {
+                ToastView(
+                    message: "\"\(pendingDeletedTask.title)\" deleted",
+                    actionTitle: "Undo",
+                    action: undoPendingDeleteTask
+                )
+                .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                .transition(ToastView.AnimationTokens.transition)
+                .id(pendingDeletedTask.id)
+            }
+        }
+        .animation(ToastView.AnimationTokens.curve, value: pendingDeletedTask?.id)
         .onChange(of: store.error as? TaskStoreError) { _, error in
             guard let error else { return }
             let generator = UINotificationFeedbackGenerator()
@@ -211,10 +228,10 @@ private struct TasksContent: View {
 
     @ViewBuilder
     private var activeTasksContent: some View {
-        if !store.nextTasks.isEmpty {
-            ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
+        if !visibleNextTasks.isEmpty {
+            ForEach(Array(visibleNextTasks.enumerated()), id: \.element.id) { index, task in
                 if taskBeingCompleted != task.id {
-                    if index == normalizedWipLimit, store.nextTasks.count > normalizedWipLimit {
+                    if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
                         overLimitSeparator
                             .tasksListRowStyle(taskListRowInsets)
                     }
@@ -239,9 +256,7 @@ private struct TasksContent: View {
                         .tint(.indigo)
 
                         Button(role: .destructive) {
-                            _ = _Concurrency.Task {
-                                await store.deleteTask(task)
-                            }
+                            queueDeleteTask(task)
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -434,7 +449,7 @@ private struct TasksContent: View {
     }
 
     private var activeTasksHeader: some View {
-        let count = store.nextTasks.count
+        let count = visibleNextTasks.count
         let limit = normalizedWipLimit
         let overLimit = count > limit
 
@@ -660,6 +675,10 @@ private struct TasksContent: View {
         min(max(recommendedWipLimit, 1), 7)
     }
 
+    private var visibleNextTasks: [Task] {
+        store.nextTasks.filter { !hiddenPendingDeleteIds.contains($0.id) }
+    }
+
     private var taskListRowInsets: EdgeInsets {
         EdgeInsets(
             top: 0,
@@ -758,6 +777,53 @@ private struct TasksContent: View {
 
             await store.deleteTask(task)
         }
+    }
+
+    private func queueDeleteTask(_ task: Task) {
+        if let previous = pendingDeletedTask {
+            pendingDeleteWork?.cancel()
+            pendingDeleteWork = nil
+            withAnimation(ToastView.AnimationTokens.curve) {
+                pendingDeletedTask = nil
+                hiddenPendingDeleteIds.remove(previous.id)
+            }
+
+            _ = _Concurrency.Task {
+                await store.deleteTask(previous)
+            }
+        }
+
+        withAnimation(ToastView.AnimationTokens.curve) {
+            pendingDeletedTask = task
+            hiddenPendingDeleteIds.insert(task.id)
+        }
+        HapticManager.lightTap()
+
+        pendingDeleteWork = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(nanoseconds: 5_000_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            await store.deleteTask(task)
+            await MainActor.run {
+                withAnimation(ToastView.AnimationTokens.curve) {
+                    if pendingDeletedTask?.id == task.id {
+                        pendingDeletedTask = nil
+                    }
+                    hiddenPendingDeleteIds.remove(task.id)
+                }
+                pendingDeleteWork = nil
+            }
+        }
+    }
+
+    private func undoPendingDeleteTask() {
+        guard let pendingDeletedTask else { return }
+        pendingDeleteWork?.cancel()
+        pendingDeleteWork = nil
+        withAnimation(ToastView.AnimationTokens.curve) {
+            hiddenPendingDeleteIds.remove(pendingDeletedTask.id)
+            self.pendingDeletedTask = nil
+        }
+        HapticManager.lightTap()
     }
 }
 

@@ -26,33 +26,20 @@ struct CelebrationOverlay: View {
                 VStack {
                     Spacer()
 
-                    HStack(spacing: 10) {
-                        Text(celebration.emoji)
-                            .font(.system(size: 24))
-
-                        Text(celebration.message)
-                            .font(messageFont)
-                            .foregroundStyle(.primary)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .background {
-                        Capsule()
-                            .fill(.ultraThinMaterial)
-                            .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
-                    }
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-
-                    Spacer().frame(height: 100) // Keep above tab bar area
+                    ToastView(
+                        message: celebration.message,
+                        messageFont: messageFont,
+                        leadingText: celebration.emoji
+                    )
+                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 34)
+                    .transition(ToastView.AnimationTokens.transition)
                 }
-                .animation(WowAnimation.spring, value: manager.activeCelebration)
             }
         }
         .celebrate(trigger: $showConfetti, accentColor: resolvedAccentColor)
         .allowsHitTesting(false)
+        .animation(ToastView.AnimationTokens.curve, value: manager.activeCelebration?.id)
         .onChange(of: manager.activeCelebration) { _, newValue in
             guard newValue != nil else { return }
             showConfetti = true
