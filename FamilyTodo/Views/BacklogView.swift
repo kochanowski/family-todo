@@ -50,6 +50,9 @@ private struct BacklogContent: View {
     @State private var editingItem: BacklogItem?
     @State private var activeComposerCategoryId: UUID?
     @State private var composerText = ""
+    @State private var pendingDeletedItem: BacklogItem?
+    @State private var pendingDeleteTask: _Concurrency.Task<Void, Never>?
+    @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -83,11 +86,12 @@ private struct BacklogContent: View {
             } else {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
-                        LazyVStack(spacing: 16) {
+                        VStack(spacing: 16) {
                             ForEach(store.categories) { category in
+                                let categoryItems = visibleItems(for: category.id)
                                 CategoryCard(
                                     category: category,
-                                    items: store.items(for: category.id),
+                                    items: categoryItems,
                                     assigneeNameFor: { assigneeId in
                                         assigneeName(for: assigneeId)
                                     },
@@ -107,7 +111,7 @@ private struct BacklogContent: View {
                                         cancelComposer(for: category.id)
                                     },
                                     onDeleteItem: { item in
-                                        _ = _Concurrency.Task { await store.deleteItem(item) }
+                                        queueDeleteItem(item)
                                     },
                                     onEditItem: { item in
                                         editingItem = item
@@ -133,6 +137,7 @@ private struct BacklogContent: View {
                         .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                         .padding(.bottom, listBottomInset)
                     }
+                    .scrollDismissesKeyboard(.never)
                 }
                 .refreshable {
                     store.setSyncMode(userSession.syncMode)
@@ -247,11 +252,22 @@ private struct BacklogContent: View {
                     }
                 },
                 onDelete: {
-                    _ = _Concurrency.Task {
-                        await store.deleteItem(item)
-                    }
+                    queueDeleteItem(item)
                 }
             )
+        }
+        .overlay(alignment: .bottom) {
+            if let pendingDeletedItem {
+                ToastView(
+                    message: "\"\(pendingDeletedItem.title)\" deleted",
+                    undoAction: undoPendingDeleteItem,
+                    displayDuration: 5
+                )
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .id(pendingDeletedItem.id)
+            }
         }
     }
 
@@ -369,14 +385,13 @@ private struct BacklogContent: View {
     private func activateComposer(for categoryId: UUID, scrollProxy: ScrollViewProxy) {
         activeComposerCategoryId = categoryId
         composerText = ""
+        focusedComposerCategoryId = nil
 
         withAnimation(WowAnimation.easeOut) {
             scrollProxy.scrollTo(categoryId, anchor: .bottom)
         }
 
-        DispatchQueue.main.async {
-            focusedComposerCategoryId = categoryId
-        }
+        scheduleComposerFocus(for: categoryId)
     }
 
     private func submitComposer(for categoryId: UUID) {
@@ -404,6 +419,62 @@ private struct BacklogContent: View {
         focusedComposerCategoryId = nil
         activeComposerCategoryId = nil
         composerText = ""
+    }
+
+    private func scheduleComposerFocus(for categoryId: UUID) {
+        // Keyboard + layout updates can race each other in scroll containers.
+        // Retry focus a few times to keep the composer deterministic.
+        for attempt in 0 ..< 4 {
+            let delay = 0.03 + (Double(attempt) * 0.05)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard activeComposerCategoryId == categoryId else { return }
+                focusedComposerCategoryId = categoryId
+            }
+        }
+    }
+
+    private func visibleItems(for categoryId: UUID) -> [BacklogItem] {
+        store.items(for: categoryId)
+            .filter { !hiddenPendingDeleteIds.contains($0.id) }
+    }
+
+    private func queueDeleteItem(_ item: BacklogItem) {
+        if let previous = pendingDeletedItem {
+            pendingDeleteTask?.cancel()
+            pendingDeleteTask = nil
+            pendingDeletedItem = nil
+            hiddenPendingDeleteIds.remove(previous.id)
+
+            _ = _Concurrency.Task {
+                _ = await store.deleteItem(previous)
+            }
+        }
+
+        pendingDeletedItem = item
+        hiddenPendingDeleteIds.insert(item.id)
+        HapticManager.lightTap()
+
+        pendingDeleteTask = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(nanoseconds: 5_000_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            _ = await store.deleteItem(item)
+            await MainActor.run {
+                if pendingDeletedItem?.id == item.id {
+                    pendingDeletedItem = nil
+                }
+                hiddenPendingDeleteIds.remove(item.id)
+                pendingDeleteTask = nil
+            }
+        }
+    }
+
+    private func undoPendingDeleteItem() {
+        guard let pendingDeletedItem else { return }
+        pendingDeleteTask?.cancel()
+        pendingDeleteTask = nil
+        hiddenPendingDeleteIds.remove(pendingDeletedItem.id)
+        self.pendingDeletedItem = nil
+        HapticManager.lightTap()
     }
 }
 
@@ -608,6 +679,11 @@ struct CategoryCard: View {
                         .focused(focusedComposerCategoryId, equals: category.id)
                         .onSubmit {
                             onSubmitItem()
+                        }
+                        .onAppear {
+                            DispatchQueue.main.async {
+                                focusedComposerCategoryId.wrappedValue = category.id
+                            }
                         }
                         .submitLabel(.done)
                         .autocorrectionDisabled()

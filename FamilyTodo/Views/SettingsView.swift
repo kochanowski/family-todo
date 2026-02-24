@@ -36,6 +36,8 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .controlSize(.large)
+                .padding(.vertical, 6)
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
             } header: {
@@ -301,13 +303,14 @@ private struct ThemeMiniatureCard: View {
 }
 
 private struct ThemeMiniatureContent: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let theme: UnifiedTheme
 
     var body: some View {
         ZStack {
             background
-            miniatureRows
-            themeSymbol
+            skeletonOverlay
+            accentDot
         }
         .contentShape(RoundedRectangle(cornerRadius: 12))
     }
@@ -333,98 +336,84 @@ private struct ThemeMiniatureContent: View {
         }
     }
 
-    private var miniatureRows: some View {
+    @ViewBuilder
+    private var skeletonOverlay: some View {
+        switch theme {
+        case .light:
+            skeletonRows(
+                headerColor: Color(hex: "E5E5EA"),
+                lineColor: Color(hex: "D1D1D6")
+            )
+        case .dark:
+            skeletonRows(
+                headerColor: Color(hex: "2C2C2E"),
+                lineColor: Color(hex: "3A3A3C")
+            )
+        case .auto:
+            ZStack {
+                skeletonRows(
+                    headerColor: Color(hex: "E5E5EA"),
+                    lineColor: Color(hex: "D1D1D6")
+                )
+                .mask(AutoMiniatureHalfShape(isLeading: true))
+
+                skeletonRows(
+                    headerColor: Color(hex: "2C2C2E"),
+                    lineColor: Color(hex: "3A3A3C")
+                )
+                .mask(AutoMiniatureHalfShape(isLeading: false))
+            }
+        case .retro:
+            skeletonRows(
+                headerColor: Color(hex: "1D223A"),
+                lineColor: Color(hex: "1E9E58")
+            )
+        case .paper:
+            skeletonRows(
+                headerColor: Color(hex: "B79263"),
+                lineColor: Color(hex: "8C6C42")
+            )
+        }
+    }
+
+    private func skeletonRows(headerColor: Color, lineColor: Color) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             RoundedRectangle(cornerRadius: 4)
-                .fill(rowColor.opacity(0.9))
-                .frame(width: 52, height: 10)
-            RoundedRectangle(cornerRadius: 4)
-                .fill(rowColor.opacity(0.72))
-                .frame(width: 62, height: 10)
-            RoundedRectangle(cornerRadius: 4)
-                .fill(rowColor.opacity(0.6))
-                .frame(width: 48, height: 10)
-            RoundedRectangle(cornerRadius: 4)
-                .fill(rowColor.opacity(0.48))
-                .frame(width: 58, height: 10)
+                .fill(headerColor)
+                .frame(height: 14)
+
+            RoundedRectangle(cornerRadius: 3)
+                .fill(lineColor.opacity(0.9))
+                .frame(width: 56, height: 7)
+            RoundedRectangle(cornerRadius: 3)
+                .fill(lineColor.opacity(0.8))
+                .frame(width: 63, height: 7)
+            RoundedRectangle(cornerRadius: 3)
+                .fill(lineColor.opacity(0.75))
+                .frame(width: 48, height: 7)
             Spacer()
         }
         .padding(10)
     }
 
-    private var themeSymbol: some View {
+    private var accentDot: some View {
         VStack {
             Spacer()
-            Image(systemName: symbolName)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(symbolColor)
-                .padding(8)
-                .background(
-                    Circle()
-                        .fill(symbolBackground)
-                )
-                .padding(.bottom, 10)
+            HStack {
+                Spacer()
+                Circle()
+                    .fill(themeStore.accentTabColor)
+                    .frame(width: 9, height: 9)
+                    .overlay {
+                        Circle()
+                            .stroke(
+                                Color.black.opacity(theme == .dark ? 0.35 : 0.22),
+                                lineWidth: 0.6
+                            )
+                    }
+            }
         }
-    }
-
-    private var rowColor: Color {
-        switch theme {
-        case .light:
-            Color(hex: "D1D1D6")
-        case .dark:
-            Color(hex: "2C2C2E")
-        case .auto:
-            Color(hex: "8E8E93")
-        case .retro:
-            Color(hex: "2BFF88")
-        case .paper:
-            Color(hex: "8C6C42")
-        }
-    }
-
-    private var symbolName: String {
-        switch theme {
-        case .light:
-            "sun.max.fill"
-        case .dark:
-            "moon.fill"
-        case .auto:
-            "circle.lefthalf.filled"
-        case .retro:
-            "gamecontroller.fill"
-        case .paper:
-            "newspaper.fill"
-        }
-    }
-
-    private var symbolColor: Color {
-        switch theme {
-        case .light:
-            Color(hex: "6B6B70")
-        case .dark:
-            .white
-        case .auto:
-            .primary
-        case .retro:
-            Color(hex: "00FF66")
-        case .paper:
-            Color(hex: "6D4C2F")
-        }
-    }
-
-    private var symbolBackground: Color {
-        switch theme {
-        case .light:
-            Color.black.opacity(0.06)
-        case .dark:
-            Color.white.opacity(0.08)
-        case .auto:
-            Color.white.opacity(0.28)
-        case .retro:
-            Color(hex: "131A2B")
-        case .paper:
-            Color.white.opacity(0.52)
-        }
+        .padding(10)
     }
 }
 

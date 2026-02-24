@@ -114,16 +114,16 @@ private struct TasksContent: View {
                     .padding(.bottom, 8)
             }
 
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if activeFilter == .active {
-                        activeTasksContent
-                    } else {
-                        completedTasksContent
-                    }
+            List {
+                if activeFilter == .active {
+                    activeTasksContent
+                } else {
+                    completedTasksContent
                 }
             }
-            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             .padding(.bottom, listBottomInset)
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
@@ -216,6 +216,7 @@ private struct TasksContent: View {
                 if taskBeingCompleted != task.id {
                     if index == normalizedWipLimit, store.nextTasks.count > normalizedWipLimit {
                         overLimitSeparator
+                            .tasksListRowStyle(taskListRowInsets)
                     }
 
                     TaskRow(
@@ -228,7 +229,7 @@ private struct TasksContent: View {
                         onToggle: { toggleTask(task) },
                         onOpenDetail: { selectedTask = task }
                     )
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button {
                             HapticManager.lightTap()
                             demoteTaskToBacklog(task)
@@ -236,15 +237,25 @@ private struct TasksContent: View {
                             Label("Move to Ideas", systemImage: "archivebox.fill")
                         }
                         .tint(.indigo)
+
+                        Button(role: .destructive) {
+                            _ = _Concurrency.Task {
+                                await store.deleteTask(task)
+                            }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                     .rowInsertAnimation()
                     .accessibilityIdentifier("taskRow_\(task.title)")
+                    .tasksListRowStyle(taskListRowInsets)
                 }
             }
         }
 
         if !store.backlogTasks.isEmpty {
             sectionHeader("IDEAS")
+                .tasksListRowStyle(taskListRowInsets)
 
             ForEach(store.backlogTasks) { task in
                 TaskRow(
@@ -267,11 +278,13 @@ private struct TasksContent: View {
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowBacklog_\(task.title)")
+                .tasksListRowStyle(taskListRowInsets)
             }
         }
 
         if !store.recentlyDoneTasks.isEmpty {
             sectionHeader("COMPLETED")
+                .tasksListRowStyle(taskListRowInsets)
 
             ForEach(store.recentlyDoneTasks) { task in
                 TaskRow(
@@ -307,6 +320,7 @@ private struct TasksContent: View {
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                .tasksListRowStyle(taskListRowInsets)
             }
         }
     }
@@ -320,8 +334,10 @@ private struct TasksContent: View {
                 Text("Complete some tasks to see them here.")
             }
             .padding(.top, 40)
+            .tasksListRowStyle(taskListRowInsets)
         } else {
             sectionHeader("COMPLETED")
+                .tasksListRowStyle(taskListRowInsets)
 
             ForEach(store.doneTasks) { task in
                 TaskRow(
@@ -344,6 +360,7 @@ private struct TasksContent: View {
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+                .tasksListRowStyle(taskListRowInsets)
             }
         }
     }
@@ -367,7 +384,7 @@ private struct TasksContent: View {
             if store.nextTasks.isEmpty, !store.recentlyDoneTasks.isEmpty {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(themeStore.accentTabColor)
                     .scaleEffect(showAllCompleteAnimation ? 1.2 : 1.0)
                     .animation(WowAnimation.spring, value: showAllCompleteAnimation)
             }
@@ -641,6 +658,15 @@ private struct TasksContent: View {
 
     private var normalizedWipLimit: Int {
         min(max(recommendedWipLimit, 1), 7)
+    }
+
+    private var taskListRowInsets: EdgeInsets {
+        EdgeInsets(
+            top: 0,
+            leading: AppChromeMetrics.screenHorizontalInset,
+            bottom: 0,
+            trailing: AppChromeMetrics.screenHorizontalInset
+        )
     }
 
     private var completedCleanupMenu: some View {
@@ -1110,6 +1136,14 @@ private struct TaskDetailSheet: View {
             onSave(updatedTask)
         }
         dismiss()
+    }
+}
+
+private extension View {
+    func tasksListRowStyle(_ insets: EdgeInsets) -> some View {
+        listRowInsets(insets)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 

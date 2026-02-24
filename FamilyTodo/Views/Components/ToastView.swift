@@ -2,9 +2,12 @@ import SwiftUI
 
 /// Toast notification with glassmorphism and undo action
 struct ToastView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let message: String
     var undoAction: (() -> Void)?
     var onDismiss: (() -> Void)?
+    var displayDuration: TimeInterval = 4
 
     @State private var isVisible = true
 
@@ -20,8 +23,9 @@ struct ToastView: View {
                         undoAction()
                         dismiss()
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.blue)
+                    .font(themeStore.font(for: .buttonLabel))
+                    .fontWeight(.bold)
+                    .foregroundStyle(themeStore.accentTabColor)
                 }
             }
             .padding(.horizontal, 16)
@@ -33,8 +37,7 @@ struct ToastView: View {
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
-                // Auto-dismiss after 4 seconds
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + displayDuration) {
                     dismiss()
                 }
             }
