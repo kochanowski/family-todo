@@ -199,13 +199,14 @@ private struct ShoppingListContent: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isKeyboardVisible = false
         }
-        .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Clear", role: .destructive) {
-                clearToBuy()
-            }
-        } message: {
-            Text("This removes current To Buy items. Recently Purchased stays unchanged.")
+        .sheet(isPresented: $showClearToBuyConfirmation) {
+            AppConfirmationSheet(
+                title: "Clear shopping list?",
+                message: "This removes current To Buy items. Recently Purchased stays unchanged.",
+                primaryTitle: "Clear",
+                primaryStyle: .destructive,
+                onPrimary: clearToBuy
+            )
         }
     }
 
@@ -736,13 +737,14 @@ struct RestockSheet: View {
                     .font(themeStore.font(for: .buttonLabel))
                 }
             }
-            .alert("Clear all recently purchased?", isPresented: $showClearAllConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Clear All", role: .destructive) {
-                    onClearAll()
-                }
-            } message: {
-                Text("This permanently removes all items from the recently purchased list.")
+            .sheet(isPresented: $showClearAllConfirmation) {
+                AppConfirmationSheet(
+                    title: "Clear all recently purchased?",
+                    message: "This permanently removes all items from the recently purchased list.",
+                    primaryTitle: "Clear All",
+                    primaryStyle: .destructive,
+                    onPrimary: onClearAll
+                )
             }
         }
         .presentationDetents([.medium, .large])

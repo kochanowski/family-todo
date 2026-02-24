@@ -151,15 +151,21 @@ private struct BacklogContent: View {
             await store.loadData()
             await memberStore.loadMembers()
         }
-        .alert("New Category", isPresented: $isAddingCategory) {
-            TextField("Category Name", text: $newCategoryName)
-            Button("Cancel", role: .cancel) { newCategoryName = "" }
-            Button("Create") {
-                let name = newCategoryName
-                newCategoryName = ""
-                HapticManager.lightTap()
-                _ = _Concurrency.Task { await store.addCategory(name) }
-            }
+        .sheet(isPresented: $isAddingCategory) {
+            AppPromptSheet(
+                title: "New Category",
+                placeholder: "Category Name",
+                text: $newCategoryName,
+                primaryTitle: "Create",
+                onCancel: {
+                    newCategoryName = ""
+                },
+                onSubmit: { name in
+                    newCategoryName = ""
+                    HapticManager.lightTap()
+                    _ = _Concurrency.Task { await store.addCategory(name) }
+                }
+            )
         }
         .sheet(isPresented: Binding(
             get: { pendingPromotionItem != nil },
@@ -656,26 +662,29 @@ struct CategoryCard: View {
                     y: colorScheme == .light ? 2 : 0
                 )
         }
-        .confirmationDialog(
-            "Delete \"\(category.title)\"?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Category and \(items.count) Items", role: .destructive) {
-                withAnimation(WowAnimation.easeOut) {
-                    onDeleteCategory()
+        .sheet(isPresented: $showDeleteConfirmation) {
+            AppConfirmationSheet(
+                title: "Delete \"\(category.title)\"?",
+                message: "This will permanently delete the category and all its items.",
+                primaryTitle: "Delete Category and \(items.count) Items",
+                primaryStyle: .destructive,
+                onPrimary: {
+                    withAnimation(WowAnimation.easeOut) {
+                        onDeleteCategory()
+                    }
                 }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently delete the category and all its items.")
+            )
         }
-        .alert("Rename Category", isPresented: $showRenameAlert) {
-            TextField("Category Name", text: $renameCategoryText)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                onRenameCategory(renameCategoryText)
-            }
+        .sheet(isPresented: $showRenameAlert) {
+            AppPromptSheet(
+                title: "Rename Category",
+                placeholder: "Category Name",
+                text: $renameCategoryText,
+                primaryTitle: "Save",
+                onSubmit: { newTitle in
+                    onRenameCategory(newTitle)
+                }
+            )
         }
     }
 
@@ -843,14 +852,17 @@ private struct BacklogItemEditSheet: View {
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .alert("Delete this item?", isPresented: $showDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    onDelete()
-                    dismiss()
-                }
-            } message: {
-                Text("This action cannot be undone.")
+            .sheet(isPresented: $showDeleteConfirmation) {
+                AppConfirmationSheet(
+                    title: "Delete this item?",
+                    message: "This action cannot be undone.",
+                    primaryTitle: "Delete",
+                    primaryStyle: .destructive,
+                    onPrimary: {
+                        onDelete()
+                        dismiss()
+                    }
+                )
             }
         }
     }

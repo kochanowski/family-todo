@@ -72,8 +72,11 @@
 		NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000018 /* LegacyStubs.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
 		TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABTYPO0000000000000002 /* TabBarTypographyManager.swift */; };
-		CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
-		SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */; };
+			CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
+			SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */; };
+			B1C2D3E4F5A60718293B4C51 /* AppModalActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293B4C52 /* AppModalActionRow.swift */; };
+			B1C2D3E4F5A60718293B4C53 /* AppConfirmationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293B4C54 /* AppConfirmationSheet.swift */; };
+			B1C2D3E4F5A60718293B4C55 /* AppPromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293B4C56 /* AppPromptSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -163,8 +166,11 @@
 		NEWFILE0000000000000018 /* LegacyStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyStubs.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
 		TABTYPO0000000000000002 /* TabBarTypographyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarTypographyManager.swift; sourceTree = "<group>"; };
-		CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
-		SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingCountBadge.swift; sourceTree = "<group>"; };
+			CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
+			SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingCountBadge.swift; sourceTree = "<group>"; };
+			B1C2D3E4F5A60718293B4C52 /* AppModalActionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModalActionRow.swift; sourceTree = "<group>"; };
+			B1C2D3E4F5A60718293B4C54 /* AppConfirmationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfirmationSheet.swift; sourceTree = "<group>"; };
+			B1C2D3E4F5A60718293B4C56 /* AppPromptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPromptSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -365,15 +371,18 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		NEWGROUP000000000000001 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-				848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
-				NEWFILE0000000000000015 /* FloatingTabBar.swift */,
-				NEWFILE0000000000000016 /* ToastView.swift */,
-				CHECKBOX000000000000002 /* ThemedCheckbox.swift */,
-				SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */,
-				CELEB4000000000000000001 /* CelebrationOverlay.swift */,
+			NEWGROUP000000000000001 /* Components */ = {
+				isa = PBXGroup;
+				children = (
+					848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
+					NEWFILE0000000000000015 /* FloatingTabBar.swift */,
+					NEWFILE0000000000000016 /* ToastView.swift */,
+					B1C2D3E4F5A60718293B4C52 /* AppModalActionRow.swift */,
+					B1C2D3E4F5A60718293B4C54 /* AppConfirmationSheet.swift */,
+					B1C2D3E4F5A60718293B4C56 /* AppPromptSheet.swift */,
+					CHECKBOX000000000000002 /* ThemedCheckbox.swift */,
+					SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */,
+					CELEB4000000000000000001 /* CelebrationOverlay.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
 			);
@@ -555,9 +564,12 @@
 				NEWFILE0000000000000002 /* TasksView.swift in Sources */,
 				NEWFILE0000000000000003 /* BacklogView.swift in Sources */,
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
-				SETTVIEW000000000000001 /* SettingsView.swift in Sources */,
-				CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */,
-				SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
+					SETTVIEW000000000000001 /* SettingsView.swift in Sources */,
+					B1C2D3E4F5A60718293B4C51 /* AppModalActionRow.swift in Sources */,
+					B1C2D3E4F5A60718293B4C53 /* AppConfirmationSheet.swift in Sources */,
+					B1C2D3E4F5A60718293B4C55 /* AppPromptSheet.swift in Sources */,
+					CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */,
+					SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
 				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
 				CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */,

@@ -102,16 +102,16 @@ private struct TasksContent: View {
                 .padding(.bottom, 12)
 
             if activeFilter == .active {
-                focusRuleBanner
-                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                    .padding(.bottom, activeBanner == nil ? 16 : 8)
-
                 if let activeBanner {
                     InlineStatusBanner(text: activeBanner.text)
                         .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                         .padding(.bottom, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+
+                activeTasksHeader
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                    .padding(.bottom, 8)
             }
 
             ScrollView {
@@ -143,40 +143,16 @@ private struct TasksContent: View {
             await memberStore.loadMembers()
             await backlogStore.loadData()
         }
-        .confirmationDialog(
-            "Completed Tasks Cleanup",
-            isPresented: Binding(
-                get: { pendingCleanupAction != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingCleanupAction = nil
-                    }
+        .sheet(item: $pendingCleanupAction) { action in
+            AppConfirmationSheet(
+                title: "Completed Tasks Cleanup",
+                message: cleanupMessage(for: action),
+                primaryTitle: cleanupPrimaryTitle(for: action),
+                primaryStyle: action == .clearAll ? .destructive : .accent,
+                onPrimary: {
+                    runCleanupAction(action)
                 }
             )
-        ) {
-            Button("Clear All", role: .destructive) {
-                runCleanupAction(.clearAll)
-            }
-            Button("Keep Last 7 Days") {
-                runCleanupAction(.keepLast7Days)
-            }
-            Button("Keep Last 30 Days") {
-                runCleanupAction(.keepLast30Days)
-            }
-            Button("Cancel", role: .cancel) {
-                pendingCleanupAction = nil
-            }
-        } message: {
-            switch pendingCleanupAction {
-            case .clearAll:
-                Text("This removes all completed tasks.")
-            case .keepLast7Days:
-                Text("This removes completed tasks older than 7 days.")
-            case .keepLast30Days:
-                Text("This removes completed tasks older than 30 days.")
-            case .none:
-                Text("")
-            }
         }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(
@@ -440,41 +416,23 @@ private struct TasksContent: View {
         }
     }
 
-    @ViewBuilder
-    private var focusRuleBanner: some View {
+    private var activeTasksHeader: some View {
         let count = store.nextTasks.count
         let limit = normalizedWipLimit
-        let color = bannerColor(count: count, limit: limit)
+        let overLimit = count > limit
 
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Focus Rule: Max \(limit) active tasks per person to ensure quality and completion.")
-                .font(themeStore.font(for: .chip))
+        return HStack {
+            Text("Active Tasks")
+                .font(themeStore.font(for: .sectionHeader))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(color)
+            Spacer()
 
-                Text("\(count) of \(limit) slots used")
-                    .font(themeStore.font(for: .bodySmall))
-                    .foregroundStyle(color)
-
-                Spacer()
-
-                if count == 0 {
-                    Button("Go to Ideas") {
-                        selectedTab = .backlog
-                    }
-                    .font(themeStore.font(for: .chip))
-                    .foregroundStyle(themeStore.accentColor)
-                }
-            }
-        }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(color.opacity(0.08))
+            Text("\(count) / \(limit)")
+                .font(themeStore.font(for: .bodySmall))
+                .fontWeight(overLimit ? .bold : .regular)
+                .foregroundStyle(overLimit ? .red : .secondary)
+                .monospacedDigit()
         }
     }
 
@@ -685,19 +643,6 @@ private struct TasksContent: View {
         min(max(recommendedWipLimit, 1), 7)
     }
 
-    private func bannerColor(count: Int, limit: Int) -> Color {
-        switch count {
-        case 0:
-            .blue
-        case 1 ... limit:
-            .blue
-        case (limit + 1) ... (limit + 2):
-            .orange
-        default:
-            .red
-        }
-    }
-
     private var completedCleanupMenu: some View {
         Menu {
             Button("Clear All", role: .destructive) {
@@ -731,6 +676,28 @@ private struct TasksContent: View {
             }
             pendingCleanupAction = nil
             HapticManager.lightTap()
+        }
+    }
+
+    private func cleanupPrimaryTitle(for action: CompletedCleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "Clear All"
+        case .keepLast7Days:
+            "Keep Last 7 Days"
+        case .keepLast30Days:
+            "Keep Last 30 Days"
+        }
+    }
+
+    private func cleanupMessage(for action: CompletedCleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "This removes all completed tasks."
+        case .keepLast7Days:
+            "This removes completed tasks older than 7 days."
+        case .keepLast30Days:
+            "This removes completed tasks older than 30 days."
         }
     }
 

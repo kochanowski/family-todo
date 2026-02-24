@@ -14,7 +14,7 @@ struct SettingsView: View {
             // MARK: - Theme + Appearance Section
 
             Section {
-                UnifiedThemeSelector(selectedTheme: Binding(
+                ThemeMiniatureCarousel(selectedTheme: Binding(
                     get: { themeStore.unifiedTheme },
                     set: {
                         HapticManager.selection()
@@ -233,28 +233,33 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Unified Theme Selector
+// MARK: - Theme Miniatures Carousel
 
-private struct UnifiedThemeSelector: View {
+private struct ThemeMiniatureCarousel: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Binding var selectedTheme: UnifiedTheme
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            ForEach(UnifiedTheme.allCases) { theme in
-                UnifiedThemeCard(
-                    theme: theme,
-                    isSelected: selectedTheme == theme
-                ) {
-                    selectedTheme = theme
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(UnifiedTheme.allCases) { theme in
+                    ThemeMiniatureCard(
+                        theme: theme,
+                        isSelected: selectedTheme == theme
+                    ) {
+                        selectedTheme = theme
+                    }
+                    .environmentObject(themeStore)
                 }
-                .environmentObject(themeStore)
             }
+            .padding(.vertical, 2)
+            .scrollTargetLayout()
         }
+        .scrollTargetBehavior(.viewAligned)
     }
 }
 
-private struct UnifiedThemeCard: View {
+private struct ThemeMiniatureCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
     let theme: UnifiedTheme
     let isSelected: Bool
@@ -262,17 +267,28 @@ private struct UnifiedThemeCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(swatchGradient)
-                        .frame(maxWidth: .infinity, minHeight: 64)
-                    themeIcon
+            VStack(spacing: 6) {
+                ThemeMiniatureContent(theme: theme)
+                    .frame(width: 85, height: 150)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                isSelected ? themeStore.accentTabColor : Color.primary.opacity(0.12),
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    }
+
+                Group {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(themeStore.accentTabColor)
+                    } else {
+                        Color.clear
+                            .frame(width: 14, height: 14)
+                    }
                 }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isSelected ? 3 : 1)
-                )
 
                 Text(theme.displayName)
                     .font(themeStore.font(for: .bodyStrong))
@@ -280,55 +296,153 @@ private struct UnifiedThemeCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("themeMiniatureCard_\(theme.rawValue)")
     }
+}
 
-    private var swatchGradient: LinearGradient {
-        let colors: [Color] = switch theme {
-        case .light:
-            [Color(hex: "FFFFFF"), Color(hex: "F5F5F5")]
-        case .dark:
-            [Color(hex: "1C1C1E"), Color(hex: "2C2C2E")]
-        case .auto:
-            [Color(hex: "D1D1D6"), Color(hex: "D1D1D6")]
-        case .retro:
-            [Color(hex: "0F0F23"), Color(hex: "1A1A3E")]
-        case .paper:
-            [Color(hex: "FFF8E7"), Color(hex: "F0E6CE")]
+private struct ThemeMiniatureContent: View {
+    let theme: UnifiedTheme
+
+    var body: some View {
+        ZStack {
+            background
+            miniatureRows
+            themeSymbol
         }
-        return LinearGradient(
-            colors: colors,
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        .contentShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder
-    private var themeIcon: some View {
-        if theme == .auto {
-            Image(systemName: "circle.lefthalf.filled")
-                .font(.system(size: 26, weight: .regular))
-                .rotationEffect(.degrees(-45))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.black.opacity(0.8), .white.opacity(0.9))
-        } else {
-            Image(systemName: themeStore.appearanceSymbolName(for: theme))
-                .font(.system(size: 24))
-                .foregroundStyle(iconColor)
+    private var background: some View {
+        switch theme {
+        case .light:
+            Color.white
+        case .dark:
+            Color.black
+        case .auto:
+            ZStack {
+                AutoMiniatureHalfShape(isLeading: true)
+                    .fill(Color.white)
+                AutoMiniatureHalfShape(isLeading: false)
+                    .fill(Color.black)
+            }
+        case .retro:
+            Color(hex: "090A0E")
+        case .paper:
+            Color(hex: "F6EEDC")
         }
     }
 
-    private var iconColor: Color {
+    private var miniatureRows: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(rowColor.opacity(0.9))
+                .frame(width: 52, height: 10)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(rowColor.opacity(0.72))
+                .frame(width: 62, height: 10)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(rowColor.opacity(0.6))
+                .frame(width: 48, height: 10)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(rowColor.opacity(0.48))
+                .frame(width: 58, height: 10)
+            Spacer()
+        }
+        .padding(10)
+    }
+
+    private var themeSymbol: some View {
+        VStack {
+            Spacer()
+            Image(systemName: symbolName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(symbolColor)
+                .padding(8)
+                .background(
+                    Circle()
+                        .fill(symbolBackground)
+                )
+                .padding(.bottom, 10)
+        }
+    }
+
+    private var rowColor: Color {
         switch theme {
         case .light:
-            Color(hex: "666666")
+            Color(hex: "D1D1D6")
+        case .dark:
+            Color(hex: "2C2C2E")
+        case .auto:
+            Color(hex: "8E8E93")
+        case .retro:
+            Color(hex: "2BFF88")
+        case .paper:
+            Color(hex: "8C6C42")
+        }
+    }
+
+    private var symbolName: String {
+        switch theme {
+        case .light:
+            "sun.max.fill"
+        case .dark:
+            "moon.fill"
+        case .auto:
+            "circle.lefthalf.filled"
+        case .retro:
+            "gamecontroller.fill"
+        case .paper:
+            "newspaper.fill"
+        }
+    }
+
+    private var symbolColor: Color {
+        switch theme {
+        case .light:
+            Color(hex: "6B6B70")
         case .dark:
             .white
         case .auto:
             .primary
         case .retro:
-            Color(hex: "00FF41")
+            Color(hex: "00FF66")
         case .paper:
-            Color(hex: "8B4513")
+            Color(hex: "6D4C2F")
         }
+    }
+
+    private var symbolBackground: Color {
+        switch theme {
+        case .light:
+            Color.black.opacity(0.06)
+        case .dark:
+            Color.white.opacity(0.08)
+        case .auto:
+            Color.white.opacity(0.28)
+        case .retro:
+            Color(hex: "131A2B")
+        case .paper:
+            Color.white.opacity(0.52)
+        }
+    }
+}
+
+private struct AutoMiniatureHalfShape: Shape {
+    let isLeading: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if isLeading {
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }

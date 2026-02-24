@@ -246,28 +246,34 @@ struct ProfileView: View {
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Rename Household", isPresented: $showRenameHousehold) {
-            TextField("Household name", text: $editedHouseholdName)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                renameHousehold()
-            }
+        .sheet(isPresented: $showRenameHousehold) {
+            AppPromptSheet(
+                title: "Rename Household",
+                placeholder: "Household name",
+                text: $editedHouseholdName,
+                primaryTitle: "Save",
+                onSubmit: { _ in
+                    renameHousehold()
+                }
+            )
         }
-        .confirmationDialog("Leave household?", isPresented: $showLeaveConfirmation) {
-            Button("Leave", role: .destructive) {
-                leaveHousehold()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You will lose access until invited again.")
+        .sheet(isPresented: $showLeaveConfirmation) {
+            AppConfirmationSheet(
+                title: "Leave household?",
+                message: "You will lose access until invited again.",
+                primaryTitle: "Leave",
+                primaryStyle: .destructive,
+                onPrimary: leaveHousehold
+            )
         }
-        .confirmationDialog("Delete household permanently?", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                deleteHousehold()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This action removes members and shared data.")
+        .sheet(isPresented: $showDeleteConfirmation) {
+            AppConfirmationSheet(
+                title: "Delete household permanently?",
+                message: "This action removes members and shared data.",
+                primaryTitle: "Delete",
+                primaryStyle: .destructive,
+                onPrimary: deleteHousehold
+            )
         }
         .alert("Action failed", isPresented: Binding(
             get: { actionErrorMessage != nil },
@@ -414,21 +420,23 @@ struct CategoriesManagementView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
-        .alert("Rename Category", isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { renamingCategory != nil },
             set: { if !$0 { renamingCategory = nil } }
         )) {
-            TextField("Category name", text: $renamingTitle)
-            Button("Cancel", role: .cancel) {
-                renamingCategory = nil
-            }
-            Button("Save") {
-                guard let category = renamingCategory else { return }
-                _ = _Concurrency.Task {
-                    await store.renameCategory(category, newTitle: renamingTitle)
+            AppPromptSheet(
+                title: "Rename Category",
+                placeholder: "Category name",
+                text: $renamingTitle,
+                primaryTitle: "Save",
+                onSubmit: { newTitle in
+                    guard let category = renamingCategory else { return }
+                    _ = _Concurrency.Task {
+                        await store.renameCategory(category, newTitle: newTitle)
+                    }
+                    renamingCategory = nil
                 }
-                renamingCategory = nil
-            }
+            )
         }
     }
 
@@ -700,40 +708,16 @@ private struct CompletedTasksContent: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Task History Cleanup",
-            isPresented: Binding(
-                get: { pendingCleanup != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingCleanup = nil
-                    }
+        .sheet(item: $pendingCleanup) { action in
+            AppConfirmationSheet(
+                title: "Task History Cleanup",
+                message: cleanupMessage(for: action),
+                primaryTitle: cleanupPrimaryTitle(for: action),
+                primaryStyle: action == .clearAll ? .destructive : .accent,
+                onPrimary: {
+                    runCleanupAction(action)
                 }
             )
-        ) {
-            Button("Clear All", role: .destructive) {
-                runCleanupAction(.clearAll)
-            }
-            Button("Keep Last 7 Days") {
-                runCleanupAction(.keepLast7Days)
-            }
-            Button("Keep Last 30 Days") {
-                runCleanupAction(.keepLast30Days)
-            }
-            Button("Cancel", role: .cancel) {
-                pendingCleanup = nil
-            }
-        } message: {
-            switch pendingCleanup {
-            case .clearAll:
-                Text("This permanently removes all items from Task History.")
-            case .keepLast7Days:
-                Text("This removes history older than 7 days.")
-            case .keepLast30Days:
-                Text("This removes history older than 30 days.")
-            case .none:
-                Text("")
-            }
         }
         .task {
             store.setSyncMode(userSession.syncMode)
@@ -752,6 +736,28 @@ private struct CompletedTasksContent: View {
             case .keepLast30Days:
                 await store.clearArchivedTasks(keepingDays: 30)
             }
+        }
+    }
+
+    private func cleanupPrimaryTitle(for action: CleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "Clear All"
+        case .keepLast7Days:
+            "Keep Last 7 Days"
+        case .keepLast30Days:
+            "Keep Last 30 Days"
+        }
+    }
+
+    private func cleanupMessage(for action: CleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "This permanently removes all items from Task History."
+        case .keepLast7Days:
+            "This removes history older than 7 days."
+        case .keepLast30Days:
+            "This removes history older than 30 days."
         }
     }
 }

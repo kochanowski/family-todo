@@ -33,13 +33,29 @@ struct MemberManagementView: View {
         NavigationStack {
             listContent
                 .navigationTitle("Household Members")
-                .alert("Edit Name", isPresented: $showEditNameAlert) {
-                    editNameAlertContent
+                .sheet(isPresented: $showEditNameAlert) {
+                    AppPromptSheet(
+                        title: "Edit Name",
+                        placeholder: "Display Name",
+                        text: $newDisplayName,
+                        primaryTitle: "Save",
+                        onSubmit: { _ in
+                            _Concurrency.Task { await saveName() }
+                        }
+                    )
                 }
-                .alert("Remove Member", isPresented: $showDeleteConfirmation) {
-                    deleteAlertButtons
-                } message: {
-                    deleteAlertMessage
+                .sheet(isPresented: $showDeleteConfirmation) {
+                    if let member = memberToDelete {
+                        AppConfirmationSheet(
+                            title: "Remove Member",
+                            message: "Are you sure you want to remove \(member.displayName)? This cannot be undone.",
+                            primaryTitle: "Remove",
+                            primaryStyle: .destructive,
+                            onPrimary: {
+                                _Concurrency.Task { await deleteMember() }
+                            }
+                        )
+                    }
                 }
                 .alert("Error", isPresented: $showErrorAlert) {
                     Button("OK") {}
@@ -92,32 +108,6 @@ struct MemberManagementView: View {
                 ShareInviteView(isPresented: $showShareInvite)
                     .environmentObject(householdStore)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var editNameAlertContent: some View {
-        TextField("Display Name", text: $newDisplayName)
-        Button("Cancel", role: .cancel) {}
-        Button("Save") {
-            _Concurrency.Task { await saveName() }
-        }
-    }
-
-    @ViewBuilder
-    private var deleteAlertButtons: some View {
-        Button("Cancel", role: .cancel) {}
-        Button("Remove", role: .destructive) {
-            _Concurrency.Task { await deleteMember() }
-        }
-    }
-
-    @ViewBuilder
-    private var deleteAlertMessage: some View {
-        if let member = memberToDelete {
-            Text("Are you sure you want to remove \(member.displayName)? This cannot be undone.")
-        } else {
-            Text("")
         }
     }
 
