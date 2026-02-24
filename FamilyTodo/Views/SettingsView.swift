@@ -29,46 +29,20 @@ struct SettingsView: View {
 
             // MARK: - Font Management Settings Section
 
-            if themeStore.preset == .paper {
-                Section {
-                    FontScaleSelector(
-                        selectedScale: Binding(
-                            get: { themeStore.paperFontScale },
-                            set: { HapticManager.selection(); themeStore.paperFontScale = $0 }
-                        )
-                    )
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                    .listRowBackground(Color.clear)
-                } header: {
-                    Text("System Font Size")
+            Section {
+                Picker("System Font Size", selection: selectedFontScaleBinding) {
+                    ForEach(FontSizeScale.allCases) { scale in
+                        Text(scale.displayName).tag(scale)
+                    }
                 }
-            } else if themeStore.preset == .retro {
-                Section {
-                    FontScaleSelector(
-                        selectedScale: Binding(
-                            get: { themeStore.retroFontScale },
-                            set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
-                        )
-                    )
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                    .listRowBackground(Color.clear)
-                } header: {
-                    Text("System Font Size")
-                } footer: {
+                .pickerStyle(.segmented)
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.clear)
+            } header: {
+                Text("System Font Size")
+            } footer: {
+                if themeStore.preset == .retro {
                     Text("Regular is the default font size.")
-                }
-            } else if themeStore.preset == .system {
-                Section {
-                    FontScaleSelector(
-                        selectedScale: Binding(
-                            get: { themeStore.systemFontScale },
-                            set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
-                        )
-                    )
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                    .listRowBackground(Color.clear)
-                } header: {
-                    Text("System Font Size")
                 }
             }
 
@@ -237,6 +211,26 @@ struct SettingsView: View {
             NotificationService.shared.cancelDailyDigest()
         }
     }
+
+    private var selectedFontScaleBinding: Binding<FontSizeScale> {
+        switch themeStore.preset {
+        case .paper:
+            Binding(
+                get: { themeStore.paperFontScale },
+                set: { HapticManager.selection(); themeStore.paperFontScale = $0 }
+            )
+        case .retro:
+            Binding(
+                get: { themeStore.retroFontScale },
+                set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
+            )
+        case .system:
+            Binding(
+                get: { themeStore.systemFontScale },
+                set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
+            )
+        }
+    }
 }
 
 // MARK: - Unified Theme Selector
@@ -336,56 +330,5 @@ private struct UnifiedThemeCard: View {
         case .paper:
             Color(hex: "8B4513")
         }
-    }
-}
-
-private struct FontScaleSelector: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Binding var selectedScale: FontSizeScale
-    var showSelectionPill = true
-    var showBorder = true
-    @Namespace private var selectorNamespace
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(FontSizeScale.allCases) { scale in
-                Button {
-                    selectedScale = scale
-                } label: {
-                    Text(scale.displayName)
-                        .font(themeStore.font(for: .filterLabel))
-                        .foregroundStyle(selectedScale == scale ? .primary : .secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background {
-                            if selectedScale == scale, showSelectionPill {
-                                Capsule()
-                                    .fill(.regularMaterial)
-                                    .overlay {
-                                        Capsule()
-                                            .stroke(Color.primary.opacity(0.16), lineWidth: 0.8)
-                                    }
-                                    .matchedGeometryEffect(
-                                        id: "font_scale_indicator",
-                                        in: selectorNamespace
-                                    )
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    if showBorder {
-                        Capsule()
-                            .stroke(Color.primary.opacity(0.12), lineWidth: 0.8)
-                    }
-                }
-        )
-        .compositingGroup()
     }
 }

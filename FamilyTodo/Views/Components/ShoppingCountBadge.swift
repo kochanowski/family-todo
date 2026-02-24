@@ -29,29 +29,32 @@ struct ShoppingCountBadge: View {
         let fillColor = themeStore.accentTabColor
 
         return ZStack {
-            if isWide {
-                Capsule()
-                    .fill(fillColor)
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(Color.black, lineWidth: 2)
-                    }
-            } else {
-                Circle()
-                    .fill(fillColor)
-                    .overlay {
-                        Circle()
-                            .strokeBorder(Color.black, lineWidth: 2)
-                    }
+            Group {
+                if isWide {
+                    Capsule()
+                        .fill(fillColor)
+                        .overlay {
+                            Capsule()
+                                .strokeBorder(Color.black, lineWidth: 2)
+                        }
+                } else {
+                    Circle()
+                        .fill(fillColor)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(Color.black, lineWidth: 2)
+                        }
+                }
             }
+            .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)
 
             Text(label)
-                .font(.system(size: isWide ? 10 : 11, weight: .bold, design: .rounded))
+                .font(.system(size: isWide ? 11 : 12, weight: .heavy, design: .rounded))
+                .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .minimumScaleFactor(0.75)
                 .foregroundStyle(themeStore.foregroundOnAccent(for: fillColor, colorScheme: colorScheme))
         }
         .frame(width: isWide ? 30 : 22, height: 22)
-        .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)
     }
 }
