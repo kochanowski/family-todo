@@ -269,7 +269,7 @@ private struct ShoppingListContent: View {
     private var addPillButton: some View {
         let foreground = themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme)
 
-        Button {
+        return Button {
             startRapidEntry()
         } label: {
             HStack(spacing: 6) {
