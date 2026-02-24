@@ -45,6 +45,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @Environment(\.colorScheme) private var colorScheme
 
     // Rapid entry state
     @State private var isRapidEntryActive = false
@@ -211,16 +212,13 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 10) {
             Text("Shopping")
                 .font(themeStore.font(for: .screenHeader))
 
             // Item count badge
             if !store.toBuyItems.isEmpty {
                 ShoppingCountBadge(count: store.toBuyItems.count)
-                    .alignmentGuide(.firstTextBaseline) { dimensions in
-                        dimensions[VerticalAlignment.center]
-                    }
             }
 
             Spacer()
@@ -269,6 +267,8 @@ private struct ShoppingListContent: View {
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
+        let foreground = themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme)
+
         Button {
             startRapidEntry()
         } label: {
@@ -276,9 +276,9 @@ private struct ShoppingListContent: View {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .bold))
                 Text("Add item")
-                    .font(themeStore.font(for: .buttonLabel))
+                    .font(themeStore.preset == .retro ? .system(size: 15, weight: .semibold) : themeStore.font(for: .buttonLabel))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
             .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
@@ -304,6 +304,7 @@ private struct ShoppingListContent: View {
                 isFocused: $rapidEntryFocused,
                 placeholder: "Add item",
                 actionColor: UIColor(themeStore.accentTabColor),
+                actionForegroundColor: UIColor(themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme)),
                 onSubmit: handleRapidEntrySubmit,
                 onDone: commitOrDismissRapidEntry
             )
@@ -555,6 +556,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
     @Binding var isFocused: Bool
     let placeholder: String
     let actionColor: UIColor
+    let actionForegroundColor: UIColor
     let onSubmit: () -> Void
     let onDone: () -> Void
 
@@ -633,7 +635,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
             let button = UIButton(type: .system)
             button.setTitle("Done", for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-            button.setTitleColor(.white, for: .normal)
+            button.setTitleColor(parent.actionForegroundColor, for: .normal)
             button.backgroundColor = parent.actionColor
             button.layer.cornerRadius = buttonHeight / 2
             button.contentEdgeInsets = UIEdgeInsets(

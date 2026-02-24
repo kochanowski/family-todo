@@ -509,7 +509,7 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         case .light: "sun.max.fill"
         case .dark: "moon.fill"
         case .auto: "circle.lefthalf.filled"
-        case .retro: "floppy.disk"
+        case .retro: "gamecontroller.fill"
         case .paper: "newspaper.fill"
         }
     }
@@ -660,6 +660,43 @@ final class ThemeStore: ObservableObject {
 
     var accentTabColor: Color {
         resolvedTabTint
+    }
+
+    var retroAppearanceSymbolName: String {
+        let candidates = [
+            "gamecontroller.fill",
+            "cpu",
+            "die.face.5.fill",
+            "square.stack.3d.up",
+            "floppy.disk",
+        ]
+        return candidates.first(where: { UIImage(systemName: $0) != nil }) ?? "circle.fill"
+    }
+
+    func appearanceSymbolName(for theme: UnifiedTheme) -> String {
+        if theme == .retro {
+            return retroAppearanceSymbolName
+        }
+        return theme.iconName
+    }
+
+    func foregroundOnAccent(for accent: Color, colorScheme: ColorScheme? = nil) -> Color {
+        if tabTintColor == .monochrome, let colorScheme {
+            return colorScheme == .dark ? .black : .white
+        }
+
+        let color = UIColor(accent)
+        var red = CGFloat.zero
+        var green = CGFloat.zero
+        var blue = CGFloat.zero
+        var alpha = CGFloat.zero
+
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return .white
+        }
+
+        let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        return luminance > 0.62 ? .black : .white
     }
 
     func settingsToggleTint(for colorScheme: ColorScheme) -> Color {

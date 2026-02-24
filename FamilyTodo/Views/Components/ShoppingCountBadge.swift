@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ShoppingCountBadge: View {
     @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
 
     let count: Int
 
@@ -16,7 +17,7 @@ struct ShoppingCountBadge: View {
     private var standardBadge: some View {
         Text("\(count)")
             .font(themeStore.font(for: .chip))
-            .foregroundStyle(.white)
+            .foregroundStyle(themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Capsule().fill(themeStore.accentTabColor))
@@ -45,11 +46,10 @@ struct ShoppingCountBadge: View {
             }
 
             Text(label)
-                .font(.custom("PressStart2P-Regular", size: isWide ? 7 : 8))
+                .font(.system(size: isWide ? 10 : 11, weight: .bold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .foregroundStyle(.white)
-                .offset(y: isWide ? 0 : -0.5)
+                .foregroundStyle(themeStore.foregroundOnAccent(for: fillColor, colorScheme: colorScheme))
         }
         .frame(width: isWide ? 30 : 22, height: 22)
         .shadow(color: .black.opacity(0.9), radius: 0, x: 2, y: 2)

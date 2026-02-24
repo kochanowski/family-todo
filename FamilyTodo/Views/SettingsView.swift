@@ -37,8 +37,10 @@ struct SettingsView: View {
                             set: { HapticManager.selection(); themeStore.paperFontScale = $0 }
                         )
                     )
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(Color.clear)
                 } header: {
-                    Text("Paper Font")
+                    Text("System Font Size")
                 }
             } else if themeStore.preset == .retro {
                 Section {
@@ -48,8 +50,10 @@ struct SettingsView: View {
                             set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
                         )
                     )
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(Color.clear)
                 } header: {
-                    Text("Retro Font")
+                    Text("System Font Size")
                 } footer: {
                     Text("Regular is the default font size.")
                 }
@@ -313,7 +317,7 @@ private struct UnifiedThemeCard: View {
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.black.opacity(0.8), .white.opacity(0.9))
         } else {
-            Image(systemName: theme.iconName)
+            Image(systemName: themeStore.appearanceSymbolName(for: theme))
                 .font(.system(size: 24))
                 .foregroundStyle(iconColor)
         }
@@ -356,7 +360,11 @@ private struct FontScaleSelector: View {
                         .background {
                             if selectedScale == scale, showSelectionPill {
                                 Capsule()
-                                    .fill(themeStore.surfaceColor)
+                                    .fill(.regularMaterial)
+                                    .overlay {
+                                        Capsule()
+                                            .stroke(Color.primary.opacity(0.16), lineWidth: 0.8)
+                                    }
                                     .matchedGeometryEffect(
                                         id: "font_scale_indicator",
                                         in: selectorNamespace
@@ -370,13 +378,14 @@ private struct FontScaleSelector: View {
         .padding(4)
         .background(
             Capsule()
-                .fill(themeStore.surfaceElevatedColor)
+                .fill(.ultraThinMaterial)
                 .overlay {
                     if showBorder {
                         Capsule()
-                            .stroke(themeStore.borderLightColor.opacity(0.45), lineWidth: 1)
+                            .stroke(Color.primary.opacity(0.12), lineWidth: 0.8)
                     }
                 }
         )
+        .compositingGroup()
     }
 }
