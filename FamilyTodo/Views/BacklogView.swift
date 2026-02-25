@@ -947,7 +947,7 @@ private struct BacklogItemEditSheet: View {
             Form {
                 Section("Item") {
                     TextField("Title", text: $title)
-                        .font(themeStore.font(for: .body))
+                        .font(themeStore.font(for: .listRowTitle))
                 }
 
                 Section("Assignee") {
@@ -961,7 +961,7 @@ private struct BacklogItemEditSheet: View {
 
                 Section("Notes") {
                     TextEditor(text: $notes)
-                        .font(themeStore.font(for: .body))
+                        .font(themeStore.font(for: .listRowTitle))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
                 }

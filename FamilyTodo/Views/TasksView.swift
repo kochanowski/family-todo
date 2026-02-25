@@ -1144,7 +1144,7 @@ private struct TaskDetailSheet: View {
             Form {
                 Section("Task") {
                     TextField("Title", text: $title)
-                        .font(themeStore.font(for: .body))
+                        .font(themeStore.font(for: .listRowTitle))
                     Picker("Status", selection: $status) {
                         Text("Ideas").tag(Task.TaskStatus.backlog)
                         Text("Next").tag(Task.TaskStatus.next)
@@ -1174,7 +1174,7 @@ private struct TaskDetailSheet: View {
 
                 Section("Notes") {
                     TextEditor(text: $notes)
-                        .font(themeStore.font(for: .body))
+                        .font(themeStore.font(for: .listRowTitle))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
                 }
