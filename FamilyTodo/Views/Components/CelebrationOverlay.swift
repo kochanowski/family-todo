@@ -117,7 +117,7 @@ final class ConfettiEmitterView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
-        // Position emitters at the bottom-center of the view, slightly raised to avoid Tab Bar clipping
+        // Raise emitters above tab bar chrome to avoid clipping.
         leftEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY - 90)
         rightEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY - 90)
     }
@@ -127,16 +127,12 @@ final class ConfettiEmitterView: UIView {
     }
 
     func fireBurst() {
-        let palette: [UIColor] = [
-            .systemRed,
-            .systemBlue,
-            .systemGreen,
-            .systemOrange,
-            .systemPurple,
-            .systemPink
-        ]
+        let palette: [UIColor] = [accentColor, .systemYellow, .systemPink, .white]
 
         burstTask?.cancel()
+
+        leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
+        rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
 
         leftEmitter.birthRate = 1
         rightEmitter.birthRate = 1
@@ -148,7 +144,7 @@ final class ConfettiEmitterView: UIView {
 
         burstTask = _Concurrency.Task { @MainActor [weak self] in
             // Emit particles for exactly 50ms then shut off birth rate
-            try? await _Concurrency.Task.sleep(for: .milliseconds(50))
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
             guard !_Concurrency.Task.isCancelled else { return }
             self?.stopBurst()
         }
@@ -170,8 +166,8 @@ final class ConfettiEmitterView: UIView {
     }
 
     private func makeCells(colors: [UIColor], isLeftCannon: Bool) -> [CAEmitterCell] {
-        // Left Cannon shoots up and left (-135 degrees)
-        // Right Cannon shoots up and right (-45 degrees)
+        // Dual cannon burst from a shared center source:
+        // left cannon shoots up-left, right cannon shoots up-right.
         let baseAngle = isLeftCannon ? (-3.0 * CGFloat.pi / 4.0) : (-CGFloat.pi / 4.0)
 
         return colors.flatMap { color in
@@ -181,14 +177,14 @@ final class ConfettiEmitterView: UIView {
                     color: color,
                     baseAngle: baseAngle,
                     xAcceleration: isLeftCannon ? -50 : 50,
-                    scale: 0.15
+                    scale: 0.26
                 ),
                 makeCell(
                     image: Self.circleImage,
                     color: color,
                     baseAngle: baseAngle,
                     xAcceleration: isLeftCannon ? -50 : 50,
-                    scale: 0.15
+                    scale: 0.22
                 ),
             ]
         }
@@ -205,7 +201,7 @@ final class ConfettiEmitterView: UIView {
         cell.contents = image
         cell.color = color.cgColor
 
-        cell.birthRate = 150
+        cell.birthRate = 120
         cell.lifetime = 4.0
         cell.lifetimeRange = 0.9
 

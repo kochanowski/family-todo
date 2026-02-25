@@ -36,7 +36,7 @@ final class CelebrationManager: ObservableObject {
             ("✨", "Done! \(taskTitle)"),
             ("👏", "Nice one!"),
             ("✅", "\(taskTitle) — sorted!"),
-            ("💪", "Crushed it!"),
+            ("💪", "Crushed it!")
         ]
         guard let pick = messages.randomElement() else { return }
         show(Celebration(emoji: pick.0, message: pick.1, style: .normal))
@@ -82,6 +82,9 @@ final class CelebrationManager: ObservableObject {
     private func show(_ celebration: Celebration) {
         withAnimation(WowAnimation.spring) {
             activeCelebration = celebration
+        }
+        if celebration.style == .milestone {
+            confettiTrigger += 1
         }
         HapticManager.success()
 
