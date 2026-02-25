@@ -1,73 +1,45 @@
 # STATUS
 
-Last updated: 2026-02-15
+Last updated: 2026-02-25
 
 ## Implemented (current redesign branch)
 
-### Core shell
-- 4-tab app shell: Shopping, Tasks, Backlog, More
-- Custom floating tab bar
-  - iOS 26+: Liquid Glass transition path (`GlassEffectContainer` + matched transition)
-  - iOS 17-25: material fallback
-- Onboarding flow: carousel -> sync choice -> household setup -> main app
-- Sign in with Apple + guest mode
-- CloudKit sync + SwiftData offline-first cache
+### Core shell and session flow
+- 4-tab app shell: Shopping, Tasks, Backlog/Ideas, More
+- Onboarding flow now transitions to `mainApp` after sync choice
+- Cloud-first with Guest fallback:
+  - iCloud path shows Sign in with Apple
+  - Guest path starts local-only session
+- Household setup gate enforced after session activation:
+  - active session + no household => `CreateHouseholdView`
+  - cloud session auto-bootstraps existing household membership before showing gate
 
-### Shopping
-- Rapid entry with stable keyboard behavior
-- Custom keyboard accessory `Done` pill (matching CTA metrics)
-- Recently Purchased:
-  - one-tap restore to shopping list
-  - swipe delete per title
-  - clear all with confirmation
-- Header actions: clear To Buy with confirmation, open Recently Purchased
+### CloudKit / Sharing
+- CloudKitManager has explicit household DB scope (`ownerPrivate` / `participantShared`)
+- Household join supports:
+  - invite link paste
+  - deep-link acceptance (`userDidAcceptCloudKitShareWith` via app delegate bridge)
+  - pending invite processing after login (`ShareAcceptanceCoordinator`)
+- Household membership join path now uses member upsert (prevents duplicate member records)
 
-### Tasks (backlog-first)
-- `TasksView` is execution board (no manual intake button)
-- Sections: `NEXT`, `BACKLOG`, `COMPLETED`
-- Strict rules:
-  - `NEXT` requires assignee
-  - WIP limit = 3 per assignee
-- Inline blocked-action feedback banner (assignee/WIP)
-- Backlog -> Next start flow with assignee picker for multi-member households
-- Task detail edit sheet (status, assignee, due date, notes)
-- Recurring tasks are shown in `Tasks.BACKLOG` with recurring badge
+### Invite UX
+- Owner can invite via existing `UICloudSharingController`
+- Owner can also show invite QR (`InviteQRCodeView`)
+- Join sheet accepts full iCloud share link, supports clipboard paste, and QR scanning
+- Invite normalization utility added (`InviteInputNormalizer`)
 
-### Backlog
-- Categories CRUD + reorder/rename support in management
-- Items CRUD per category
-- Promote to task flow with atomic behavior:
-  - backlog item removed only when task create succeeds
-  - typed promotion result (`success`, `assigneeRequired`, `wipLimitReached`, `failed`)
-- Multi-member assignee flow before promotion
+### Project configuration
+- Added app entitlements (`FamilyTodo/HousePulse.entitlements`) for:
+  - CloudKit
+  - CloudKit sharing
+  - Sign in with Apple
+- App target defaults to `HPCloudKitEnabled = YES`
+- Added camera usage description + remote notification background mode
 
-### More / Settings
-- Profile, member management, household management actions
-- Categories management wired to real `BacklogStore`
-- Repetitive Tasks manager with Daily/Weekly/Monthly/Custom (Every N days)
-- Settings:
-  - appearance + notification toggles
-  - real sign out flow
-  - defensive bottom inset to avoid chrome overlap
-- Detail screens request hidden app tab bar via `appTabBarVisibility(false)`
+## Tests added
+- `InviteInputNormalizerTests`
+- `OnboardingStateTests`
 
-### Recurring engine
-- `RecurringChoreStore` CRUD active
-- `ChoreScheduler` runs on app launch/foreground path and generates tasks with:
-  - `status = .backlog`
-  - `taskType = .recurring`
-  - `recurringChoreId` linked to source chore
-
-## Product decisions now active
-- Backlog-only task intake (no direct add in Tasks)
-- `Tasks.BACKLOG` is a general staging area (promoted + recurring)
-- Rooms/Areas removed from product UI (data compatibility fields remain temporarily)
-
-## In progress / to verify
-- On-device visual verification of iOS 26 glass transition strength/contrast
-- Additional tests for promotion atomicity and recurring metadata consistency
-
-## Known constraints
-- `HPCloudKitEnabled` defaults to `NO` for local UI iteration
-- Cloud sharing tests require explicit sync-enabled profile
-- Build/test loop is primarily via GitHub Actions + physical iPhone validation
+## Known constraints / follow-up
+- CloudKit sharing behavior still requires on-device validation with two Apple IDs.
+- Full XCTest/UI test lanes in PR CI remain disabled by policy; use nightly/manual runs.

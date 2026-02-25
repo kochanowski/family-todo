@@ -19,6 +19,7 @@ struct MemberManagementView: View {
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
     @State private var showShareInvite = false
+    @State private var showInviteQR = false
 
     private var currentUserIsOwner: Bool {
         guard let userId = userSession.userId else { return false }
@@ -103,9 +104,19 @@ struct MemberManagementView: View {
                 } label: {
                     Label("Invite Member", systemImage: "person.badge.plus")
                 }
+
+                Button {
+                    showInviteQR = true
+                } label: {
+                    Label("Show Invite QR", systemImage: "qrcode")
+                }
             }
             .sheet(isPresented: $showShareInvite) {
                 ShareInviteView(isPresented: $showShareInvite)
+                    .environmentObject(householdStore)
+            }
+            .sheet(isPresented: $showInviteQR) {
+                InviteQRCodeView()
                     .environmentObject(householdStore)
             }
         }

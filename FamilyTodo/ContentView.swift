@@ -3,14 +3,49 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
+
+    @State private var isResolvingHousehold = false
 
     var body: some View {
         Group {
-            if userSession.hasActiveSession {
-                MainAppView()
-            } else {
+            if !userSession.hasActiveSession {
                 SignInView()
+            } else if isResolvingHousehold {
+                ProgressView("Loading household…")
+            } else if userSession.currentHouseholdID == nil {
+                CreateHouseholdView()
+            } else {
+                MainAppView()
             }
+        }
+        .task(id: householdResolutionKey) {
+            await bootstrapHouseholdIfNeeded()
+        }
+    }
+
+    private var householdResolutionKey: String {
+        [
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+            userSession.syncMode == .cloud ? "cloud" : "local"
+        ].joined(separator: "|")
+    }
+
+    private func bootstrapHouseholdIfNeeded() async {
+        guard userSession.hasActiveSession else { return }
+        guard userSession.currentHouseholdID == nil else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId else { return }
+
+        isResolvingHousehold = true
+        defer { isResolvingHousehold = false }
+
+        householdStore.setSyncMode(userSession.syncMode)
+        await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+        if let household = householdStore.currentHousehold {
+            userSession.setCurrentHousehold(household.id)
         }
     }
 }

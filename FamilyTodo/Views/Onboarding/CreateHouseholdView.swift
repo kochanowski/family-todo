@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CreateHouseholdView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
@@ -84,7 +85,7 @@ struct CreateHouseholdView: View {
                                 .fill(householdName.isEmpty ? Color.secondary : Color.blue)
                         )
                     }
-                    .disabled(householdName.isEmpty || isCreating)
+                    .disabled(householdName.isEmpty || isCreating || !userSession.hasActiveSession)
                     .padding(.horizontal, 40)
 
                     // Join Link
@@ -98,28 +99,38 @@ struct CreateHouseholdView: View {
                             .bold()
                     }
                     .font(.system(size: 15))
+                    .disabled(!canJoinViaInvite)
+
+                    if !userSession.hasActiveSession {
+                        Text("Sign in or continue as guest before creating or joining household.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    } else if userSession.syncMode != .cloud {
+                        Text("Guest mode can create local household. Joining via invite requires Apple/iCloud sign in.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
 
                     Spacer()
                         .frame(height: 60)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Skip") {
-                        onboardingState.skipHouseholdSetup()
-                    }
-                    .foregroundStyle(.secondary)
-                }
-            }
             .sheet(isPresented: $showJoinSheet) {
                 CreateJoinSheet(
                     joinCode: $joinCode,
-                    onJoin: joinHousehold
+                    onJoin: joinHousehold,
+                    onPasteFromClipboard: {
+                        joinCode = UIPasteboard.general.string ?? ""
+                    }
                 )
                 .presentationDetents([.medium])
             }
-            .alert("Could not join household", isPresented: Binding(
+            .alert("Action failed", isPresented: Binding(
                 get: { joinErrorMessage != nil },
                 set: { if !$0 { joinErrorMessage = nil } }
             )) {
@@ -135,8 +146,17 @@ struct CreateHouseholdView: View {
         }
     }
 
+    private var canJoinViaInvite: Bool {
+        userSession.hasActiveSession && userSession.syncMode == .cloud
+    }
+
     private func createHousehold() {
         guard !householdName.isEmpty else { return }
+        guard userSession.hasActiveSession, let userId = userSession.userId else {
+            joinErrorMessage = "Sign in or continue as guest before creating household."
+            return
+        }
+
         isCreating = true
 
         _Concurrency.Task {
@@ -146,12 +166,13 @@ struct CreateHouseholdView: View {
 
                 let newHousehold = try await householdStore.createHousehold(
                     name: householdName,
-                    userId: userSession.userId ?? "local-user",
+                    userId: userId,
                     displayName: userSession.displayName ?? "Me"
                 )
                 userSession.setCurrentHousehold(newHousehold.id)
                 onboardingState.completeHouseholdSetup(withHousehold: true)
             } catch {
+                joinErrorMessage = error.localizedDescription
                 print("Error creating household: \(error)")
                 isCreating = false
             }
@@ -159,8 +180,16 @@ struct CreateHouseholdView: View {
     }
 
     private func joinHousehold() {
-        let trimmedCode = joinCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedCode.isEmpty else { return }
+        guard canJoinViaInvite else {
+            joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
+            return
+        }
+        guard let userId = userSession.userId else {
+            joinErrorMessage = "Could not determine your account identity."
+            return
+        }
+
+        guard !joinCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !isJoining else { return }
 
         isJoining = true
@@ -168,10 +197,11 @@ struct CreateHouseholdView: View {
 
         _Concurrency.Task {
             do {
+                let normalizedInvite = try InviteInputNormalizer.normalize(joinCode)
                 householdStore.setSyncMode(userSession.syncMode)
                 try await householdStore.joinHousehold(
-                    inviteCode: trimmedCode,
-                    userId: userSession.userId ?? "local-user",
+                    inviteCode: normalizedInvite,
+                    userId: userId,
                     displayName: userSession.displayName ?? "Me"
                 )
                 if let household = householdStore.currentHousehold {
@@ -195,8 +225,10 @@ struct CreateHouseholdView: View {
 private struct CreateJoinSheet: View {
     @Binding var joinCode: String
     let onJoin: () -> Void
+    let onPasteFromClipboard: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var showScanner = false
+    @State private var scannerErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -204,13 +236,14 @@ private struct CreateJoinSheet: View {
                 Spacer()
                     .frame(height: 20)
 
-                Text("Enter your invite code")
+                Text("Enter your invite link")
                     .font(.system(size: 22, weight: .bold))
 
-                TextField("Invite Code", text: $joinCode)
+                TextField("https://www.icloud.com/share/...", text: $joinCode)
                     .font(.system(size: 20))
                     .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.characters)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
@@ -231,7 +264,26 @@ private struct CreateJoinSheet: View {
                                 .fill(joinCode.isEmpty ? Color.secondary : Color.blue)
                         )
                 }
-                .disabled(joinCode.isEmpty)
+                    .disabled(joinCode.isEmpty)
+                    .padding(.horizontal, 40)
+
+                HStack(spacing: 12) {
+                    Button {
+                        onPasteFromClipboard()
+                    } label: {
+                        Label("Paste", systemImage: "doc.on.clipboard")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan QR", systemImage: "qrcode.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
                 .padding(.horizontal, 40)
 
                 Spacer()
@@ -243,6 +295,35 @@ private struct CreateJoinSheet: View {
                         dismiss()
                     }
                 }
+            }
+            .sheet(isPresented: $showScanner) {
+                NavigationStack {
+                    QRCodeScannerView(
+                        onCodeScanned: { scanned in
+                            joinCode = scanned
+                            showScanner = false
+                        },
+                        onFailure: { message in
+                            scannerErrorMessage = message
+                            showScanner = false
+                        }
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Cancel") {
+                                showScanner = false
+                            }
+                        }
+                    }
+                }
+            }
+            .alert("Scanner error", isPresented: Binding(
+                get: { scannerErrorMessage != nil },
+                set: { if !$0 { scannerErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(scannerErrorMessage ?? "Unknown camera error")
             }
         }
     }

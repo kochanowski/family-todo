@@ -65,8 +65,9 @@ final class OnboardingState: ObservableObject {
             let lastState = LaunchState(rawValue: lastLaunchStateRaw) ?? .onboarding
             switch lastState {
             case .householdSetup:
-                // User quit during household setup, resume there
-                currentState = .householdSetup
+                // Household setup is now gated by active session in main app flow.
+                // Resume at sync choice to avoid landing in setup without an active session.
+                currentState = .syncChoice
             case .syncChoice:
                 currentState = .syncChoice
             default:
@@ -86,8 +87,9 @@ final class OnboardingState: ObservableObject {
     func selectSyncMethod(_ method: SyncMethod) {
         HapticManager.mediumTap()
         syncMethod = method
-        currentState = .householdSetup
-        lastLaunchStateRaw = LaunchState.householdSetup.rawValue
+        hasCompletedOnboarding = true
+        currentState = .mainApp
+        lastLaunchStateRaw = LaunchState.mainApp.rawValue
     }
 
     func completeHouseholdSetup(withHousehold: Bool) {

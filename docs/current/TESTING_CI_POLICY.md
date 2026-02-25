@@ -1,6 +1,6 @@
 # TESTING_CI_POLICY
 
-Last updated: 2026-02-15
+Last updated: 2026-02-25
 
 ## Why this policy exists
 Build time on macOS runners must stay short for rapid UI iteration. Tests are split between fast CI and full nightly/manual regression.
@@ -11,12 +11,12 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 - Build (no signing)
 - SwiftLint
 - No XCTest by default
+- Supports `cloud_sync_profile` override (`preview-local` / `sync-enabled`)
 
 ### `nightly.yml` (scheduled + manual)
 - Full `xcodebuild test` suite
 - Scheduled nightly
 - Can also be triggered manually (`workflow_dispatch`)
-- Future: add `sync-enabled` lane for CloudKit sharing validation
 
 ## Test toggling
 - Need extra confidence on a branch? Run `nightly.yml` manually.
@@ -30,37 +30,22 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 ## Manual iPhone checklist (physical device — iPhone 15, iOS 26.2.1)
 
 ### Core flows
-- [ ] App launch → onboarding or main app (based on session)
-- [ ] Tab switching (all 4 tabs respond)
-- [ ] Shopping: rapid entry → submit multiple items → tap outside to dismiss
-- [ ] Shopping: buy/unbuy checkbox → item moves between sections
-- [ ] Shopping: Recently Purchased → swipe delete individual → Clear All
-- [ ] Tasks: add task → appears in Next → tap checkbox → moves to Done
-- [ ] Tasks: WIP limit → try adding 4th task to Next → should be blocked
-- [ ] Backlog: add category → add items → delete item → delete category
-- [ ] More: profile card shows, member list loads
+- [ ] First launch: onboarding carousel -> sync selection -> main app shell
+- [ ] iCloud path: choose iCloud -> Sign in with Apple -> auto household setup gate
+- [ ] Guest path: choose guest -> auto household setup gate
+- [ ] Create household (cloud + guest local)
+- [ ] Join household by pasted iCloud invite link
+- [ ] Join household by scanned QR invite
+- [ ] Deep link accept from iMessage/Mail before login, then finish after login
+- [ ] Sign out -> return to SignInView and no stale household context
 
-### Chrome & glass
-- [ ] Floating tab bar visible while scrolling (glass effect on iOS 26+)
-- [ ] Tab bar hides when keyboard appears
-- [ ] `+ Add item` button always visible above tab bar
-- [ ] "Done" keyboard accessory pill visible and functional
+### Collaboration
+- [ ] Owner opens Member Management -> Invite Member (UICloudSharingController)
+- [ ] Owner opens Invite QR and second account joins via scan
+- [ ] Joined account sees shared updates in Shopping/Tasks/Ideas
 
-### Settings
-- [ ] Appearance mode switch (Light/Dark/System)
-- [ ] Theme preset switch (Journal/Pastel/Soft/Night)
-
-## Planned test expansion (Phase 8 of roadmap)
-
-### Unit tests
-- `HouseholdStore`: create / join / rename / leave / delete
-- `MemberStore`: role guardrails (owner-only operations)
-- `TaskStore`: WIP enforcement + backlog promotion
-- `BacklogStore`: reorder / rename / promotion
-- `RecurringChoreStore`: schedule calculations
-
-### UI tests
-- Onboarding create / join household
-- Tasks full CRUD + due date + assignee
-- Backlog ↔ More categories consistency
-- Settings sign out + session reset
+### Existing product smoke
+- [ ] Shopping interactions (add, buy/unbuy, recently purchased)
+- [ ] Tasks board section behavior (`NEXT`, `IDEAS`, `COMPLETED`)
+- [ ] Ideas backlog category/item CRUD
+- [ ] More/Profile member management and household actions

@@ -4,12 +4,14 @@ import SwiftUI
 
 @main
 struct FamilyTodoApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegateBridge.self) private var appDelegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var themeStore: ThemeStore
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var onboardingState = OnboardingState()
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
+    @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
 
     init() {
         let fontRegistrationReport = FontRegistrar.registerBundledFonts()
@@ -87,6 +89,7 @@ struct FamilyTodoApp: App {
                 .environmentObject(onboardingState)
                 .environmentObject(subscriptionManager)
                 .environmentObject(celebrationManager)
+                .environmentObject(shareAcceptanceCoordinator)
                 .modelContainer(sharedModelContainer)
                 .preferredColorScheme(themeStore.colorScheme)
                 .overlay {
@@ -97,6 +100,8 @@ struct FamilyTodoApp: App {
                     )
                 }
                 .task {
+                    appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                    appDelegate.flushPendingInviteIfNeeded()
                     householdStore.setModelContext(sharedModelContainer.mainContext)
                     householdStore.setSyncMode(userSession.syncMode)
 
@@ -113,6 +118,12 @@ struct FamilyTodoApp: App {
                             subscriptionManager.configure(userId: userId, householdId: householdId)
                         }
                     #endif
+
+                    await shareAcceptanceCoordinator.processPendingIfPossible(
+                        userSession: userSession,
+                        householdStore: householdStore,
+                        onboardingState: onboardingState
+                    )
 
                     await ChoreScheduler.shared.runIfNeeded(
                         householdId: userSession.currentHouseholdID,
@@ -137,6 +148,12 @@ struct FamilyTodoApp: App {
                         }
                     #endif
                 }
+                .onOpenURL { url in
+                    if let host = url.host?.lowercased(),
+                       host.contains("icloud.com") {
+                        shareAcceptanceCoordinator.enqueue(inviteURL: url)
+                    }
+                }
         }
     }
 }
@@ -145,6 +162,9 @@ struct FamilyTodoApp: App {
 
 struct RootView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
 
     var body: some View {
         Group {
@@ -158,8 +178,13 @@ struct RootView: View {
                     .transition(.opacity)
 
             case .householdSetup:
-                CreateHouseholdView()
-                    .transition(.opacity)
+                if userSession.hasActiveSession {
+                    CreateHouseholdView()
+                        .transition(.opacity)
+                } else {
+                    SignInView()
+                        .transition(.opacity)
+                }
 
             case .mainApp:
                 ContentView()
@@ -167,6 +192,36 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: onboardingState.currentState)
+        .task(id: pendingProcessingKey) {
+            await shareAcceptanceCoordinator.processPendingIfPossible(
+                userSession: userSession,
+                householdStore: householdStore,
+                onboardingState: onboardingState
+            )
+        }
+        .alert(
+            "Invitation Error",
+            isPresented: Binding(
+                get: { shareAcceptanceCoordinator.lastErrorMessage != nil },
+                set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                shareAcceptanceCoordinator.clearError()
+            }
+        } message: {
+            Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
+        }
+    }
+
+    private var pendingProcessingKey: String {
+        [
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+            shareAcceptanceCoordinator.pendingInviteCode ?? "none",
+            shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "none"
+        ].joined(separator: "|")
     }
 }
 
