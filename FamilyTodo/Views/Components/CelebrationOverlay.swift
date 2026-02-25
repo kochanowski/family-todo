@@ -117,9 +117,9 @@ final class ConfettiEmitterView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
-        // Position emitters at the bottom-center of the view
-        leftEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY)
-        rightEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY)
+        // Position emitters at the bottom-center of the view, slightly raised to avoid Tab Bar clipping
+        leftEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY - 90)
+        rightEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY - 90)
     }
 
     func setAccentColor(_ color: UIColor) {
@@ -138,11 +138,8 @@ final class ConfettiEmitterView: UIView {
 
         burstTask?.cancel()
 
-        leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
-        rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
-
-        leftEmitter.birthRate = 40
-        rightEmitter.birthRate = 40
+        leftEmitter.birthRate = 1
+        rightEmitter.birthRate = 1
 
         // Explicitly restart the animation by resetting beginTime if the layer already exists
         let currentTime = CACurrentMediaTime()
@@ -150,8 +147,8 @@ final class ConfettiEmitterView: UIView {
         rightEmitter.beginTime = currentTime
 
         burstTask = _Concurrency.Task { @MainActor [weak self] in
-            // Emit particles for exactly 200ms then shut off birth rate
-            try? await _Concurrency.Task.sleep(for: .milliseconds(200))
+            // Emit particles for exactly 50ms then shut off birth rate
+            try? await _Concurrency.Task.sleep(for: .milliseconds(50))
             guard !_Concurrency.Task.isCancelled else { return }
             self?.stopBurst()
         }
@@ -208,20 +205,20 @@ final class ConfettiEmitterView: UIView {
         cell.contents = image
         cell.color = color.cgColor
 
-        cell.birthRate = 85
+        cell.birthRate = 150
         cell.lifetime = 4.0
         cell.lifetimeRange = 0.9
 
-        cell.velocity = 450
-        cell.velocityRange = 200
-        cell.yAcceleration = 600
+        cell.velocity = 1000
+        cell.velocityRange = 300
+        cell.yAcceleration = 900
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle
-        cell.emissionRange = .pi / 8
+        cell.emissionRange = .pi / 6
 
-        cell.spin = 7.0
-        cell.spinRange = 8.0
+        cell.spin = 2.0
+        cell.spinRange = 4.0
 
         cell.scale = scale
         cell.scaleRange = 0.05
