@@ -12,73 +12,41 @@ struct FamilyTodoApp: App {
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
+    @State private var startupRecoveryMessage: String?
+
+    private let sharedModelContainer: ModelContainer
+
+    private static let appSchema = Schema([
+        CachedTask.self,
+        CachedMember.self,
+        CachedShoppingItem.self,
+        CachedBacklogCategory.self,
+        CachedBacklogItem.self,
+        CachedHousehold.self,
+        CachedArea.self,
+        CachedRecurringChore.self,
+    ])
 
     init() {
         let fontRegistrationReport = FontRegistrar.registerBundledFonts()
         _themeStore = StateObject(
             wrappedValue: ThemeStore(initialFontReport: fontRegistrationReport)
         )
-    }
 
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            CachedTask.self,
-            CachedMember.self,
-            CachedShoppingItem.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedHousehold.self,
-            CachedArea.self,
-            CachedRecurringChore.self
-        ])
         #if CI
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: true
+            let bootstrapResult = SwiftDataContainerFactory.bootstrap(
+                schema: Self.appSchema,
+                isCI: true
             )
         #else
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false
+            let bootstrapResult = SwiftDataContainerFactory.bootstrap(
+                schema: Self.appSchema
             )
         #endif
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            #if CI
-                // In CI, return a minimal container
-                do {
-                    return try ModelContainer(
-                        for: schema,
-                        configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
-                    )
-                } catch {
-                    fatalError("Could not create CI ModelContainer: \(error)")
-                }
-            #else
-                // Recovery path for incompatible/corrupted local SwiftData store.
-                // This prevents app launch crash on migration failures in TestFlight production data.
-                print("⚠️ ModelContainer migration failed: \(error)")
-                print("⚠️ Destroying local store and retrying...")
 
-                let appSupportURL =
-                    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-                        ?? URL(fileURLWithPath: NSTemporaryDirectory())
-                let defaultStoreURL = appSupportURL.appendingPathComponent("default.store")
-                let storePath = defaultStoreURL.path
-
-                for suffix in ["", "-shm", "-wal"] {
-                    try? FileManager.default.removeItem(atPath: storePath + suffix)
-                }
-
-                do {
-                    return try ModelContainer(for: schema, configurations: [modelConfiguration])
-                } catch {
-                    fatalError("Could not create ModelContainer after reset: \(error)")
-                }
-            #endif
-        }
-    }()
+        sharedModelContainer = bootstrapResult.container
+        _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -153,6 +121,19 @@ struct FamilyTodoApp: App {
                        host.contains("icloud.com") {
                         shareAcceptanceCoordinator.enqueue(inviteURL: url)
                     }
+                }
+                .alert(
+                    "Recovery Complete",
+                    isPresented: Binding(
+                        get: { startupRecoveryMessage != nil },
+                        set: { if !$0 { startupRecoveryMessage = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        startupRecoveryMessage = nil
+                    }
+                } message: {
+                    Text(startupRecoveryMessage ?? "")
                 }
         }
     }
