@@ -180,7 +180,7 @@ final class HouseholdStoreTests: XCTestCase {
             CachedTask.self,
             CachedShoppingItem.self,
             CachedBacklogCategory.self,
-            CachedBacklogItem.self,
+            CachedBacklogItem.self
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -249,7 +249,7 @@ final class HouseholdStoreTests: XCTestCase {
             .householdNotFound,
             .cloudSyncRequired,
             .memberNotFound,
-            .cacheNotAvailable,
+            .cacheNotAvailable
         ]
 
         XCTAssertEqual(errors.count, 5)

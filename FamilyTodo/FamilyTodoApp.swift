@@ -27,7 +27,7 @@ struct FamilyTodoApp: App {
             CachedBacklogItem.self,
             CachedHousehold.self,
             CachedArea.self,
-            CachedRecurringChore.self,
+            CachedRecurringChore.self
         ])
         #if CI
             let modelConfiguration = ModelConfiguration(
@@ -109,8 +109,7 @@ struct FamilyTodoApp: App {
                         // Skip for guest users (localOnly mode) to avoid CloudKit access
                         if userSession.syncMode == .cloud,
                            let userId = userSession.userId,
-                           let householdId = userSession.currentHouseholdID
-                        {
+                           let householdId = userSession.currentHouseholdID {
                             subscriptionManager.configure(userId: userId, householdId: householdId)
                         }
                     #endif
@@ -188,8 +187,7 @@ struct UITestHelper {
 
         // Check for specific scenario
         if let scenarioIndex = args.firstIndex(of: "-seedScenario"),
-           scenarioIndex + 1 < args.count
-        {
+           scenarioIndex + 1 < args.count {
             let scenario = args[scenarioIndex + 1]
             applyScenario(scenario, context: modelContext)
         }
@@ -279,7 +277,7 @@ struct UITestHelper {
         let items = [
             ShoppingItem(householdId: householdId, title: "Milk", isBought: false),
             ShoppingItem(householdId: householdId, title: "Bread", isBought: false),
-            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true),
+            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true)
         ]
         for item in items {
             context.insert(CachedShoppingItem(from: item))
@@ -295,7 +293,7 @@ struct UITestHelper {
         let tasks = [
             Task(householdId: householdId, title: "Pay bills", status: .next, taskType: .oneOff),
             Task(householdId: householdId, title: "Call mom", status: .next, taskType: .oneOff),
-            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff),
+            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff)
         ]
         tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
@@ -312,7 +310,7 @@ struct UITestHelper {
 
         let items = [
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Olive Oil"),
-            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
+            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices")
         ]
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
     }

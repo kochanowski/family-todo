@@ -3176,3 +3176,676 @@ let badgeColor = themeStore.accentTabColor  // Z R7-1
 5. **R7-6** — FAB + badge (po R7-1 trivial)
 
 > **Uwaga:** R7-2 wymaga ostrożnego mapowania `unifiedTheme` → `ColorScheme`. Sprawdzić czy `FamilyTodoApp.swift` już aplikuje `preferredColorScheme`, czy jest to w `MainAppView`.
+
+---
+
+## R8: Polish & Consistency (2026-02-24)
+
+> **Skills:** `swift-expert`, `swiftui-ui-patterns`
+
+---
+
+### R8-1: Recently Purchased — przycisk "+" = Accent Color
+
+**Problem:** Przyciski `+` w arkuszu "Recently Purchased" używają `themeStore.accentColor` zamiast globalnego koloru akcentu (po R7-1 `tabTint.color`).
+
+**Root cause:** `RestockItemRow` (ShoppingListView.swift L758-L764):
+```swift
+.foregroundStyle(themeStore.accentColor)  // ← stary accentColor
+```
+
+**Fix:**
+```swift
+// RestockItemRow body, plus.circle.fill button:
+Button { onRestore() } label: {
+    Image(systemName: "plus.circle.fill")
+        .font(.system(size: 22))
+        .foregroundStyle(themeStore.accentTabColor)  // Z R7-1
+}
+```
+
+**Plik:** `FamilyTodo/Views/ShoppingListView.swift` (struct `RestockItemRow`, ~L763)
+
+---
+
+### R8-2: Settings — ikona "Auto" diagonalnie płaska
+
+**Problem:** Ikona "Auto" ma gradientowy wygląd. Użytkownik chce: płaska, bez gradientu, diagonalny split dark/light.
+
+**Opcja A (SF Symbol rotowany):**
+```swift
+// W widoku karty tematu dla .auto — zastąpić ikonę:
+Image(systemName: "circle.lefthalf.filled")
+    .rotationEffect(.degrees(-45))
+    .font(.system(size: 28, weight: .light))  // .light weight = cienszy, bez fill
+```
+
+**Opcja B (niestandardowy kształt — brak gradientu):**
+```swift
+struct DiagonalSplitIcon: View {
+    var body: some View {
+        ZStack {
+            // Ciemna połowa
+            Rectangle()
+                .fill(Color.primary)
+                .clipShape(DiagonalClip(isLeft: true))
+            // Jasna połowa
+            Rectangle()
+                .fill(Color(uiColor: .systemBackground))
+                .clipShape(DiagonalClip(isLeft: false))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .frame(width: 28, height: 28)
+    }
+}
+
+struct DiagonalClip: Shape {
+    let isLeft: Bool
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        if isLeft {
+            p.move(to: rect.origin)
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        } else {
+            p.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        p.closeSubpath()
+        return p
+    }
+}
+```
+
+> Opcja A jest szybsza. Opcja B daje perfekcyjny wygląd jeśli czas pozwala.
+
+**Plik:** MoreView.swift lub komponent renderujący siateczkę tematów (szukać gdzie renderowane są karty tematów `UnifiedTheme.allCases`)
+
+---
+
+### R8-3: Settings — ikona "Retro" = dyskietka
+
+**Problem:** Ikona Retro = `gamecontroller.fill` (lub `dpad.fill` po R6-3). Zmienić na dyskietkę.
+
+**Fix w `UnifiedTheme.iconName`:**
+```swift
+case .retro: "floppy.disk"   // Dostępny od iOS 17, iPadOS 17
+```
+
+> ⚠️ **Sprawdzić dostępność:** `"floppy.disk"` to SF Symbol dostępny od iOS 17+. Jeśli target jest iOS 16 — użyć `"externaldrive.fill"` jako fallback.
+> Sprawdzić minimum deployment target w `FamilyTodo.xcodeproj`.
+
+**Plik:** `FamilyTodo/Views/ThemeStore.swift` — `UnifiedTheme.iconName` (wcześniej zmieniony w R6-3)
+
+---
+
+### R8-4: Ideas — "+ Add item" = Accent Color
+
+**Problem:** Przycisk "Add item" wewnątrz kart kategorii w Ideas (BacklogView) używa `themeStore.accentColor`.
+
+**Root cause:** `CategoryCard` (BacklogView.swift L563-L574):
+```swift
+.stroke(themeStore.accentColor.opacity(0.55), ...)
+.foregroundStyle(themeStore.accentColor)
+```
+
+**Fix — zastąpić `themeStore.accentColor` przez `themeStore.accentTabColor`:**
+```swift
+Circle()
+    .stroke(themeStore.accentTabColor.opacity(0.55), lineWidth: 1.5)
+    ...
+    .foregroundStyle(themeStore.accentTabColor)
+
+Text("Add item")
+    .foregroundStyle(themeStore.accentTabColor)
+```
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` (struct `CategoryCard`, L563-L574)
+
+---
+
+### R8-5: Tasks — wyciszony wygląd dla zadań powyżej limitu
+
+**Problem:** Przekroczone zadania (indeksy 3+) wyświetlają `orange` tło i kolor checkboxa — wizualny szum.
+
+**Istniejąca logika (TaskRow.swift L828-L957):**
+- `WipZone.warning` → checkbox=`.orange`, tło=`.orange.opacity(0.06)`
+- `WipZone.danger` → checkbox=`.red`, tło=`.red.opacity(0.08)`
+
+**Nowe zachowanie — "dimmed" zamiast kolorowania:**
+
+**Krok 1 — Zmienić `uncheckedColor` i `rowBackgroundColor` w `TaskRow`:**
+```swift
+private var uncheckedColor: Color {
+    switch wipZone {
+    case .safe:    .green.opacity(0.5)
+    case .normal:  .secondary.opacity(0.3)
+    case .warning, .danger:
+        .secondary.opacity(0.25)  // Wyciszony szary — nie orange/red
+    }
+}
+
+private var rowBackgroundColor: Color {
+    switch wipZone {
+    case .safe:   .green.opacity(0.04)
+    case .normal: .clear
+    case .warning, .danger:
+        .clear  // Brak kolorowego tła
+    }
+}
+```
+
+**Krok 2 — Dodać dimmed efekt na tekście taska powyżej limitu:**
+```swift
+// W TaskRow body, Text(task.title):
+Text(task.title)
+    .font(themeStore.font(for: .listRowTitle))
+    .foregroundStyle(
+        isCompleted ? .secondary :
+        (wipZone == .warning || wipZone == .danger) ? .secondary :  // Dimmed
+        .primary
+    )
+    .strikethrough(isCompleted)
+```
+
+**Krok 3 — Dodać separator "Over limit" po 3. tasku w `activeTasksContent`:**
+
+W `TasksView.activeTasksContent` (L236-L283), po ForEach dla `store.nextTasks`, wstawić separator jeśli `store.nextTasks.count > 3`:
+
+```swift
+// Po pierwszych 3 taskach, jeśli są kolejne z warning/danger wipZone:
+ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
+    if taskBeingCompleted != task.id {
+        // Wstawiamy separator przed 4. taskiem
+        if index == 3 && store.nextTasks.count > 3 {
+            HStack {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.2))
+                    .frame(height: 1)
+                Text("Over limit")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.2))
+                    .frame(height: 1)
+            }
+            .padding(.vertical, 4)
+        }
+
+        TaskRow(...)
+            .swipeActions(edge: .leading, allowsFullSwipe: false) { ... }
+    }
+}
+```
+
+**Pliki:**
+- `FamilyTodo/Views/TasksView.swift` (struct `TaskRow` L828-L984, `activeTasksContent` L236-L283)
+
+---
+
+### R8-6: Settings — "System Font Size" w tym samym stylu co "Accent Color"
+
+**Problem:** Selektor Small/Regular/Large wygląda "nago" bez kontenera, podczas gdy sekcja "Accent Color" ma białe zaokrąglone tło.
+
+**Fix:** Owinąć `FontSizePicker` lub istniejący selektor w ten sam kontener co inne sekcje Settings:
+
+```swift
+// W widoku Settings (MoreView lub AppearanceSelector), sekcja Font Size:
+VStack(alignment: .leading, spacing: 8) {
+    Text("System Font Size")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 4)
+
+    // Istniejący FontSizePicker — owinąć:
+    FontSizePicker(selected: $themeStore.systemFontScale)
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        }
+}
+```
+
+Alternatywnie, jeśli sekcje są w `Form`/`List` — użyć `Section("System Font Size") { FontSizePicker(...) }` i pozwolić FormStyle za styl.
+
+**Plik:** `FamilyTodo/Views/MoreView.swift` lub komponent AppearanceSelector (szukać gdzie renderowany jest `systemFontScale` picker)
+
+---
+
+### R8-7: Ujednolicenie tytułów Shopping / Tasks / Ideas
+
+**Problem:** Tytuł "Shopping" wygląda inaczej niż "Tasks" i "Ideas" — inne położenie, rozmiar, lub padding.
+
+**Diagnoza:**
+- `ShoppingListView.header` (L213-L264): custom `HStack` z `Text("Shopping")` w `VStack` z `padding(.horizontal, 20)` + `padding(.top, 16)`
+- `TasksView.header` (L383-L401): custom `HStack` z `Text("Tasks")`
+- `BacklogView.header` (L251-L254): `HStack` z `Text("Ideas")`
+
+Wszystkie trzy używają `.font(themeStore.font(for: .screenHeader))` — font jest ten sam.
+
+**Potencjalne różnice do wyrównać:**
+
+1. **Padding górny:** Upewnić się że każdy screen ma identyczny `padding(.top, X)` na headerze. Sprawdzić `AppChromeMetrics.headerTopPadding` jeśli istnieje.
+
+2. **Padding poziomy:** Shopping używa `.padding(.horizontal, 20)` — sprawdzić czy Tasks i Ideas też mają 20pt.
+
+3. **Wysokość HStack:** Jeśli Shopping ma badge (`ShoppingCountBadge`) a Tasks nie ma — HStack może być wyższy w Shopping. Upewnić się że badge nie rozciąga HStack pionowo:
+```swift
+ShoppingCountBadge(count: count)
+    .alignmentGuide(.firstTextBaseline) { d in d[.firstTextBaseline] }
+```
+
+4. **Sprawdzić `screenHeader` token** w ThemeStore — czy `size` i `weight` są takie same dla wszystkich presetów.
+
+5. **Jeśli Shopping ma `.large` navigation title przez NavigationStack** a innych nie — upewnić się że wszystkie trzy używają custom inline header bez `navigationTitle`. Sprawdzić czy żaden z ekranów nie ma:
+```swift
+.navigationTitle("Shopping")   // ← usunąć jeśli jest, custom header ma priorytet
+```
+
+**Plik:** `ShoppingListView.swift`, `TasksView.swift`, `BacklogView.swift` — porównać i wyrównać `header` var
+
+---
+
+### Kolejność implementacji R8
+
+| # | Priorytet | Plik | Zmiana |
+|---|-----------|------|--------|
+| R8-3 | Bardzo niski | `ThemeStore.swift` | `"floppy.disk"` dla Retro icon |
+| R8-4 | Niski | `BacklogView.swift` | `accentTabColor` w "Add item" |
+| R8-1 | Niski | `ShoppingListView.swift` | `accentTabColor` w RestockItemRow |
+| R8-5 | Średni | `TasksView.swift` | WipZone dimmed + separator "Over limit" |
+| R8-7 | Średni | Wszystkie 3 views | Inspekcja i wyrównanie headerów |
+| R8-2 | Niski | `MoreView.swift` | Ikona Auto — opcja A (SF Symbol rotowany) |
+| R8-6 | Niski | `MoreView.swift` | FontSizePicker w wrapperze |
+
+> R8-3 i R8-4 są trywialne (1 linia). R8-5 jest najbardziej złożone — dodanie separatora wymaga modyfikacji ForEach w `activeTasksContent`. R8-7 to diagnoza + drobne korekty paddingów.
+
+---
+
+## R9: Settings Cleanup, Task UX & Polish (2026-02-24)
+
+> **Skills:** `swift-expert`, `swiftui-ui-patterns`
+
+---
+
+### R9-1: Settings → Retro — usuń wybór fontów, zawsze używaj PressStart2P
+
+**Problem:** Sekcja "Retro Font" w Settings pokazuje picker "Font Style" (A – Classic, B – Thin). Retro ma zawsze używać A – Classic (Press Start 2P).
+
+**Root cause:** `SettingsView.swift` L58-L80:
+```swift
+} else if themeStore.preset == .retro {
+    Section {
+        Picker("Font Style", ...) { ... }  // ← USUNĄĆ
+        FontScaleSelector(...)
+    } header: { Text("Retro Font") }
+}
+```
+
+**Fix — dwa kroki:**
+
+**1. `SettingsView.swift` — usunąć Picker "Font Style" z sekcji Retro:**
+```swift
+} else if themeStore.preset == .retro {
+    Section {
+        // USUNĄĆ: cały blok Picker("Font Style", ...)
+        FontScaleSelector(
+            selectedScale: Binding(
+                get: { themeStore.retroFontScale },
+                set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
+            )
+        )
+    } header: {
+        Text("Retro Font")
+    } footer: {
+        Text("Regular is the default font size.")
+    }
+}
+```
+
+**2. `ThemeStore.swift` — hardcode `retroVariant` na `.a`:**
+
+W `ThemeStore` dodać do `init` lub w computed property:
+```swift
+// Upewnić się że retroVariant zawsze = .a bez względu na zapisaną wartość
+var retroVariant: RetroVariant {
+    get { .a }  // Zawsze A – Classic (PressStart2P)
+    set { }     // Ignorować zapis
+}
+```
+Lub alternatywnie: usunąć `@AppStorage("retroVariant")` i wszędzie gdzie kod używa `themeStore.retroVariant` zastąpić literalem `.a`.
+
+**Plik:** `FamilyTodo/Views/SettingsView.swift` (L58-L80), `FamilyTodo/Views/ThemeStore.swift`
+
+---
+
+### R9-2: Settings → Paper — usuń wybór fontów, zawsze używaj Modern Classic (Georgia)
+
+**Problem:** Sekcja "Paper Font" w Settings pokazuje picker "Font Style" (A–G). Paper ma zawsze używać wariantu F – Modern Classic (Georgia + Georgia).
+
+**Root cause:** `SettingsView.swift` L31-L57 — `Picker("Font Style")` dla `PaperVariant`.
+
+**Fix — dwa kroki:**
+
+**1. `SettingsView.swift` — usunąć Picker "Font Style" z sekcji Paper:**
+```swift
+if themeStore.preset == .paper {
+    Section {
+        // USUNĄĆ: cały blok Picker("Font Style", ...)
+        FontScaleSelector(
+            selectedScale: Binding(
+                get: { themeStore.paperFontScale },
+                set: { HapticManager.selection(); themeStore.paperFontScale = $0 }
+            )
+        )
+    } header: {
+        Text("Paper Font")
+    }
+}
+```
+
+**2. `ThemeStore.swift` — hardcode `paperVariant` na `.f`:**
+```swift
+var paperVariant: PaperVariant {
+    get { .f }  // Zawsze F – Modern Classic (Georgia + Georgia)
+    set { }     // Ignorować zapis
+}
+```
+
+> Uwaga: Po R5-6 `PaperVariant` ma tylko `.e` i `.f`. `.f` = "Modern Classic" = Georgia + Georgia.
+
+**Plik:** `FamilyTodo/Views/SettingsView.swift` (L31-L57), `FamilyTodo/Views/ThemeStore.swift`
+
+---
+
+### R9-3: Settings — usuń Light2/Dark2, Light i Dark przejm ich ustawienia
+
+**Problem:** W Settings jest 7 kafelków (Light, Dark, Auto, Light2, Dark2, Retro, Paper). Użytkownik chce 5: Light, Dark, Auto, Retro, Paper — ale Light używa palety Light2, a Dark używa palety Dark2.
+
+**Krok 1 — `ThemeStore.swift`: aktualizacja `canvasColor` i `surfaceColor` dla `.light` i `.dark`:**
+
+```swift
+// PRZED (light):
+case .light: Color(hex: "F9F9F9")  // lub podobny lekko szary
+
+// PO (light = czyste białe jak light2):
+case .light: Color(uiColor: .systemBackground)  // Pure white w light mode
+
+// PRZED (dark):
+case .dark: Color(hex: "1C1C1E")   // lub podobny
+
+// PO (dark = czyste czarne jak dark2):
+case .dark: Color(uiColor: .systemBackground)   // Pure black w dark mode
+```
+
+Analogicznie `surfaceColor`:
+```swift
+case .light: Color(uiColor: .secondarySystemGroupedBackground)  // Jasny szary #F2F2F7
+case .dark:  Color(uiColor: .secondarySystemGroupedBackground)  // Ciemny szary #1C1C1E
+```
+
+**Krok 2 — `ThemeStore.swift`: usunąć `.light2` i `.dark2` z `UnifiedTheme`:**
+```swift
+enum UnifiedTheme: String, CaseIterable, Identifiable {
+    case light, dark, auto, retro, paper
+    // USUNĄĆ: case light2, dark2
+}
+```
+
+**Krok 3 — `ThemeStore.swift`: naprawić wszystkie switch/case:**
+
+Poszukać wszystkich `switch unifiedTheme` (lub `switch self` w `UnifiedTheme`) i usunąć case `.light2` i `.dark2`. Zastąpić logikę która była w `.light2`/`.dark2` przez nowe wartości dla `.light`/`.dark`.
+
+**Krok 4 — `SettingsView.swift`: swatch gradient zachować:**
+
+`UnifiedThemeCard.swatchGradient` dla `.light` już ma:
+```swift
+case .light: [Color(hex: "FFFFFF"), Color(hex: "F5F5F5")]  // Zachować wygląd kafelka
+case .dark:  [Color(hex: "1C1C1E"), Color(hex: "2C2C2E")]  // Zachować wygląd kafelka
+```
+
+**Pliki:** `FamilyTodo/Views/ThemeStore.swift` (enum `UnifiedTheme`, `canvasColor`, `surfaceColor`, `preferredColorScheme`), `FamilyTodo/Views/SettingsView.swift` (sprawdzić czy `light2`/`dark2` nie są używane)
+
+---
+
+### R9-4: Tasks — usuń nagłówek "NEXT"
+
+**Problem:** Tasks wyświetla sekcję nagłówkową "NEXT" nad listą aktywnych tasków — niepotrzebna etykieta.
+
+**Root cause:** `TasksView.swift` L239:
+```swift
+sectionHeader("NEXT")  // ← USUNĄĆ
+```
+
+**Fix:**
+```swift
+private var activeTasksContent: some View {
+    if !store.nextTasks.isEmpty {
+        // USUNĄĆ: sectionHeader("NEXT")
+
+        ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
+            // ... bez zmian
+        }
+    }
+    // ... reszta bez zmian
+}
+```
+
+**Plik:** `FamilyTodo/Views/TasksView.swift` (L239)
+
+---
+
+### R9-5: Tasks — swipe w lewo = "Move to Ideas"
+
+**Problem:** Swipe w lewo na tasku w sekcji aktywnych (NEXT) powinien przenosić go do Ideas/Backlog.
+
+**Uwaga:** `.swipeActions(edge: .trailing)` = swipe w **lewo**. Aktualnie NEXT tasks nie mają żadnych trailing swipe actions (L241-L255).
+
+**Krok 1 — dodać funkcję `moveToIdeas` w `TasksView`/`TasksContent`:**
+
+```swift
+private func moveToIdeas(_ task: Task) {
+    _Concurrency.Task {
+        // Zmiana statusu na backlog — sprawdzić jak `startTaskFromBacklog` robi reverse
+        // Wzorzec: tasks z store.backlogTasks mają status == .backlog lub isBacklog == true
+        await store.demoteToBacklog(task)  // Dodać tę metodę do TaskStore jeśli nie istnieje
+    }
+}
+```
+
+**Krok 2 — dodać `demoteToBacklog` w `TaskStore`:**
+
+```swift
+func demoteToBacklog(_ task: Task) async {
+    var updated = task
+    updated.status = .backlog   // Lub .ideas, zależnie od enum Task.Status
+    await updateTask(updated)
+}
+```
+
+> Sprawdzić jak `startTaskFromBacklog` działa (L274) — robi reverse tej operacji. Użyć odwrotnej logiki.
+
+**Krok 3 — dodać `.swipeActions(edge: .trailing)` na NEXT tasks:**
+
+```swift
+ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
+    if taskBeingCompleted != task.id {
+        TaskRow(...)
+            .rowInsertAnimation()
+            .accessibilityIdentifier("taskRow_\(task.title)")
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .none) {
+                    moveToIdeas(task)
+                } label: {
+                    Label("Ideas", systemImage: "archivebox.fill")
+                }
+                .tint(.indigo)
+            }
+    }
+}
+```
+
+**Pliki:** `FamilyTodo/Views/TasksView.swift`, `FamilyTodo/Store/TaskStore.swift` (lub analogiczny plik)
+
+---
+
+### R9-6: Ideas — "Add item" natychmiast otwiera klawiaturę
+
+**Problem:** Po kliknięciu "Add item" w karcie kategorii (Ideas), `TextField` się pojawia, ale klawiatura nie otwiera się automatycznie — trzeba kliknąć ponownie.
+
+**Root cause:** `CategoryCard` (`BacklogView.swift` L458) używa `@State var isAddingItem = false`, ale `TextField` nie ma `@FocusState` — klawiatura nie jest wymuszana programatycznie.
+
+**Fix — dodać `@FocusState` do `CategoryCard`:**
+
+```swift
+struct CategoryCard: View {
+    // ... istniejące właściwości ...
+    @State private var isAddingItem = false
+    @FocusState private var isTextFieldFocused: Bool   // NOWE
+    @State private var newItemText = ""
+
+    // W body, w bloku gdzie isAddingItem == true:
+    if isAddingItem {
+        HStack {
+            TextField("Add item", text: $newItemText)
+                .focused($isTextFieldFocused)         // NOWE
+                .font(themeStore.font(for: .listRowTitle))
+                .submitLabel(.done)
+                .onSubmit { commitNewItem() }
+                // ... reszta bez zmian
+        }
+    } else {
+        Button { isAddingItem = true } label: { ... }
+    }
+
+    // W onChange lub task, wymusić focus gdy isAddingItem = true:
+    .onChange(of: isAddingItem) { _, newValue in
+        if newValue {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isTextFieldFocused = true   // Mały delay dla animacji
+            }
+        }
+    }
+}
+```
+
+> Alternatywnie użyć `.task(id: isAddingItem) { if isAddingItem { isTextFieldFocused = true } }` — bez DispatchQueue.
+
+**Plik:** `FamilyTodo/Views/BacklogView.swift` (struct `CategoryCard`, ~L458-L540)
+
+---
+
+### R9-7: Settings — System Font Size z efektem szkła (przywrócić stary wygląd)
+
+**Problem:** `FontScaleSelector` wywoływany z `showSelectionPill: false, showBorder: false` wygląda "nago" — brak efektu selection i brak border.
+
+**Root cause:** `SettingsView.swift` L83-L100:
+```swift
+FontScaleSelector(
+    selectedScale: ...,
+    showSelectionPill: false,   // ← wyłączona "pastylka" dla wybranego
+    showBorder: false           // ← wyłączony border kontenera
+)
+```
+
+Parametry `showSelectionPill: false` i `showBorder: false` wyłączają efekt szkła który pokazuje wybrany element.
+
+**Fix — przywrócić domyślne wartości (usunąć override):**
+
+```swift
+FontScaleSelector(
+    selectedScale: Binding(
+        get: { themeStore.systemFontScale },
+        set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
+    )
+    // Usunąć: showSelectionPill: false, showBorder: false
+    // Domyślnie: showSelectionPill = true, showBorder = true
+)
+.listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+.listRowBackground(Color.clear)
+```
+
+I usunąć zewnętrzny wrapper `.padding(12).background { RoundedRectangle ... }` bo `FontScaleSelector` ma własne tło.
+
+**Plik:** `FamilyTodo/Views/SettingsView.swift` (L81-L101)
+
+---
+
+### R9-8: Accent Color "Mono" + Dark mode — niewidoczne przełączniki Toggle
+
+**Problem:** Gdy Accent Color = Mono (`Color.primary`) i theme = Dark, przełączniki Toggle w Settings (Celebrations, Enable notifications itd.) są niewidoczne — biały toggle na ciemnym tle nie sygnalizuje stanu ON.
+
+**Root cause:** iOS `Toggle` używa `.tint()` ze środowiska do koloru stanu ON. `Color.primary` w dark mode = biały = niewidoczny na białym tle ON-state.
+
+**Fix — w `ThemeStore.swift` dodać `toggleTintColor`:**
+
+```swift
+var toggleTintColor: Color {
+    guard case .monochrome = tabTintColor else {
+        return tabTintColor.color  // Normalny kolor = OK
+    }
+    // Mono w dark mode: użyj szarego zamiast białego
+    // Sprawdzić colorScheme — ThemeStore nie ma dostępu, użyć preferredColorScheme
+    switch preferredColorScheme {
+    case .dark:   return Color(hex: "8E8E93")  // iOS system gray — widoczny w dark
+    case .light:  return Color.primary          // Czarny = OK w light
+    default:      return Color(hex: "8E8E93")  // Safe default
+    }
+}
+```
+
+> Ponieważ `ThemeStore` może nie mieć dostępu do aktualnego `colorScheme`, inny podejście:
+
+**Alternatywne podejście — zmodyfikować kolor Mono w `TabTintColor.color`:**
+
+Zamiast `Color.primary`, użyć innego koloru dla "Mono" który wygląda dobrze w obydwu trybach:
+
+```swift
+case .monochrome: Color(uiColor: .label)  // Zamiast Color.primary — label jest bardziej przewidywalny
+```
+
+Lub całkowicie zmienić definicję toggle tint w sekcji Toggles Settings:
+
+**W `SettingsView.swift`, zmienić `.tint()` na Toggles Section:**
+```swift
+Section {
+    Toggle(...) { ... }
+    Toggle(...) { ... }
+}
+.tint(themeStore.safeToggleTint)  // Nowa property w ThemeStore
+
+// W ThemeStore:
+var safeToggleTint: Color {
+    let base = tabTintColor.color
+    // Jeśli kolor jest zbyt jasny (luminancja > 0.8), zamień na szary
+    // Prosta heurystyka: Color.primary i białe kolory → szary
+    if tabTintColor == .monochrome {
+        return Color(hex: "34C759")  // Zielony jako bezpieczny fallback dla toggles
+    }
+    return base
+}
+```
+
+> Prostsze podejście: zmienić `case .monochrome` w `TabTintColor.color` tak żeby zawracał `Color.primary` tylko dla tint tab bar, a Toggle używa osobnego systemu. Jednak najprostsza zmiana to użycie `.tint(Color.green)` lub `.tint(themeStore.accentColor)` na sekcji Toggles gdy `tabTintColor == .monochrome`.
+
+**Plik:** `FamilyTodo/Views/SettingsView.swift` (Section z Toggle, L154-L163, L180-L210), `FamilyTodo/Views/ThemeStore.swift`
+
+---
+
+### Kolejność implementacji R9
+
+| # | Plik | Zmiana |
+|---|------|--------|
+| R9-4 | `TasksView.swift` | Usunąć `sectionHeader("NEXT")` — 1 linia |
+| R9-1 | `SettingsView.swift`, `ThemeStore.swift` | Usuń Retro font picker, hardcode `.a` |
+| R9-2 | `SettingsView.swift`, `ThemeStore.swift` | Usuń Paper font picker, hardcode `.f` |
+| R9-7 | `SettingsView.swift` | Usunąć `showSelectionPill: false, showBorder: false` |
+| R9-3 | `ThemeStore.swift`, `SettingsView.swift` | Usuń `light2`/`dark2` z enum, przenieś ich palette do `light`/`dark` |
+| R9-5 | `TasksView.swift`, `TaskStore.swift` | `.swipeActions(edge: .trailing)` = "Move to Ideas" |
+| R9-6 | `BacklogView.swift` | `@FocusState` + `focused($isTextFieldFocused)` w `CategoryCard` |
+| R9-8 | `ThemeStore.swift`, `SettingsView.swift` | Safe toggle tint dla Mono accent |
+
+> **Uwaga do R9-3:** Po usunięciu `.light2` i `.dark2` upewnić się że `@AppStorage("unifiedTheme")` fallback jest `.light` (nie `.light2`, które przestanie istnieć). Dodać migrację: jeśli `rawValue == "light2"` → ustawić `.light`.

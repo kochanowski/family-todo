@@ -214,8 +214,7 @@ final class UserSession: ObservableObject {
 
     private func restoreHouseholdSelection() {
         if let householdIDString = userDefaults.string(forKey: StorageKeys.currentHouseholdId),
-           let householdID = UUID(uuidString: householdIDString)
-        {
+           let householdID = UUID(uuidString: householdIDString) {
             currentHouseholdID = householdID
         }
     }

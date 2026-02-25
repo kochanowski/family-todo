@@ -244,8 +244,6 @@ final class FamilyTodoUITests: XCTestCase {
     }
 }
 
-import XCTest
-
 final class FamilyTodoPerformanceTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
