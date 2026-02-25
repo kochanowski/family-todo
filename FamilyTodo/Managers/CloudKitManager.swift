@@ -1,7 +1,6 @@
 import CloudKit
 import Foundation
 
-// swiftlint:disable type_body_length
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
@@ -610,4 +609,3 @@ actor CloudKitManager {
         }
     }
 }
-// swiftlint:enable type_body_length

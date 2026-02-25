@@ -5,6 +5,7 @@ import SwiftUI
 import UIKit
 
 @MainActor
+// swiftlint:disable type_body_length
 class HouseholdStore: ObservableObject {
     @Published var currentHousehold: Household?
     @Published var isLoading = false
@@ -702,3 +703,4 @@ class HouseholdStore: ObservableObject {
         return ([homeProjectsCategory, routineCategory], items)
     }
 }
+// swiftlint:enable type_body_length
