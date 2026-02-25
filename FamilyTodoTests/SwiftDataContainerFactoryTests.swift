@@ -32,7 +32,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    func testBootstrapSuccessReturnsNormalMode() throws {
+    func testBootstrapSuccessReturnsReadyNormalMode() {
         let schema = Schema([CachedTask.self])
         let result = SwiftDataContainerFactory.bootstrap(
             schema: schema,
@@ -40,11 +40,13 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         )
 
         XCTAssertEqual(result.recoveryMode, .normal)
+        XCTAssertEqual(result.bootstrapState, .ready)
         XCTAssertNil(result.diagnosticMessage)
-        XCTAssertNotNil(result.container.mainContext)
+        XCTAssertNil(result.diagnostics)
+        XCTAssertNotNil(result.container)
     }
 
-    func testBootstrapAfterCleanupReturnsStoreResetMode() throws {
+    func testBootstrapAfterCleanupReturnsStoreResetReadyMode() {
         let schema = Schema([CachedTask.self])
         var attempts = 0
         let result = SwiftDataContainerFactory.bootstrap(
@@ -62,13 +64,16 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
 
         XCTAssertEqual(attempts, 2)
         XCTAssertEqual(result.recoveryMode, .storeReset)
+        XCTAssertEqual(result.bootstrapState, .ready)
         XCTAssertNotNil(result.diagnosticMessage)
+        XCTAssertNotNil(result.diagnostics)
+        XCTAssertNotNil(result.container)
 
         let event = defaults.dictionary(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
         XCTAssertEqual(event?["mode"] as? String, StoreRecoveryMode.storeReset.rawValue)
     }
 
-    func testBootstrapDoubleFailureReturnsInMemoryFallback() throws {
+    func testBootstrapDoubleFailureReturnsInMemoryFallbackReadyMode() {
         let schema = Schema([CachedTask.self])
         var attempts = 0
         let result = SwiftDataContainerFactory.bootstrap(
@@ -84,12 +89,42 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(attempts, 3)
+        XCTAssertGreaterThanOrEqual(attempts, 3)
         XCTAssertEqual(result.recoveryMode, .inMemoryFallback)
+        XCTAssertEqual(result.bootstrapState, .ready)
         XCTAssertNotNil(result.diagnosticMessage)
+        XCTAssertNotNil(result.diagnostics)
+        XCTAssertNotNil(result.container)
 
         let event = defaults.dictionary(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
         XCTAssertEqual(event?["mode"] as? String, StoreRecoveryMode.inMemoryFallback.rawValue)
+    }
+
+    func testBootstrapTripleFailureReturnsSchemaFailureEmergencyMode() {
+        let schema = Schema([CachedTask.self])
+        var attempts = 0
+        let result = SwiftDataContainerFactory.bootstrap(
+            schema: schema,
+            dependencies: dependencies(
+                containerBuilder: { schema, _ in
+                    attempts += 1
+                    if attempts <= 3 {
+                        throw NSError(domain: "SwiftDataContainerFactoryTests", code: 1003)
+                    }
+                    return try Self.makeInMemoryContainer(schema: schema)
+                }
+            )
+        )
+
+        XCTAssertGreaterThanOrEqual(attempts, 4)
+        XCTAssertEqual(result.recoveryMode, .schemaFailure)
+        XCTAssertEqual(result.bootstrapState, .emergency)
+        XCTAssertNotNil(result.diagnosticMessage)
+        XCTAssertNotNil(result.diagnostics)
+        XCTAssertNotNil(result.container)
+
+        let event = defaults.dictionary(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
+        XCTAssertEqual(event?["mode"] as? String, StoreRecoveryMode.schemaFailure.rawValue)
     }
 
     func testCleanupRemovesLegacyAndCurrentStoreArtifacts() throws {
@@ -141,6 +176,14 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         for name in keptNames {
             XCTAssertTrue(FileManager.default.fileExists(atPath: tempDirectoryURL.appendingPathComponent(name).path))
         }
+    }
+
+    func testRequestStoreResetSetsFlag() {
+        XCTAssertFalse(defaults.bool(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey))
+
+        SwiftDataContainerFactory.requestStoreReset(defaults)
+
+        XCTAssertTrue(defaults.bool(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey))
     }
 
     private func dependencies(

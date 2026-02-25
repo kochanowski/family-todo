@@ -13,8 +13,10 @@ struct FamilyTodoApp: App {
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @State private var startupRecoveryMessage: String?
+    @State private var startupBootstrapState: StartupBootstrapState
+    @State private var startupDiagnostics: BootstrapDiagnostics?
 
-    private let sharedModelContainer: ModelContainer
+    private let sharedModelContainer: ModelContainer?
 
     private static let appSchema = Schema([
         CachedTask.self,
@@ -46,95 +48,106 @@ struct FamilyTodoApp: App {
 
         sharedModelContainer = bootstrapResult.container
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
+        _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
+        _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(userSession)
-                .environmentObject(themeStore)
-                .environmentObject(householdStore)
-                .environmentObject(onboardingState)
-                .environmentObject(subscriptionManager)
-                .environmentObject(celebrationManager)
-                .environmentObject(shareAcceptanceCoordinator)
-                .modelContainer(sharedModelContainer)
+            if startupBootstrapState == .emergency || sharedModelContainer == nil {
+                StartupRecoveryView(
+                    message: startupRecoveryMessage
+                        ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
+                    diagnostics: startupDiagnostics
+                )
                 .preferredColorScheme(themeStore.colorScheme)
-                .overlay {
-                    CelebrationOverlay(
-                        manager: celebrationManager,
-                        messageFont: themeStore.font(for: .celebrationMessage),
-                        accentPalette: themeStore.confettiAccentPalette
-                    )
-                }
-                .task {
-                    appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
-                    appDelegate.flushPendingInviteIfNeeded()
-                    householdStore.setModelContext(sharedModelContainer.mainContext)
-                    householdStore.setSyncMode(userSession.syncMode)
-
-                    // Configure for UI Testing if needed
-                    UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
-
-                    #if !CI
-                        await userSession.checkAuthenticationStatus()
-                        // Configure subscriptions only for cloud users with household
-                        // Skip for guest users (localOnly mode) to avoid CloudKit access
-                        if userSession.syncMode == .cloud,
-                           let userId = userSession.userId,
-                           let householdId = userSession.currentHouseholdID {
-                            subscriptionManager.configure(userId: userId, householdId: householdId)
-                        }
-                    #endif
-
-                    await shareAcceptanceCoordinator.processPendingIfPossible(
-                        userSession: userSession,
-                        householdStore: householdStore,
-                        onboardingState: onboardingState
-                    )
-
-                    await ChoreScheduler.shared.runIfNeeded(
-                        householdId: userSession.currentHouseholdID,
-                        modelContext: sharedModelContainer.mainContext,
-                        syncMode: userSession.syncMode
-                    )
-
-                    #if !CI
-                        // Re-schedule daily digest on every app launch.
-                        let notifSettings = NotificationSettingsStore()
-                        NotificationService.shared.setSettingsStore(notifSettings)
-                        await NotificationService.shared.checkAuthorizationStatus()
-                        if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
-                            let components = Calendar.current.dateComponents(
-                                [.hour, .minute],
-                                from: notifSettings.reminderTime
-                            )
-                            await NotificationService.shared.scheduleDailyDigest(
-                                at: components.hour ?? 8,
-                                minute: components.minute ?? 0
-                            )
-                        }
-                    #endif
-                }
-                .onOpenURL { url in
-                    if let host = url.host?.lowercased(),
-                       host.contains("icloud.com") {
-                        shareAcceptanceCoordinator.enqueue(inviteURL: url)
+            } else if let sharedModelContainer {
+                RootView()
+                    .environmentObject(userSession)
+                    .environmentObject(themeStore)
+                    .environmentObject(householdStore)
+                    .environmentObject(onboardingState)
+                    .environmentObject(subscriptionManager)
+                    .environmentObject(celebrationManager)
+                    .environmentObject(shareAcceptanceCoordinator)
+                    .modelContainer(sharedModelContainer)
+                    .preferredColorScheme(themeStore.colorScheme)
+                    .overlay {
+                        CelebrationOverlay(
+                            manager: celebrationManager,
+                            messageFont: themeStore.font(for: .celebrationMessage),
+                            accentPalette: themeStore.confettiAccentPalette
+                        )
                     }
-                }
-                .alert(
-                    "Recovery Complete",
-                    isPresented: Binding(
-                        get: { startupRecoveryMessage != nil },
-                        set: { if !$0 { startupRecoveryMessage = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) {
-                        startupRecoveryMessage = nil
+                    .task {
+                        appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                        appDelegate.flushPendingInviteIfNeeded()
+                        householdStore.setModelContext(sharedModelContainer.mainContext)
+                        householdStore.setSyncMode(userSession.syncMode)
+
+                        // Configure for UI Testing if needed
+                        UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+
+                        #if !CI
+                            await userSession.checkAuthenticationStatus()
+                            // Configure subscriptions only for cloud users with household
+                            // Skip for guest users (localOnly mode) to avoid CloudKit access
+                            if userSession.syncMode == .cloud,
+                               let userId = userSession.userId,
+                               let householdId = userSession.currentHouseholdID {
+                                subscriptionManager.configure(userId: userId, householdId: householdId)
+                            }
+                        #endif
+
+                        await shareAcceptanceCoordinator.processPendingIfPossible(
+                            userSession: userSession,
+                            householdStore: householdStore,
+                            onboardingState: onboardingState
+                        )
+
+                        await ChoreScheduler.shared.runIfNeeded(
+                            householdId: userSession.currentHouseholdID,
+                            modelContext: sharedModelContainer.mainContext,
+                            syncMode: userSession.syncMode
+                        )
+
+                        #if !CI
+                            // Re-schedule daily digest on every app launch.
+                            let notifSettings = NotificationSettingsStore()
+                            NotificationService.shared.setSettingsStore(notifSettings)
+                            await NotificationService.shared.checkAuthorizationStatus()
+                            if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
+                                let components = Calendar.current.dateComponents(
+                                    [.hour, .minute],
+                                    from: notifSettings.reminderTime
+                                )
+                                await NotificationService.shared.scheduleDailyDigest(
+                                    at: components.hour ?? 8,
+                                    minute: components.minute ?? 0
+                                )
+                            }
+                        #endif
                     }
-                } message: {
-                    Text(startupRecoveryMessage ?? "")
-                }
+                    .onOpenURL { url in
+                        if let host = url.host?.lowercased(),
+                           host.contains("icloud.com") {
+                            shareAcceptanceCoordinator.enqueue(inviteURL: url)
+                        }
+                    }
+                    .alert(
+                        "Recovery Complete",
+                        isPresented: Binding(
+                            get: { startupRecoveryMessage != nil },
+                            set: { if !$0 { startupRecoveryMessage = nil } }
+                        )
+                    ) {
+                        Button("OK", role: .cancel) {
+                            startupRecoveryMessage = nil
+                        }
+                    } message: {
+                        Text(startupRecoveryMessage ?? "")
+                    }
+            }
         }
     }
 }

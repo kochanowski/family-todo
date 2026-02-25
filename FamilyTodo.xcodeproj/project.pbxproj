@@ -18,6 +18,8 @@
 		57718B5777DA4E819676A7A2 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA591D77C780445A82FEE9E0 /* HapticManager.swift */; };
 			F0B100000000000000000001 /* InviteInputNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000001 /* InviteInputNormalizer.swift */; };
 			F0B100000000000000000006 /* SwiftDataContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000006 /* SwiftDataContainerFactory.swift */; };
+			F0B100000000000000000007 /* StartupSentinel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000007 /* StartupSentinel.swift */; };
+			F0B100000000000000000008 /* StartupRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000008 /* StartupRecoveryView.swift */; };
 		5BEEEE7F89A8433F92A7D492 /* Household.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1674080DA4453DBCD21C18 /* Household.swift */; };
 		6E1645FA58BB4C66A2BE9E5D /* CachedHousehold.swift in Sources */ = {isa = PBXBuildFile; fileRef = E896C65571D94FEE8308FB98 /* CachedHousehold.swift */; };
 		F7C1B9DBB0C84D5E9C893342 /* HouseholdStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF93CA8D49114B14908933E2 /* HouseholdStore.swift */; };
@@ -118,6 +120,8 @@
 		DA591D77C780445A82FEE9E0 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 			F0A100000000000000000001 /* InviteInputNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizer.swift; sourceTree = "<group>"; };
 			F0A100000000000000000006 /* SwiftDataContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataContainerFactory.swift; sourceTree = "<group>"; };
+			F0A100000000000000000007 /* StartupSentinel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupSentinel.swift; sourceTree = "<group>"; };
+			F0A100000000000000000008 /* StartupRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupRecoveryView.swift; sourceTree = "<group>"; };
 		5E1674080DA4453DBCD21C18 /* Household.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Household.swift; sourceTree = "<group>"; };
 		E896C65571D94FEE8308FB98 /* CachedHousehold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedHousehold.swift; sourceTree = "<group>"; };
 		AF93CA8D49114B14908933E2 /* HouseholdStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStore.swift; sourceTree = "<group>"; };
@@ -271,6 +275,7 @@
 				D5698A6FED3C457788B6A60C /* CachedMember.swift */,
 				1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */,
 				86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */,
+				F0A100000000000000000007 /* StartupSentinel.swift */,
 				A1B2C3D4E5F60718293A4B96 /* Member.swift */,
 				A1B2C3D4E5F60718293A4B98 /* Task.swift */,
 				B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */,
@@ -390,6 +395,7 @@
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
 				D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
+				F0A100000000000000000008 /* StartupRecoveryView.swift */,
 );
 			path = Views;
 			sourceTree = "<group>";
@@ -559,6 +565,8 @@
 				57718B5777DA4E819676A7A2 /* HapticManager.swift in Sources */,
 					F0B100000000000000000001 /* InviteInputNormalizer.swift in Sources */,
 					F0B100000000000000000006 /* SwiftDataContainerFactory.swift in Sources */,
+					F0B100000000000000000007 /* StartupSentinel.swift in Sources */,
+					F0B100000000000000000008 /* StartupRecoveryView.swift in Sources */,
 					5BEEEE7F89A8433F92A7D492 /* Household.swift in Sources */,
 				6E1645FA58BB4C66A2BE9E5D /* CachedHousehold.swift in Sources */,
 				F7C1B9DBB0C84D5E9C893342 /* HouseholdStore.swift in Sources */,
