@@ -117,9 +117,9 @@ final class ConfettiEmitterView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
-        // Raise emitters above tab bar chrome to avoid clipping.
-        leftEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY - 90)
-        rightEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY - 90)
+        // True dual-cannon layout: left and right launch points above tab chrome.
+        leftEmitter.emitterPosition = CGPoint(x: bounds.width * 0.18, y: bounds.height - 120)
+        rightEmitter.emitterPosition = CGPoint(x: bounds.width * 0.82, y: bounds.height - 120)
     }
 
     func setAccentColor(_ color: UIColor) {
@@ -166,9 +166,8 @@ final class ConfettiEmitterView: UIView {
     }
 
     private func makeCells(colors: [UIColor], isLeftCannon: Bool) -> [CAEmitterCell] {
-        // Dual cannon burst from a shared center source:
-        // left cannon shoots up-left, right cannon shoots up-right.
-        let baseAngle = isLeftCannon ? (-3.0 * CGFloat.pi / 4.0) : (-CGFloat.pi / 4.0)
+        // Shoot mostly upward with slight inward bias.
+        let baseAngle = isLeftCannon ? (-(.pi / 2) + (.pi / 9)) : (-(.pi / 2) - (.pi / 9))
 
         return colors.flatMap { color in
             [
@@ -176,14 +175,14 @@ final class ConfettiEmitterView: UIView {
                     image: Self.rectangleImage,
                     color: color,
                     baseAngle: baseAngle,
-                    xAcceleration: isLeftCannon ? -50 : 50,
+                    xAcceleration: isLeftCannon ? 12 : -12,
                     scale: 0.26
                 ),
                 makeCell(
                     image: Self.circleImage,
                     color: color,
                     baseAngle: baseAngle,
-                    xAcceleration: isLeftCannon ? -50 : 50,
+                    xAcceleration: isLeftCannon ? 12 : -12,
                     scale: 0.22
                 ),
             ]
@@ -202,16 +201,16 @@ final class ConfettiEmitterView: UIView {
         cell.color = color.cgColor
 
         cell.birthRate = 120
-        cell.lifetime = 4.0
-        cell.lifetimeRange = 0.9
+        cell.lifetime = 4.8
+        cell.lifetimeRange = 1.0
 
-        cell.velocity = 1000
-        cell.velocityRange = 300
-        cell.yAcceleration = 900
+        cell.velocity = 950
+        cell.velocityRange = 220
+        cell.yAcceleration = 620
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle
-        cell.emissionRange = .pi / 6
+        cell.emissionRange = .pi / 10
 
         cell.spin = 2.0
         cell.spinRange = 4.0
