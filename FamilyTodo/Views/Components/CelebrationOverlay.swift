@@ -117,8 +117,9 @@ final class ConfettiEmitterView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
-        leftEmitter.emitterPosition = CGPoint(x: 18, y: bounds.maxY - 8)
-        rightEmitter.emitterPosition = CGPoint(x: bounds.maxX - 18, y: bounds.maxY - 8)
+        // Position emitters at the bottom-center of the view
+        leftEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY)
+        rightEmitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY)
     }
 
     func setAccentColor(_ color: UIColor) {
@@ -141,7 +142,13 @@ final class ConfettiEmitterView: UIView {
         leftEmitter.birthRate = 1
         rightEmitter.birthRate = 1
 
+        // Explicitly restart the animation by resetting beginTime if the layer already exists
+        let currentTime = CACurrentMediaTime()
+        leftEmitter.beginTime = currentTime
+        rightEmitter.beginTime = currentTime
+
         burstTask = _Concurrency.Task { @MainActor [weak self] in
+            // Emit particles for exactly 150ms then shut off birth rate
             try? await _Concurrency.Task.sleep(for: .milliseconds(150))
             guard !_Concurrency.Task.isCancelled else { return }
             self?.stopBurst()
@@ -164,7 +171,9 @@ final class ConfettiEmitterView: UIView {
     }
 
     private func makeCells(colors: [UIColor], isLeftCannon: Bool) -> [CAEmitterCell] {
-        let baseAngle = isLeftCannon ? (-CGFloat.pi / 3.0) : (-2.0 * CGFloat.pi / 3.0)
+        // Left Cannon shoots up and left (-135 degrees)
+        // Right Cannon shoots up and right (-45 degrees)
+        let baseAngle = isLeftCannon ? (-3.0 * CGFloat.pi / 4.0) : (-CGFloat.pi / 4.0)
 
         return colors.flatMap { color in
             [
@@ -172,15 +181,15 @@ final class ConfettiEmitterView: UIView {
                     image: Self.rectangleImage,
                     color: color,
                     baseAngle: baseAngle,
-                    xAcceleration: isLeftCannon ? 32 : -32,
-                    scale: 0.06
+                    xAcceleration: isLeftCannon ? -50 : 50,
+                    scale: 0.05
                 ),
                 makeCell(
                     image: Self.circleImage,
                     color: color,
                     baseAngle: baseAngle,
-                    xAcceleration: isLeftCannon ? 32 : -32,
-                    scale: 0.08
+                    xAcceleration: isLeftCannon ? -50 : 50,
+                    scale: 0.05
                 ),
             ]
         }
@@ -201,9 +210,9 @@ final class ConfettiEmitterView: UIView {
         cell.lifetime = 3.0
         cell.lifetimeRange = 0.9
 
-        cell.velocity = 800
-        cell.velocityRange = 200
-        cell.yAcceleration = 1200
+        cell.velocity = 1000
+        cell.velocityRange = 300
+        cell.yAcceleration = 1000
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle

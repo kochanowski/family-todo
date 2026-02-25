@@ -114,10 +114,6 @@ private struct TasksContent: View {
                         .padding(.bottom, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
-
-                activeTasksHeader
-                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                    .padding(.bottom, 8)
             }
 
             List {
@@ -234,6 +230,9 @@ private struct TasksContent: View {
 
     @ViewBuilder
     private var activeTasksContent: some View {
+        activeTasksHeader
+            .tasksListRowStyle(taskListRowInsets)
+
         if !visibleNextTasks.isEmpty {
             ForEach(Array(visibleNextTasks.enumerated()), id: \.element.id) { index, task in
                 if taskBeingCompleted != task.id {
