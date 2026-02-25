@@ -27,9 +27,9 @@ private struct BacklogContent: View {
             switch self {
             case .assigneeRequired:
                 "Assign this item before moving it to Tasks/NEXT."
-            case let .wipLimitReached(current, limit):
+            case .wipLimitReached(let current, let limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
-            case let .failed(message):
+            case .failed(let message):
                 message
             }
         }
@@ -38,6 +38,7 @@ private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -47,10 +48,18 @@ private struct BacklogContent: View {
     @State private var pendingAssignmentItem: BacklogItem?
     @State private var selectedAssigneeIdForAssignment: UUID?
     @State private var editingItem: BacklogItem?
+    @State private var activeComposerCategoryId: UUID?
+    @State private var composerText = ""
+    @State private var pendingDeletionItem: BacklogItem?
+    @State private var deletionTask: _Concurrency.Task<Void, Never>?
+    @State private var hiddenPendingDeleteIds: Set<UUID> = []
+    @FocusState private var focusedComposerCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
-        _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
-        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _store = StateObject(
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
     }
 
     var body: some View {
@@ -58,13 +67,14 @@ private struct BacklogContent: View {
 
         VStack(spacing: 0) {
             header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, activeBanner == nil ? 12 : 8)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                .padding(
+                    .bottom, activeBanner == nil ? AppChromeMetrics.screenHeaderBottomPadding : 8)
 
             if let activeBanner {
                 BacklogStatusBanner(text: activeBanner.text)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.bottom, 12)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -77,44 +87,68 @@ private struct BacklogContent: View {
                 emptyState
                     .padding(.bottom, listBottomInset)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(store.categories) { category in
-                            CategoryCard(
-                                category: category,
-                                items: store.items(for: category.id),
-                                assigneeNameFor: { assigneeId in
-                                    assigneeName(for: assigneeId)
-                                },
-                                onAddItem: { title in
-                                    HapticManager.lightTap()
-                                    _ = _Concurrency.Task { await store.addItem(to: category.id, title: title) }
-                                },
-                                onDeleteItem: { item in
-                                    _ = _Concurrency.Task { await store.deleteItem(item) }
-                                },
-                                onEditItem: { item in
-                                    editingItem = item
-                                },
-                                onAssignItem: { item in
-                                    pendingAssignmentItem = item
-                                    selectedAssigneeIdForAssignment = item.assigneeId ?? currentMember?.id
-                                },
-                                onPromoteItem: { item in
-                                    promoteItem(item)
-                                },
-                                onRenameCategory: { newTitle in
-                                    _ = _Concurrency.Task { await store.renameCategory(category, newTitle: newTitle) }
-                                },
-                                onDeleteCategory: {
-                                    _ = _Concurrency.Task { await store.deleteCategory(category) }
-                                }
-                            )
-                            .rowInsertAnimation()
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ForEach(store.categories) { category in
+                                let categoryItems = visibleItems(for: category.id)
+                                CategoryCard(
+                                    category: category,
+                                    items: categoryItems,
+                                    assigneeNameFor: { assigneeId in
+                                        assigneeName(for: assigneeId)
+                                    },
+                                    isAddingItem: activeComposerCategoryId == category.id,
+                                    newItemText: Binding(
+                                        get: {
+                                            activeComposerCategoryId == category.id
+                                                ? composerText : ""
+                                        },
+                                        set: { composerText = $0 }
+                                    ),
+                                    focusedComposerCategoryId: $focusedComposerCategoryId,
+                                    onActivateComposer: {
+                                        activateComposer(for: category.id, scrollProxy: scrollProxy)
+                                    },
+                                    onSubmitItem: {
+                                        submitComposer(for: category.id)
+                                    },
+                                    onCancelItem: {
+                                        cancelComposer(for: category.id)
+                                    },
+                                    onDeleteItem: { item in
+                                        queueDeleteItem(item)
+                                    },
+                                    onEditItem: { item in
+                                        editingItem = item
+                                    },
+                                    onAssignItem: { item in
+                                        pendingAssignmentItem = item
+                                        selectedAssigneeIdForAssignment =
+                                            item.assigneeId ?? currentMember?.id
+                                    },
+                                    onPromoteItem: { item in
+                                        promoteItem(item)
+                                    },
+                                    onRenameCategory: { newTitle in
+                                        _ = _Concurrency.Task {
+                                            await store.renameCategory(category, newTitle: newTitle)
+                                        }
+                                    },
+                                    onDeleteCategory: {
+                                        _ = _Concurrency.Task {
+                                            await store.deleteCategory(category)
+                                        }
+                                    }
+                                )
+                                .id(category.id)
+                                .rowInsertAnimation()
+                            }
                         }
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, listBottomInset)
+                    .scrollDismissesKeyboard(.never)
                 }
                 .refreshable {
                     store.setSyncMode(userSession.syncMode)
@@ -133,25 +167,33 @@ private struct BacklogContent: View {
             await store.loadData()
             await memberStore.loadMembers()
         }
-        .alert("New Category", isPresented: $isAddingCategory) {
-            TextField("Category Name", text: $newCategoryName)
-            Button("Cancel", role: .cancel) { newCategoryName = "" }
-            Button("Create") {
-                let name = newCategoryName
-                newCategoryName = ""
-                HapticManager.lightTap()
-                _ = _Concurrency.Task { await store.addCategory(name) }
-            }
-        }
-        .sheet(isPresented: Binding(
-            get: { pendingPromotionItem != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingPromotionItem = nil
-                    selectedAssigneeIdForPromotion = nil
+        .sheet(isPresented: $isAddingCategory) {
+            AppPromptSheet(
+                title: "New Category",
+                placeholder: "Category Name",
+                text: $newCategoryName,
+                primaryTitle: "Create",
+                onCancel: {
+                    newCategoryName = ""
+                },
+                onSubmit: { name in
+                    newCategoryName = ""
+                    HapticManager.lightTap()
+                    _ = _Concurrency.Task { await store.addCategory(name) }
                 }
-            }
-        )) {
+            )
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { pendingPromotionItem != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingPromotionItem = nil
+                        selectedAssigneeIdForPromotion = nil
+                    }
+                }
+            )
+        ) {
             if let pendingPromotionItem {
                 BacklogAssigneePickerSheet(
                     title: "Assign before start",
@@ -173,15 +215,17 @@ private struct BacklogContent: View {
                 )
             }
         }
-        .sheet(isPresented: Binding(
-            get: { pendingAssignmentItem != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingAssignmentItem = nil
-                    selectedAssigneeIdForAssignment = nil
+        .sheet(
+            isPresented: Binding(
+                get: { pendingAssignmentItem != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingAssignmentItem = nil
+                        selectedAssigneeIdForAssignment = nil
+                    }
                 }
-            }
-        )) {
+            )
+        ) {
             BacklogAssigneePickerSheet(
                 title: "Assign owner",
                 actionTitle: "Save",
@@ -223,18 +267,32 @@ private struct BacklogContent: View {
                     }
                 },
                 onDelete: {
-                    _ = _Concurrency.Task {
-                        await store.deleteItem(item)
-                    }
+                    queueDeleteItem(item)
                 }
             )
         }
+        .overlay(alignment: .bottom) {
+            if let pendingDeletionItem {
+                ToastView(
+                    message: "\"\(pendingDeletionItem.title)\" deleted",
+                    actionTitle: "Undo",
+                    action: undoPendingDeleteItem
+                )
+                .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                .transition(ToastView.AnimationTokens.transition)
+                .id(pendingDeletionItem.id)
+            }
+        }
+        .animation(ToastView.AnimationTokens.curve, value: pendingDeletionItem?.id)
     }
 
     private var activeMembers: [Member] {
         memberStore.members
             .filter(\.isActive)
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
     }
 
     private var currentMember: Member? {
@@ -248,9 +306,10 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        HStack {
-            Text("Backlog")
-                .font(.system(size: 28, weight: .bold))
+        HStack(alignment: .firstTextBaseline) {
+            Text("Ideas")
+                .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
 
@@ -259,7 +318,7 @@ private struct BacklogContent: View {
             } label: {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 20))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(themeStore.accentTabColor)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
         }
@@ -267,15 +326,15 @@ private struct BacklogContent: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No Categories", systemImage: "archivebox")
+            Label("No Ideas Yet", systemImage: "archivebox")
         } description: {
-            Text("Create a category to start organizing your backlog items.")
+            Text("Create a category to start organizing your ideas.")
         } actions: {
             Button("Create Category") {
                 isAddingCategory = true
             }
             .buttonStyle(.borderedProminent)
-            .tint(.orange)
+            .tint(themeStore.accentColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -319,10 +378,10 @@ private struct BacklogContent: View {
         case .assigneeRequired:
             HapticManager.warning()
             showBanner(.assigneeRequired)
-        case let .wipLimitReached(current, limit):
+        case .wipLimitReached(let current, let limit):
             HapticManager.warning()
             showBanner(.wipLimitReached(current: current, limit: limit))
-        case let .failed(message):
+        case .failed(let message):
             HapticManager.warning()
             showBanner(.failed(message))
         }
@@ -341,9 +400,113 @@ private struct BacklogContent: View {
             }
         }
     }
+
+    private func activateComposer(for categoryId: UUID, scrollProxy: ScrollViewProxy) {
+        activeComposerCategoryId = categoryId
+        composerText = ""
+        focusedComposerCategoryId = nil
+
+        withAnimation(WowAnimation.easeOut) {
+            scrollProxy.scrollTo(categoryId, anchor: .bottom)
+        }
+
+        scheduleComposerFocus(for: categoryId)
+    }
+
+    private func submitComposer(for categoryId: UUID) {
+        guard activeComposerCategoryId == categoryId else { return }
+        let trimmedText = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedText.isEmpty else {
+            clearComposerState()
+            return
+        }
+
+        HapticManager.lightTap()
+        _ = _Concurrency.Task {
+            await store.addItem(to: categoryId, title: trimmedText)
+        }
+        clearComposerState()
+    }
+
+    private func cancelComposer(for categoryId: UUID) {
+        guard activeComposerCategoryId == categoryId else { return }
+        clearComposerState()
+    }
+
+    private func clearComposerState() {
+        focusedComposerCategoryId = nil
+        activeComposerCategoryId = nil
+        composerText = ""
+    }
+
+    private func scheduleComposerFocus(for categoryId: UUID) {
+        // Keyboard + layout updates can race each other in scroll containers.
+        // Retry focus a few times to keep the composer deterministic.
+        for attempt in 0..<4 {
+            let delay = 0.03 + (Double(attempt) * 0.05)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard activeComposerCategoryId == categoryId else { return }
+                focusedComposerCategoryId = categoryId
+            }
+        }
+    }
+
+    private func visibleItems(for categoryId: UUID) -> [BacklogItem] {
+        store.items(for: categoryId)
+            .filter { !hiddenPendingDeleteIds.contains($0.id) }
+    }
+
+    private func queueDeleteItem(_ item: BacklogItem) {
+        if let previous = pendingDeletionItem {
+            deletionTask?.cancel()
+            deletionTask = nil
+            withAnimation(ToastView.AnimationTokens.curve) {
+                pendingDeletionItem = nil
+                hiddenPendingDeleteIds.remove(previous.id)
+            }
+
+            _ = _Concurrency.Task {
+                _ = await store.deleteItem(previous)
+            }
+        }
+
+        withAnimation(ToastView.AnimationTokens.curve) {
+            pendingDeletionItem = item
+            hiddenPendingDeleteIds.insert(item.id)
+        }
+        HapticManager.lightTap()
+
+        deletionTask = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(for: .seconds(5))
+            guard !_Concurrency.Task.isCancelled else { return }
+            _ = await store.deleteItem(item)
+            await MainActor.run {
+                withAnimation(ToastView.AnimationTokens.curve) {
+                    if pendingDeletionItem?.id == item.id {
+                        pendingDeletionItem = nil
+                    }
+                    hiddenPendingDeleteIds.remove(item.id)
+                }
+                deletionTask = nil
+            }
+        }
+    }
+
+    private func undoPendingDeleteItem() {
+        guard let pendingDeletionItem else { return }
+        deletionTask?.cancel()
+        deletionTask = nil
+        withAnimation(ToastView.AnimationTokens.curve) {
+            hiddenPendingDeleteIds.remove(pendingDeletionItem.id)
+            self.pendingDeletionItem = nil
+        }
+        HapticManager.lightTap()
+    }
 }
 
 private struct BacklogStatusBanner: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let text: String
 
     var body: some View {
@@ -353,7 +516,7 @@ private struct BacklogStatusBanner: View {
                 .foregroundStyle(.orange)
 
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -368,6 +531,7 @@ private struct BacklogStatusBanner: View {
 }
 
 private struct BacklogAssigneePickerSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let title: String
     let actionTitle: String
     let members: [Member]
@@ -402,6 +566,7 @@ private struct BacklogAssigneePickerSheet: View {
                     } label: {
                         HStack {
                             Text(member.displayName)
+                                .font(themeStore.font(for: .inlineTitle))
                                 .foregroundStyle(.primary)
                             Spacer()
                             if selectedAssigneeId == member.id {
@@ -425,7 +590,7 @@ private struct BacklogAssigneePickerSheet: View {
                     Button(actionTitle) {
                         onConfirm()
                     }
-                    .fontWeight(.semibold)
+                    .font(themeStore.font(for: .buttonLabel))
                     .disabled(!allowUnassigned && selectedAssigneeId == nil)
                 }
             }
@@ -441,7 +606,12 @@ struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
     let assigneeNameFor: (UUID?) -> String?
-    let onAddItem: (String) -> Void
+    let isAddingItem: Bool
+    @Binding var newItemText: String
+    let focusedComposerCategoryId: FocusState<UUID?>.Binding
+    let onActivateComposer: () -> Void
+    let onSubmitItem: () -> Void
+    let onCancelItem: () -> Void
     let onDeleteItem: (BacklogItem) -> Void
     let onEditItem: (BacklogItem) -> Void
     let onAssignItem: (BacklogItem) -> Void
@@ -449,9 +619,8 @@ struct CategoryCard: View {
     let onRenameCategory: (String) -> Void
     let onDeleteCategory: () -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isAddingItem = false
-    @State private var newItemText = ""
     @State private var showDeleteConfirmation = false
     @State private var showRenameAlert = false
     @State private var renameCategoryText = ""
@@ -459,13 +628,9 @@ struct CategoryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Circle()
-                    .fill(category.color)
-                    .frame(width: 10, height: 10)
-
                 Text(category.title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
 
                 Spacer()
 
@@ -505,7 +670,6 @@ struct CategoryCard: View {
                         item: item,
                         assigneeName: assigneeNameFor(item.assigneeId),
                         onTap: { onEditItem(item) },
-                        onEdit: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
                         onPromote: { onPromoteItem(item) },
                         onDelete: { onDeleteItem(item) }
@@ -532,45 +696,46 @@ struct CategoryCard: View {
 
             if isAddingItem {
                 HStack(spacing: 10) {
-                    Circle()
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                        .frame(width: 20, height: 20)
+                    composerPlaceholderIcon
 
-                    TextField("Add item", text: $newItemText)
-                        .font(.system(size: 15))
-                        .onSubmit {
-                            submitItem()
+                    TextField(
+                        "",
+                        text: $newItemText,
+                        prompt: Text("Add item").font(themeStore.font(for: .listRowTitle))
+                    )
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .focused(focusedComposerCategoryId, equals: category.id)
+                    .onSubmit {
+                        onSubmitItem()
+                    }
+                    .onAppear {
+                        DispatchQueue.main.async {
+                            focusedComposerCategoryId.wrappedValue = category.id
                         }
-                        .submitLabel(.done)
-                        .autocorrectionDisabled()
+                    }
+                    .submitLabel(.done)
+                    .autocorrectionDisabled()
 
                     Button {
-                        isAddingItem = false
-                        newItemText = ""
+                        onCancelItem()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
             } else {
                 Button {
-                    isAddingItem = true
+                    onActivateComposer()
                 } label: {
                     HStack(spacing: 10) {
-                        Circle()
-                            .stroke(Color.orange.opacity(0.55), lineWidth: 1.5)
-                            .frame(width: 20, height: 20)
-                            .overlay {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.orange)
-                            }
+                        addItemPlaceholderIcon
 
                         Text("Add item")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.orange)
+                            .font(themeStore.font(for: .buttonLabel))
+                            .foregroundStyle(themeStore.accentTabColor)
 
                         Spacer()
                     }
@@ -584,52 +749,102 @@ struct CategoryCard: View {
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
-        }
-        .confirmationDialog(
-            "Delete \"\(category.title)\"?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Category and \(items.count) Items", role: .destructive) {
-                withAnimation(WowAnimation.easeOut) {
-                    onDeleteCategory()
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(cardBorder, lineWidth: colorScheme == .light ? 1 : 0)
                 }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently delete the category and all its items.")
+                .shadow(
+                    color: colorScheme == .light
+                        ? themeStore.borderLightColor.opacity(0.35) : .clear,
+                    radius: colorScheme == .light ? 6 : 0,
+                    x: 0,
+                    y: colorScheme == .light ? 2 : 0
+                )
         }
-        .alert("Rename Category", isPresented: $showRenameAlert) {
-            TextField("Category Name", text: $renameCategoryText)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                onRenameCategory(renameCategoryText)
-            }
+        .sheet(isPresented: $showDeleteConfirmation) {
+            AppConfirmationSheet(
+                title: "Delete \"\(category.title)\"?",
+                message: "This will permanently delete the category and all its items.",
+                primaryTitle: "Delete Category and \(items.count) Items",
+                primaryStyle: .destructive,
+                onPrimary: {
+                    withAnimation(WowAnimation.easeOut) {
+                        onDeleteCategory()
+                    }
+                }
+            )
         }
-    }
-
-    private func submitItem() {
-        guard !newItemText.isEmpty else {
-            isAddingItem = false
-            return
+        .sheet(isPresented: $showRenameAlert) {
+            AppPromptSheet(
+                title: "Rename Category",
+                placeholder: "Category Name",
+                text: $renameCategoryText,
+                primaryTitle: "Save",
+                onSubmit: { newTitle in
+                    onRenameCategory(newTitle)
+                }
+            )
         }
-        onAddItem(newItemText)
-        newItemText = ""
-        isAddingItem = false
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
+    }
+
+    private var cardBorder: Color {
+        colorScheme == .light ? themeStore.borderLightColor : .clear
+    }
+
+    @ViewBuilder
+    private var composerPlaceholderIcon: some View {
+        if themeStore.preset == .retro {
+            Rectangle()
+                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Rectangle()
+                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                        .padding(0.8)
+                }
+        } else {
+            Circle()
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+        }
+    }
+
+    @ViewBuilder
+    private var addItemPlaceholderIcon: some View {
+        if themeStore.preset == .retro {
+            Rectangle()
+                .stroke(themeStore.accentTabColor.opacity(0.9), lineWidth: 2.2)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(themeStore.accentTabColor)
+                }
+        } else {
+            Circle()
+                .stroke(themeStore.accentTabColor.opacity(0.55), lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(themeStore.accentTabColor)
+                }
+        }
     }
 }
 
 // MARK: - Backlog Item Row
 
 struct BacklogItemRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let item: BacklogItem
     let assigneeName: String?
     let onTap: () -> Void
-    let onEdit: () -> Void
     let onAssign: () -> Void
     let onPromote: () -> Void
     let onDelete: () -> Void
@@ -637,58 +852,53 @@ struct BacklogItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.secondary.opacity(0.3))
-                .frame(width: 6, height: 6)
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.system(size: 15))
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
                     .strikethrough(false)
 
                 if let assigneeName {
                     Text(assigneeName)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(themeStore.font(for: .chip))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.secondary.opacity(0.14)))
+                        .background(
+                            Capsule().fill(
+                                Color.secondary.opacity(colorScheme == .dark ? 0.2 : 0.12)
+                            )
+                        )
                 }
             }
 
             Spacer()
 
-            Menu {
-                Button {
-                    onEdit()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
+            HStack(spacing: 16) {
+                Button(action: onAssign) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 14))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .frame(width: 32, height: 32)
                 }
+                .buttonStyle(.plain)
 
-                Button {
-                    onAssign()
-                } label: {
-                    Label("Assign", systemImage: "person.crop.circle.badge.plus")
+                Button(action: onPromote) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .frame(width: 32, height: 32)
                 }
+                .buttonStyle(.plain)
 
-                Button {
-                    onPromote()
-                } label: {
-                    Label("Promote", systemImage: "arrow.up.circle")
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red.opacity(0.7))
+                        .frame(width: 32, height: 32)
                 }
-
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -709,6 +919,7 @@ private struct BacklogItemEditSheet: View {
     let onSave: (String, String?, UUID?) -> Void
     let onDelete: () -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
@@ -736,6 +947,7 @@ private struct BacklogItemEditSheet: View {
             Form {
                 Section("Item") {
                     TextField("Title", text: $title)
+                        .font(themeStore.font(for: .listRowTitle))
                 }
 
                 Section("Assignee") {
@@ -749,6 +961,8 @@ private struct BacklogItemEditSheet: View {
 
                 Section("Notes") {
                     TextEditor(text: $notes)
+                        .font(themeStore.font(for: .listRowTitle))
+                        .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
                 }
 
@@ -758,7 +972,7 @@ private struct BacklogItemEditSheet: View {
                     }
                 }
             }
-            .navigationTitle("Backlog Item")
+            .navigationTitle("Idea Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -774,14 +988,17 @@ private struct BacklogItemEditSheet: View {
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .alert("Delete this item?", isPresented: $showDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    onDelete()
-                    dismiss()
-                }
-            } message: {
-                Text("This action cannot be undone.")
+            .sheet(isPresented: $showDeleteConfirmation) {
+                AppConfirmationSheet(
+                    title: "Delete this item?",
+                    message: "This action cannot be undone.",
+                    primaryTitle: "Delete",
+                    primaryStyle: .destructive,
+                    onPrimary: {
+                        onDelete()
+                        dismiss()
+                    }
+                )
             }
         }
     }
@@ -799,4 +1016,5 @@ private struct BacklogItemEditSheet: View {
 #Preview {
     BacklogView()
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

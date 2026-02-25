@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+// swiftlint:disable file_length
 /// Tasks screen - execution board for tasks promoted from Backlog
 struct TasksView: View {
     @EnvironmentObject private var userSession: UserSession
@@ -37,7 +38,7 @@ private struct TasksContent: View {
             switch self {
             case .assigneeRequired:
                 "Assign this task before moving it to Next."
-            case let .wipLimitReached(current, limit):
+            case .wipLimitReached(let current, let limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
             }
         }
@@ -63,25 +64,33 @@ private struct TasksContent: View {
     @StateObject private var backlogStore: BacklogStore
 
     @State private var taskBeingCompleted: UUID?
-    @State private var showAllCompleteAnimation = false
     @State private var selectedTask: Task?
     @State private var pendingNextTask: Task?
     @State private var selectedAssigneeIdForNext: UUID?
     @State private var activeBanner: InlineBanner?
     @State private var activeFilter: TasksFilter = .active
     @State private var pendingCleanupAction: CompletedCleanupAction?
-    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
+    @State private var pendingDeletedTask: Task?
+    @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
+    @State private var hiddenPendingDeleteIds: Set<UUID> = []
+    @State private var hiddenMovedToIdeasIds: Set<UUID> = []
+    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
+        .defaultRecommendedWipLimit
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var celebrationManager: CelebrationManager
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(householdId)
         _store = StateObject(wrappedValue: taskStore)
-        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
-        _backlogStore = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _backlogStore = StateObject(
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
         _selectedTab = selectedTab
     }
 
@@ -90,37 +99,38 @@ private struct TasksContent: View {
 
         VStack(spacing: 0) {
             header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
             filterToggle
-                .padding(.horizontal, 20)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.bottom, 12)
 
             if activeFilter == .active {
-                focusRuleBanner
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, activeBanner == nil ? 16 : 8)
-
                 if let activeBanner {
                     InlineStatusBanner(text: activeBanner.text)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                         .padding(.bottom, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
 
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if activeFilter == .active {
-                        activeTasksContent
-                    } else {
-                        completedTasksContent
-                    }
+            unifiedListHeader
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, 8)
+
+            List {
+                if activeFilter == .active {
+                    activeTasksContent
+                } else {
+                    completedTasksContent
                 }
             }
-            .padding(.horizontal, 20)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .animation(.easeInOut(duration: 0.22), value: visibleNextTasks.map(\.id))
             .padding(.bottom, listBottomInset)
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
@@ -140,40 +150,16 @@ private struct TasksContent: View {
             await memberStore.loadMembers()
             await backlogStore.loadData()
         }
-        .confirmationDialog(
-            "Completed Tasks Cleanup",
-            isPresented: Binding(
-                get: { pendingCleanupAction != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingCleanupAction = nil
-                    }
+        .sheet(item: $pendingCleanupAction) { action in
+            AppConfirmationSheet(
+                title: "Completed Tasks Cleanup",
+                message: cleanupMessage(for: action),
+                primaryTitle: cleanupPrimaryTitle(for: action),
+                primaryStyle: action == .clearAll ? .destructive : .accent,
+                onPrimary: {
+                    runCleanupAction(action)
                 }
             )
-        ) {
-            Button("Clear All", role: .destructive) {
-                runCleanupAction(.clearAll)
-            }
-            Button("Keep Last 7 Days") {
-                runCleanupAction(.keepLast7Days)
-            }
-            Button("Keep Last 30 Days") {
-                runCleanupAction(.keepLast30Days)
-            }
-            Button("Cancel", role: .cancel) {
-                pendingCleanupAction = nil
-            }
-        } message: {
-            switch pendingCleanupAction {
-            case .clearAll:
-                Text("This removes all completed tasks.")
-            case .keepLast7Days:
-                Text("This removes completed tasks older than 7 days.")
-            case .keepLast30Days:
-                Text("This removes completed tasks older than 30 days.")
-            case .none:
-                Text("")
-            }
         }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(
@@ -195,15 +181,17 @@ private struct TasksContent: View {
                 }
             )
         }
-        .sheet(isPresented: Binding(
-            get: { pendingNextTask != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingNextTask = nil
-                    selectedAssigneeIdForNext = nil
+        .sheet(
+            isPresented: Binding(
+                get: { pendingNextTask != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingNextTask = nil
+                        selectedAssigneeIdForNext = nil
+                    }
                 }
-            }
-        )) {
+            )
+        ) {
             if let pendingNextTask {
                 AssigneePickerSheet(
                     title: "Assign and start",
@@ -222,6 +210,20 @@ private struct TasksContent: View {
                 )
             }
         }
+        .overlay(alignment: .bottom) {
+            if let pendingDeletedTask {
+                ToastView(
+                    message: "\"\(pendingDeletedTask.title)\" deleted",
+                    actionTitle: "Undo",
+                    action: undoPendingDeleteTask
+                )
+                .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                .transition(ToastView.AnimationTokens.transition)
+                .id(pendingDeletedTask.id)
+            }
+        }
+        .animation(ToastView.AnimationTokens.curve, value: pendingDeletedTask?.id)
         .onChange(of: store.error as? TaskStoreError) { _, error in
             guard let error else { return }
             let generator = UINotificationFeedbackGenerator()
@@ -232,33 +234,55 @@ private struct TasksContent: View {
 
     @ViewBuilder
     private var activeTasksContent: some View {
-        if !store.nextTasks.isEmpty {
-            sectionHeader("NEXT")
-
-            ForEach(Array(store.nextTasks.enumerated()), id: \.element.id) { index, task in
+        if !visibleNextTasks.isEmpty {
+            ForEach(Array(visibleNextTasks.enumerated()), id: \.element.id) { index, task in
                 if taskBeingCompleted != task.id {
+                    if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
+                        overLimitSeparator
+                            .tasksListRowStyle(taskListRowInsets)
+                    }
+
                     TaskRow(
                         task: task,
                         assigneeName: assigneeName(for: task),
+                        assigneeId: task.assigneeId,
                         categoryName: categoryName(for: task),
                         categoryColor: categoryColor(for: task),
                         wipZone: wipZone(for: index),
                         onToggle: { toggleTask(task) },
                         onOpenDetail: { selectedTask = task }
                     )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            HapticManager.lightTap()
+                            demoteTaskToBacklog(task)
+                        } label: {
+                            Label("Move to Ideas", systemImage: "archivebox.fill")
+                        }
+                        .tint(.indigo)
+
+                        Button(role: .destructive) {
+                            queueDeleteTask(task)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                     .rowInsertAnimation()
                     .accessibilityIdentifier("taskRow_\(task.title)")
+                    .tasksListRowStyle(taskListRowInsets)
                 }
             }
         }
 
         if !store.backlogTasks.isEmpty {
-            sectionHeader("BACKLOG")
+            sectionHeader("IDEAS")
+                .tasksListRowStyle(taskListRowInsets)
 
             ForEach(store.backlogTasks) { task in
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
+                    assigneeId: task.assigneeId,
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -271,20 +295,20 @@ private struct TasksContent: View {
                     } label: {
                         Label("Start", systemImage: "play.fill")
                     }
-                    .tint(.blue)
+                    .tint(themeStore.accentColor)
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowBacklog_\(task.title)")
+                .tasksListRowStyle(taskListRowInsets)
             }
         }
 
         if !store.recentlyDoneTasks.isEmpty {
-            sectionHeader("COMPLETED")
-
             ForEach(store.recentlyDoneTasks) { task in
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
+                    assigneeId: task.assigneeId,
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -314,6 +338,7 @@ private struct TasksContent: View {
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowCompleted_\(task.title)")
+                .tasksListRowStyle(taskListRowInsets)
             }
         }
     }
@@ -327,13 +352,13 @@ private struct TasksContent: View {
                 Text("Complete some tasks to see them here.")
             }
             .padding(.top, 40)
+            .tasksListRowStyle(taskListRowInsets)
         } else {
-            sectionHeader("COMPLETED")
-
             ForEach(store.doneTasks) { task in
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
+                    assigneeId: task.assigneeId,
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -350,6 +375,7 @@ private struct TasksContent: View {
                 }
                 .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+                .tasksListRowStyle(taskListRowInsets)
             }
         }
     }
@@ -357,7 +383,9 @@ private struct TasksContent: View {
     private var activeMembers: [Member] {
         memberStore.members
             .filter(\.isActive)
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
     }
 
     private var currentMember: Member? {
@@ -366,23 +394,16 @@ private struct TasksContent: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text("Tasks")
-                .font(.system(size: 28, weight: .bold))
-
-            if store.nextTasks.isEmpty, !store.recentlyDoneTasks.isEmpty {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(.green)
-                    .scaleEffect(showAllCompleteAnimation ? 1.2 : 1.0)
-                    .animation(WowAnimation.spring, value: showAllCompleteAnimation)
-            }
+                .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
 
-            if activeFilter == .completed {
-                completedCleanupMenu
-            }
+            completedCleanupMenu
+                .opacity(activeFilter == .completed ? 1 : 0)
+                .disabled(activeFilter != .completed)
         }
     }
 
@@ -395,7 +416,7 @@ private struct TasksContent: View {
                     }
                 } label: {
                     Text(filter.rawValue)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(themeStore.font(for: .filterLabel))
                         .foregroundStyle(activeFilter == filter ? .primary : .secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -410,7 +431,8 @@ private struct TasksContent: View {
                                 Capsule()
                                     .stroke(Color.primary.opacity(0.08), lineWidth: 0.6)
                             }
-                            .matchedGeometryEffect(id: "tasks-filter-indicator", in: tasksFilterGlassNamespace)
+                            .matchedGeometryEffect(
+                                id: "tasks-filter-indicator", in: tasksFilterGlassNamespace)
                     }
                 }
             }
@@ -423,41 +445,33 @@ private struct TasksContent: View {
     }
 
     @ViewBuilder
-    private var focusRuleBanner: some View {
-        let count = store.nextTasks.count
-        let limit = normalizedWipLimit
-        let color = bannerColor(count: count, limit: limit)
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Focus Rule: Max \(limit) active tasks per person to ensure quality and completion.")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(color)
-
-                Text("\(count) of \(limit) slots used")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(color)
+    private var unifiedListHeader: some View {
+        HStack {
+            if activeFilter == .active {
+                Text("Active Tasks")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
 
                 Spacer()
 
-                if count == 0 {
-                    Button("Go to Backlog") {
-                        selectedTab = .backlog
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.blue)
-                }
+                let count = visibleNextTasks.count
+                let limit = normalizedWipLimit
+                let overLimit = count > limit
+
+                Text("\(count) / \(limit)")
+                    .font(themeStore.font(for: .bodySmall))
+                    .fontWeight(overLimit ? .bold : .regular)
+                    .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
+                    .monospacedDigit()
+            } else {
+                Text("COMPLETED")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+
+                Spacer()
             }
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(color.opacity(0.08))
-        }
+        .frame(minHeight: 30, alignment: .bottom)
     }
 
     private func startTaskFromBacklog(_ task: Task) {
@@ -500,7 +514,8 @@ private struct TasksContent: View {
 
         if newStatus == .next {
             if let existingAssignee = task.assigneeId {
-                let validation = store.validateNextTransition(assigneeId: existingAssignee, excludingTaskId: task.id)
+                let validation = store.validateNextTransition(
+                    assigneeId: existingAssignee, excludingTaskId: task.id)
                 guard validation == .ok else {
                     handleNextTransitionValidation(validation)
                     HapticManager.warning()
@@ -549,12 +564,27 @@ private struct TasksContent: View {
 
                     if willCompleteAll {
                         HapticManager.success()
-                        showAllCompleteAnimation = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            showAllCompleteAnimation = false
+                        if themeStore.celebrationsEnabled {
+                            celebrationManager.celebrateAllTasksComplete()
+                            celebrationManager.triggerConfetti()
+                            if activeMembers.count > 1, let name = currentMember?.displayName {
+                                celebrationManager.notifyPartner(
+                                    completedBy: name,
+                                    action: "Cleared all tasks! 🏡"
+                                )
+                            }
                         }
                     } else {
                         HapticManager.mediumTap()
+                        if themeStore.celebrationsEnabled {
+                            celebrationManager.celebrateTaskCompletion(taskTitle: task.title)
+                            if activeMembers.count > 1, let name = currentMember?.displayName {
+                                celebrationManager.notifyPartner(
+                                    completedBy: name,
+                                    action: "\(task.title) — done!"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -575,7 +605,7 @@ private struct TasksContent: View {
             activeBanner = nil
         case .assigneeRequired:
             showBanner(.assigneeRequired)
-        case let .wipLimitReached(current, limit):
+        case .wipLimitReached(let current, let limit):
             showBanner(.wipLimitReached(current: current, limit: limit))
         }
     }
@@ -611,39 +641,57 @@ private struct TasksContent: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.secondary)
+            .font(themeStore.font(for: .sectionHeader))
+            .foregroundStyle(themeStore.contentSecondaryColor)
             .padding(.top, 24)
             .padding(.bottom, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var overLimitSeparator: some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(themeStore.separatorColor)
+                .frame(height: 1)
+
+            Text("Over limit")
+                .font(themeStore.font(for: .chip))
+                .foregroundStyle(themeStore.contentSecondaryColor)
+                .fixedSize()
+
+            Rectangle()
+                .fill(themeStore.separatorColor)
+                .frame(height: 1)
+        }
+        .padding(.vertical, 6)
+        .accessibilityIdentifier("tasksOverLimitSeparator")
+    }
+
     private func wipZone(for index: Int) -> TaskRow.WipZone {
         let limit = normalizedWipLimit
         if index < limit {
-            return .safe
+            return .normal
         }
-        if index < limit + 2 {
-            return .warning
-        }
-        return .danger
+        return .warning
     }
 
     private var normalizedWipLimit: Int {
         min(max(recommendedWipLimit, 1), 7)
     }
 
-    private func bannerColor(count: Int, limit: Int) -> Color {
-        switch count {
-        case 0:
-            .blue
-        case 1 ... limit:
-            .blue
-        case (limit + 1) ... (limit + 2):
-            .orange
-        default:
-            .red
+    private var visibleNextTasks: [Task] {
+        store.nextTasks.filter {
+            !hiddenPendingDeleteIds.contains($0.id) && !hiddenMovedToIdeasIds.contains($0.id)
         }
+    }
+
+    private var taskListRowInsets: EdgeInsets {
+        EdgeInsets(
+            top: 0,
+            leading: AppChromeMetrics.screenHorizontalInset,
+            bottom: 0,
+            trailing: AppChromeMetrics.screenHorizontalInset
+        )
     }
 
     private var completedCleanupMenu: some View {
@@ -682,6 +730,28 @@ private struct TasksContent: View {
         }
     }
 
+    private func cleanupPrimaryTitle(for action: CompletedCleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "Clear All"
+        case .keepLast7Days:
+            "Keep Last 7 Days"
+        case .keepLast30Days:
+            "Keep Last 30 Days"
+        }
+    }
+
+    private func cleanupMessage(for action: CompletedCleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "This removes all completed tasks."
+        case .keepLast7Days:
+            "This removes completed tasks older than 7 days."
+        case .keepLast30Days:
+            "This removes completed tasks older than 30 days."
+        }
+    }
+
     private func archiveTask(_ task: Task) {
         var updatedTask = task
         updatedTask.completedAt = Date().addingTimeInterval(-86401)
@@ -691,16 +761,26 @@ private struct TasksContent: View {
     }
 
     private func demoteTaskToBacklog(_ task: Task) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            hiddenMovedToIdeasIds.insert(task.id)
+        }
+
         _ = _Concurrency.Task {
-            let resolvedCategoryId: UUID? = if let backlogCategoryId = task.backlogCategoryId,
-                                               backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
-            {
-                backlogCategoryId
-            } else {
-                backlogStore.categories.first?.id
-            }
+            let resolvedCategoryId: UUID? =
+                if let backlogCategoryId = task.backlogCategoryId,
+                    backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
+                {
+                    backlogCategoryId
+                } else {
+                    backlogStore.categories.first?.id
+                }
 
             guard let resolvedCategoryId else {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        hiddenMovedToIdeasIds.remove(task.id)
+                    }
+                }
                 return
             }
 
@@ -712,13 +792,64 @@ private struct TasksContent: View {
             )
 
             await store.deleteTask(task)
+            await MainActor.run {
+                hiddenMovedToIdeasIds.remove(task.id)
+            }
         }
+    }
+
+    private func queueDeleteTask(_ task: Task) {
+        if let previous = pendingDeletedTask {
+            pendingDeleteWork?.cancel()
+            pendingDeleteWork = nil
+            withAnimation(ToastView.AnimationTokens.curve) {
+                pendingDeletedTask = nil
+                hiddenPendingDeleteIds.remove(previous.id)
+            }
+
+            _ = _Concurrency.Task {
+                await store.deleteTask(previous)
+            }
+        }
+
+        withAnimation(ToastView.AnimationTokens.curve) {
+            pendingDeletedTask = task
+            hiddenPendingDeleteIds.insert(task.id)
+        }
+        HapticManager.lightTap()
+
+        pendingDeleteWork = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(nanoseconds: 5_000_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            await store.deleteTask(task)
+            await MainActor.run {
+                withAnimation(ToastView.AnimationTokens.curve) {
+                    if pendingDeletedTask?.id == task.id {
+                        pendingDeletedTask = nil
+                    }
+                    hiddenPendingDeleteIds.remove(task.id)
+                }
+                pendingDeleteWork = nil
+            }
+        }
+    }
+
+    private func undoPendingDeleteTask() {
+        guard let pendingDeletedTask else { return }
+        pendingDeleteWork?.cancel()
+        pendingDeleteWork = nil
+        withAnimation(ToastView.AnimationTokens.curve) {
+            hiddenPendingDeleteIds.remove(pendingDeletedTask.id)
+            self.pendingDeletedTask = nil
+        }
+        HapticManager.lightTap()
     }
 }
 
 // swiftlint:enable type_body_length
 
 private struct InlineStatusBanner: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let text: String
 
     var body: some View {
@@ -728,7 +859,7 @@ private struct InlineStatusBanner: View {
                 .foregroundStyle(.orange)
 
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -743,6 +874,7 @@ private struct InlineStatusBanner: View {
 }
 
 private struct AssigneePickerSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let title: String
     let members: [Member]
     @Binding var selectedAssigneeId: UUID?
@@ -757,6 +889,7 @@ private struct AssigneePickerSheet: View {
                 } label: {
                     HStack {
                         Text(member.displayName)
+                            .font(themeStore.font(for: .inlineTitle))
                             .foregroundStyle(.primary)
                         Spacer()
                         if selectedAssigneeId == member.id {
@@ -779,7 +912,7 @@ private struct AssigneePickerSheet: View {
                     Button("Start") {
                         onConfirm()
                     }
-                    .fontWeight(.semibold)
+                    .font(themeStore.font(for: .buttonLabel))
                     .disabled(selectedAssigneeId == nil)
                 }
             }
@@ -797,8 +930,11 @@ struct TaskRow: View {
         case danger
     }
 
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let task: Task
     let assigneeName: String?
+    let assigneeId: UUID?
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
@@ -807,31 +943,28 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onToggle) {
-                Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 22))
-                    .foregroundStyle(isCompleted ? .blue : uncheckedColor)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            ThemedCheckbox(
+                isChecked: isCompleted,
+                onToggle: onToggle,
+                size: 22,
+                style: .square,
+                checkedColor: checkedColor,
+                uncheckedColor: uncheckedColor
+            )
 
             Button(action: onOpenDetail) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
-                            .font(.system(size: 15))
-                            .foregroundStyle(isCompleted ? .secondary : .primary)
+                            .font(themeStore.font(for: .listRowTitle))
+                            .foregroundStyle(taskTitleColor)
                             .strikethrough(isCompleted)
 
                         HStack(spacing: 6) {
                             if let categoryName, let categoryColor {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(categoryColor)
-                                        .frame(width: 6, height: 6)
+                                HStack(spacing: 0) {
                                     Text(categoryName)
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(themeStore.font(for: .chip))
                                         .foregroundStyle(categoryColor)
                                 }
                                 .padding(.horizontal, 8)
@@ -840,18 +973,21 @@ struct TaskRow: View {
                             }
 
                             if let assigneeName {
-                                let ownerColor = categoryColor ?? .secondary
+                                let memberColor = Self.memberColor(for: assigneeId)
                                 HStack(spacing: 4) {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundStyle(ownerColor)
+                                    Text(String(assigneeName.prefix(1)).uppercased())
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(memberColor))
                                     Text(assigneeName)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(ownerColor)
+                                        .font(themeStore.font(for: .bodySmall))
+                                        .foregroundStyle(memberColor)
                                 }
-                                .padding(.horizontal, 8)
+                                .padding(.trailing, 8)
+                                .padding(.leading, 2)
                                 .padding(.vertical, 3)
-                                .background(Capsule().fill(ownerColor.opacity(0.12)))
+                                .background(Capsule().fill(memberColor.opacity(0.12)))
                             }
 
                             if let dueDate = task.dueDate {
@@ -860,7 +996,7 @@ struct TaskRow: View {
 
                             if task.taskType == .recurring {
                                 Label("Recurring", systemImage: "repeat")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(themeStore.font(for: .chip))
                                     .foregroundStyle(.purple)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
@@ -879,6 +1015,7 @@ struct TaskRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .opacity(isDimmedOverLimit ? 0.72 : 1.0)
         }
         .padding(.vertical, 2)
         .background {
@@ -891,49 +1028,80 @@ struct TaskRow: View {
         task.status == .done
     }
 
+    private var isDimmedOverLimit: Bool {
+        !isCompleted && (wipZone == .warning || wipZone == .danger)
+    }
+
+    private var taskTitleColor: Color {
+        if isCompleted || isDimmedOverLimit {
+            return themeStore.contentSecondaryColor
+        }
+        return themeStore.contentPrimaryColor
+    }
+
+    private var checkedColor: Color {
+        isDimmedOverLimit ? .secondary.opacity(0.55) : themeStore.accentTabColor
+    }
+
     private var uncheckedColor: Color {
         switch wipZone {
-        case .safe:
-            .green.opacity(0.5)
-        case .normal:
-            .secondary.opacity(0.3)
-        case .warning:
-            .orange
-        case .danger:
-            .red
+        case .safe, .normal:
+            themeStore.checkboxEmptyColor
+        case .warning, .danger:
+            themeStore.checkboxEmptyColor.opacity(0.85)
         }
     }
 
     private var rowBackgroundColor: Color {
-        switch wipZone {
-        case .safe:
-            .green.opacity(0.04)
-        case .normal:
-            .clear
-        case .warning:
-            .orange.opacity(0.06)
-        case .danger:
-            .red.opacity(0.08)
-        }
+        .clear
     }
 
     @ViewBuilder
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
         let isOverdue = task.isOverdue
+        let dueColor: Color =
+            if isDimmedOverLimit {
+                .secondary
+            } else if isOverdue {
+                .red
+            } else if isToday {
+                .orange
+            } else {
+                .secondary
+            }
+        let dueBackgroundColor: Color =
+            if isDimmedOverLimit {
+                .secondary
+            } else if isOverdue {
+                .red
+            } else {
+                .orange
+            }
 
         Text(dateFormatter.string(from: date))
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(isOverdue ? .red : (isToday ? .orange : .secondary))
+            .font(themeStore.font(for: .chip))
+            .foregroundStyle(dueColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
-            .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.12)))
+            .background(
+                Capsule()
+                    .fill(dueBackgroundColor.opacity(0.12))
+            )
     }
 
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         return formatter
+    }
+
+    /// Deterministic color for a member based on their ID hash.
+    private static func memberColor(for id: UUID?) -> Color {
+        guard let id else { return .secondary }
+        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .indigo, .mint]
+        let hash = abs(id.hashValue)
+        return colors[hash % colors.count]
     }
 }
 
@@ -944,6 +1112,7 @@ private struct TaskDetailSheet: View {
     let onDelete: (Task) -> Void
     let onDemoteToBacklog: (Task) -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
@@ -979,8 +1148,9 @@ private struct TaskDetailSheet: View {
             Form {
                 Section("Task") {
                     TextField("Title", text: $title)
+                        .font(themeStore.font(for: .listRowTitle))
                     Picker("Status", selection: $status) {
-                        Text("Backlog").tag(Task.TaskStatus.backlog)
+                        Text("Ideas").tag(Task.TaskStatus.backlog)
                         Text("Next").tag(Task.TaskStatus.next)
                         Text("Done").tag(Task.TaskStatus.done)
                     }
@@ -1008,6 +1178,8 @@ private struct TaskDetailSheet: View {
 
                 Section("Notes") {
                     TextEditor(text: $notes)
+                        .font(themeStore.font(for: .listRowTitle))
+                        .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
                 }
 
@@ -1056,7 +1228,17 @@ private struct TaskDetailSheet: View {
     }
 }
 
+extension View {
+    fileprivate func tasksListRowStyle(_ insets: EdgeInsets) -> some View {
+        listRowInsets(insets)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+}
+
 #Preview {
     TasksView(selectedTab: .constant(.tasks))
         .environmentObject(UserSession.shared)
 }
+
+// swiftlint:enable file_length

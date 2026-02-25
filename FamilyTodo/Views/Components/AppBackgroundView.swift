@@ -1,11 +1,8 @@
 import SwiftUI
 
 /// Subtle app-wide background that gives glass blur materials content to sample.
-///
-/// Uses the app's standard base colour with a very subtle gradient shift near the
-/// bottom of the screen. This ensures the floating tab bar's frosted-glass effect
-/// remains perceptible even on screens with little scrollable content.
 struct AppBackgroundView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -18,18 +15,31 @@ struct AppBackgroundView: View {
     }
 
     private var gradientStops: [Gradient.Stop] {
-        if colorScheme == .dark {
+        switch themeStore.preset {
+        case .retro:
             [
-                .init(color: .black, location: 0),
-                .init(color: Color(red: 0.05, green: 0.05, blue: 0.08), location: 0.72),
-                .init(color: Color(red: 0.12, green: 0.08, blue: 0.20), location: 1.0),
+                .init(color: Color(hex: "050510"), location: 0),
+                .init(color: Color(hex: "0D0D22"), location: 0.74),
+                .init(color: Color(hex: "1A0F2F"), location: 1.0),
             ]
-        } else {
+        case .paper:
             [
-                .init(color: Color(hex: "FAFAF9"), location: 0),
-                .init(color: Color(hex: "F5F1EB"), location: 0.78),
-                .init(color: Color(hex: "EDE4D9"), location: 1.0),
+                .init(color: Color(hex: "F7F0E3"), location: 0),
+                .init(color: Color(hex: "F2E8D6"), location: 0.78),
+                .init(color: Color(hex: "E9D9BF"), location: 1.0),
             ]
+        case .system:
+            if colorScheme == .dark {
+                [
+                    .init(color: Color(hex: "000000"), location: 0),
+                    .init(color: Color(hex: "000000"), location: 1.0),
+                ]
+            } else {
+                [
+                    .init(color: Color(hex: "FFFFFF"), location: 0),
+                    .init(color: Color(hex: "FFFFFF"), location: 1.0),
+                ]
+            }
         }
     }
 }

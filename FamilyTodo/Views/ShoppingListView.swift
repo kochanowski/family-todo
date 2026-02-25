@@ -43,6 +43,9 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var celebrationManager: CelebrationManager
+    @Environment(\.colorScheme) private var colorScheme
 
     // Rapid entry state
     @State private var isRapidEntryActive = false
@@ -57,8 +60,6 @@ private struct ShoppingListContent: View {
     @State private var isKeyboardVisible = false
     @State private var draggedItem: ShoppingItem?
 
-    @Environment(\.colorScheme) private var colorScheme
-
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
             wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
@@ -69,8 +70,8 @@ private struct ShoppingListContent: View {
         GeometryReader { proxy in
             let listBottomInset =
                 isKeyboardVisible
-                    ? CGFloat(16)
-                    : AppChromeMetrics.compactCTAHeight + 28
+                ? CGFloat(16)
+                : AppChromeMetrics.compactCTAHeight + 28
             let floatingButtonInset: CGFloat = 16
             let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
 
@@ -87,9 +88,9 @@ private struct ShoppingListContent: View {
                 VStack(spacing: 0) {
                     // Header
                     header
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .padding(.bottom, 12)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                        .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
                     // Items list with rapid entry
                     ScrollViewReader { proxy in
@@ -101,23 +102,31 @@ private struct ShoppingListContent: View {
                                             if editingItemId == item.id {
                                                 ShoppingItemInlineEditRow(
                                                     text: $editingItemText,
+                                                    isBought: item.isBought,
+                                                    onToggle: {
+                                                        cancelEditingItem()
+                                                        toggleItem(item)
+                                                    },
                                                     onSubmit: { commitEditingItem(item) },
                                                     onCancel: cancelEditingItem
                                                 )
-                                                .accessibilityIdentifier("shoppingItemEdit_\(item.title)")
+                                                .accessibilityIdentifier(
+                                                    "shoppingItemEdit_\(item.title)")
                                             } else {
                                                 ShoppingItemRow(
                                                     item: item,
                                                     onToggle: { toggleItem(item) },
                                                     onEdit: { startEditingItem(item) }
                                                 )
-                                                .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                                .accessibilityIdentifier(
+                                                    "shoppingItem_\(item.title)")
                                             }
                                         }
                                     }
                                     .onDrag {
                                         draggedItem = item
-                                        return NSItemProvider(object: item.id.uuidString as NSString)
+                                        return NSItemProvider(
+                                            object: item.id.uuidString as NSString)
                                     }
                                     .onDrop(
                                         of: [UTType.text],
@@ -126,7 +135,8 @@ private struct ShoppingListContent: View {
                                             items: store.toBuyItems,
                                             draggedItem: $draggedItem,
                                             onMove: { from, to in
-                                                store.moveToBuyItems(from: from, to: to, persist: false)
+                                                store.moveToBuyItems(
+                                                    from: from, to: to, persist: false)
                                             },
                                             onDrop: {
                                                 _ = _Concurrency.Task {
@@ -143,7 +153,7 @@ private struct ShoppingListContent: View {
                                         .id("rapidEntry")
                                 }
                             }
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                             .padding(.bottom, listBottomInset)
                         }
                         .scrollDismissesKeyboard(.interactively)
@@ -187,40 +197,43 @@ private struct ShoppingListContent: View {
             guard !visible, let editingItem = currentEditingItem else { return }
             commitEditingItem(editingItem)
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
+        ) { _ in
             isKeyboardVisible = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
+        ) { _ in
             isKeyboardVisible = false
         }
-        .alert("Clear shopping list?", isPresented: $showClearToBuyConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Clear", role: .destructive) {
-                clearToBuy()
-            }
-        } message: {
-            Text("This removes current To Buy items. Recently Purchased stays unchanged.")
+        .sheet(isPresented: $showClearToBuyConfirmation) {
+            AppConfirmationSheet(
+                title: "Clear shopping list?",
+                message: "This removes current To Buy items. Recently Purchased stays unchanged.",
+                primaryTitle: "Clear",
+                primaryStyle: .destructive,
+                onPrimary: clearToBuy
+            )
         }
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            Text("Shopping")
-                .font(.system(size: 28, weight: .bold))
+        HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("Shopping")
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
-            // Item count badge
-            if !store.toBuyItems.isEmpty {
-                Text("\(store.toBuyItems.count)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(.blue))
+                // Item count badge
+                if !store.toBuyItems.isEmpty {
+                    ShoppingCountBadge(count: store.toBuyItems.count)
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 12)
 
             HStack(spacing: 14) {
                 // Clear To Buy button
@@ -231,7 +244,7 @@ private struct ShoppingListContent: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
@@ -245,7 +258,7 @@ private struct ShoppingListContent: View {
                 } label: {
                     Image(systemName: "clock.badge.checkmark")
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -260,28 +273,35 @@ private struct ShoppingListContent: View {
                     )
                 }
             }
+            .padding(.top, 2)
         }
     }
 
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
-        Button {
+        let foreground = themeStore.foregroundOnAccent(
+            for: themeStore.accentTabColor, colorScheme: colorScheme)
+
+        return Button {
             startRapidEntry()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .bold))
                 Text("Add item")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(
+                        themeStore.preset == .retro
+                            ? .system(size: 15, weight: .semibold)
+                            : themeStore.font(for: .buttonLabel))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
             .frame(height: AppChromeMetrics.compactCTAHeight)
             .background {
                 Capsule()
-                    .fill(.blue)
-                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .fill(themeStore.accentTabColor)
+                    .shadow(color: themeStore.accentTabColor.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .buttonStyle(.plain)
@@ -290,21 +310,44 @@ private struct ShoppingListContent: View {
 
     private var rapidEntryRow: some View {
         HStack(spacing: 10) {
-            Circle()
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                .frame(width: 20, height: 20)
+            rapidEntryPlaceholderIcon
 
             RapidEntryTextField(
                 text: $rapidEntryText,
                 isFocused: $rapidEntryFocused,
                 placeholder: "Add item",
+                actionColor: UIColor(themeStore.accentTabColor),
+                actionForegroundColor: UIColor(
+                    themeStore.foregroundOnAccent(
+                        for: themeStore.accentTabColor, colorScheme: colorScheme)),
                 onSubmit: handleRapidEntrySubmit,
-                onDone: commitOrDismissRapidEntry
+                onDone: commitOrDismissRapidEntry,
+                themeStore: themeStore
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
         }
         .padding(.vertical, 6)
-        .background(cardBackground.opacity(0.01)) // Tap target
+        .background(cardBackground.opacity(0.01))  // Tap target
+    }
+
+    @ViewBuilder
+    private var rapidEntryPlaceholderIcon: some View {
+        if themeStore.preset == .retro {
+            Rectangle()
+                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                .frame(width: 20, height: 20)
+                .overlay {
+                    Rectangle()
+                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                        .padding(0.8)
+                }
+                .frame(width: 44)
+        } else {
+            Circle()
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
+                .frame(width: 20, height: 20)
+                .frame(width: 44)
+        }
     }
 
     // MARK: - Rapid Entry Logic
@@ -395,6 +438,7 @@ private struct ShoppingListContent: View {
 
     private func toggleItem(_ item: ShoppingItem) {
         HapticManager.lightTap()
+        let shouldCelebrateCompletion = store.toBuyItems.count == 1 && !item.isBought
 
         // Animate item removal
         withAnimation(WowAnimation.easeOut) {
@@ -412,6 +456,10 @@ private struct ShoppingListContent: View {
             _Concurrency.Task {
                 await store.toggleBought(item)
                 itemBeingRemoved = nil
+                if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
+                    celebrationManager.celebrateShoppingComplete()
+                    celebrationManager.triggerConfetti()
+                }
             }
         }
     }
@@ -445,39 +493,36 @@ private struct ShoppingListContent: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
 // MARK: - Shopping Item Row
 
 struct ShoppingItemRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let item: ShoppingItem
     let onToggle: () -> Void
     let onEdit: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            // Circular checkbox
-            Button(action: onToggle) {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                    .frame(width: 20, height: 20)
-                    .overlay {
-                        if item.isBought {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 13, height: 13)
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
+            ThemedCheckbox(
+                isChecked: item.isBought,
+                onToggle: onToggle,
+                size: 20,
+                style: .circle
+            )
             .accessibilityIdentifier("shoppingToggle_\(item.title)")
 
             Button(action: onEdit) {
                 Text(item.title)
-                    .font(.system(size: 15))
-                    .foregroundStyle(item.isBought ? .secondary : .primary)
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(
+                        item.isBought
+                            ? themeStore.contentSecondaryColor : themeStore.contentPrimaryColor
+                    )
                     .strikethrough(item.isBought)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -493,20 +538,23 @@ struct ShoppingItemRow: View {
 
 private struct ShoppingItemInlineEditRow: View {
     @Binding var text: String
+    let isBought: Bool
+    let onToggle: () -> Void
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @FocusState private var isFocused: Bool
     @State private var isCancelling = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Circle()
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
-                .frame(width: 20, height: 20)
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
+                .frame(width: 22, height: 22)
 
             TextField("Item name", text: $text)
-                .font(.system(size: 15))
+                .font(themeStore.font(for: .listRowTitle))
                 .submitLabel(.done)
                 .focused($isFocused)
                 .onSubmit(onSubmit)
@@ -540,8 +588,11 @@ private struct RapidEntryTextField: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let placeholder: String
+    let actionColor: UIColor
+    let actionForegroundColor: UIColor
     let onSubmit: () -> Void
     let onDone: () -> Void
+    let themeStore: ThemeStore
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -550,8 +601,18 @@ private struct RapidEntryTextField: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField(frame: .zero)
         textField.delegate = context.coordinator
-        textField.font = .systemFont(ofSize: 15)
-        textField.placeholder = placeholder
+
+        let customFont = themeStore.uiFont(for: .listRowTitle)
+        textField.font = customFont
+
+        textField.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: customFont,
+                .foregroundColor: UIColor.secondaryLabel,
+            ]
+        )
+
         textField.returnKeyType = .done
         textField.autocapitalizationType = .sentences
         textField.autocorrectionType = .yes
@@ -564,9 +625,21 @@ private struct RapidEntryTextField: UIViewRepresentable {
         return textField
     }
 
-    func updateUIView(_ uiView: UITextField, context _: Context) {
+    func updateUIView(_ uiView: UITextField, context: Context) {
         if uiView.text != text {
             uiView.text = text
+        }
+
+        let customFont = themeStore.uiFont(for: .listRowTitle)
+        if uiView.font != customFont {
+            uiView.font = customFont
+            uiView.attributedPlaceholder = NSAttributedString(
+                string: placeholder,
+                attributes: [
+                    .font: customFont,
+                    .foregroundColor: UIColor.secondaryLabel,
+                ]
+            )
         }
 
         if isFocused, !uiView.isFirstResponder {
@@ -618,8 +691,8 @@ private struct RapidEntryTextField: UIViewRepresentable {
             let button = UIButton(type: .system)
             button.setTitle("Done", for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-            button.setTitleColor(.white, for: .normal)
-            button.backgroundColor = UIColor.systemBlue
+            button.setTitleColor(parent.actionForegroundColor, for: .normal)
+            button.backgroundColor = parent.actionColor
             button.layer.cornerRadius = buttonHeight / 2
             button.contentEdgeInsets = UIEdgeInsets(
                 top: 0,
@@ -630,7 +703,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
             button.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
 
             // Shadow matching the Add item pill
-            button.layer.shadowColor = UIColor.systemBlue.withAlphaComponent(0.3).cgColor
+            button.layer.shadowColor = parent.actionColor.withAlphaComponent(0.3).cgColor
             button.layer.shadowRadius = 8
             button.layer.shadowOffset = CGSize(width: 0, height: 4)
             button.layer.shadowOpacity = 1.0
@@ -643,7 +716,8 @@ private struct RapidEntryTextField: UIViewRepresentable {
                     equalTo: container.trailingAnchor,
                     constant: -AppChromeMetrics.horizontalInset
                 ),
-                button.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -bottomInset),
+                button.bottomAnchor.constraint(
+                    equalTo: container.bottomAnchor, constant: -bottomInset),
                 button.heightAnchor.constraint(equalToConstant: buttonHeight),
             ])
 
@@ -665,7 +739,7 @@ struct RestockSheet: View {
     let onDeleteItem: (ShoppingItem) -> Void
     let onClearAll: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var showClearAllConfirmation = false
 
     var body: some View {
@@ -687,7 +761,7 @@ struct RestockSheet: View {
                                 onDelete: { onDeleteItem(item) }
                             )
                             .listRowInsets(
-                                EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+                                EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
                             )
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -697,7 +771,7 @@ struct RestockSheet: View {
                 }
             }
             .background(
-                (colorScheme == .dark ? Color.black : Color(hex: "F9F9F9")).ignoresSafeArea()
+                themeStore.canvasColor.ignoresSafeArea()
             )
             .navigationTitle("Recently Purchased")
             .navigationBarTitleDisplayMode(.inline)
@@ -708,22 +782,29 @@ struct RestockSheet: View {
                             showClearAllConfirmation = true
                         } label: {
                             Text("Clear All")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .foregroundStyle(.red)
                         }
+                        .tint(.red)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .fontWeight(.bold)
+                    .tint(themeStore.accentTabColor)
                 }
             }
-            .alert("Clear all recently purchased?", isPresented: $showClearAllConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Clear All", role: .destructive) {
-                    onClearAll()
-                }
-            } message: {
-                Text("This permanently removes all items from the recently purchased list.")
+            .sheet(isPresented: $showClearAllConfirmation) {
+                AppConfirmationSheet(
+                    title: "Clear all recently purchased?",
+                    message: "This permanently removes all items from the recently purchased list.",
+                    primaryTitle: "Clear All",
+                    primaryStyle: .destructive,
+                    onPrimary: onClearAll
+                )
             }
         }
         .presentationDetents([.medium, .large])
@@ -735,11 +816,13 @@ private struct RestockItemRow: View {
     let item: ShoppingItem
     let onRestore: () -> Void
     let onDelete: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         HStack {
             Text(item.title)
-                .font(.system(size: 15))
+                .font(themeStore.font(for: .listRowTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
                 .lineLimit(1)
 
             Spacer()
@@ -749,10 +832,10 @@ private struct RestockItemRow: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(themeStore.accentTabColor)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
@@ -799,4 +882,5 @@ private struct ShoppingItemReorderDropDelegate: DropDelegate {
 #Preview {
     ShoppingListView()
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

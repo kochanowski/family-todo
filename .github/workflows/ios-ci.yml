@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp]
+    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, r4-features]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -20,9 +20,25 @@ on:
           - sync-enabled
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Notify: build started
+  # ─────────────────────────────────────────────────────────────────────────
+  notify-start:
+    name: Notify Start (Telegram)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram start message
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '\360\237\232\200 <b>Build started</b>\nBranch: <code>${{ github.ref_name }}</code>\nCommit: <code>${{ github.sha }}</code>\n<a href="%s">Sledz postep</a>' "${JOB_URL}")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
+  # ─────────────────────────────────────────────────────────────────────────
   # Build and Test
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
   build-and-test:
     name: Build and Test
     runs-on: macos-15
@@ -147,6 +163,16 @@ jobs:
       #     name: HousePulse-TestResults
       #     path: TestResults.xcresult
 
+      - name: Notify build success
+        if: success()
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '\342\234\205 <b>Build OK</b>\nBranch: <code>${{ github.ref_name }}</code>\n<a href="%s">Szczegoly</a>' "${JOB_URL}")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
   # ─────────────────────────────────────────────────────────────
@@ -164,6 +190,16 @@ jobs:
       - name: Run SwiftLint
         run: swiftlint lint --reporter github-actions-logging
 
+      - name: Notify SwiftLint success
+        if: success()
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '\342\234\205 <b>SwiftLint OK</b>\nBranch: <code>${{ github.ref_name }}</code>\n<a href="%s">Szczegoly</a>' "${JOB_URL}")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
   # ─────────────────────────────────────────────────────────────
   # Deploy to TestFlight (Fastlane)
   # ─────────────────────────────────────────────────────────────
@@ -174,7 +210,7 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     needs: [build-and-test, swiftlint]
     # Only run on manual dispatch, tags starting with 'v', or pushes to main or feature/continue-mvp
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/continue-mvp'))
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features'))
 
     steps:
       - name: Checkout
@@ -278,16 +314,39 @@ jobs:
           retention-days: 30
 
   # ─────────────────────────────────────────────────────────────
-  # Notify on failure
+  # Notify: failure (build, lint, OR deploy)
   # ─────────────────────────────────────────────────────────────
   notify-failure:
-    name: Notify on Failure
+    name: Notify Failure (Telegram)
     runs-on: ubuntu-latest
-    needs: [build-and-test, swiftlint]
+    needs: [build-and-test, swiftlint, deploy-testflight]
     if: failure()
 
     steps:
-      - name: Log failure
+      - name: Send Telegram failure message
         run: |
-          echo "Build or tests failed!"
-          echo "Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '❌ <b>Build failed</b>\nBranch: <code>${{ github.ref_name }}</code>\nCommit: <code>${{ github.sha }}</code>\n<a href="'"${JOB_URL}"'">Zobacz logi →</a>')
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"
+
+  # ─────────────────────────────────────────────────────────────
+  # Notify: TestFlight deploy success
+  # ─────────────────────────────────────────────────────────────
+  notify-success:
+    name: Notify Success (Telegram)
+    runs-on: ubuntu-latest
+    needs: [deploy-testflight]
+    if: success()
+
+    steps:
+      - name: Send Telegram success message
+        run: |
+          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf '✅ <b>TestFlight deploy OK</b>\nBranch: <code>${{ github.ref_name }}</code>\nBuild: <code>#${{ github.run_number }}</code>\n<a href="'"${JOB_URL}"'">Szczegóły →</a>')
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "text=${MSG}"

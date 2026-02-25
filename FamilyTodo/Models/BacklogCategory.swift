@@ -70,6 +70,12 @@ extension BacklogCategory {
         .cyan,
         Color(red: 0.95, green: 0.4, blue: 0.3), // coral
         Color(red: 0.3, green: 0.7, blue: 0.4), // emerald
+        Color(red: 0.6, green: 0.2, blue: 0.8), // violet
+        Color(red: 0.2, green: 0.6, blue: 0.9), // sky blue
+        Color(red: 0.9, green: 0.6, blue: 0.1), // amber
+        Color(red: 0.4, green: 0.8, blue: 0.7), // aquamarine
+        Color(red: 0.85, green: 0.3, blue: 0.5), // rose
+        Color(red: 0.5, green: 0.7, blue: 0.2), // lime
     ]
 
     /// Deterministic color derived from category id.

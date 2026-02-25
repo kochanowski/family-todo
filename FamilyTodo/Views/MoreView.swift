@@ -1,20 +1,21 @@
 import Foundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// More screen - hub for settings, profile, and configuration
 struct MoreView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
+                .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
             // Menu items
             ScrollView {
@@ -36,7 +37,7 @@ struct MoreView: View {
                                 GuidedEmptyStateView()
                             }
                         } label: {
-                            MoreRow(icon: "folder", title: "Backlog Categories")
+                            MoreRow(icon: "folder", title: "Idea Categories")
                         }
                         .buttonStyle(.plain)
 
@@ -83,23 +84,24 @@ struct MoreView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text("More")
-                .font(.system(size: 28, weight: .bold))
+                .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
         }
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
 // MARK: - Profile Card
 
 struct ProfileCard: View {
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
 
@@ -108,7 +110,7 @@ struct ProfileCard: View {
             // Avatar stack
             ZStack {
                 Circle()
-                    .fill(.blue)
+                    .fill(themeStore.accentColor)
                     .frame(width: 44, height: 44)
                     .overlay {
                         Text(String(userSession.displayName?.prefix(1) ?? "U"))
@@ -121,10 +123,10 @@ struct ProfileCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(userSession.displayName ?? "User")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(themeStore.font(for: .profileName))
 
                 Text(householdStore.currentHousehold?.name ?? "No Household")
-                    .font(.system(size: 13))
+                    .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(.secondary)
             }
 
@@ -142,7 +144,7 @@ struct ProfileCard: View {
     }
 
     private var cardBackground: Color {
-        colorScheme == .dark ? Color(hex: "1C1C1E") : .white
+        themeStore.surfaceColor
     }
 }
 
@@ -150,6 +152,8 @@ struct ProfileCard: View {
 
 /// Standardized row for More menu items to ensure consistent icon sizing and styling.
 struct MoreRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
     let icon: String
     let title: String
     var subtitle: String?
@@ -165,13 +169,13 @@ struct MoreRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16))
-                    .foregroundStyle(.primary)
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
             }
 
@@ -190,6 +194,7 @@ struct MoreRow: View {
 // MARK: - Sub-screens
 
 struct ProfileView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
     @State private var editedHouseholdName = ""
@@ -239,30 +244,37 @@ struct ProfileView: View {
                 }
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Rename Household", isPresented: $showRenameHousehold) {
-            TextField("Household name", text: $editedHouseholdName)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                renameHousehold()
-            }
+        .sheet(isPresented: $showRenameHousehold) {
+            AppPromptSheet(
+                title: "Rename Household",
+                placeholder: "Household name",
+                text: $editedHouseholdName,
+                primaryTitle: "Save",
+                onSubmit: { _ in
+                    renameHousehold()
+                }
+            )
         }
-        .confirmationDialog("Leave household?", isPresented: $showLeaveConfirmation) {
-            Button("Leave", role: .destructive) {
-                leaveHousehold()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You will lose access until invited again.")
+        .sheet(isPresented: $showLeaveConfirmation) {
+            AppConfirmationSheet(
+                title: "Leave household?",
+                message: "You will lose access until invited again.",
+                primaryTitle: "Leave",
+                primaryStyle: .destructive,
+                onPrimary: leaveHousehold
+            )
         }
-        .confirmationDialog("Delete household permanently?", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                deleteHousehold()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This action removes members and shared data.")
+        .sheet(isPresented: $showDeleteConfirmation) {
+            AppConfirmationSheet(
+                title: "Delete household permanently?",
+                message: "This action removes members and shared data.",
+                primaryTitle: "Delete",
+                primaryStyle: .destructive,
+                onPrimary: deleteHousehold
+            )
         }
         .alert("Action failed", isPresented: Binding(
             get: { actionErrorMessage != nil },
@@ -310,6 +322,7 @@ struct ProfileView: View {
 }
 
 struct MemberRow: View {
+    @EnvironmentObject private var themeStore: ThemeStore
     let name: String
     let initials: String
     let color: Color
@@ -326,7 +339,7 @@ struct MemberRow: View {
                 }
 
             Text(name)
-                .font(.system(size: 16))
+                .font(themeStore.font(for: .inlineTitle))
 
             Spacer()
         }
@@ -336,6 +349,7 @@ struct MemberRow: View {
 struct CategoriesManagementView: View {
     @StateObject private var store: BacklogStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var newCategoryName = ""
     @State private var renamingCategory: BacklogCategory?
     @State private var renamingTitle = ""
@@ -395,7 +409,8 @@ struct CategoriesManagementView: View {
                 }
             }
         }
-        .navigationTitle("Backlog Categories")
+        .environment(\.font, themeStore.font(for: .inlineTitle))
+        .navigationTitle("Idea Categories")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -406,21 +421,23 @@ struct CategoriesManagementView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
-        .alert("Rename Category", isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { renamingCategory != nil },
             set: { if !$0 { renamingCategory = nil } }
         )) {
-            TextField("Category name", text: $renamingTitle)
-            Button("Cancel", role: .cancel) {
-                renamingCategory = nil
-            }
-            Button("Save") {
-                guard let category = renamingCategory else { return }
-                _ = _Concurrency.Task {
-                    await store.renameCategory(category, newTitle: renamingTitle)
+            AppPromptSheet(
+                title: "Rename Category",
+                placeholder: "Category name",
+                text: $renamingTitle,
+                primaryTitle: "Save",
+                onSubmit: { newTitle in
+                    guard let category = renamingCategory else { return }
+                    _ = _Concurrency.Task {
+                        await store.renameCategory(category, newTitle: newTitle)
+                    }
+                    renamingCategory = nil
                 }
-                renamingCategory = nil
-            }
+            )
         }
     }
 
@@ -436,17 +453,23 @@ struct CategoriesManagementView: View {
 
 struct RepetitiveTasksView: View {
     @StateObject private var store: RecurringChoreStore
+    @StateObject private var backlogStore: BacklogStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var newTitle = ""
     @State private var recurrenceType: RecurringChore.RecurrenceType = .weekly
     @State private var recurrenceDay = 2
     @State private var recurrenceDayOfMonth = 1
     @State private var recurrenceInterval = 1
+    @State private var selectedCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
             wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
+        )
+        _backlogStore = StateObject(
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
     }
 
@@ -461,7 +484,7 @@ struct RepetitiveTasksView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(chore.title)
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(themeStore.font(for: .inlineTitle))
                                 Spacer()
                                 Toggle("", isOn: Binding(
                                     get: { chore.isActive },
@@ -477,8 +500,19 @@ struct RepetitiveTasksView: View {
                             }
 
                             Text(chore.recurrenceType.rawValue.capitalized)
-                                .font(.system(size: 12))
+                                .font(themeStore.font(for: .chip))
                                 .foregroundStyle(.secondary)
+
+                            if let categoryId = chore.categoryId,
+                               let category = backlogStore.categories.first(where: { $0.id == categoryId })
+                            {
+                                Text(category.title)
+                                    .font(themeStore.font(for: .chip))
+                                    .foregroundStyle(category.color)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(category.color.opacity(0.12)))
+                            }
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -520,6 +554,13 @@ struct RepetitiveTasksView: View {
                     }
                 }
 
+                Picker("Category", selection: $selectedCategoryId) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(backlogStore.categories) { category in
+                        Text(category.title).tag(UUID?.some(category.id))
+                    }
+                }
+
                 Button {
                     let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !title.isEmpty else { return }
@@ -529,22 +570,27 @@ struct RepetitiveTasksView: View {
                             recurrenceType: recurrenceType,
                             recurrenceInterval: recurrenceType == .custom ? recurrenceInterval : 1,
                             recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
-                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil
+                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
+                            categoryId: selectedCategoryId
                         )
                     }
                     newTitle = ""
                     recurrenceInterval = 1
+                    selectedCategoryId = nil
                 } label: {
                     Label("Add repetitive task", systemImage: "plus.circle.fill")
                 }
                 .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Repetitive Tasks")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             store.setSyncMode(userSession.syncMode)
+            backlogStore.setSyncMode(userSession.syncMode)
             await store.loadChores()
+            await backlogStore.loadData()
         }
     }
 
@@ -587,6 +633,7 @@ private struct CompletedTasksContent: View {
 
     @StateObject private var store: TaskStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var pendingCleanup: CleanupAction?
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -608,20 +655,20 @@ private struct CompletedTasksContent: View {
                     ForEach(store.archivedDoneTasks) { task in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(task.title)
-                                .font(.system(size: 15))
+                                .font(themeStore.font(for: .listRowTitle))
                                 .strikethrough(true)
                                 .foregroundStyle(.secondary)
 
                             if let notes = task.notes, !notes.isEmpty {
                                 Text(notes)
-                                    .font(.system(size: 13))
+                                    .font(themeStore.font(for: .bodySmall))
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(2)
                             }
 
                             if let completedAt = task.completedAt {
                                 Text(completedAt, style: .relative)
-                                    .font(.system(size: 11))
+                                    .font(themeStore.font(for: .chip))
                                     .foregroundStyle(.tertiary)
                             }
                         }
@@ -631,6 +678,7 @@ private struct CompletedTasksContent: View {
                 .listStyle(.plain)
             }
         }
+        .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Task History")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -661,40 +709,16 @@ private struct CompletedTasksContent: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Task History Cleanup",
-            isPresented: Binding(
-                get: { pendingCleanup != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingCleanup = nil
-                    }
+        .sheet(item: $pendingCleanup) { action in
+            AppConfirmationSheet(
+                title: "Task History Cleanup",
+                message: cleanupMessage(for: action),
+                primaryTitle: cleanupPrimaryTitle(for: action),
+                primaryStyle: action == .clearAll ? .destructive : .accent,
+                onPrimary: {
+                    runCleanupAction(action)
                 }
             )
-        ) {
-            Button("Clear All", role: .destructive) {
-                runCleanupAction(.clearAll)
-            }
-            Button("Keep Last 7 Days") {
-                runCleanupAction(.keepLast7Days)
-            }
-            Button("Keep Last 30 Days") {
-                runCleanupAction(.keepLast30Days)
-            }
-            Button("Cancel", role: .cancel) {
-                pendingCleanup = nil
-            }
-        } message: {
-            switch pendingCleanup {
-            case .clearAll:
-                Text("This permanently removes all items from Task History.")
-            case .keepLast7Days:
-                Text("This removes history older than 7 days.")
-            case .keepLast30Days:
-                Text("This removes history older than 30 days.")
-            case .none:
-                Text("")
-            }
         }
         .task {
             store.setSyncMode(userSession.syncMode)
@@ -715,208 +739,27 @@ private struct CompletedTasksContent: View {
             }
         }
     }
-}
 
-struct SettingsView: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-    @EnvironmentObject private var userSession: UserSession
-    @EnvironmentObject private var householdStore: HouseholdStore
-    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
-    @StateObject private var notificationSettings = NotificationSettingsStore()
-    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
-
-    var body: some View {
-        List {
-            // MARK: - Appearance Section
-
-            Section {
-                AppearanceSelector(selectedMode: Binding(
-                    get: { themeStore.appearanceMode },
-                    set: {
-                        HapticManager.selection()
-                        themeStore.appearanceMode = $0
-                    }
-                ))
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                .listRowBackground(Color.clear)
-            } header: {
-                Text("Appearance")
-            }
-
-            // MARK: - Toggles Section
-
-            Section {
-                Toggle(isOn: Binding(
-                    get: { themeStore.celebrationsEnabled },
-                    set: { themeStore.celebrationsEnabled = $0 }
-                )) {
-                    Label("Celebrations", systemImage: "party.popper.fill")
-                        .foregroundStyle(.primary)
-                }
-                .accessibilityIdentifier("settingsToggle_celebrations")
-
-                Toggle(isOn: Binding(
-                    get: { themeStore.suggestionsEnabled },
-                    set: { themeStore.suggestionsEnabled = $0 }
-                )) {
-                    Label("Shopping suggestions", systemImage: "lightbulb.fill")
-                        .foregroundStyle(.primary)
-                }
-                .accessibilityIdentifier("settingsToggle_suggestions")
-            }
-
-            Section("Tasks") {
-                HStack {
-                    Label("Recommended task limit", systemImage: "target")
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Stepper(value: $recommendedWipLimit, in: 1 ... 7) {
-                        Text("\(recommendedWipLimit)")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .frame(width: 130)
-                }
-            }
-
-            Section("Notifications") {
-                Toggle("Enable notifications", isOn: $notificationSettings.isEnabled)
-                    .onChange(of: notificationSettings.isEnabled) { _, enabled in
-                        if enabled {
-                            _ = _Concurrency.Task {
-                                await NotificationService.shared.requestAuthorization()
-                            }
-                        }
-                    }
-
-                Toggle("Task reminders", isOn: $notificationSettings.taskRemindersEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-
-                Toggle("Daily digest", isOn: $notificationSettings.dailyDigestEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-
-                if notificationSettings.dailyDigestEnabled {
-                    DatePicker(
-                        "Digest time",
-                        selection: Binding(
-                            get: { notificationSettings.reminderTime },
-                            set: { notificationSettings.reminderTime = $0 }
-                        ),
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .disabled(!notificationSettings.isEnabled)
-                }
-
-                Toggle("Notification sound", isOn: $notificationSettings.soundEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-            }
-
-            // MARK: - Sign Out
-
-            Section {
-                Button(role: .destructive) {
-                    signOut()
-                } label: {
-                    HStack {
-                        Spacer()
-                        Text("Sign Out")
-                        Spacer()
-                    }
-                }
-            }
-        }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            NotificationService.shared.setSettingsStore(notificationSettings)
-            await NotificationService.shared.checkAuthorizationStatus()
-            await syncDailyDigest()
-        }
-        .onChange(of: notificationSettings.dailyDigestEnabled) { _, _ in
-            _ = _Concurrency.Task {
-                await syncDailyDigest()
-            }
-        }
-        .onChange(of: notificationSettings.reminderTime) { _, _ in
-            _ = _Concurrency.Task {
-                await syncDailyDigest()
-            }
+    private func cleanupPrimaryTitle(for action: CleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "Clear All"
+        case .keepLast7Days:
+            "Keep Last 7 Days"
+        case .keepLast30Days:
+            "Keep Last 30 Days"
         }
     }
 
-    private func signOut() {
-        _Concurrency.Task {
-            await subscriptionManager.removeSubscriptions()
-            householdStore.clearCurrentHousehold()
-            userSession.clearCurrentHousehold()
-            userSession.signOut()
+    private func cleanupMessage(for action: CleanupAction) -> String {
+        switch action {
+        case .clearAll:
+            "This permanently removes all items from Task History."
+        case .keepLast7Days:
+            "This removes history older than 7 days."
+        case .keepLast30Days:
+            "This removes history older than 30 days."
         }
-    }
-
-    private func syncDailyDigest() async {
-        if notificationSettings.isEnabled, notificationSettings.dailyDigestEnabled {
-            let components = Calendar.current.dateComponents([.hour, .minute], from: notificationSettings.reminderTime)
-            await NotificationService.shared.scheduleDailyDigest(
-                at: components.hour ?? 8,
-                minute: components.minute ?? 0
-            )
-        } else {
-            NotificationService.shared.cancelDailyDigest()
-        }
-    }
-}
-
-// MARK: - Appearance Card Selector
-
-private struct AppearanceSelector: View {
-    @Binding var selectedMode: AppearanceMode
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(AppearanceMode.allCases) { mode in
-                AppearanceCard(
-                    mode: mode,
-                    isSelected: selectedMode == mode,
-                    colorScheme: colorScheme
-                ) {
-                    selectedMode = mode
-                }
-            }
-        }
-    }
-}
-
-private struct AppearanceCard: View {
-    let mode: AppearanceMode
-    let isSelected: Bool
-    let colorScheme: ColorScheme
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: mode.iconName)
-                    .font(.system(size: 24, weight: .medium))
-
-                Text(mode.displayName)
-                    .font(.system(size: 13, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .foregroundStyle(isSelected ? .white : .primary)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue : secondaryBackground)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("appearanceCard_\(mode.displayName)")
-    }
-
-    private var secondaryBackground: Color {
-        colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.93)
     }
 }
 
