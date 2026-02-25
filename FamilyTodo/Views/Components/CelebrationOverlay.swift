@@ -167,7 +167,9 @@ final class ConfettiEmitterView: UIView {
 
     private func makeCells(colors: [UIColor], isLeftCannon: Bool) -> [CAEmitterCell] {
         // Shoot mostly upward with slight inward bias.
-        let baseAngle = isLeftCannon ? (-(.pi / 2) + (.pi / 9)) : (-(.pi / 2) - (.pi / 9))
+        let upwardAngle: CGFloat = -CGFloat.pi / 2
+        let inwardBias: CGFloat = CGFloat.pi / 9
+        let baseAngle: CGFloat = isLeftCannon ? (upwardAngle + inwardBias) : (upwardAngle - inwardBias)
 
         return colors.flatMap { color in
             [
