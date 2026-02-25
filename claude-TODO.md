@@ -153,7 +153,7 @@
 
 ---
 
-### Phase 4: Areas / Rooms (P1) 🏠
+### Phase 4: Areas / Rooms (P1) 🏠 - nieaktualne
 > Cel: Organizacja zadań wg pokojów/stref
 
 #### 4.1 Areas CRUD
