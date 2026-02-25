@@ -70,8 +70,8 @@ private struct ShoppingListContent: View {
         GeometryReader { proxy in
             let listBottomInset =
                 isKeyboardVisible
-                    ? CGFloat(16)
-                    : AppChromeMetrics.compactCTAHeight + 28
+                ? CGFloat(16)
+                : AppChromeMetrics.compactCTAHeight + 28
             let floatingButtonInset: CGFloat = 16
             let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
 
@@ -110,20 +110,23 @@ private struct ShoppingListContent: View {
                                                     onSubmit: { commitEditingItem(item) },
                                                     onCancel: cancelEditingItem
                                                 )
-                                                .accessibilityIdentifier("shoppingItemEdit_\(item.title)")
+                                                .accessibilityIdentifier(
+                                                    "shoppingItemEdit_\(item.title)")
                                             } else {
                                                 ShoppingItemRow(
                                                     item: item,
                                                     onToggle: { toggleItem(item) },
                                                     onEdit: { startEditingItem(item) }
                                                 )
-                                                .accessibilityIdentifier("shoppingItem_\(item.title)")
+                                                .accessibilityIdentifier(
+                                                    "shoppingItem_\(item.title)")
                                             }
                                         }
                                     }
                                     .onDrag {
                                         draggedItem = item
-                                        return NSItemProvider(object: item.id.uuidString as NSString)
+                                        return NSItemProvider(
+                                            object: item.id.uuidString as NSString)
                                     }
                                     .onDrop(
                                         of: [UTType.text],
@@ -132,7 +135,8 @@ private struct ShoppingListContent: View {
                                             items: store.toBuyItems,
                                             draggedItem: $draggedItem,
                                             onMove: { from, to in
-                                                store.moveToBuyItems(from: from, to: to, persist: false)
+                                                store.moveToBuyItems(
+                                                    from: from, to: to, persist: false)
                                             },
                                             onDrop: {
                                                 _ = _Concurrency.Task {
@@ -193,10 +197,14 @@ private struct ShoppingListContent: View {
             guard !visible, let editingItem = currentEditingItem else { return }
             commitEditingItem(editingItem)
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
+        ) { _ in
             isKeyboardVisible = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
+        ) { _ in
             isKeyboardVisible = false
         }
         .sheet(isPresented: $showClearToBuyConfirmation) {
@@ -272,7 +280,8 @@ private struct ShoppingListContent: View {
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
-        let foreground = themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme)
+        let foreground = themeStore.foregroundOnAccent(
+            for: themeStore.accentTabColor, colorScheme: colorScheme)
 
         return Button {
             startRapidEntry()
@@ -281,7 +290,10 @@ private struct ShoppingListContent: View {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .bold))
                 Text("Add item")
-                    .font(themeStore.preset == .retro ? .system(size: 15, weight: .semibold) : themeStore.font(for: .buttonLabel))
+                    .font(
+                        themeStore.preset == .retro
+                            ? .system(size: 15, weight: .semibold)
+                            : themeStore.font(for: .buttonLabel))
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
@@ -305,14 +317,16 @@ private struct ShoppingListContent: View {
                 isFocused: $rapidEntryFocused,
                 placeholder: "Add item",
                 actionColor: UIColor(themeStore.accentTabColor),
-                actionForegroundColor: UIColor(themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme)),
+                actionForegroundColor: UIColor(
+                    themeStore.foregroundOnAccent(
+                        for: themeStore.accentTabColor, colorScheme: colorScheme)),
                 onSubmit: handleRapidEntrySubmit,
                 onDone: commitOrDismissRapidEntry
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
         }
         .padding(.vertical, 6)
-        .background(cardBackground.opacity(0.01)) // Tap target
+        .background(cardBackground.opacity(0.01))  // Tap target
     }
 
     @ViewBuilder
@@ -443,6 +457,7 @@ private struct ShoppingListContent: View {
                 itemBeingRemoved = nil
                 if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
                     celebrationManager.celebrateShoppingComplete()
+                    celebrationManager.triggerConfetti()
                 }
             }
         }
@@ -503,7 +518,10 @@ struct ShoppingItemRow: View {
             Button(action: onEdit) {
                 Text(item.title)
                     .font(themeStore.font(for: .listRowTitle))
-                    .foregroundStyle(item.isBought ? themeStore.contentSecondaryColor : themeStore.contentPrimaryColor)
+                    .foregroundStyle(
+                        item.isBought
+                            ? themeStore.contentSecondaryColor : themeStore.contentPrimaryColor
+                    )
                     .strikethrough(item.isBought)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -529,25 +547,26 @@ private struct ShoppingItemInlineEditRow: View {
     @State private var isCancelling = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            ThemedCheckbox(
-                isChecked: isBought,
-                onToggle: onToggle,
-                size: 20,
-                style: .circle
-            )
+        HStack(spacing: 12) {
+            Circle()
+                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
+                .frame(width: 22, height: 22)
 
-            TextField("Item name", text: $text)
-                .font(themeStore.font(for: .listRowTitle))
-                .submitLabel(.done)
-                .focused($isFocused)
-                .onSubmit(onSubmit)
-                .onChange(of: isFocused) { _, focused in
-                    if !focused, !isCancelling {
-                        onSubmit()
-                    }
+            TextField(
+                "",
+                text: $text,
+                prompt: Text("Item name").font(themeStore.font(for: .listRowTitle))
+            )
+            .font(themeStore.font(for: .listRowTitle))
+            .submitLabel(.done)
+            .focused($isFocused)
+            .onSubmit(onSubmit)
+            .onChange(of: isFocused) { _, focused in
+                if !focused, !isCancelling {
+                    onSubmit()
                 }
-                .autocorrectionDisabled()
+            }
+            .autocorrectionDisabled()
 
             Button {
                 isCancelling = true
@@ -584,8 +603,18 @@ private struct RapidEntryTextField: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField(frame: .zero)
         textField.delegate = context.coordinator
-        textField.font = .systemFont(ofSize: 15)
-        textField.placeholder = placeholder
+
+        let customFont = themeStore.uiFont(for: .listRowTitle)
+        textField.font = customFont
+
+        textField.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: customFont,
+                .foregroundColor: UIColor.secondaryLabel,
+            ]
+        )
+
         textField.returnKeyType = .done
         textField.autocapitalizationType = .sentences
         textField.autocorrectionType = .yes
@@ -598,9 +627,21 @@ private struct RapidEntryTextField: UIViewRepresentable {
         return textField
     }
 
-    func updateUIView(_ uiView: UITextField, context _: Context) {
+    func updateUIView(_ uiView: UITextField, context: Context) {
         if uiView.text != text {
             uiView.text = text
+        }
+
+        let customFont = themeStore.uiFont(for: .listRowTitle)
+        if uiView.font != customFont {
+            uiView.font = customFont
+            uiView.attributedPlaceholder = NSAttributedString(
+                string: placeholder,
+                attributes: [
+                    .font: customFont,
+                    .foregroundColor: UIColor.secondaryLabel,
+                ]
+            )
         }
 
         if isFocused, !uiView.isFirstResponder {
@@ -677,7 +718,8 @@ private struct RapidEntryTextField: UIViewRepresentable {
                     equalTo: container.trailingAnchor,
                     constant: -AppChromeMetrics.horizontalInset
                 ),
-                button.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -bottomInset),
+                button.bottomAnchor.constraint(
+                    equalTo: container.bottomAnchor, constant: -bottomInset),
                 button.heightAnchor.constraint(equalToConstant: buttonHeight),
             ])
 

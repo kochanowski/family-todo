@@ -48,22 +48,25 @@ struct AppPromptSheet: View {
                     .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(.secondary)
             }
-
-            TextField(placeholder, text: $text)
-                .font(themeStore.font(for: .inlineTitle))
-                .textInputAutocapitalization(.sentences)
-                .autocorrectionDisabled()
-                .focused($isFocused)
-                .submitLabel(.done)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.secondary.opacity(0.12))
-                }
-                .onSubmit {
-                    submitAndDismiss()
-                }
+            TextField(
+                "",
+                text: $text,
+                prompt: Text(placeholder).font(themeStore.font(for: .inlineTitle))
+            )
+            .font(themeStore.font(for: .inlineTitle))
+            .textInputAutocapitalization(.sentences)
+            .autocorrectionDisabled()
+            .focused($isFocused)
+            .submitLabel(.done)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.secondary.opacity(0.12))
+            }
+            .onSubmit {
+                submitAndDismiss()
+            }
 
             Spacer(minLength: 0)
 

@@ -8,8 +8,6 @@ struct CelebrationOverlay: View {
     let messageFont: Font
     let accentPalette: [Color]?
 
-    @State private var showConfetti = false
-
     init(
         manager: CelebrationManager,
         messageFont: Font = .system(size: 15, weight: .semibold),
@@ -40,13 +38,9 @@ struct CelebrationOverlay: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .celebrate(trigger: $showConfetti, accentColor: resolvedAccentColor)
+        .celebrate(trigger: manager.confettiTrigger, accentColor: resolvedAccentColor)
         .allowsHitTesting(false)
         .animation(ToastView.AnimationTokens.curve, value: manager.activeCelebration?.id)
-        .onChange(of: manager.activeCelebration) { _, newValue in
-            guard let newValue, newValue.style == .milestone else { return }
-            showConfetti = true
-        }
     }
 
     private var resolvedAccentColor: Color {
@@ -65,12 +59,11 @@ struct CelebrationOverlay: View {
 }
 
 struct ConfettiCannon: UIViewRepresentable {
-    @Binding var isActive: Bool
+    let trigger: Int
     let accentColor: UIColor
 
     final class Coordinator {
-        var isRunning = false
-        var stopWorkItem: DispatchWorkItem?
+        var lastTrigger = 0
     }
 
     func makeCoordinator() -> Coordinator {
@@ -84,30 +77,13 @@ struct ConfettiCannon: UIViewRepresentable {
     func updateUIView(_ uiView: ConfettiEmitterView, context: Context) {
         uiView.setAccentColor(accentColor)
 
-        if isActive, !context.coordinator.isRunning {
-            context.coordinator.stopWorkItem?.cancel()
-            context.coordinator.isRunning = true
+        if trigger > context.coordinator.lastTrigger {
+            context.coordinator.lastTrigger = trigger
             uiView.fireBurst()
-
-            let binding = $isActive
-            let workItem = DispatchWorkItem {
-                context.coordinator.isRunning = false
-                if binding.wrappedValue {
-                    binding.wrappedValue = false
-                }
-            }
-
-            context.coordinator.stopWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: workItem)
-        }
-
-        if !isActive, !context.coordinator.isRunning {
-            uiView.stopBurst()
         }
     }
 
     static func dismantleUIView(_ uiView: ConfettiEmitterView, coordinator: Coordinator) {
-        coordinator.stopWorkItem?.cancel()
         uiView.stopBurst()
     }
 }
@@ -117,7 +93,7 @@ final class ConfettiEmitterView: UIView {
     private let rightEmitter = CAEmitterLayer()
 
     private var accentColor = UIColor.systemGreen
-    private var burstStopWorkItem: DispatchWorkItem?
+    private var burstTask: _Concurrency.Task<Void, Never>?
 
     private static let rectangleImage = ConfettiShapeRenderer.rectangleImage()
     private static let circleImage = ConfettiShapeRenderer.circleImage()
@@ -150,8 +126,14 @@ final class ConfettiEmitterView: UIView {
     }
 
     func fireBurst() {
-        let palette: [UIColor] = [accentColor, .systemYellow, .systemPink, .white]
-        burstStopWorkItem?.cancel()
+        let palette: [UIColor] = [
+            accentColor,
+            UIColor(red: 0.85, green: 0.65, blue: 0.13, alpha: 1.0),  // Gold
+            UIColor(red: 0.96, green: 0.96, blue: 0.98, alpha: 1.0),  // Silver/White
+            accentColor.withAlphaComponent(0.8),
+        ]
+
+        burstTask?.cancel()
 
         leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
         rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
@@ -159,16 +141,16 @@ final class ConfettiEmitterView: UIView {
         leftEmitter.birthRate = 1
         rightEmitter.birthRate = 1
 
-        let stopWorkItem = DispatchWorkItem { [weak self] in
+        burstTask = _Concurrency.Task { @MainActor [weak self] in
+            try? await _Concurrency.Task.sleep(for: .milliseconds(150))
+            guard !_Concurrency.Task.isCancelled else { return }
             self?.stopBurst()
         }
-        burstStopWorkItem = stopWorkItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: stopWorkItem)
     }
 
     func stopBurst() {
-        burstStopWorkItem?.cancel()
-        burstStopWorkItem = nil
+        burstTask?.cancel()
+        burstTask = nil
         leftEmitter.birthRate = 0
         rightEmitter.birthRate = 0
     }
@@ -191,14 +173,14 @@ final class ConfettiEmitterView: UIView {
                     color: color,
                     baseAngle: baseAngle,
                     xAcceleration: isLeftCannon ? 32 : -32,
-                    scale: 0.3
+                    scale: 0.06
                 ),
                 makeCell(
                     image: Self.circleImage,
                     color: color,
                     baseAngle: baseAngle,
                     xAcceleration: isLeftCannon ? 32 : -32,
-                    scale: 0.34
+                    scale: 0.08
                 ),
             ]
         }
@@ -219,9 +201,9 @@ final class ConfettiEmitterView: UIView {
         cell.lifetime = 3.0
         cell.lifetimeRange = 0.9
 
-        cell.velocity = 720
-        cell.velocityRange = 170
-        cell.yAcceleration = 900
+        cell.velocity = 800
+        cell.velocityRange = 200
+        cell.yAcceleration = 1200
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle
@@ -259,13 +241,13 @@ private enum ConfettiShapeRenderer {
 }
 
 private struct CelebrationModifier: ViewModifier {
-    @Binding var trigger: Bool
+    let trigger: Int
     let accentColor: Color
 
     func body(content: Content) -> some View {
         content.overlay {
             ConfettiCannon(
-                isActive: $trigger,
+                trigger: trigger,
                 accentColor: UIColor(accentColor)
             )
             .ignoresSafeArea()
@@ -275,7 +257,7 @@ private struct CelebrationModifier: ViewModifier {
 }
 
 extension View {
-    func celebrate(trigger: Binding<Bool>, accentColor: Color) -> some View {
+    func celebrate(trigger: Int, accentColor: Color) -> some View {
         modifier(CelebrationModifier(trigger: trigger, accentColor: accentColor))
     }
 }

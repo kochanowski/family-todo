@@ -38,7 +38,7 @@ private struct TasksContent: View {
             switch self {
             case .assigneeRequired:
                 "Assign this task before moving it to Next."
-            case let .wipLimitReached(current, limit):
+            case .wipLimitReached(let current, let limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
             }
         }
@@ -74,7 +74,8 @@ private struct TasksContent: View {
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
-    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
+    @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
+        .defaultRecommendedWipLimit
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
@@ -86,8 +87,10 @@ private struct TasksContent: View {
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(householdId)
         _store = StateObject(wrappedValue: taskStore)
-        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
-        _backlogStore = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _backlogStore = StateObject(
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
         _selectedTab = selectedTab
     }
 
@@ -178,15 +181,17 @@ private struct TasksContent: View {
                 }
             )
         }
-        .sheet(isPresented: Binding(
-            get: { pendingNextTask != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingNextTask = nil
-                    selectedAssigneeIdForNext = nil
+        .sheet(
+            isPresented: Binding(
+                get: { pendingNextTask != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingNextTask = nil
+                        selectedAssigneeIdForNext = nil
+                    }
                 }
-            }
-        )) {
+            )
+        ) {
             if let pendingNextTask {
                 AssigneePickerSheet(
                     title: "Assign and start",
@@ -384,7 +389,9 @@ private struct TasksContent: View {
     private var activeMembers: [Member] {
         memberStore.members
             .filter(\.isActive)
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
     }
 
     private var currentMember: Member? {
@@ -430,7 +437,8 @@ private struct TasksContent: View {
                                 Capsule()
                                     .stroke(Color.primary.opacity(0.08), lineWidth: 0.6)
                             }
-                            .matchedGeometryEffect(id: "tasks-filter-indicator", in: tasksFilterGlassNamespace)
+                            .matchedGeometryEffect(
+                                id: "tasks-filter-indicator", in: tasksFilterGlassNamespace)
                     }
                 }
             }
@@ -502,7 +510,8 @@ private struct TasksContent: View {
 
         if newStatus == .next {
             if let existingAssignee = task.assigneeId {
-                let validation = store.validateNextTransition(assigneeId: existingAssignee, excludingTaskId: task.id)
+                let validation = store.validateNextTransition(
+                    assigneeId: existingAssignee, excludingTaskId: task.id)
                 guard validation == .ok else {
                     handleNextTransitionValidation(validation)
                     HapticManager.warning()
@@ -553,6 +562,7 @@ private struct TasksContent: View {
                         HapticManager.success()
                         if themeStore.celebrationsEnabled {
                             celebrationManager.celebrateAllTasksComplete()
+                            celebrationManager.triggerConfetti()
                             if activeMembers.count > 1, let name = currentMember?.displayName {
                                 celebrationManager.notifyPartner(
                                     completedBy: name,
@@ -591,7 +601,7 @@ private struct TasksContent: View {
             activeBanner = nil
         case .assigneeRequired:
             showBanner(.assigneeRequired)
-        case let .wipLimitReached(current, limit):
+        case .wipLimitReached(let current, let limit):
             showBanner(.wipLimitReached(current: current, limit: limit))
         }
     }
@@ -752,13 +762,14 @@ private struct TasksContent: View {
         }
 
         _ = _Concurrency.Task {
-            let resolvedCategoryId: UUID? = if let backlogCategoryId = task.backlogCategoryId,
-                                               backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
-            {
-                backlogCategoryId
-            } else {
-                backlogStore.categories.first?.id
-            }
+            let resolvedCategoryId: UUID? =
+                if let backlogCategoryId = task.backlogCategoryId,
+                    backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
+                {
+                    backlogCategoryId
+                } else {
+                    backlogStore.categories.first?.id
+                }
 
             guard let resolvedCategoryId else {
                 await MainActor.run {
@@ -1097,6 +1108,7 @@ private struct TaskDetailSheet: View {
     let onDelete: (Task) -> Void
     let onDemoteToBacklog: (Task) -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
@@ -1131,7 +1143,12 @@ private struct TaskDetailSheet: View {
         NavigationStack {
             Form {
                 Section("Task") {
-                    TextField("Title", text: $title)
+                    TextField(
+                        "",
+                        text: $title,
+                        prompt: Text("Title").font(themeStore.font(for: .body))
+                    )
+                    .font(themeStore.font(for: .body))
                     Picker("Status", selection: $status) {
                         Text("Ideas").tag(Task.TaskStatus.backlog)
                         Text("Next").tag(Task.TaskStatus.next)
@@ -1161,6 +1178,8 @@ private struct TaskDetailSheet: View {
 
                 Section("Notes") {
                     TextEditor(text: $notes)
+                        .font(themeStore.font(for: .body))
+                        .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
                 }
 
@@ -1209,8 +1228,8 @@ private struct TaskDetailSheet: View {
     }
 }
 
-private extension View {
-    func tasksListRowStyle(_ insets: EdgeInsets) -> some View {
+extension View {
+    fileprivate func tasksListRowStyle(_ insets: EdgeInsets) -> some View {
         listRowInsets(insets)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)

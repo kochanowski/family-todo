@@ -27,9 +27,9 @@ private struct BacklogContent: View {
             switch self {
             case .assigneeRequired:
                 "Assign this item before moving it to Tasks/NEXT."
-            case let .wipLimitReached(current, limit):
+            case .wipLimitReached(let current, let limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
-            case let .failed(message):
+            case .failed(let message):
                 message
             }
         }
@@ -56,8 +56,10 @@ private struct BacklogContent: View {
     @FocusState private var focusedComposerCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
-        _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
-        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+        _store = StateObject(
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
     }
 
     var body: some View {
@@ -67,7 +69,8 @@ private struct BacklogContent: View {
             header
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
-                .padding(.bottom, activeBanner == nil ? AppChromeMetrics.screenHeaderBottomPadding : 8)
+                .padding(
+                    .bottom, activeBanner == nil ? AppChromeMetrics.screenHeaderBottomPadding : 8)
 
             if let activeBanner {
                 BacklogStatusBanner(text: activeBanner.text)
@@ -97,7 +100,10 @@ private struct BacklogContent: View {
                                     },
                                     isAddingItem: activeComposerCategoryId == category.id,
                                     newItemText: Binding(
-                                        get: { activeComposerCategoryId == category.id ? composerText : "" },
+                                        get: {
+                                            activeComposerCategoryId == category.id
+                                                ? composerText : ""
+                                        },
                                         set: { composerText = $0 }
                                     ),
                                     focusedComposerCategoryId: $focusedComposerCategoryId,
@@ -118,16 +124,21 @@ private struct BacklogContent: View {
                                     },
                                     onAssignItem: { item in
                                         pendingAssignmentItem = item
-                                        selectedAssigneeIdForAssignment = item.assigneeId ?? currentMember?.id
+                                        selectedAssigneeIdForAssignment =
+                                            item.assigneeId ?? currentMember?.id
                                     },
                                     onPromoteItem: { item in
                                         promoteItem(item)
                                     },
                                     onRenameCategory: { newTitle in
-                                        _ = _Concurrency.Task { await store.renameCategory(category, newTitle: newTitle) }
+                                        _ = _Concurrency.Task {
+                                            await store.renameCategory(category, newTitle: newTitle)
+                                        }
                                     },
                                     onDeleteCategory: {
-                                        _ = _Concurrency.Task { await store.deleteCategory(category) }
+                                        _ = _Concurrency.Task {
+                                            await store.deleteCategory(category)
+                                        }
                                     }
                                 )
                                 .id(category.id)
@@ -172,15 +183,17 @@ private struct BacklogContent: View {
                 }
             )
         }
-        .sheet(isPresented: Binding(
-            get: { pendingPromotionItem != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingPromotionItem = nil
-                    selectedAssigneeIdForPromotion = nil
+        .sheet(
+            isPresented: Binding(
+                get: { pendingPromotionItem != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingPromotionItem = nil
+                        selectedAssigneeIdForPromotion = nil
+                    }
                 }
-            }
-        )) {
+            )
+        ) {
             if let pendingPromotionItem {
                 BacklogAssigneePickerSheet(
                     title: "Assign before start",
@@ -202,15 +215,17 @@ private struct BacklogContent: View {
                 )
             }
         }
-        .sheet(isPresented: Binding(
-            get: { pendingAssignmentItem != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingAssignmentItem = nil
-                    selectedAssigneeIdForAssignment = nil
+        .sheet(
+            isPresented: Binding(
+                get: { pendingAssignmentItem != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingAssignmentItem = nil
+                        selectedAssigneeIdForAssignment = nil
+                    }
                 }
-            }
-        )) {
+            )
+        ) {
             BacklogAssigneePickerSheet(
                 title: "Assign owner",
                 actionTitle: "Save",
@@ -275,7 +290,9 @@ private struct BacklogContent: View {
     private var activeMembers: [Member] {
         memberStore.members
             .filter(\.isActive)
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
     }
 
     private var currentMember: Member? {
@@ -361,10 +378,10 @@ private struct BacklogContent: View {
         case .assigneeRequired:
             HapticManager.warning()
             showBanner(.assigneeRequired)
-        case let .wipLimitReached(current, limit):
+        case .wipLimitReached(let current, let limit):
             HapticManager.warning()
             showBanner(.wipLimitReached(current: current, limit: limit))
-        case let .failed(message):
+        case .failed(let message):
             HapticManager.warning()
             showBanner(.failed(message))
         }
@@ -426,7 +443,7 @@ private struct BacklogContent: View {
     private func scheduleComposerFocus(for categoryId: UUID) {
         // Keyboard + layout updates can race each other in scroll containers.
         // Retry focus a few times to keep the composer deterministic.
-        for attempt in 0 ..< 4 {
+        for attempt in 0..<4 {
             let delay = 0.03 + (Double(attempt) * 0.05)
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 guard activeComposerCategoryId == categoryId else { return }
@@ -681,20 +698,24 @@ struct CategoryCard: View {
                 HStack(spacing: 10) {
                     composerPlaceholderIcon
 
-                    TextField("Add item", text: $newItemText)
-                        .font(themeStore.font(for: .listRowTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-                        .focused(focusedComposerCategoryId, equals: category.id)
-                        .onSubmit {
-                            onSubmitItem()
+                    TextField(
+                        "",
+                        text: $newItemText,
+                        prompt: Text("Add item").font(themeStore.font(for: .listRowTitle))
+                    )
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .focused(focusedComposerCategoryId, equals: category.id)
+                    .onSubmit {
+                        onSubmitItem()
+                    }
+                    .onAppear {
+                        DispatchQueue.main.async {
+                            focusedComposerCategoryId.wrappedValue = category.id
                         }
-                        .onAppear {
-                            DispatchQueue.main.async {
-                                focusedComposerCategoryId.wrappedValue = category.id
-                            }
-                        }
-                        .submitLabel(.done)
-                        .autocorrectionDisabled()
+                    }
+                    .submitLabel(.done)
+                    .autocorrectionDisabled()
 
                     Button {
                         onCancelItem()
@@ -733,7 +754,8 @@ struct CategoryCard: View {
                         .stroke(cardBorder, lineWidth: colorScheme == .light ? 1 : 0)
                 }
                 .shadow(
-                    color: colorScheme == .light ? themeStore.borderLightColor.opacity(0.35) : .clear,
+                    color: colorScheme == .light
+                        ? themeStore.borderLightColor.opacity(0.35) : .clear,
                     radius: colorScheme == .light ? 6 : 0,
                     x: 0,
                     y: colorScheme == .light ? 2 : 0
@@ -897,6 +919,7 @@ private struct BacklogItemEditSheet: View {
     let onSave: (String, String?, UUID?) -> Void
     let onDelete: () -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
@@ -923,7 +946,12 @@ private struct BacklogItemEditSheet: View {
         NavigationStack {
             Form {
                 Section("Item") {
-                    TextField("Title", text: $title)
+                    TextField(
+                        "",
+                        text: $title,
+                        prompt: Text("Title").font(themeStore.font(for: .body))
+                    )
+                    .font(themeStore.font(for: .body))
                 }
 
                 Section("Assignee") {
@@ -937,6 +965,8 @@ private struct BacklogItemEditSheet: View {
 
                 Section("Notes") {
                     TextEditor(text: $notes)
+                        .font(themeStore.font(for: .body))
+                        .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
                 }
 

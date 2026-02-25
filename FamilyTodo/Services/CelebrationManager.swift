@@ -10,6 +10,7 @@ final class CelebrationManager: ObservableObject {
     static let shared = CelebrationManager()
 
     @Published var activeCelebration: Celebration?
+    @Published var confettiTrigger: Int = 0
 
     struct Celebration: Identifiable, Equatable {
         let id = UUID()
@@ -49,6 +50,11 @@ final class CelebrationManager: ObservableObject {
     /// Celebrate shopping list cleared.
     func celebrateShoppingComplete() {
         show(Celebration(emoji: "🛒", message: "Shopping done! Fridge is happy", style: .milestone))
+    }
+
+    /// Trigger confetti independently if needed.
+    func triggerConfetti() {
+        confettiTrigger += 1
     }
 
     /// Notify partner about completion (local notification).
