@@ -444,8 +444,6 @@ private struct TasksContent: View {
         }
     }
 
-    }
-
     @ViewBuilder
     private var unifiedListHeader: some View {
         HStack {
