@@ -504,8 +504,7 @@ struct RepetitiveTasksView: View {
                                 .foregroundStyle(.secondary)
 
                             if let categoryId = chore.categoryId,
-                               let category = backlogStore.categories.first(where: { $0.id == categoryId })
-                            {
+                               let category = backlogStore.categories.first(where: { $0.id == categoryId }) {
                                 Text(category.title)
                                     .font(themeStore.font(for: .chip))
                                     .foregroundStyle(category.color)

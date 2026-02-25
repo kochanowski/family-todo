@@ -492,7 +492,7 @@ class HouseholdStore: ObservableObject {
                 completedAt: yesterday,
                 completedById: memberId.uuidString,
                 taskType: .oneOff
-            ),
+            )
         ]
     }
 
@@ -532,7 +532,7 @@ class HouseholdStore: ObservableObject {
                 title: "Coffee",
                 quantityValue: "200",
                 quantityUnit: "g"
-            ),
+            )
         ]
     }
 
@@ -577,7 +577,7 @@ class HouseholdStore: ObservableObject {
                 categoryId: routineCategory.id,
                 householdId: householdId,
                 title: "Mow the lawn"
-            ),
+            )
         ]
 
         return ([homeProjectsCategory, routineCategory], items)

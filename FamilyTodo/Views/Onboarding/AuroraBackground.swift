@@ -14,13 +14,13 @@ enum AuroraPalette {
                 [
                     Color(hex: "312E81"), // Indigo-900
                     Color(hex: "1E3A8A"), // Blue-900
-                    Color(hex: "0C4A6E"), // Sky-800
+                    Color(hex: "0C4A6E") // Sky-800
                 ]
             } else {
                 [
                     Color(hex: "A5B4FC"), // Indigo-300
                     Color(hex: "93C5FD"), // Blue-300
-                    Color(hex: "BAE6FD"), // Sky-200
+                    Color(hex: "BAE6FD") // Sky-200
                 ]
             }
 
@@ -29,13 +29,13 @@ enum AuroraPalette {
                 [
                     Color(hex: "064E3B"), // Emerald-900
                     Color(hex: "134E4A"), // Teal-900
-                    Color(hex: "14532D"), // Green-900
+                    Color(hex: "14532D") // Green-900
                 ]
             } else {
                 [
                     Color(hex: "6EE7B7"), // Emerald-300
                     Color(hex: "5EEAD4"), // Teal-300
-                    Color(hex: "DCFCE7"), // Green-100
+                    Color(hex: "DCFCE7") // Green-100
                 ]
             }
 
@@ -44,13 +44,13 @@ enum AuroraPalette {
                 [
                     Color(hex: "7C2D12"), // Orange-900
                     Color(hex: "881337"), // Rose-900
-                    Color(hex: "78350F"), // Amber-900
+                    Color(hex: "78350F") // Amber-900
                 ]
             } else {
                 [
                     Color(hex: "FDBA74"), // Orange-300
                     Color(hex: "FDA4AF"), // Rose-300
-                    Color(hex: "FDE68A"), // Amber-200
+                    Color(hex: "FDE68A") // Amber-200
                 ]
             }
         }

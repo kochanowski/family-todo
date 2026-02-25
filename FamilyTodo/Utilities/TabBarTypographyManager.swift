@@ -41,7 +41,7 @@ enum TabBarTypographyManager {
     ) -> [NSAttributedString.Key: Any] {
         [
             .font: font,
-            .foregroundColor: color,
+            .foregroundColor: color
         ]
     }
 

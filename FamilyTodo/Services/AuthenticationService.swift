@@ -204,8 +204,7 @@
                 guard let self else { return }
 
                 if let authError = error as? ASAuthorizationError,
-                   authError.code == .canceled
-                {
+                   authError.code == .canceled {
                     await updateAuthenticationState(.error(.cancelled))
                 } else {
                     await updateAuthenticationState(.error(.failed(error)))
