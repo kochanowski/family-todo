@@ -139,8 +139,8 @@ final class ConfettiEmitterView: UIView {
         leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
         rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
 
-        leftEmitter.birthRate = 1
-        rightEmitter.birthRate = 1
+        leftEmitter.birthRate = 200
+        rightEmitter.birthRate = 200
 
         // Explicitly restart the animation by resetting beginTime if the layer already exists
         let currentTime = CACurrentMediaTime()
@@ -148,8 +148,8 @@ final class ConfettiEmitterView: UIView {
         rightEmitter.beginTime = currentTime
 
         burstTask = _Concurrency.Task { @MainActor [weak self] in
-            // Emit particles for exactly 150ms then shut off birth rate
-            try? await _Concurrency.Task.sleep(for: .milliseconds(150))
+            // Emit particles for exactly 300ms then shut off birth rate
+            try? await _Concurrency.Task.sleep(for: .milliseconds(300))
             guard !_Concurrency.Task.isCancelled else { return }
             self?.stopBurst()
         }
@@ -182,14 +182,14 @@ final class ConfettiEmitterView: UIView {
                     color: color,
                     baseAngle: baseAngle,
                     xAcceleration: isLeftCannon ? -50 : 50,
-                    scale: 0.05
+                    scale: 0.15
                 ),
                 makeCell(
                     image: Self.circleImage,
                     color: color,
                     baseAngle: baseAngle,
                     xAcceleration: isLeftCannon ? -50 : 50,
-                    scale: 0.05
+                    scale: 0.15
                 ),
             ]
         }
@@ -207,12 +207,12 @@ final class ConfettiEmitterView: UIView {
         cell.color = color.cgColor
 
         cell.birthRate = 85
-        cell.lifetime = 3.0
+        cell.lifetime = 4.0
         cell.lifetimeRange = 0.9
 
-        cell.velocity = 1000
-        cell.velocityRange = 300
-        cell.yAcceleration = 1000
+        cell.velocity = 600
+        cell.velocityRange = 200
+        cell.yAcceleration = 800
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle
@@ -222,7 +222,7 @@ final class ConfettiEmitterView: UIView {
         cell.spinRange = 8.0
 
         cell.scale = scale
-        cell.scaleRange = 0.2
+        cell.scaleRange = 0.05
         cell.scaleSpeed = -0.08
 
         cell.alphaRange = 0.3

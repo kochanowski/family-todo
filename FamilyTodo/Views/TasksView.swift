@@ -116,6 +116,10 @@ private struct TasksContent: View {
                 }
             }
 
+            unifiedListHeader
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, 8)
+
             List {
                 if activeFilter == .active {
                     activeTasksContent
@@ -230,9 +234,6 @@ private struct TasksContent: View {
 
     @ViewBuilder
     private var activeTasksContent: some View {
-        activeTasksHeader
-            .tasksListRowStyle(taskListRowInsets)
-
         if !visibleNextTasks.isEmpty {
             ForEach(Array(visibleNextTasks.enumerated()), id: \.element.id) { index, task in
                 if taskBeingCompleted != task.id {
@@ -303,9 +304,6 @@ private struct TasksContent: View {
         }
 
         if !store.recentlyDoneTasks.isEmpty {
-            sectionHeader("COMPLETED")
-                .tasksListRowStyle(taskListRowInsets)
-
             ForEach(store.recentlyDoneTasks) { task in
                 TaskRow(
                     task: task,
@@ -356,9 +354,6 @@ private struct TasksContent: View {
             .padding(.top, 40)
             .tasksListRowStyle(taskListRowInsets)
         } else {
-            sectionHeader("COMPLETED")
-                .tasksListRowStyle(taskListRowInsets)
-
             ForEach(store.doneTasks) { task in
                 TaskRow(
                     task: task,
@@ -449,24 +444,36 @@ private struct TasksContent: View {
         }
     }
 
-    private var activeTasksHeader: some View {
-        let count = visibleNextTasks.count
-        let limit = normalizedWipLimit
-        let overLimit = count > limit
+    }
 
-        return HStack {
-            Text("Active Tasks")
-                .font(themeStore.font(for: .sectionHeader))
-                .foregroundStyle(themeStore.contentSecondaryColor)
+    @ViewBuilder
+    private var unifiedListHeader: some View {
+        HStack {
+            if activeFilter == .active {
+                Text("Active Tasks")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
 
-            Spacer()
+                Spacer()
 
-            Text("\(count) / \(limit)")
-                .font(themeStore.font(for: .bodySmall))
-                .fontWeight(overLimit ? .bold : .regular)
-                .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
-                .monospacedDigit()
+                let count = visibleNextTasks.count
+                let limit = normalizedWipLimit
+                let overLimit = count > limit
+
+                Text("\(count) / \(limit)")
+                    .font(themeStore.font(for: .bodySmall))
+                    .fontWeight(overLimit ? .bold : .regular)
+                    .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
+                    .monospacedDigit()
+            } else {
+                Text("COMPLETED")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+
+                Spacer()
+            }
         }
+        .frame(minHeight: 30, alignment: .bottom)
     }
 
     private func startTaskFromBacklog(_ task: Task) {
