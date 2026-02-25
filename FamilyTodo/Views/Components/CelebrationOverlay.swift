@@ -128,10 +128,12 @@ final class ConfettiEmitterView: UIView {
 
     func fireBurst() {
         let palette: [UIColor] = [
-            accentColor,
-            UIColor(red: 0.85, green: 0.65, blue: 0.13, alpha: 1.0),  // Gold
-            UIColor(red: 0.96, green: 0.96, blue: 0.98, alpha: 1.0),  // Silver/White
-            accentColor.withAlphaComponent(0.8),
+            .systemRed,
+            .systemBlue,
+            .systemGreen,
+            .systemOrange,
+            .systemPurple,
+            .systemPink
         ]
 
         burstTask?.cancel()
@@ -139,8 +141,8 @@ final class ConfettiEmitterView: UIView {
         leftEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: true)
         rightEmitter.emitterCells = makeCells(colors: palette, isLeftCannon: false)
 
-        leftEmitter.birthRate = 200
-        rightEmitter.birthRate = 200
+        leftEmitter.birthRate = 40
+        rightEmitter.birthRate = 40
 
         // Explicitly restart the animation by resetting beginTime if the layer already exists
         let currentTime = CACurrentMediaTime()
@@ -148,8 +150,8 @@ final class ConfettiEmitterView: UIView {
         rightEmitter.beginTime = currentTime
 
         burstTask = _Concurrency.Task { @MainActor [weak self] in
-            // Emit particles for exactly 300ms then shut off birth rate
-            try? await _Concurrency.Task.sleep(for: .milliseconds(300))
+            // Emit particles for exactly 200ms then shut off birth rate
+            try? await _Concurrency.Task.sleep(for: .milliseconds(200))
             guard !_Concurrency.Task.isCancelled else { return }
             self?.stopBurst()
         }
@@ -210,9 +212,9 @@ final class ConfettiEmitterView: UIView {
         cell.lifetime = 4.0
         cell.lifetimeRange = 0.9
 
-        cell.velocity = 600
+        cell.velocity = 450
         cell.velocityRange = 200
-        cell.yAcceleration = 800
+        cell.yAcceleration = 600
         cell.xAcceleration = xAcceleration
 
         cell.emissionLongitude = baseAngle

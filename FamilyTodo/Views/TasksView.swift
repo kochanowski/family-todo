@@ -401,9 +401,9 @@ private struct TasksContent: View {
 
             Spacer()
 
-            if activeFilter == .completed {
-                completedCleanupMenu
-            }
+            completedCleanupMenu
+                .opacity(activeFilter == .completed ? 1 : 0)
+                .disabled(activeFilter != .completed)
         }
     }
 
