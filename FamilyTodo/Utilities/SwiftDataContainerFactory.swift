@@ -34,6 +34,13 @@ enum SwiftDataContainerFactory {
     typealias ContainerBuilder = (Schema, ModelConfiguration) throws -> ModelContainer
     typealias AppSupportURLProvider = (FileManager) -> URL
 
+    private struct RuntimeBootstrapContext {
+        let appSupportURL: URL
+        let storeURL: URL
+        let schemaModelNames: [String]
+        let timestamp: String
+    }
+
     static let recoveryUserDefaultsKey = "lastStoreRecoveryEvent"
     static let bootstrapDiagnosticsUserDefaultsKey = "lastStoreBootstrapDiagnostics"
     static let pendingStoreResetUserDefaultsKey = "pendingStoreReset"
@@ -129,15 +136,68 @@ enum SwiftDataContainerFactory {
         schema: Schema,
         dependencies: Dependencies
     ) -> ModelContainerBootstrapResult {
+        let context = prepareRuntimeContext(dependencies: dependencies)
+        var errorChain: [String] = []
+
+        if let container = attemptPersistentContainer(
+            schema: schema,
+            storeURL: context.storeURL,
+            dependencies: dependencies,
+            failureLogPrefix: "initial persistent bootstrap failed",
+            errorChain: &errorChain,
+            cleanupURLOnFailure: context.appSupportURL
+        ) {
+            return readyResult(container: container, mode: .normal, message: nil, diagnostics: nil)
+        }
+
+        if let container = attemptPersistentContainer(
+            schema: schema,
+            storeURL: context.storeURL,
+            dependencies: dependencies,
+            failureLogPrefix: "persistent bootstrap after cleanup failed",
+            errorChain: &errorChain
+        ) {
+            return recoveredResult(
+                container: container,
+                mode: .storeReset,
+                context: context,
+                errorChain: errorChain,
+                dependencies: dependencies
+            )
+        }
+
+        if let container = attemptInMemoryContainer(
+            schema: schema,
+            dependencies: dependencies,
+            failureLogPrefix: "in-memory full schema bootstrap failed",
+            errorChain: &errorChain
+        ) {
+            return recoveredResult(
+                container: container,
+                mode: .inMemoryFallback,
+                context: context,
+                errorChain: errorChain,
+                dependencies: dependencies
+            )
+        }
+
+        let failingModelNames = probeModelsIndividually(dependencies: dependencies)
+        return emergencyResult(
+            context: context,
+            failingModelNames: failingModelNames,
+            dependencies: dependencies,
+            errorChain: &errorChain
+        )
+    }
+
+    private static func prepareRuntimeContext(
+        dependencies: Dependencies
+    ) -> RuntimeBootstrapContext {
         let appSupportURL = dependencies.appSupportURLProvider(dependencies.fileManager)
         try? dependencies.fileManager.createDirectory(
             at: appSupportURL,
             withIntermediateDirectories: true
         )
-
-        let schemaModelNames = runtimeModelProbes.map(\.name)
-        let timestamp = ISO8601DateFormatter().string(from: dependencies.now())
-        let storeURL = appSupportURL.appendingPathComponent(runtimeStoreFileName)
 
         if dependencies.userDefaults.bool(forKey: pendingStoreResetUserDefaultsKey) {
             log("pending reset flag detected, clearing local store artifacts before bootstrap")
@@ -148,102 +208,102 @@ enum SwiftDataContainerFactory {
         dependencies.userDefaults.removeObject(forKey: bootstrapDiagnosticsUserDefaultsKey)
         dependencies.userDefaults.removeObject(forKey: recoveryUserDefaultsKey)
 
-        var errorChain: [String] = []
+        return RuntimeBootstrapContext(
+            appSupportURL: appSupportURL,
+            storeURL: appSupportURL.appendingPathComponent(runtimeStoreFileName),
+            schemaModelNames: runtimeModelProbes.map(\.name),
+            timestamp: ISO8601DateFormatter().string(from: dependencies.now())
+        )
+    }
 
+    private static func attemptPersistentContainer(
+        schema: Schema,
+        storeURL: URL,
+        dependencies: Dependencies,
+        failureLogPrefix: String,
+        errorChain: inout [String],
+        cleanupURLOnFailure: URL? = nil
+    ) -> ModelContainer? {
+        let configuration = persistentConfiguration(schema: schema, storeURL: storeURL)
         do {
-            let container = try dependencies.containerBuilder(
-                schema,
-                persistentConfiguration(schema: schema, storeURL: storeURL)
-            )
-            return ModelContainerBootstrapResult(
-                container: container,
-                recoveryMode: .normal,
-                diagnosticMessage: nil,
-                bootstrapState: .ready,
-                diagnostics: nil
-            )
+            return try dependencies.containerBuilder(schema, configuration)
         } catch {
             let details = detailedErrorDescription(error)
             errorChain.append(details)
-            log("initial persistent bootstrap failed: \(details)")
-            let removedArtifacts = cleanupStoreArtifacts(in: appSupportURL, using: dependencies.fileManager)
-            log("cleanup removed \(removedArtifacts.count) artifacts")
+            log("\(failureLogPrefix): \(details)")
+            if let cleanupURLOnFailure {
+                let removedArtifacts = cleanupStoreArtifacts(
+                    in: cleanupURLOnFailure,
+                    using: dependencies.fileManager
+                )
+                log("cleanup removed \(removedArtifacts.count) artifacts")
+            }
+            return nil
         }
+    }
 
+    private static func attemptInMemoryContainer(
+        schema: Schema,
+        dependencies: Dependencies,
+        failureLogPrefix: String,
+        errorChain: inout [String]
+    ) -> ModelContainer? {
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         do {
-            let container = try dependencies.containerBuilder(
-                schema,
-                persistentConfiguration(schema: schema, storeURL: storeURL)
-            )
-            let diagnostics = BootstrapDiagnostics(
-                recoveryMode: .storeReset,
-                timestampISO8601: timestamp,
-                osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                schemaModelNames: schemaModelNames,
-                failingModelNames: [],
-                errorChain: errorChain
-            )
-            persistRecoveryEvent(mode: .storeReset, diagnostics: diagnostics, dependencies: dependencies)
-            return ModelContainerBootstrapResult(
-                container: container,
-                recoveryMode: .storeReset,
-                diagnosticMessage: recoveryMessage,
-                bootstrapState: .ready,
-                diagnostics: diagnostics
-            )
+            return try dependencies.containerBuilder(schema, configuration)
         } catch {
             let details = detailedErrorDescription(error)
             errorChain.append(details)
-            log("persistent bootstrap after cleanup failed: \(details)")
+            log("\(failureLogPrefix): \(details)")
+            return nil
         }
+    }
+
+    private static func recoveredResult(
+        container: ModelContainer,
+        mode: StoreRecoveryMode,
+        context: RuntimeBootstrapContext,
+        errorChain: [String],
+        dependencies: Dependencies
+    ) -> ModelContainerBootstrapResult {
+        let diagnostics = makeDiagnostics(
+            mode: mode,
+            context: context,
+            failingModelNames: [],
+            errorChain: errorChain
+        )
+        persistRecoveryEvent(mode: mode, diagnostics: diagnostics, dependencies: dependencies)
+        return readyResult(
+            container: container,
+            mode: mode,
+            message: recoveryMessage,
+            diagnostics: diagnostics
+        )
+    }
+
+    private static func emergencyResult(
+        context: RuntimeBootstrapContext,
+        failingModelNames: [String],
+        dependencies: Dependencies,
+        errorChain: inout [String]
+    ) -> ModelContainerBootstrapResult {
+        let emergencySchema = Schema([StartupSentinel.self])
+        let emergencyConfiguration = ModelConfiguration(
+            schema: emergencySchema,
+            isStoredInMemoryOnly: true
+        )
 
         do {
-            let container = try dependencies.containerBuilder(
-                schema,
-                ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            )
-            let diagnostics = BootstrapDiagnostics(
-                recoveryMode: .inMemoryFallback,
-                timestampISO8601: timestamp,
-                osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                schemaModelNames: schemaModelNames,
-                failingModelNames: [],
-                errorChain: errorChain
-            )
-            persistRecoveryEvent(mode: .inMemoryFallback, diagnostics: diagnostics, dependencies: dependencies)
-            return ModelContainerBootstrapResult(
-                container: container,
-                recoveryMode: .inMemoryFallback,
-                diagnosticMessage: recoveryMessage,
-                bootstrapState: .ready,
-                diagnostics: diagnostics
-            )
-        } catch {
-            let details = detailedErrorDescription(error)
-            errorChain.append(details)
-            log("in-memory full schema bootstrap failed: \(details)")
-        }
-
-        let failingModelNames = probeModelsIndividually(dependencies: dependencies)
-
-        do {
-            let emergencySchema = Schema([StartupSentinel.self])
-            let emergencyConfiguration = ModelConfiguration(
-                schema: emergencySchema,
-                isStoredInMemoryOnly: true
-            )
-            let emergencyContainer = try dependencies.containerBuilder(emergencySchema, emergencyConfiguration)
-            let diagnostics = BootstrapDiagnostics(
-                recoveryMode: .schemaFailure,
-                timestampISO8601: timestamp,
-                osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                schemaModelNames: schemaModelNames,
+            let container = try dependencies.containerBuilder(emergencySchema, emergencyConfiguration)
+            let diagnostics = makeDiagnostics(
+                mode: .schemaFailure,
+                context: context,
                 failingModelNames: failingModelNames,
                 errorChain: errorChain
             )
             persistRecoveryEvent(mode: .schemaFailure, diagnostics: diagnostics, dependencies: dependencies)
             return ModelContainerBootstrapResult(
-                container: emergencyContainer,
+                container: container,
                 recoveryMode: .schemaFailure,
                 diagnosticMessage: emergencyMessage,
                 bootstrapState: .emergency,
@@ -253,11 +313,9 @@ enum SwiftDataContainerFactory {
             let details = detailedErrorDescription(error)
             errorChain.append(details)
             log("emergency bootstrap failed: \(details)")
-            let diagnostics = BootstrapDiagnostics(
-                recoveryMode: .schemaFailure,
-                timestampISO8601: timestamp,
-                osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                schemaModelNames: schemaModelNames,
+            let diagnostics = makeDiagnostics(
+                mode: .schemaFailure,
+                context: context,
                 failingModelNames: failingModelNames,
                 errorChain: errorChain
             )
@@ -270,6 +328,37 @@ enum SwiftDataContainerFactory {
                 diagnostics: diagnostics
             )
         }
+    }
+
+    private static func makeDiagnostics(
+        mode: StoreRecoveryMode,
+        context: RuntimeBootstrapContext,
+        failingModelNames: [String],
+        errorChain: [String]
+    ) -> BootstrapDiagnostics {
+        BootstrapDiagnostics(
+            recoveryMode: mode,
+            timestampISO8601: context.timestamp,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            schemaModelNames: context.schemaModelNames,
+            failingModelNames: failingModelNames,
+            errorChain: errorChain
+        )
+    }
+
+    private static func readyResult(
+        container: ModelContainer,
+        mode: StoreRecoveryMode,
+        message: String?,
+        diagnostics: BootstrapDiagnostics?
+    ) -> ModelContainerBootstrapResult {
+        ModelContainerBootstrapResult(
+            container: container,
+            recoveryMode: mode,
+            diagnosticMessage: message,
+            bootstrapState: .ready,
+            diagnostics: diagnostics
+        )
     }
 
     @discardableResult
