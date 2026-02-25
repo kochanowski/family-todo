@@ -946,12 +946,8 @@ private struct BacklogItemEditSheet: View {
         NavigationStack {
             Form {
                 Section("Item") {
-                    TextField(
-                        "",
-                        text: $title,
-                        prompt: Text("Title").font(themeStore.font(for: .body))
-                    )
-                    .font(themeStore.font(for: .body))
+                    TextField("Title", text: $title)
+                        .font(themeStore.font(for: .body))
                 }
 
                 Section("Assignee") {

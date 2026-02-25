@@ -321,7 +321,8 @@ private struct ShoppingListContent: View {
                     themeStore.foregroundOnAccent(
                         for: themeStore.accentTabColor, colorScheme: colorScheme)),
                 onSubmit: handleRapidEntrySubmit,
-                onDone: commitOrDismissRapidEntry
+                onDone: commitOrDismissRapidEntry,
+                themeStore: themeStore
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
         }
@@ -552,21 +553,17 @@ private struct ShoppingItemInlineEditRow: View {
                 .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
                 .frame(width: 22, height: 22)
 
-            TextField(
-                "",
-                text: $text,
-                prompt: Text("Item name").font(themeStore.font(for: .listRowTitle))
-            )
-            .font(themeStore.font(for: .listRowTitle))
-            .submitLabel(.done)
-            .focused($isFocused)
-            .onSubmit(onSubmit)
-            .onChange(of: isFocused) { _, focused in
-                if !focused, !isCancelling {
-                    onSubmit()
+            TextField("Item name", text: $text)
+                .font(themeStore.font(for: .listRowTitle))
+                .submitLabel(.done)
+                .focused($isFocused)
+                .onSubmit(onSubmit)
+                .onChange(of: isFocused) { _, focused in
+                    if !focused, !isCancelling {
+                        onSubmit()
+                    }
                 }
-            }
-            .autocorrectionDisabled()
+                .autocorrectionDisabled()
 
             Button {
                 isCancelling = true
@@ -595,6 +592,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
     let actionForegroundColor: UIColor
     let onSubmit: () -> Void
     let onDone: () -> Void
+    let themeStore: ThemeStore
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)

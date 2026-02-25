@@ -1143,12 +1143,8 @@ private struct TaskDetailSheet: View {
         NavigationStack {
             Form {
                 Section("Task") {
-                    TextField(
-                        "",
-                        text: $title,
-                        prompt: Text("Title").font(themeStore.font(for: .body))
-                    )
-                    .font(themeStore.font(for: .body))
+                    TextField("Title", text: $title)
+                        .font(themeStore.font(for: .body))
                     Picker("Status", selection: $status) {
                         Text("Ideas").tag(Task.TaskStatus.backlog)
                         Text("Next").tag(Task.TaskStatus.next)
