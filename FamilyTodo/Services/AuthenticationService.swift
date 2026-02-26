@@ -53,6 +53,7 @@ struct AuthDiagnosticsSnapshot: Codable {
     let containerIdentifier: String
     let cloudKitContainerInitialized: Bool
     let cloudKitAvailabilityReason: String
+    let cloudKitEnabledFallbackApplied: Bool
     let lastCKAccountStatusRaw: Int?
     let authenticationState: String
     let mappedErrorCategory: String?
@@ -97,6 +98,7 @@ final class AuthenticationService: NSObject, ObservableObject {
     private var hpCloudKitEnabledRawType: String?
     private var cloudKitAvailabilityReason: CloudKitAvailabilityReason = .missingKey
     private var cloudKitContainerInitialized = false
+    private var cloudKitEnabledFallbackApplied = false
     private var recentDiagnosticEntries: [AuthDiagnosticEntry] = []
     private var lastCKAccountStatusRaw: Int?
     private var lastMappedErrorCategory: AuthMappedErrorCategory?
@@ -117,6 +119,7 @@ final class AuthenticationService: NSObject, ObservableObject {
             cloudKitEnabledByFlag = true
             cloudKitAvailabilityReason = .enabled
             cloudKitContainerInitialized = true
+            cloudKitEnabledFallbackApplied = false
         } else {
             self.cloudKitContainer = makeCloudKitContainer()
         }
@@ -350,6 +353,16 @@ final class AuthenticationService: NSObject, ObservableObject {
         hpCloudKitEnabledRawValue = parseResult.rawValue
         hpCloudKitEnabledRawType = parseResult.rawType
         cloudKitAvailabilityReason = parseResult.reason
+        cloudKitEnabledFallbackApplied = false
+
+        // Hotfix: if custom key is absent in production/TestFlight, default to enabled
+        // so we can proceed to real CloudKit authentication checks.
+        if parseResult.reason == .missingKey {
+            cloudKitEnabledByFlag = true
+            cloudKitContainerInitialized = true
+            cloudKitEnabledFallbackApplied = true
+            return CKContainer(identifier: Self.containerIdentifier)
+        }
 
         guard parseResult.enabled else {
             cloudKitContainerInitialized = false
@@ -415,6 +428,7 @@ final class AuthenticationService: NSObject, ObservableObject {
             containerIdentifier: Self.containerIdentifier,
             cloudKitContainerInitialized: cloudKitContainerInitialized,
             cloudKitAvailabilityReason: cloudKitAvailabilityReason.rawValue,
+            cloudKitEnabledFallbackApplied: cloudKitEnabledFallbackApplied,
             lastCKAccountStatusRaw: lastCKAccountStatusRaw,
             authenticationState: authenticationState.diagnosticState,
             mappedErrorCategory: lastMappedErrorCategory?.rawValue,
@@ -520,6 +534,7 @@ final class AuthenticationService: NSObject, ObservableObject {
     private var hpCloudKitEnabledRawType: String?
     private var cloudKitAvailabilityReason: CloudKitAvailabilityReason = .disabledByFlag
     private var cloudKitContainerInitialized = false
+    private var cloudKitEnabledFallbackApplied = false
     private var recentDiagnosticEntries: [AuthDiagnosticEntry] = []
     private static let maxDiagnosticEntries = 20
 
@@ -568,6 +583,7 @@ final class AuthenticationService: NSObject, ObservableObject {
         hpCloudKitEnabledRawType = parseResult.rawType
         cloudKitAvailabilityReason = parseResult.reason
         cloudKitContainerInitialized = false
+        cloudKitEnabledFallbackApplied = false
         recordDiagnostic(stage: .cloudKitContainerInit)
         refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
     }
@@ -645,6 +661,7 @@ final class AuthenticationService: NSObject, ObservableObject {
             containerIdentifier: Self.containerIdentifier,
             cloudKitContainerInitialized: cloudKitContainerInitialized,
             cloudKitAvailabilityReason: cloudKitAvailabilityReason.rawValue,
+            cloudKitEnabledFallbackApplied: cloudKitEnabledFallbackApplied,
             lastCKAccountStatusRaw: nil,
             authenticationState: authenticationState.diagnosticState,
             mappedErrorCategory: mappedErrorCategory?.rawValue,

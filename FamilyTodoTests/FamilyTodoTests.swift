@@ -136,6 +136,8 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
         if snapshot.cloudKitAvailabilityReason != CloudKitAvailabilityReason.missingKey.rawValue {
             XCTAssertNotNil(snapshot.hpCloudKitEnabledRawType)
             XCTAssertNotNil(snapshot.hpCloudKitEnabledRawValue)
+        } else {
+            XCTAssertTrue(snapshot.cloudKitEnabledFallbackApplied)
         }
 
         let report = service.diagnosticsReportJSON()
