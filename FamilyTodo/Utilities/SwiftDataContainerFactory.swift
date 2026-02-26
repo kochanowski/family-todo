@@ -13,13 +13,31 @@ enum StartupBootstrapState: String, Codable {
     case emergency
 }
 
+enum BootstrapStage: String, Codable {
+    case initialPersistent
+    case persistentAfterCleanup
+    case fullInMemory
+    case emergencyInMemory
+    case modelProbe
+}
+
+struct BootstrapErrorDetail: Codable {
+    let stage: BootstrapStage
+    let modelName: String?
+    let summary: String
+    let reflected: String
+    let underlyingChain: [String]
+}
+
 struct BootstrapDiagnostics: Codable {
     let recoveryMode: StoreRecoveryMode
     let timestampISO8601: String
     let osVersion: String
+    let cloudKitDatabaseMode: String
     let schemaModelNames: [String]
     let failingModelNames: [String]
     let errorChain: [String]
+    let errorDetails: [BootstrapErrorDetail]
 }
 
 struct ModelContainerBootstrapResult {
@@ -39,6 +57,7 @@ enum SwiftDataContainerFactory {
         let storeURL: URL
         let schemaModelNames: [String]
         let timestamp: String
+        let cloudKitDatabaseMode: String
     }
 
     static let recoveryUserDefaultsKey = "lastStoreRecoveryEvent"
@@ -47,6 +66,7 @@ enum SwiftDataContainerFactory {
 
     private static let legacyStorePrefix = "default.store"
     private static let runtimeStoreFileName = "HousePulse.store"
+    private static let swiftDataCloudKitDatabaseMode = "none"
     private static let recoveryMessage =
         "Wykryto problem lokalnej bazy. Cache został odtworzony. Dane w chmurze zsynchronizują się automatycznie."
     private static let emergencyMessage =
@@ -117,7 +137,7 @@ enum SwiftDataContainerFactory {
         schema: Schema,
         dependencies: Dependencies
     ) -> ModelContainerBootstrapResult {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let configuration = inMemoryConfiguration(schema: schema)
         do {
             let container = try dependencies.containerBuilder(schema, configuration)
             return ModelContainerBootstrapResult(
@@ -137,14 +157,15 @@ enum SwiftDataContainerFactory {
         dependencies: Dependencies
     ) -> ModelContainerBootstrapResult {
         let context = prepareRuntimeContext(dependencies: dependencies)
-        var errorChain: [String] = []
+        var errorDetails: [BootstrapErrorDetail] = []
 
         if let container = attemptPersistentContainer(
             schema: schema,
             storeURL: context.storeURL,
             dependencies: dependencies,
+            stage: .initialPersistent,
             failureLogPrefix: "initial persistent bootstrap failed",
-            errorChain: &errorChain,
+            errorDetails: &errorDetails,
             cleanupURLOnFailure: context.appSupportURL
         ) {
             return readyResult(container: container, mode: .normal, message: nil, diagnostics: nil)
@@ -154,14 +175,15 @@ enum SwiftDataContainerFactory {
             schema: schema,
             storeURL: context.storeURL,
             dependencies: dependencies,
+            stage: .persistentAfterCleanup,
             failureLogPrefix: "persistent bootstrap after cleanup failed",
-            errorChain: &errorChain
+            errorDetails: &errorDetails
         ) {
             return recoveredResult(
                 container: container,
                 mode: .storeReset,
                 context: context,
-                errorChain: errorChain,
+                errorDetails: errorDetails,
                 dependencies: dependencies
             )
         }
@@ -169,24 +191,28 @@ enum SwiftDataContainerFactory {
         if let container = attemptInMemoryContainer(
             schema: schema,
             dependencies: dependencies,
+            stage: .fullInMemory,
             failureLogPrefix: "in-memory full schema bootstrap failed",
-            errorChain: &errorChain
+            errorDetails: &errorDetails
         ) {
             return recoveredResult(
                 container: container,
                 mode: .inMemoryFallback,
                 context: context,
-                errorChain: errorChain,
+                errorDetails: errorDetails,
                 dependencies: dependencies
             )
         }
 
-        let failingModelNames = probeModelsIndividually(dependencies: dependencies)
+        let failingModelNames = probeModelsIndividually(
+            dependencies: dependencies,
+            errorDetails: &errorDetails
+        )
         return emergencyResult(
             context: context,
             failingModelNames: failingModelNames,
             dependencies: dependencies,
-            errorChain: &errorChain
+            errorDetails: &errorDetails
         )
     }
 
@@ -212,7 +238,8 @@ enum SwiftDataContainerFactory {
             appSupportURL: appSupportURL,
             storeURL: appSupportURL.appendingPathComponent(runtimeStoreFileName),
             schemaModelNames: runtimeModelProbes.map(\.name),
-            timestamp: ISO8601DateFormatter().string(from: dependencies.now())
+            timestamp: ISO8601DateFormatter().string(from: dependencies.now()),
+            cloudKitDatabaseMode: swiftDataCloudKitDatabaseMode
         )
     }
 
@@ -220,17 +247,22 @@ enum SwiftDataContainerFactory {
         schema: Schema,
         storeURL: URL,
         dependencies: Dependencies,
+        stage: BootstrapStage,
         failureLogPrefix: String,
-        errorChain: inout [String],
+        errorDetails: inout [BootstrapErrorDetail],
         cleanupURLOnFailure: URL? = nil
     ) -> ModelContainer? {
         let configuration = persistentConfiguration(schema: schema, storeURL: storeURL)
         do {
             return try dependencies.containerBuilder(schema, configuration)
         } catch {
-            let details = detailedErrorDescription(error)
-            errorChain.append(details)
-            log("\(failureLogPrefix): \(details)")
+            let detail = buildErrorDetail(stage: stage, error: error)
+            errorDetails.append(detail)
+            log("\(failureLogPrefix): \(detail.summary)")
+            log("stage=\(detail.stage.rawValue) reflected=\(detail.reflected)")
+            if !detail.underlyingChain.isEmpty {
+                log("stage=\(detail.stage.rawValue) underlying=\(detail.underlyingChain.joined(separator: " || "))")
+            }
             if let cleanupURLOnFailure {
                 let removedArtifacts = cleanupStoreArtifacts(
                     in: cleanupURLOnFailure,
@@ -245,16 +277,21 @@ enum SwiftDataContainerFactory {
     private static func attemptInMemoryContainer(
         schema: Schema,
         dependencies: Dependencies,
+        stage: BootstrapStage,
         failureLogPrefix: String,
-        errorChain: inout [String]
+        errorDetails: inout [BootstrapErrorDetail]
     ) -> ModelContainer? {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let configuration = inMemoryConfiguration(schema: schema)
         do {
             return try dependencies.containerBuilder(schema, configuration)
         } catch {
-            let details = detailedErrorDescription(error)
-            errorChain.append(details)
-            log("\(failureLogPrefix): \(details)")
+            let detail = buildErrorDetail(stage: stage, error: error)
+            errorDetails.append(detail)
+            log("\(failureLogPrefix): \(detail.summary)")
+            log("stage=\(detail.stage.rawValue) reflected=\(detail.reflected)")
+            if !detail.underlyingChain.isEmpty {
+                log("stage=\(detail.stage.rawValue) underlying=\(detail.underlyingChain.joined(separator: " || "))")
+            }
             return nil
         }
     }
@@ -263,14 +300,14 @@ enum SwiftDataContainerFactory {
         container: ModelContainer,
         mode: StoreRecoveryMode,
         context: RuntimeBootstrapContext,
-        errorChain: [String],
+        errorDetails: [BootstrapErrorDetail],
         dependencies: Dependencies
     ) -> ModelContainerBootstrapResult {
         let diagnostics = makeDiagnostics(
             mode: mode,
             context: context,
             failingModelNames: [],
-            errorChain: errorChain
+            errorDetails: errorDetails
         )
         persistRecoveryEvent(mode: mode, diagnostics: diagnostics, dependencies: dependencies)
         return readyResult(
@@ -285,13 +322,10 @@ enum SwiftDataContainerFactory {
         context: RuntimeBootstrapContext,
         failingModelNames: [String],
         dependencies: Dependencies,
-        errorChain: inout [String]
+        errorDetails: inout [BootstrapErrorDetail]
     ) -> ModelContainerBootstrapResult {
         let emergencySchema = Schema([StartupSentinel.self])
-        let emergencyConfiguration = ModelConfiguration(
-            schema: emergencySchema,
-            isStoredInMemoryOnly: true
-        )
+        let emergencyConfiguration = inMemoryConfiguration(schema: emergencySchema)
 
         do {
             let container = try dependencies.containerBuilder(emergencySchema, emergencyConfiguration)
@@ -299,7 +333,7 @@ enum SwiftDataContainerFactory {
                 mode: .schemaFailure,
                 context: context,
                 failingModelNames: failingModelNames,
-                errorChain: errorChain
+                errorDetails: errorDetails
             )
             persistRecoveryEvent(mode: .schemaFailure, diagnostics: diagnostics, dependencies: dependencies)
             return ModelContainerBootstrapResult(
@@ -310,14 +344,18 @@ enum SwiftDataContainerFactory {
                 diagnostics: diagnostics
             )
         } catch {
-            let details = detailedErrorDescription(error)
-            errorChain.append(details)
-            log("emergency bootstrap failed: \(details)")
+            let detail = buildErrorDetail(stage: .emergencyInMemory, error: error)
+            errorDetails.append(detail)
+            log("emergency bootstrap failed: \(detail.summary)")
+            log("stage=\(detail.stage.rawValue) reflected=\(detail.reflected)")
+            if !detail.underlyingChain.isEmpty {
+                log("stage=\(detail.stage.rawValue) underlying=\(detail.underlyingChain.joined(separator: " || "))")
+            }
             let diagnostics = makeDiagnostics(
                 mode: .schemaFailure,
                 context: context,
                 failingModelNames: failingModelNames,
-                errorChain: errorChain
+                errorDetails: errorDetails
             )
             persistRecoveryEvent(mode: .schemaFailure, diagnostics: diagnostics, dependencies: dependencies)
             return ModelContainerBootstrapResult(
@@ -334,15 +372,17 @@ enum SwiftDataContainerFactory {
         mode: StoreRecoveryMode,
         context: RuntimeBootstrapContext,
         failingModelNames: [String],
-        errorChain: [String]
+        errorDetails: [BootstrapErrorDetail]
     ) -> BootstrapDiagnostics {
         BootstrapDiagnostics(
             recoveryMode: mode,
             timestampISO8601: context.timestamp,
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            cloudKitDatabaseMode: context.cloudKitDatabaseMode,
             schemaModelNames: context.schemaModelNames,
             failingModelNames: failingModelNames,
-            errorChain: errorChain
+            errorChain: errorDetails.map(\.summary),
+            errorDetails: errorDetails
         )
     }
 
@@ -391,20 +431,28 @@ enum SwiftDataContainerFactory {
     }
 
     private static func probeModelsIndividually(
-        dependencies: Dependencies
+        dependencies: Dependencies,
+        errorDetails: inout [BootstrapErrorDetail]
     ) -> [String] {
         var failingModels: [String] = []
         for probe in runtimeModelProbes {
             let probeSchema = probe.makeSchema()
-            let probeConfiguration = ModelConfiguration(
-                schema: probeSchema,
-                isStoredInMemoryOnly: true
-            )
+            let probeConfiguration = inMemoryConfiguration(schema: probeSchema)
             do {
                 _ = try dependencies.containerBuilder(probeSchema, probeConfiguration)
             } catch {
+                let detail = buildErrorDetail(
+                    stage: .modelProbe,
+                    modelName: probe.name,
+                    error: error
+                )
+                errorDetails.append(detail)
                 failingModels.append(probe.name)
-                log("model probe failed for \(probe.name): \(detailedErrorDescription(error))")
+                log("model probe failed for \(probe.name): \(detail.summary)")
+                log("stage=\(detail.stage.rawValue) model=\(probe.name) reflected=\(detail.reflected)")
+                if !detail.underlyingChain.isEmpty {
+                    log("stage=\(detail.stage.rawValue) model=\(probe.name) underlying=\(detail.underlyingChain.joined(separator: " || "))")
+                }
             }
         }
         return failingModels
@@ -424,7 +472,39 @@ enum SwiftDataContainerFactory {
     }
 
     private static func persistentConfiguration(schema: Schema, storeURL: URL) -> ModelConfiguration {
-        ModelConfiguration(schema: schema, url: storeURL)
+        localOnlyConfiguration(
+            schema: schema,
+            storeURL: storeURL,
+            isStoredInMemoryOnly: false
+        )
+    }
+
+    private static func inMemoryConfiguration(schema: Schema) -> ModelConfiguration {
+        localOnlyConfiguration(
+            schema: schema,
+            storeURL: nil,
+            isStoredInMemoryOnly: true
+        )
+    }
+
+    private static func localOnlyConfiguration(
+        schema: Schema,
+        storeURL: URL?,
+        isStoredInMemoryOnly: Bool
+    ) -> ModelConfiguration {
+        if let storeURL {
+            return ModelConfiguration(
+                schema: schema,
+                url: storeURL,
+                cloudKitDatabase: .none
+            )
+        }
+
+        return ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: isStoredInMemoryOnly,
+            cloudKitDatabase: .none
+        )
     }
 
     private static func persistRecoveryEvent(
@@ -436,10 +516,14 @@ enum SwiftDataContainerFactory {
             "mode": mode.rawValue,
             "timestamp": diagnostics.timestampISO8601,
             "osVersion": diagnostics.osVersion,
+            "cloudKitDatabaseMode": diagnostics.cloudKitDatabaseMode,
             "schemaModels": diagnostics.schemaModelNames.joined(separator: ","),
             "failingModels": diagnostics.failingModelNames.joined(separator: ","),
             "errorCount": diagnostics.errorChain.count,
             "lastError": diagnostics.errorChain.last ?? "",
+            "lastStage": diagnostics.errorDetails.last?.stage.rawValue ?? "",
+            "lastReflectedError": diagnostics.errorDetails.last?.reflected ?? "",
+            "lastUnderlyingError": diagnostics.errorDetails.last?.underlyingChain.last ?? "",
         ]
         dependencies.userDefaults.set(payload, forKey: recoveryUserDefaultsKey)
 
@@ -463,6 +547,40 @@ enum SwiftDataContainerFactory {
             parts.append("userInfo=\(String(describing: nsError.userInfo))")
         }
         return parts.joined(separator: " | ")
+    }
+
+    private static func buildErrorDetail(
+        stage: BootstrapStage,
+        modelName: String? = nil,
+        error: Error
+    ) -> BootstrapErrorDetail {
+        BootstrapErrorDetail(
+            stage: stage,
+            modelName: modelName,
+            summary: detailedErrorDescription(error),
+            reflected: String(reflecting: error),
+            underlyingChain: underlyingErrorChain(from: error)
+        )
+    }
+
+    private static func underlyingErrorChain(from error: Error) -> [String] {
+        var chain: [String] = []
+        var current = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+
+        while let currentError = current {
+            var parts: [String] = [
+                "domain=\(currentError.domain)",
+                "code=\(currentError.code)",
+                "description=\(currentError.localizedDescription)",
+            ]
+            if let reason = currentError.localizedFailureReason, !reason.isEmpty {
+                parts.append("reason=\(reason)")
+            }
+            chain.append(parts.joined(separator: " | "))
+            current = currentError.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+
+        return chain
     }
 
     private static func log(_ message: String) {
