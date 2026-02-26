@@ -18,7 +18,7 @@ run_export() {
       --team-id "$TEAM_ID" \
       --container-id "$CONTAINER_ID" \
       --environment production \
-      --file "$output_file" \
+      --output-file "$output_file" \
       --token "$TOKEN" \
       2>&1 | tee "$log_file"; then
       return 0
@@ -35,7 +35,7 @@ run_export() {
     --team-id "$TEAM_ID" \
     --container-id "$CONTAINER_ID" \
     --environment production \
-    --file "$output_file" \
+    --output-file "$output_file" \
     2>&1 | tee "$log_file"
 }
 
