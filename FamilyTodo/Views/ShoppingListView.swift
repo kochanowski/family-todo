@@ -59,6 +59,7 @@ private struct ShoppingListContent: View {
     @State private var editingItemText = ""
     @State private var isKeyboardVisible = false
     @State private var draggedItem: ShoppingItem?
+    @State private var didPerformInitialLoad = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -193,8 +194,16 @@ private struct ShoppingListContent: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .task {
+            guard !didPerformInitialLoad else { return }
+            didPerformInitialLoad = true
             store.setSyncMode(userSession.syncMode)
             await store.loadItems()
+        }
+        .onChange(of: userSession.syncMode) { _, mode in
+            store.setSyncMode(mode)
+            _ = _Concurrency.Task {
+                await store.loadItems()
+            }
         }
         .newItemsBanner(manager: subscriptionManager)
         .onChange(of: isKeyboardVisible) { _, visible in

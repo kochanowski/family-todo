@@ -7,6 +7,12 @@ import UIKit
 @MainActor
 // swiftlint:disable type_body_length
 class HouseholdStore: ObservableObject {
+    enum LeaveResolution: Equatable {
+        case deleteHousehold
+        case requireTransfer
+        case deactivateMembership
+    }
+
     @Published var currentHousehold: Household?
     @Published var isLoading = false
     @Published var error: Error?
@@ -196,9 +202,28 @@ class HouseholdStore: ObservableObject {
         }
 
         if share == nil {
-            _ = try await createShare()
-            if let createdURL = share?.url {
-                return createdURL
+            do {
+                _ = try await createShare()
+                if let createdURL = share?.url {
+                    return createdURL
+                }
+            } catch CloudKitManager.CloudKitManagerError.shareNotCreated {
+                if let fallbackShare = try await cloudKit.fetchShare(for: household.id) {
+                    share = fallbackShare
+                    activeContainer = await cloudKit.getContainer()
+                    if let fallbackURL = fallbackShare.url {
+                        return fallbackURL
+                    }
+                }
+                throw CloudKitManager.CloudKitManagerError.shareNotCreated
+            }
+        }
+
+        if let fallbackShare = try await cloudKit.fetchShare(for: household.id) {
+            share = fallbackShare
+            activeContainer = await cloudKit.getContainer()
+            if let shareURL = fallbackShare.url {
+                return shareURL
             }
         }
 
@@ -306,10 +331,15 @@ class HouseholdStore: ObservableObject {
             }
 
             let members = try await cloudKit.fetchMembers(householdId: household.id)
-            let activeOwners = members.filter { $0.isActive && $0.role == .owner }
-
-            if member.role == .owner, activeOwners.count <= 1 {
+            let activeMembers = members.filter(\.isActive)
+            switch resolveLeaveBehavior(for: member, activeMembers: activeMembers) {
+            case .deleteHousehold:
+                try await deleteCurrentHousehold(requestedBy: userId)
+                return
+            case .requireTransfer:
                 throw HouseholdError.transferOwnershipRequired
+            case .deactivateMembership:
+                break
             }
 
             let updatedMember = Member(
@@ -338,32 +368,47 @@ class HouseholdStore: ObservableObject {
 
         if syncMode == .cloud {
             await cloudKit.setHouseholdScope(.ownerPrivate)
-            let members = try await cloudKit.fetchMembers(householdId: household.id)
-            for member in members {
-                try await cloudKit.deleteMember(id: member.id, householdId: household.id)
+            let deletedByZone = try await cloudKit.deleteHouseholdZoneIfCustom(id: household.id)
+
+            if !deletedByZone {
+                let members = try await cloudKit.fetchMembers(householdId: household.id)
+                for member in members {
+                    try await cloudKit.deleteMember(id: member.id, householdId: household.id)
+                }
+
+                let tasks = try await cloudKit.fetchTasks(householdId: household.id)
+                for task in tasks {
+                    try await cloudKit.deleteTask(id: task.id, householdId: household.id)
+                }
+
+                let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: household.id)
+                for item in shoppingItems {
+                    try await cloudKit.deleteShoppingItem(id: item.id, householdId: household.id)
+                }
+
+                let backlogItems = try await cloudKit.fetchBacklogItems(householdId: household.id)
+                for item in backlogItems {
+                    try await cloudKit.deleteBacklogItem(id: item.id, householdId: household.id)
+                }
+
+                let categories = try await cloudKit.fetchBacklogCategories(householdId: household.id)
+                for category in categories {
+                    try await cloudKit.deleteBacklogCategory(id: category.id, householdId: household.id)
+                }
+
+                try await cloudKit.deleteHousehold(id: household.id)
             }
 
-            let tasks = try await cloudKit.fetchTasks(householdId: household.id)
-            for task in tasks {
-                try await cloudKit.deleteTask(id: task.id, householdId: household.id)
+            do {
+                _ = try await cloudKit.fetchHousehold(id: household.id)
+                throw NSError(
+                    domain: "HouseholdStore",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Household deletion could not be verified."]
+                )
+            } catch {
+                guard isRecordMissingError(error) else { throw error }
             }
-
-            let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: household.id)
-            for item in shoppingItems {
-                try await cloudKit.deleteShoppingItem(id: item.id, householdId: household.id)
-            }
-
-            let backlogItems = try await cloudKit.fetchBacklogItems(householdId: household.id)
-            for item in backlogItems {
-                try await cloudKit.deleteBacklogItem(id: item.id, householdId: household.id)
-            }
-
-            let categories = try await cloudKit.fetchBacklogCategories(householdId: household.id)
-            for category in categories {
-                try await cloudKit.deleteBacklogCategory(id: category.id, householdId: household.id)
-            }
-
-            try await cloudKit.deleteHousehold(id: household.id)
         }
 
         removeHouseholdFromCache(id: household.id)
@@ -428,6 +473,35 @@ class HouseholdStore: ObservableObject {
             return validated
         }
         return syncMode == .localOnly ? "Guest" : "Member"
+    }
+
+    func resolveLeaveBehavior(for member: Member, activeMembers: [Member]) -> LeaveResolution {
+        guard member.role == .owner else {
+            return .deactivateMembership
+        }
+
+        let otherActiveMembers = activeMembers.filter { $0.id != member.id }
+        let hasOtherActiveOwners = otherActiveMembers.contains(where: { $0.role == .owner })
+
+        if activeMembers.count <= 1 {
+            return .deleteHousehold
+        }
+        if !otherActiveMembers.isEmpty, !hasOtherActiveOwners {
+            return .requireTransfer
+        }
+        return .deactivateMembership
+    }
+
+    private func isRecordMissingError(_ error: Error) -> Bool {
+        if let ckError = error as? CKError {
+            return ckError.code == .unknownItem
+        }
+        if let managerError = error as? CloudKitManager.CloudKitManagerError,
+           case let .unknownError(underlying) = managerError
+        {
+            return isRecordMissingError(underlying)
+        }
+        return false
     }
 
     func clearCurrentHousehold() {

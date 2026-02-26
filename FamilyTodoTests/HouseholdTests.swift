@@ -256,6 +256,39 @@ final class HouseholdStoreTests: XCTestCase {
 
         XCTAssertEqual(errors.count, 6)
     }
+
+    func testResolveLeaveBehavior_OwnerOnlyMember_DeletesHousehold() {
+        let owner = Member(
+            householdId: UUID(),
+            userId: "owner",
+            displayName: "Owner",
+            role: .owner
+        )
+
+        let decision = store.resolveLeaveBehavior(for: owner, activeMembers: [owner])
+
+        XCTAssertEqual(decision, .deleteHousehold)
+    }
+
+    func testResolveLeaveBehavior_OwnerWithMembersWithoutOtherOwner_RequiresTransfer() {
+        let householdId = UUID()
+        let owner = Member(
+            householdId: householdId,
+            userId: "owner",
+            displayName: "Owner",
+            role: .owner
+        )
+        let member = Member(
+            householdId: householdId,
+            userId: "member",
+            displayName: "Member",
+            role: .member
+        )
+
+        let decision = store.resolveLeaveBehavior(for: owner, activeMembers: [owner, member])
+
+        XCTAssertEqual(decision, .requireTransfer)
+    }
 }
 
 // MARK: - Invite Code Validation Tests

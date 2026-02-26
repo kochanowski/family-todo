@@ -74,6 +74,9 @@ class MemberStore: ObservableObject {
 
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         var member = members[index]
+        if member.displayName == trimmedName {
+            return
+        }
 
         // Optimistic Update
         let oldName = member.displayName

@@ -347,7 +347,10 @@ struct ProfileView: View {
     }
 
     private func leaveHousehold() {
-        guard let userId = userSession.userId else { return }
+        guard let userId = userSession.userId else {
+            actionErrorMessage = "Session expired. Sign in again to manage household."
+            return
+        }
         _ = _Concurrency.Task {
             do {
                 try await householdStore.leaveCurrentHousehold(userId: userId)
@@ -359,7 +362,10 @@ struct ProfileView: View {
     }
 
     private func deleteHousehold() {
-        guard let userId = userSession.userId else { return }
+        guard let userId = userSession.userId else {
+            actionErrorMessage = "Session expired. Sign in again to manage household."
+            return
+        }
         _ = _Concurrency.Task {
             do {
                 try await householdStore.deleteCurrentHousehold(requestedBy: userId)
