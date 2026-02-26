@@ -229,7 +229,7 @@ actor CloudKitManager {
 
     private func allSharedZoneIDs() async throws -> [CKRecordZone.ID] {
         let zones = try await sharedDatabase.allRecordZones()
-        let zoneIDs = Array(zones.keys)
+        let zoneIDs = zones.map(\.zoneID)
         sharedZoneContext.lastResolvedSharedZones = zoneIDs
         if !zoneIDs.isEmpty {
             let names = zoneIDs.map(\.zoneName).joined(separator: ",")
@@ -248,7 +248,7 @@ actor CloudKitManager {
         case .ownerPrivate:
             print("CloudKitScope: query ownerPrivate \(query.recordType)")
             let (results, _) = try await db.records(matching: query)
-            let records = try results.compactMap { _, result -> CKRecord? in
+            let records = results.compactMap { _, result -> CKRecord? in
                 guard case let .success(record) = result else { return nil }
                 return record
             }
