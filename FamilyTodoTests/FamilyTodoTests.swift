@@ -131,6 +131,12 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
         XCTAssertFalse(snapshot.osVersion.isEmpty)
         XCTAssertFalse(snapshot.recentEntries.isEmpty)
         XCTAssertNotNil(snapshot.mappedErrorCategory)
+        XCTAssertFalse(snapshot.cloudKitAvailabilityReason.isEmpty)
+        XCTAssertNotNil(snapshot.recentEntries.first(where: { $0.stage == .cloudKitContainerInit }))
+        if snapshot.cloudKitAvailabilityReason != CloudKitAvailabilityReason.missingKey.rawValue {
+            XCTAssertNotNil(snapshot.hpCloudKitEnabledRawType)
+            XCTAssertNotNil(snapshot.hpCloudKitEnabledRawValue)
+        }
 
         let report = service.diagnosticsReportJSON()
         XCTAssertFalse(report.contains("appleUserID"))
@@ -170,5 +176,59 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: data)
 
         XCTAssertNotNil(object)
+    }
+
+    func testParseCloudKitEnabledFlagForBoolValues() {
+        let enabledResult = AuthenticationService.parseCloudKitEnabledFlag(true)
+        XCTAssertTrue(enabledResult.enabled)
+        XCTAssertEqual(enabledResult.reason, .enabled)
+        XCTAssertEqual(enabledResult.rawType, "Bool")
+
+        let disabledResult = AuthenticationService.parseCloudKitEnabledFlag(false)
+        XCTAssertFalse(disabledResult.enabled)
+        XCTAssertEqual(disabledResult.reason, .disabledByFlag)
+        XCTAssertEqual(disabledResult.rawType, "Bool")
+    }
+
+    func testParseCloudKitEnabledFlagForNSNumberValues() {
+        let enabledResult = AuthenticationService.parseCloudKitEnabledFlag(NSNumber(value: 1))
+        XCTAssertTrue(enabledResult.enabled)
+        XCTAssertEqual(enabledResult.reason, .enabled)
+        XCTAssertEqual(enabledResult.rawType, "NSNumber")
+
+        let disabledResult = AuthenticationService.parseCloudKitEnabledFlag(NSNumber(value: 0))
+        XCTAssertFalse(disabledResult.enabled)
+        XCTAssertEqual(disabledResult.reason, .disabledByFlag)
+        XCTAssertEqual(disabledResult.rawType, "NSNumber")
+    }
+
+    func testParseCloudKitEnabledFlagForStringValues() {
+        let enabledValues = ["YES", "true", "1"]
+        for value in enabledValues {
+            let result = AuthenticationService.parseCloudKitEnabledFlag(value)
+            XCTAssertTrue(result.enabled, "Expected \(value) to parse as enabled")
+            XCTAssertEqual(result.reason, .enabled)
+            XCTAssertEqual(result.rawType, "String")
+        }
+
+        let disabledValues = ["NO", "false", "0"]
+        for value in disabledValues {
+            let result = AuthenticationService.parseCloudKitEnabledFlag(value)
+            XCTAssertFalse(result.enabled, "Expected \(value) to parse as disabled")
+            XCTAssertEqual(result.reason, .disabledByFlag)
+            XCTAssertEqual(result.rawType, "String")
+        }
+    }
+
+    func testParseCloudKitEnabledFlagForMissingAndInvalidValues() {
+        let missingResult = AuthenticationService.parseCloudKitEnabledFlag(nil)
+        XCTAssertFalse(missingResult.enabled)
+        XCTAssertEqual(missingResult.reason, .missingKey)
+        XCTAssertNil(missingResult.rawType)
+
+        let invalidStringResult = AuthenticationService.parseCloudKitEnabledFlag("enabled")
+        XCTAssertFalse(invalidStringResult.enabled)
+        XCTAssertEqual(invalidStringResult.reason, .parseFailure)
+        XCTAssertEqual(invalidStringResult.rawType, "String")
     }
 }

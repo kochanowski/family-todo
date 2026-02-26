@@ -302,9 +302,13 @@ jobs:
           PROVISIONING_PROFILE_NAME: ${{ secrets.PROVISIONING_PROFILE_NAME }}
           # Build number from GitHub run
           BUILD_NUMBER: ${{ github.run_number }}
+          # Force CloudKit-enabled TestFlight archives.
+          HP_CLOUDKIT_ENABLED: "YES"
           # Use the keychain we created in CI (avoid fastlane creating another)
           SKIP_FASTLANE_SETUP_CI: "1"
-        run: bundle exec fastlane beta
+        run: |
+          echo "Deploy profile: HPCloudKitEnabled=$HP_CLOUDKIT_ENABLED"
+          bundle exec fastlane beta
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4

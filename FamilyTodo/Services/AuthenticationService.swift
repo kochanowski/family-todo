@@ -7,12 +7,20 @@ import UIKit
 #endif
 
 enum AuthDiagnosticStage: String, Codable {
+    case cloudKitContainerInit
     case startupStatusCheck
     case signInTapped
     case authorizationReceived
     case authorizationCancelled
     case cloudKitUserFetch
     case signInFailed
+}
+
+enum CloudKitAvailabilityReason: String, Codable {
+    case enabled
+    case disabledByFlag
+    case missingKey
+    case parseFailure
 }
 
 enum AuthMappedErrorCategory: String, Codable {
@@ -40,7 +48,11 @@ struct AuthDiagnosticsSnapshot: Codable {
     let bundleIdentifier: String
     let osVersion: String
     let hpCloudKitEnabled: Bool
+    let hpCloudKitEnabledRawValue: String?
+    let hpCloudKitEnabledRawType: String?
     let containerIdentifier: String
+    let cloudKitContainerInitialized: Bool
+    let cloudKitAvailabilityReason: String
     let lastCKAccountStatusRaw: Int?
     let authenticationState: String
     let mappedErrorCategory: String?
@@ -50,6 +62,13 @@ struct AuthDiagnosticsSnapshot: Codable {
     let reflectedError: String?
     let underlyingErrorChain: [String]
     let recentEntries: [AuthDiagnosticEntry]
+}
+
+struct CloudKitFlagParseResult {
+    let enabled: Bool
+    let rawValue: String?
+    let rawType: String?
+    let reason: CloudKitAvailabilityReason
 }
 
 #if !CI
@@ -71,7 +90,13 @@ final class AuthenticationService: NSObject, ObservableObject {
 
     // MARK: - Private Properties
 
-    private lazy var cloudKitContainer: CKContainer? = makeCloudKitContainer()
+    private static let cloudKitEnabledInfoKey = "HPCloudKitEnabled"
+    private var cloudKitContainer: CKContainer?
+    private var cloudKitEnabledByFlag = false
+    private var hpCloudKitEnabledRawValue: String?
+    private var hpCloudKitEnabledRawType: String?
+    private var cloudKitAvailabilityReason: CloudKitAvailabilityReason = .missingKey
+    private var cloudKitContainerInitialized = false
     private var recentDiagnosticEntries: [AuthDiagnosticEntry] = []
     private var lastCKAccountStatusRaw: Int?
     private var lastMappedErrorCategory: AuthMappedErrorCategory?
@@ -89,7 +114,13 @@ final class AuthenticationService: NSObject, ObservableObject {
         super.init()
         if let cloudKitContainer {
             self.cloudKitContainer = cloudKitContainer
+            cloudKitEnabledByFlag = true
+            cloudKitAvailabilityReason = .enabled
+            cloudKitContainerInitialized = true
+        } else {
+            self.cloudKitContainer = makeCloudKitContainer()
         }
+        recordDiagnostic(stage: .cloudKitContainerInit)
         refreshLatestDiagnostics()
     }
 
@@ -312,17 +343,20 @@ final class AuthenticationService: NSObject, ObservableObject {
     }
 
     private func makeCloudKitContainer() -> CKContainer? {
-        guard isCloudKitEnabled() else {
+        let rawValue = Bundle.main.object(forInfoDictionaryKey: Self.cloudKitEnabledInfoKey)
+        let parseResult = Self.parseCloudKitEnabledFlag(rawValue)
+
+        cloudKitEnabledByFlag = parseResult.enabled
+        hpCloudKitEnabledRawValue = parseResult.rawValue
+        hpCloudKitEnabledRawType = parseResult.rawType
+        cloudKitAvailabilityReason = parseResult.reason
+
+        guard parseResult.enabled else {
+            cloudKitContainerInitialized = false
             return nil
         }
+        cloudKitContainerInitialized = true
         return CKContainer(identifier: Self.containerIdentifier)
-    }
-
-    private func isCloudKitEnabled() -> Bool {
-        if let enabled = Bundle.main.object(forInfoDictionaryKey: "HPCloudKitEnabled") as? Bool {
-            return enabled
-        }
-        return false
     }
 
     private func clearAuthenticatedState() {
@@ -375,8 +409,12 @@ final class AuthenticationService: NSObject, ObservableObject {
             appBuild: Self.infoValue(for: "CFBundleVersion"),
             bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-            hpCloudKitEnabled: isCloudKitEnabled(),
+            hpCloudKitEnabled: cloudKitEnabledByFlag,
+            hpCloudKitEnabledRawValue: hpCloudKitEnabledRawValue,
+            hpCloudKitEnabledRawType: hpCloudKitEnabledRawType,
             containerIdentifier: Self.containerIdentifier,
+            cloudKitContainerInitialized: cloudKitContainerInitialized,
+            cloudKitAvailabilityReason: cloudKitAvailabilityReason.rawValue,
             lastCKAccountStatusRaw: lastCKAccountStatusRaw,
             authenticationState: authenticationState.diagnosticState,
             mappedErrorCategory: lastMappedErrorCategory?.rawValue,
@@ -476,6 +514,12 @@ final class AuthenticationService: NSObject, ObservableObject {
     @Published private(set) var latestDiagnostics: AuthDiagnosticsSnapshot?
 
     private static let containerIdentifier = "iCloud.com.example.familytodo"
+    private static let cloudKitEnabledInfoKey = "HPCloudKitEnabled"
+    private var cloudKitEnabledByFlag = false
+    private var hpCloudKitEnabledRawValue: String?
+    private var hpCloudKitEnabledRawType: String?
+    private var cloudKitAvailabilityReason: CloudKitAvailabilityReason = .disabledByFlag
+    private var cloudKitContainerInitialized = false
     private var recentDiagnosticEntries: [AuthDiagnosticEntry] = []
     private static let maxDiagnosticEntries = 20
 
@@ -517,6 +561,14 @@ final class AuthenticationService: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        let rawValue = Bundle.main.object(forInfoDictionaryKey: Self.cloudKitEnabledInfoKey)
+        let parseResult = Self.parseCloudKitEnabledFlag(rawValue)
+        cloudKitEnabledByFlag = parseResult.enabled
+        hpCloudKitEnabledRawValue = parseResult.rawValue
+        hpCloudKitEnabledRawType = parseResult.rawType
+        cloudKitAvailabilityReason = parseResult.reason
+        cloudKitContainerInitialized = false
+        recordDiagnostic(stage: .cloudKitContainerInit)
         refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
     }
 
@@ -587,8 +639,12 @@ final class AuthenticationService: NSObject, ObservableObject {
             appBuild: Self.infoValue(for: "CFBundleVersion"),
             bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-            hpCloudKitEnabled: false,
+            hpCloudKitEnabled: cloudKitEnabledByFlag,
+            hpCloudKitEnabledRawValue: hpCloudKitEnabledRawValue,
+            hpCloudKitEnabledRawType: hpCloudKitEnabledRawType,
             containerIdentifier: Self.containerIdentifier,
+            cloudKitContainerInitialized: cloudKitContainerInitialized,
+            cloudKitAvailabilityReason: cloudKitAvailabilityReason.rawValue,
             lastCKAccountStatusRaw: nil,
             authenticationState: authenticationState.diagnosticState,
             mappedErrorCategory: mappedErrorCategory?.rawValue,
@@ -621,6 +677,73 @@ final class AuthenticationService: NSObject, ObservableObject {
 #endif
 
 extension AuthenticationService {
+    static func parseCloudKitEnabledFlag(_ rawValue: Any?) -> CloudKitFlagParseResult {
+        guard let rawValue else {
+            return CloudKitFlagParseResult(
+                enabled: false,
+                rawValue: nil,
+                rawType: nil,
+                reason: .missingKey
+            )
+        }
+
+        switch rawValue {
+        case let boolValue as Bool:
+            return CloudKitFlagParseResult(
+                enabled: boolValue,
+                rawValue: String(boolValue),
+                rawType: "Bool",
+                reason: boolValue ? .enabled : .disabledByFlag
+            )
+
+        case let numberValue as NSNumber:
+            let enabled = numberValue.boolValue
+            return CloudKitFlagParseResult(
+                enabled: enabled,
+                rawValue: numberValue.stringValue,
+                rawType: "NSNumber",
+                reason: enabled ? .enabled : .disabledByFlag
+            )
+
+        case let stringValue as String:
+            let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = trimmed.lowercased()
+
+            if ["yes", "true", "1"].contains(normalized) {
+                return CloudKitFlagParseResult(
+                    enabled: true,
+                    rawValue: trimmed,
+                    rawType: "String",
+                    reason: .enabled
+                )
+            }
+
+            if ["no", "false", "0"].contains(normalized) {
+                return CloudKitFlagParseResult(
+                    enabled: false,
+                    rawValue: trimmed,
+                    rawType: "String",
+                    reason: .disabledByFlag
+                )
+            }
+
+            return CloudKitFlagParseResult(
+                enabled: false,
+                rawValue: trimmed,
+                rawType: "String",
+                reason: .parseFailure
+            )
+
+        default:
+            return CloudKitFlagParseResult(
+                enabled: false,
+                rawValue: String(describing: rawValue),
+                rawType: String(reflecting: type(of: rawValue)),
+                reason: .parseFailure
+            )
+        }
+    }
+
     static func mappedErrorCategory(for error: Error) -> AuthMappedErrorCategory {
         if let authError = error as? AuthenticationError {
             switch authError {

@@ -56,10 +56,13 @@ platform :ios do
     team_id = ENV["TEAM_ID"]
     profile_name = ENV["PROVISIONING_PROFILE_NAME"]
     profile_name_escaped = profile_name.to_s.gsub('"', '\"')
+    hp_cloudkit_enabled = ENV["HP_CLOUDKIT_ENABLED"] || "YES"
 
     if app_identifier.to_s.empty? || team_id.to_s.empty? || profile_name.to_s.empty?
       UI.user_error!("Missing signing env vars: APP_IDENTIFIER, TEAM_ID, PROVISIONING_PROFILE_NAME")
     end
+
+    UI.message("Deploy config: forcing HPCloudKitEnabled=#{hp_cloudkit_enabled}")
 
     # Increment build number
     increment_build_number(
@@ -85,6 +88,7 @@ platform :ios do
         "CODE_SIGN_STYLE=Manual",
         "PROVISIONING_PROFILE_SPECIFIER=\"#{profile_name_escaped}\"",
         "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
+        "INFOPLIST_KEY_HPCloudKitEnabled=#{hp_cloudkit_enabled}",
       ].join(" "),
       output_directory: "./build",
       output_name: "HousePulse.ipa"
