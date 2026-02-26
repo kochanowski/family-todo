@@ -7,6 +7,12 @@
     /// and CloudKit user identity management
     @MainActor
     final class AuthenticationService: NSObject, ObservableObject {
+        #if CI
+            private static let containerIdentifier = "iCloud.com.example.familytodo"
+        #else
+            private static let containerIdentifier = "iCloud.com.kochanowski.housepulse"
+        #endif
+
         // MARK: - Published Properties
 
         @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
@@ -70,6 +76,10 @@
 
         /// Initiates Sign in with Apple flow
         func signInWithApple() {
+            guard cloudKitContainer != nil else {
+                authenticationState = .error(.cloudKitNotAvailable)
+                return
+            }
             authenticationState = .authenticating
 
             let request = ASAuthorizationAppleIDProvider().createRequest()
@@ -90,7 +100,7 @@
         /// Checks CloudKit account status and fetches user identity
         func checkCloudKitStatus() async {
             guard let cloudKitContainer else {
-                authenticationState = .error(.cloudKitNotAvailable)
+                clearAuthenticatedState()
                 return
             }
             do {
@@ -98,20 +108,24 @@
 
                 switch status {
                 case .available:
-                    try await fetchCloudKitUserIdentity()
+                    do {
+                        try await fetchCloudKitUserIdentity()
+                    } catch {
+                        clearAuthenticatedState()
+                    }
                 case .noAccount:
-                    authenticationState = .error(.cloudKitNotAvailable)
+                    clearAuthenticatedState()
                 case .restricted:
-                    authenticationState = .error(.cloudKitNotAvailable)
+                    clearAuthenticatedState()
                 case .couldNotDetermine:
-                    authenticationState = .error(.cloudKitNotAvailable)
+                    clearAuthenticatedState()
                 case .temporarilyUnavailable:
-                    authenticationState = .error(.cloudKitNotAvailable)
+                    clearAuthenticatedState()
                 @unknown default:
-                    authenticationState = .error(.cloudKitNotAvailable)
+                    clearAuthenticatedState()
                 }
             } catch {
-                authenticationState = .error(.failed(error))
+                clearAuthenticatedState()
             }
         }
 
@@ -160,7 +174,7 @@
                     self.currentUser = updatedUser
                 }
             } catch {
-                authenticationState = .error(.failed(error))
+                authenticationState = .error(mapSignInError(error))
             }
         }
 
@@ -168,7 +182,7 @@
             guard isCloudKitEnabled() else {
                 return nil
             }
-            return .default()
+            return CKContainer(identifier: Self.containerIdentifier)
         }
 
         private func isCloudKitEnabled() -> Bool {
@@ -176,6 +190,31 @@
                 return enabled
             }
             return false
+        }
+
+        private func clearAuthenticatedState() {
+            currentUser = nil
+            authenticationState = .unauthenticated
+        }
+
+        private func mapSignInError(_ error: Error) -> AuthenticationError {
+            if let authError = error as? AuthenticationError {
+                return authError
+            }
+
+            let nsError = error as NSError
+            guard nsError.domain == CKError.errorDomain,
+                  let code = CKError.Code(rawValue: nsError.code)
+            else {
+                return .failed(error)
+            }
+
+            switch code {
+            case .notAuthenticated, .permissionFailure, .missingEntitlement, .badContainer:
+                return .cloudKitNotAvailable
+            default:
+                return .failed(error)
+            }
         }
     }
 
@@ -205,7 +244,7 @@
 
                 if let authError = error as? ASAuthorizationError,
                    authError.code == .canceled {
-                    await updateAuthenticationState(.error(.cancelled))
+                    await updateAuthenticationState(.unauthenticated)
                 } else {
                     await updateAuthenticationState(.error(.failed(error)))
                 }
