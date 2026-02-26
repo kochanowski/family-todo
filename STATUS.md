@@ -38,7 +38,7 @@ Last updated: 2026-02-26
 - Added CloudKit schema CI workflow (`.github/workflows/cloudkit-schema.yml`):
   - reusable + manual dispatch
   - schema contract validation from `cloudkit/schema/housepulse-schema.json`
-  - Development apply + automatic Production promote
+  - Development apply + Production schema verification (record type coverage)
   - `ios-ci.yml` blocks TestFlight deploy until schema gate succeeds
 
 ## Tests added

@@ -15,7 +15,7 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 - For release/TestFlight branches, runs CloudKit schema gate before deploy:
   - validate schema contract
   - apply Development schema
-  - promote Production schema
+  - verify Production schema contract coverage (record types)
 
 ### `nightly.yml` (scheduled + manual)
 - Full `xcodebuild test` suite

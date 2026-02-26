@@ -28,7 +28,9 @@ Last updated: 2026-02-26
   - `.github/workflows/cloudkit-schema.yml`
   - validates `cloudkit/schema/housepulse-schema.json`
   - applies schema to CloudKit Development
-  - promotes schema to CloudKit Production automatically
+  - verifies Production schema has required record types
+- If production schema is missing required record types, workflow fails with manual action:
+  - CloudKit Console (Production) -> `Deploy Schema Changes...`
 - Required secret for schema operations:
   - `CLOUDKIT_MANAGEMENT_TOKEN` (CloudKit management token)
 - Existing `TEAM_ID` secret is reused.
