@@ -459,16 +459,9 @@ enum SwiftDataContainerFactory {
     }
 
     private static func shouldRemoveArtifact(named name: String, isDirectory: Bool) -> Bool {
-        if name.hasPrefix(legacyStorePrefix) {
-            return true
-        }
-        if removableStoreSuffixes.contains(where: { name.hasSuffix($0) }) {
-            return true
-        }
-        if isDirectory, name.hasSuffix("_SUPPORT") {
-            return true
-        }
-        return false
+        name.hasPrefix(legacyStorePrefix)
+            || removableStoreSuffixes.contains(where: { name.hasSuffix($0) })
+            || (isDirectory && name.hasSuffix("_SUPPORT"))
     }
 
     private static func persistentConfiguration(schema: Schema, storeURL: URL) -> ModelConfiguration {
