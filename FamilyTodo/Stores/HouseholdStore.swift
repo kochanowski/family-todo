@@ -104,7 +104,12 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    func createHousehold(name: String, userId: String, displayName: String) async throws -> Household {
+    func createHousehold(
+        name: String,
+        userId: String,
+        displayName: String,
+        iconSymbol: String = "house.fill"
+    ) async throws -> Household {
         // CloudKit safety check
         precondition(
             syncMode == .localOnly || syncMode == .cloud,
@@ -114,7 +119,17 @@ class HouseholdStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let newHousehold = Household(name: name, ownerId: userId)
+        let validatedDisplayName = try DisplayNameValidator.validate(displayName)
+        let trimmedHouseholdName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHouseholdName.isEmpty else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        let newHousehold = Household(
+            name: trimmedHouseholdName,
+            iconSymbol: iconSymbol,
+            ownerId: userId
+        )
 
         // 1. Save to CloudKit (if cloud sync is enabled and available)
         if syncMode == .cloud {
@@ -128,7 +143,7 @@ class HouseholdStore: ObservableObject {
             let owner = Member(
                 householdId: newHousehold.id,
                 userId: userId,
-                displayName: displayName,
+                displayName: validatedDisplayName,
                 role: .owner
             )
             _ = try await cloudKit.saveMember(owner)
@@ -139,7 +154,7 @@ class HouseholdStore: ObservableObject {
             try seedDefaultData(
                 householdId: newHousehold.id,
                 userId: userId,
-                displayName: displayName
+                displayName: validatedDisplayName
             )
         }
 
@@ -204,6 +219,8 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
+        let validatedDisplayName = try DisplayNameValidator.validate(displayName)
+
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.participantShared)
 
@@ -214,7 +231,7 @@ class HouseholdStore: ObservableObject {
         try await upsertMembership(
             householdId: household.id,
             userId: userId,
-            displayName: displayName,
+            displayName: validatedDisplayName,
             role: household.ownerId == userId ? .owner : .member
         )
 
@@ -231,6 +248,8 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
+        let validatedDisplayName = try DisplayNameValidator.validate(displayName)
+
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.participantShared)
 
@@ -240,7 +259,7 @@ class HouseholdStore: ObservableObject {
         try await upsertMembership(
             householdId: household.id,
             userId: userId,
-            displayName: displayName,
+            displayName: validatedDisplayName,
             role: household.ownerId == userId ? .owner : .member
         )
 
@@ -321,27 +340,27 @@ class HouseholdStore: ObservableObject {
             await cloudKit.setHouseholdScope(.ownerPrivate)
             let members = try await cloudKit.fetchMembers(householdId: household.id)
             for member in members {
-                try await cloudKit.deleteMember(id: member.id)
+                try await cloudKit.deleteMember(id: member.id, householdId: household.id)
             }
 
             let tasks = try await cloudKit.fetchTasks(householdId: household.id)
             for task in tasks {
-                try await cloudKit.deleteTask(id: task.id)
+                try await cloudKit.deleteTask(id: task.id, householdId: household.id)
             }
 
             let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: household.id)
             for item in shoppingItems {
-                try await cloudKit.deleteShoppingItem(id: item.id)
+                try await cloudKit.deleteShoppingItem(id: item.id, householdId: household.id)
             }
 
             let backlogItems = try await cloudKit.fetchBacklogItems(householdId: household.id)
             for item in backlogItems {
-                try await cloudKit.deleteBacklogItem(id: item.id)
+                try await cloudKit.deleteBacklogItem(id: item.id, householdId: household.id)
             }
 
             let categories = try await cloudKit.fetchBacklogCategories(householdId: household.id)
             for category in categories {
-                try await cloudKit.deleteBacklogCategory(id: category.id)
+                try await cloudKit.deleteBacklogCategory(id: category.id, householdId: household.id)
             }
 
             try await cloudKit.deleteHousehold(id: household.id)
@@ -363,6 +382,16 @@ class HouseholdStore: ObservableObject {
         displayName: String,
         role: Member.MemberRole
     ) async throws {
+        let normalizedKey = DisplayNameValidator.normalizedKey(displayName)
+        let allMembers = try await cloudKit.fetchMembers(householdId: householdId)
+        if allMembers.contains(where: {
+            $0.isActive &&
+                $0.userId != userId &&
+                DisplayNameValidator.normalizedKey($0.displayName) == normalizedKey
+        }) {
+            throw HouseholdError.displayNameAlreadyTaken
+        }
+
         if let existing = try await cloudKit.fetchMemberByUserId(userId, householdId: householdId) {
             let resolvedRole: Member.MemberRole = existing.role == .owner ? .owner : role
             let shouldUpdate =
@@ -612,7 +641,7 @@ class HouseholdStore: ObservableObject {
                 completedAt: yesterday,
                 completedById: memberId.uuidString,
                 taskType: .oneOff
-            )
+            ),
         ]
     }
 
@@ -652,7 +681,7 @@ class HouseholdStore: ObservableObject {
                 title: "Coffee",
                 quantityValue: "200",
                 quantityUnit: "g"
-            )
+            ),
         ]
     }
 
@@ -697,10 +726,11 @@ class HouseholdStore: ObservableObject {
                 categoryId: routineCategory.id,
                 householdId: householdId,
                 title: "Mow the lawn"
-            )
+            ),
         ]
 
         return ([homeProjectsCategory, routineCategory], items)
     }
 }
+
 // swiftlint:enable type_body_length

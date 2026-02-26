@@ -218,7 +218,7 @@ final class BacklogStore: ObservableObject {
         if !isCloudSyncEnabled { return }
 
         do {
-            try await cloudKit.deleteBacklogCategory(id: category.id)
+            try await cloudKit.deleteBacklogCategory(id: category.id, householdId: category.householdId)
             // CloudKit should cascade delete items optionally, or we delete them explicitly?
             // Assuming we handle items delete or specific logic elsewhere, but for now just category delete.
             // Ideally we should delete items first or rely on CloudKit references if configured.
@@ -382,7 +382,7 @@ final class BacklogStore: ObservableObject {
         }
 
         do {
-            try await cloudKit.deleteBacklogItem(id: item.id)
+            try await cloudKit.deleteBacklogItem(id: item.id, householdId: item.householdId)
             removeCachedItem(id: item.id)
             return true
         } catch {

@@ -12,6 +12,9 @@ struct CreateHouseholdView: View {
     @State private var showJoinSheet = false
     @State private var joinCode = ""
     @State private var joinErrorMessage: String?
+    @State private var selectedIconSymbol = "house.fill"
+    @State private var pendingCustomJoinInviteCode: String?
+    @State private var showCustomJoinConfirmation = false
     @FocusState private var isTextFieldFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
@@ -38,6 +41,31 @@ struct CreateHouseholdView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                     }
+
+                    VStack(spacing: 12) {
+                        Text("Choose icon")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 12) {
+                            ForEach(Self.availableHouseholdSymbols, id: \.self) { symbol in
+                                Button {
+                                    selectedIconSymbol = symbol
+                                } label: {
+                                    Image(systemName: symbol)
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(selectedIconSymbol == symbol ? .white : .primary)
+                                        .frame(width: 40, height: 40)
+                                        .background(
+                                            Circle()
+                                                .fill(selectedIconSymbol == symbol ? Color.blue : Color.secondary.opacity(0.15))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
 
                     Spacer()
                         .frame(height: 20)
@@ -130,6 +158,14 @@ struct CreateHouseholdView: View {
                 )
                 .presentationDetents([.medium])
             }
+            .sheet(isPresented: $showCustomJoinConfirmation) {
+                AppConfirmationSheet(
+                    title: "Join this household?",
+                    message: "This invite uses a custom deep link. Confirm before joining.",
+                    primaryTitle: "Join",
+                    onPrimary: confirmCustomJoin
+                )
+            }
             .alert("Action failed", isPresented: Binding(
                 get: { joinErrorMessage != nil },
                 set: { if !$0 { joinErrorMessage = nil } }
@@ -167,7 +203,8 @@ struct CreateHouseholdView: View {
                 let newHousehold = try await householdStore.createHousehold(
                     name: householdName,
                     userId: userId,
-                    displayName: userSession.displayName ?? "Me"
+                    displayName: resolvedDisplayName(),
+                    iconSymbol: selectedIconSymbol
                 )
                 userSession.setCurrentHousehold(newHousehold.id)
                 onboardingState.completeHouseholdSetup(withHousehold: true)
@@ -197,20 +234,20 @@ struct CreateHouseholdView: View {
 
         _Concurrency.Task {
             do {
-                let normalizedInvite = try InviteInputNormalizer.normalize(joinCode)
-                householdStore.setSyncMode(userSession.syncMode)
-                try await householdStore.joinHousehold(
-                    inviteCode: normalizedInvite,
-                    userId: userId,
-                    displayName: userSession.displayName ?? "Me"
-                )
-                if let household = householdStore.currentHousehold {
-                    userSession.setCurrentHousehold(household.id)
+                let normalizedInvite = try InviteInputNormalizer.normalizeInput(joinCode)
+                let displayName = try resolvedDisplayName()
+                if normalizedInvite.requiresConfirmation {
+                    pendingCustomJoinInviteCode = normalizedInvite.inviteCode
+                    showCustomJoinConfirmation = true
+                    isJoining = false
+                    return
                 }
 
-                joinCode = ""
-                showJoinSheet = false
-                onboardingState.completeHouseholdSetup(withHousehold: true)
+                try await performJoinHousehold(
+                    inviteCode: normalizedInvite.inviteCode,
+                    userId: userId,
+                    displayName: displayName
+                )
             } catch {
                 joinErrorMessage = error.localizedDescription
             }
@@ -218,6 +255,65 @@ struct CreateHouseholdView: View {
             isJoining = false
         }
     }
+
+    private func confirmCustomJoin() {
+        guard let inviteCode = pendingCustomJoinInviteCode else { return }
+        guard canJoinViaInvite else {
+            joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
+            return
+        }
+        guard let userId = userSession.userId else {
+            joinErrorMessage = "Could not determine your account identity."
+            return
+        }
+
+        pendingCustomJoinInviteCode = nil
+        isJoining = true
+        _Concurrency.Task {
+            do {
+                try await performJoinHousehold(
+                    inviteCode: inviteCode,
+                    userId: userId,
+                    displayName: resolvedDisplayName()
+                )
+            } catch {
+                joinErrorMessage = error.localizedDescription
+            }
+
+            isJoining = false
+        }
+    }
+
+    private func performJoinHousehold(inviteCode: String, userId: String, displayName: String) async throws {
+        householdStore.setSyncMode(userSession.syncMode)
+        try await householdStore.joinHousehold(
+            inviteCode: inviteCode,
+            userId: userId,
+            displayName: displayName
+        )
+        if let household = householdStore.currentHousehold {
+            userSession.setCurrentHousehold(household.id)
+        }
+
+        joinCode = ""
+        showJoinSheet = false
+        onboardingState.completeHouseholdSetup(withHousehold: true)
+    }
+
+    private func resolvedDisplayName() throws -> String {
+        guard let displayName = userSession.displayName else {
+            throw DisplayNameValidationError.empty
+        }
+        return try DisplayNameValidator.validate(displayName)
+    }
+
+    private static let availableHouseholdSymbols = [
+        "house.fill",
+        "star.fill",
+        "heart.fill",
+        "leaf.fill",
+        "pawprint.fill",
+    ]
 }
 
 // MARK: - Join Sheet (local to this view)
@@ -264,8 +360,8 @@ private struct CreateJoinSheet: View {
                                 .fill(joinCode.isEmpty ? Color.secondary : Color.blue)
                         )
                 }
-                    .disabled(joinCode.isEmpty)
-                    .padding(.horizontal, 40)
+                .disabled(joinCode.isEmpty)
+                .padding(.horizontal, 40)
 
                 HStack(spacing: 12) {
                     Button {
@@ -334,4 +430,5 @@ private struct CreateJoinSheet: View {
         .environmentObject(OnboardingState())
         .environmentObject(HouseholdStore())
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

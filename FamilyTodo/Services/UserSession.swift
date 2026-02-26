@@ -12,6 +12,55 @@ enum SessionMode: String, Equatable {
     case guest
 }
 
+enum DisplayNameValidationError: LocalizedError, Equatable {
+    case empty
+    case tooShort
+    case tooLong
+    case invalidCharacters
+
+    var errorDescription: String? {
+        switch self {
+        case .empty:
+            "Display name cannot be empty."
+        case .tooShort:
+            "Display name must have at least 2 characters."
+        case .tooLong:
+            "Display name must be at most 24 characters."
+        case .invalidCharacters:
+            "Display name contains unsupported characters."
+        }
+    }
+}
+
+enum DisplayNameValidator {
+    static let minLength = 2
+    static let maxLength = 24
+
+    private static let allowedCharacters = CharacterSet.letters
+        .union(.decimalDigits)
+        .union(CharacterSet(charactersIn: " ._-'"))
+
+    static func normalize(_ raw: String) -> String {
+        raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    static func normalizedKey(_ raw: String) -> String {
+        normalize(raw)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
+    static func validate(_ raw: String) throws -> String {
+        let normalized = normalize(raw)
+        guard !normalized.isEmpty else { throw DisplayNameValidationError.empty }
+        guard normalized.count >= minLength else { throw DisplayNameValidationError.tooShort }
+        guard normalized.count <= maxLength else { throw DisplayNameValidationError.tooLong }
+        guard normalized.unicodeScalars.allSatisfy({ allowedCharacters.contains($0) }) else {
+            throw DisplayNameValidationError.invalidCharacters
+        }
+        return normalized
+    }
+}
+
 @MainActor
 protocol AuthenticationServiceType: ObservableObject {
     var authenticationState: AuthenticationService.AuthenticationState { get }
@@ -49,6 +98,8 @@ final class UserSession: ObservableObject {
     @Published private(set) var currentHouseholdID: UUID?
     @Published private(set) var user: AuthenticationService.AuthenticatedUser?
     private var guestDisplayName: String?
+    @Published private(set) var preferredDisplayName: String?
+    @Published private(set) var hasConfirmedDisplayName = false
 
     // MARK: - Computed Properties
 
@@ -81,7 +132,16 @@ final class UserSession: ObservableObject {
         if isGuest {
             return guestDisplayName ?? "Guest"
         }
+        if let preferredDisplayName,
+           !preferredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return preferredDisplayName
+        }
         return user?.displayName ?? user?.givenName
+    }
+
+    var needsDisplayNamePrompt: Bool {
+        isAuthenticated && !hasConfirmedDisplayName
     }
 
     // MARK: - Dependencies
@@ -147,8 +207,28 @@ final class UserSession: ObservableObject {
         currentUserID = guestId
         guestDisplayName = displayName
         user = nil
+        preferredDisplayName = nil
+        hasConfirmedDisplayName = true
 
         restoreHouseholdSelection()
+    }
+
+    func confirmDisplayName(_ displayName: String) {
+        guard let trimmed = try? DisplayNameValidator.validate(displayName) else { return }
+
+        if isGuest {
+            guestDisplayName = trimmed
+            userDefaults.set(trimmed, forKey: StorageKeys.guestDisplayName)
+            hasConfirmedDisplayName = true
+            return
+        }
+
+        guard let userId = currentUserID else { return }
+        var values = userDefaults.dictionary(forKey: StorageKeys.preferredDisplayNameByUserId) as? [String: String] ?? [:]
+        values[userId] = trimmed
+        userDefaults.set(values, forKey: StorageKeys.preferredDisplayNameByUserId)
+        preferredDisplayName = trimmed
+        hasConfirmedDisplayName = true
     }
 
     /// Ends the guest session and returns to signed-out state
@@ -191,6 +271,7 @@ final class UserSession: ObservableObject {
             user = authService.currentUser
             guestDisplayName = nil
             clearGuestSessionDefaults()
+            restorePreferredDisplayName(for: userID)
 
             // Restore household selection if exists
             restoreHouseholdSelection()
@@ -212,12 +293,15 @@ final class UserSession: ObservableObject {
         currentHouseholdID = nil
         user = nil
         guestDisplayName = nil
+        preferredDisplayName = nil
+        hasConfirmedDisplayName = false
         userDefaults.removeObject(forKey: StorageKeys.currentHouseholdId)
     }
 
     private func restoreHouseholdSelection() {
         if let householdIDString = userDefaults.string(forKey: StorageKeys.currentHouseholdId),
-           let householdID = UUID(uuidString: householdIDString) {
+           let householdID = UUID(uuidString: householdIDString)
+        {
             currentHouseholdID = householdID
         }
     }
@@ -235,8 +319,21 @@ final class UserSession: ObservableObject {
         currentUserID = guestId
         guestDisplayName = guestName
         user = nil
+        preferredDisplayName = nil
+        hasConfirmedDisplayName = true
 
         restoreHouseholdSelection()
+    }
+
+    private func restorePreferredDisplayName(for userId: String) {
+        let values = userDefaults.dictionary(forKey: StorageKeys.preferredDisplayNameByUserId) as? [String: String] ?? [:]
+        if let name = values[userId], !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            preferredDisplayName = name
+            hasConfirmedDisplayName = true
+        } else {
+            preferredDisplayName = nil
+            hasConfirmedDisplayName = false
+        }
     }
 
     private func clearGuestSessionDefaults() {
@@ -250,5 +347,6 @@ final class UserSession: ObservableObject {
         static let guestSessionEnabled = "guestSessionEnabled"
         static let guestUserId = "guestUserId"
         static let guestDisplayName = "guestDisplayName"
+        static let preferredDisplayNameByUserId = "preferredDisplayNameByUserId"
     }
 }

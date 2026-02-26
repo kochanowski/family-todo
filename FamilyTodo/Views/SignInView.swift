@@ -1,5 +1,5 @@
 #if !CI
-import AuthenticationServices
+    import AuthenticationServices
 #endif
 import SwiftUI
 import UIKit
@@ -7,8 +7,15 @@ import UIKit
 /// Sign in screen with Apple authentication.
 struct SignInView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var householdStore: HouseholdStore
 
     @State private var showDiagnosticsSheet = false
+    @State private var showDisplayNamePrompt = false
+    @State private var pendingDisplayName = ""
+    @State private var pendingPostAuthHasHousehold = false
+    @State private var isResolvingAuthRoute = false
+    @State private var displayNameErrorMessage: String?
 
     var body: some View {
         VStack(spacing: 32) {
@@ -76,6 +83,33 @@ struct SignInView: View {
                 onClearDiagnostics: clearDiagnostics
             )
         }
+        .sheet(isPresented: $showDisplayNamePrompt) {
+            AppPromptSheet(
+                title: "Set your display name",
+                message: "This name is visible to your household members.",
+                placeholder: "Nickname",
+                text: $pendingDisplayName,
+                secondaryTitle: "Sign out",
+                primaryTitle: "Continue",
+                onCancel: {
+                    userSession.signOut()
+                },
+                onSubmit: { value in
+                    completeDisplayNamePrompt(with: value)
+                }
+            )
+        }
+        .alert("Display name", isPresented: Binding(
+            get: { displayNameErrorMessage != nil },
+            set: { if !$0 { displayNameErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(displayNameErrorMessage ?? "Invalid display name.")
+        }
+        .task(id: authRoutingKey) {
+            await handleAuthRoutingIfNeeded()
+        }
     }
 
     private var defaultAuthActions: some View {
@@ -127,6 +161,11 @@ struct SignInView: View {
     private var guestButton: some View {
         Button("Continue without account") {
             userSession.startGuestSession()
+            onboardingState.completeAuth(
+                syncMethod: .local,
+                isGuest: true,
+                hasHousehold: userSession.currentHouseholdID != nil
+            )
         }
         .buttonStyle(.bordered)
         .frame(maxWidth: 280)
@@ -141,13 +180,13 @@ struct SignInView: View {
     private func userFacingErrorMessage(for error: AuthenticationService.AuthenticationError) -> String {
         switch error {
         case .cloudKitNotAvailable:
-            return "Sign in could not be completed. Check iCloud settings and try again."
+            "Sign in could not be completed. Check iCloud settings and try again."
         case .userNotFound:
-            return "Sign in succeeded, but no CloudKit user was found. Please try again."
+            "Sign in succeeded, but no CloudKit user was found. Please try again."
         case .failed:
-            return "Sign in with Apple failed. Please try again or open diagnostics."
+            "Sign in with Apple failed. Please try again or open diagnostics."
         case .cancelled:
-            return ""
+            ""
         }
     }
 
@@ -156,6 +195,68 @@ struct SignInView: View {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
         defaults.removeObject(forKey: SwiftDataContainerFactory.bootstrapDiagnosticsUserDefaultsKey)
+    }
+
+    private var authRoutingKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+            userSession.hasConfirmedDisplayName ? "named" : "unnamed",
+        ].joined(separator: "|")
+    }
+
+    private func handleAuthRoutingIfNeeded() async {
+        guard onboardingState.currentState == .auth else { return }
+        guard !isResolvingAuthRoute else { return }
+
+        if userSession.isGuest {
+            onboardingState.completeAuth(
+                syncMethod: .local,
+                isGuest: true,
+                hasHousehold: userSession.currentHouseholdID != nil
+            )
+            return
+        }
+
+        guard userSession.isAuthenticated else { return }
+
+        isResolvingAuthRoute = true
+        defer { isResolvingAuthRoute = false }
+
+        if userSession.currentHouseholdID == nil, let userId = userSession.userId {
+            householdStore.setSyncMode(.cloud)
+            await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+            if let household = householdStore.currentHousehold {
+                userSession.setCurrentHousehold(household.id)
+            }
+        }
+
+        let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
+        if userSession.needsDisplayNamePrompt {
+            pendingPostAuthHasHousehold = hasHousehold
+            pendingDisplayName = userSession.displayName ?? ""
+            showDisplayNamePrompt = true
+            return
+        }
+
+        onboardingState.completeAuth(syncMethod: .iCloud, isGuest: false, hasHousehold: hasHousehold)
+    }
+
+    private func completeDisplayNamePrompt(with value: String) {
+        do {
+            let validatedDisplayName = try DisplayNameValidator.validate(value)
+            userSession.confirmDisplayName(validatedDisplayName)
+            onboardingState.completeAuth(
+                syncMethod: .iCloud,
+                isGuest: false,
+                hasHousehold: pendingPostAuthHasHousehold
+            )
+        } catch {
+            displayNameErrorMessage = error.localizedDescription
+            showDisplayNamePrompt = true
+        }
     }
 }
 
@@ -258,7 +359,6 @@ private struct SignInDiagnosticsSheet: View {
         }
     }
 
-    @ViewBuilder
     private func diagnosticsSection(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
@@ -288,36 +388,39 @@ private struct ActivityView: UIViewControllerRepresentable {
 
 // Custom Sign in with Apple button using ASAuthorizationAppleIDButton
 #if !CI
-struct SignInWithAppleButtonView: UIViewRepresentable {
-    func makeUIView(context _: Context) -> ASAuthorizationAppleIDButton {
-        ASAuthorizationAppleIDButton(
-            authorizationButtonType: .signIn,
-            authorizationButtonStyle: .black
-        )
-    }
-
-    func updateUIView(_: ASAuthorizationAppleIDButton, context _: Context) {
-        // No updates needed.
-    }
-}
-#else
-struct SignInWithAppleButtonView: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "applelogo")
-            Text("Sign in with Apple")
-                .fontWeight(.semibold)
+    struct SignInWithAppleButtonView: UIViewRepresentable {
+        func makeUIView(context _: Context) -> ASAuthorizationAppleIDButton {
+            ASAuthorizationAppleIDButton(
+                authorizationButtonType: .signIn,
+                authorizationButtonStyle: .black
+            )
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 50)
-        .background(Color.black)
-        .foregroundColor(.white)
-        .cornerRadius(10)
+
+        func updateUIView(_: ASAuthorizationAppleIDButton, context _: Context) {
+            // No updates needed.
+        }
     }
-}
+#else
+    struct SignInWithAppleButtonView: View {
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: "applelogo")
+                Text("Sign in with Apple")
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(Color.black)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+        }
+    }
 #endif
 
 #Preview {
     SignInView()
         .environmentObject(UserSession.shared)
+        .environmentObject(OnboardingState())
+        .environmentObject(HouseholdStore())
+        .environmentObject(ThemeStore())
 }

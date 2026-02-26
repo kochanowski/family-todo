@@ -94,7 +94,8 @@ struct FamilyTodoApp: App {
                             // Skip for guest users (localOnly mode) to avoid CloudKit access
                             if userSession.syncMode == .cloud,
                                let userId = userSession.userId,
-                               let householdId = userSession.currentHouseholdID {
+                               let householdId = userSession.currentHouseholdID
+                            {
                                 subscriptionManager.configure(userId: userId, householdId: householdId)
                             }
                         #endif
@@ -130,8 +131,19 @@ struct FamilyTodoApp: App {
                     }
                     .onOpenURL { url in
                         if let host = url.host?.lowercased(),
-                           host.contains("icloud.com") {
+                           host.contains("icloud.com")
+                        {
                             shareAcceptanceCoordinator.enqueue(inviteURL: url)
+                            return
+                        }
+
+                        if url.scheme?.lowercased() == "housepulse" {
+                            do {
+                                let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
+                                shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
+                            } catch {
+                                shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                            }
                         }
                     }
                     .alert(
@@ -167,8 +179,8 @@ struct RootView: View {
                 OnboardingCarouselView()
                     .transition(.opacity)
 
-            case .syncChoice:
-                SyncSelectionView()
+            case .auth:
+                SignInView()
                     .transition(.opacity)
 
             case .householdSetup:
@@ -181,11 +193,21 @@ struct RootView: View {
                 }
 
             case .mainApp:
-                ContentView()
-                    .transition(.opacity)
+                if userSession.hasActiveSession {
+                    ContentView()
+                        .transition(.opacity)
+                } else {
+                    SignInView()
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: onboardingState.currentState)
+        .onChange(of: userSession.hasActiveSession) { _, hasSession in
+            if !hasSession, onboardingState.currentState != .onboarding {
+                onboardingState.openAuth()
+            }
+        }
         .task(id: pendingProcessingKey) {
             await shareAcceptanceCoordinator.processPendingIfPossible(
                 userSession: userSession,
@@ -213,8 +235,9 @@ struct RootView: View {
             userSession.sessionMode.rawValue,
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
+            userSession.hasConfirmedDisplayName ? "named" : "unnamed",
             shareAcceptanceCoordinator.pendingInviteCode ?? "none",
-            shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "none"
+            shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "none",
         ].joined(separator: "|")
     }
 }
@@ -236,7 +259,8 @@ struct UITestHelper {
 
         // Check for specific scenario
         if let scenarioIndex = args.firstIndex(of: "-seedScenario"),
-           scenarioIndex + 1 < args.count {
+           scenarioIndex + 1 < args.count
+        {
             let scenario = args[scenarioIndex + 1]
             applyScenario(scenario, context: modelContext)
         }
@@ -326,7 +350,7 @@ struct UITestHelper {
         let items = [
             ShoppingItem(householdId: householdId, title: "Milk", isBought: false),
             ShoppingItem(householdId: householdId, title: "Bread", isBought: false),
-            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true)
+            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true),
         ]
         for item in items {
             context.insert(CachedShoppingItem(from: item))
@@ -342,7 +366,7 @@ struct UITestHelper {
         let tasks = [
             Task(householdId: householdId, title: "Pay bills", status: .next, taskType: .oneOff),
             Task(householdId: householdId, title: "Call mom", status: .next, taskType: .oneOff),
-            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff)
+            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff),
         ]
         tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
@@ -359,7 +383,7 @@ struct UITestHelper {
 
         let items = [
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Olive Oil"),
-            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices")
+            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
     }

@@ -70,8 +70,8 @@ private struct ShoppingListContent: View {
         GeometryReader { proxy in
             let listBottomInset =
                 isKeyboardVisible
-                ? CGFloat(16)
-                : AppChromeMetrics.compactCTAHeight + 28
+                    ? CGFloat(16)
+                    : AppChromeMetrics.compactCTAHeight + 28
             let floatingButtonInset: CGFloat = 16
             let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
 
@@ -111,7 +111,8 @@ private struct ShoppingListContent: View {
                                                     onCancel: cancelEditingItem
                                                 )
                                                 .accessibilityIdentifier(
-                                                    "shoppingItemEdit_\(item.title)")
+                                                    "shoppingItemEdit_\(item.title)"
+                                                )
                                             } else {
                                                 ShoppingItemRow(
                                                     item: item,
@@ -119,14 +120,16 @@ private struct ShoppingListContent: View {
                                                     onEdit: { startEditingItem(item) }
                                                 )
                                                 .accessibilityIdentifier(
-                                                    "shoppingItem_\(item.title)")
+                                                    "shoppingItem_\(item.title)"
+                                                )
                                             }
                                         }
                                     }
                                     .onDrag {
                                         draggedItem = item
                                         return NSItemProvider(
-                                            object: item.id.uuidString as NSString)
+                                            object: item.id.uuidString as NSString
+                                        )
                                     }
                                     .onDrop(
                                         of: [UTType.text],
@@ -136,7 +139,8 @@ private struct ShoppingListContent: View {
                                             draggedItem: $draggedItem,
                                             onMove: { from, to in
                                                 store.moveToBuyItems(
-                                                    from: from, to: to, persist: false)
+                                                    from: from, to: to, persist: false
+                                                )
                                             },
                                             onDrop: {
                                                 _ = _Concurrency.Task {
@@ -281,7 +285,8 @@ private struct ShoppingListContent: View {
 
     private var addPillButton: some View {
         let foreground = themeStore.foregroundOnAccent(
-            for: themeStore.accentTabColor, colorScheme: colorScheme)
+            for: themeStore.accentTabColor, colorScheme: colorScheme
+        )
 
         return Button {
             startRapidEntry()
@@ -293,7 +298,8 @@ private struct ShoppingListContent: View {
                     .font(
                         themeStore.preset == .retro
                             ? .system(size: 15, weight: .semibold)
-                            : themeStore.font(for: .buttonLabel))
+                            : themeStore.font(for: .buttonLabel)
+                    )
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
@@ -319,7 +325,9 @@ private struct ShoppingListContent: View {
                 actionColor: UIColor(themeStore.accentTabColor),
                 actionForegroundColor: UIColor(
                     themeStore.foregroundOnAccent(
-                        for: themeStore.accentTabColor, colorScheme: colorScheme)),
+                        for: themeStore.accentTabColor, colorScheme: colorScheme
+                    )
+                ),
                 onSubmit: handleRapidEntrySubmit,
                 onDone: commitOrDismissRapidEntry,
                 themeStore: themeStore
@@ -327,7 +335,7 @@ private struct ShoppingListContent: View {
             .accessibilityIdentifier("shoppingRapidEntryField")
         }
         .padding(.vertical, 6)
-        .background(cardBackground.opacity(0.01))  // Tap target
+        .background(cardBackground.opacity(0.01)) // Tap target
     }
 
     @ViewBuilder
@@ -625,7 +633,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
         return textField
     }
 
-    func updateUIView(_ uiView: UITextField, context: Context) {
+    func updateUIView(_ uiView: UITextField, context _: Context) {
         if uiView.text != text {
             uiView.text = text
         }
@@ -717,7 +725,8 @@ private struct RapidEntryTextField: UIViewRepresentable {
                     constant: -AppChromeMetrics.horizontalInset
                 ),
                 button.bottomAnchor.constraint(
-                    equalTo: container.bottomAnchor, constant: -bottomInset),
+                    equalTo: container.bottomAnchor, constant: -bottomInset
+                ),
                 button.heightAnchor.constraint(equalToConstant: buttonHeight),
             ])
 
@@ -746,11 +755,22 @@ struct RestockSheet: View {
         NavigationStack {
             Group {
                 if store.recentItems.isEmpty {
-                    ContentUnavailableView(
-                        "No Recent Purchases",
-                        systemImage: "cart",
-                        description: Text("Items marked as bought appear here for one-tap restore.")
-                    )
+                    VStack(spacing: 12) {
+                        Image(systemName: "cart")
+                            .font(.system(size: 40, weight: .regular))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+
+                        Text("No Recent Purchases")
+                            .font(themeStore.font(for: .sectionHeader))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
+
+                        Text("Items marked as bought appear here for one-tap restore.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+                    .frame(maxWidth: .infinity)
                     .padding(.top, 60)
                 } else {
                     List {
@@ -768,14 +788,19 @@ struct RestockSheet: View {
                         }
                     }
                     .listStyle(.plain)
+                    .environment(\.font, themeStore.font(for: .listRowTitle))
                 }
             }
             .background(
                 themeStore.canvasColor.ignoresSafeArea()
             )
-            .navigationTitle("Recently Purchased")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Recently Purchased")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     if !store.recentItems.isEmpty {
                         Button(role: .destructive) {

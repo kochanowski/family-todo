@@ -60,9 +60,17 @@ class MemberStore: ObservableObject {
     // MARK: - Operations
 
     func updateMember(id: UUID, displayName: String, currentUserId: String?) async throws {
-        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+        let trimmedName = try DisplayNameValidator.validate(displayName)
         try assertCanEditMember(id: id, currentUserId: currentUserId)
+
+        let normalizedKey = DisplayNameValidator.normalizedKey(trimmedName)
+        if members.contains(where: {
+            $0.id != id &&
+                $0.isActive &&
+                DisplayNameValidator.normalizedKey($0.displayName) == normalizedKey
+        }) {
+            throw HouseholdError.displayNameAlreadyTaken
+        }
 
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         var member = members[index]
@@ -145,7 +153,7 @@ class MemberStore: ObservableObject {
 
         if syncMode == .cloud {
             do {
-                try await cloudKit.deleteMember(id: id)
+                try await cloudKit.deleteMember(id: id, householdId: member.householdId)
             } catch {
                 // Revert
                 members.insert(member, at: index)

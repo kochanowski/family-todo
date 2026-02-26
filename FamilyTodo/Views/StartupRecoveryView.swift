@@ -58,7 +58,8 @@ struct StartupRecoveryView: View {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         guard let data = try? encoder.encode(diagnostics),
-              let json = String(data: data, encoding: .utf8) else {
+              let json = String(data: data, encoding: .utf8)
+        else {
             return "Diagnostics encoding failed."
         }
 

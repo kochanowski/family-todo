@@ -16,7 +16,7 @@ private struct QRCodeScannerRepresentable: UIViewControllerRepresentable {
     let onCodeScanned: (String) -> Void
     let onFailure: (String) -> Void
 
-    func makeUIViewController(context: Context) -> QRCodeScannerViewController {
+    func makeUIViewController(context _: Context) -> QRCodeScannerViewController {
         let controller = QRCodeScannerViewController()
         controller.onCodeScanned = onCodeScanned
         controller.onFailure = onFailure

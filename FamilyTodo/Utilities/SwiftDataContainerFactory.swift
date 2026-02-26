@@ -521,7 +521,8 @@ enum SwiftDataContainerFactory {
         dependencies.userDefaults.set(payload, forKey: recoveryUserDefaultsKey)
 
         if let data = try? JSONEncoder().encode(diagnostics),
-           let json = String(data: data, encoding: .utf8) {
+           let json = String(data: data, encoding: .utf8)
+        {
             dependencies.userDefaults.set(json, forKey: bootstrapDiagnosticsUserDefaultsKey)
         }
     }

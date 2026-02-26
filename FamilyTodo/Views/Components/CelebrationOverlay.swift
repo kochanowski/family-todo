@@ -70,7 +70,7 @@ struct ConfettiCannon: UIViewRepresentable {
         Coordinator()
     }
 
-    func makeUIView(context: Context) -> ConfettiEmitterView {
+    func makeUIView(context _: Context) -> ConfettiEmitterView {
         ConfettiEmitterView()
     }
 
@@ -83,7 +83,7 @@ struct ConfettiCannon: UIViewRepresentable {
         }
     }
 
-    static func dismantleUIView(_ uiView: ConfettiEmitterView, coordinator: Coordinator) {
+    static func dismantleUIView(_ uiView: ConfettiEmitterView, coordinator _: Coordinator) {
         uiView.stopBurst()
     }
 }
@@ -110,7 +110,8 @@ final class ConfettiEmitterView: UIView {
         layer.addSublayer(rightEmitter)
     }
 
-    required init?(coder: NSCoder) {
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
@@ -168,7 +169,7 @@ final class ConfettiEmitterView: UIView {
     private func makeCells(colors: [UIColor], isLeftCannon: Bool) -> [CAEmitterCell] {
         // Shoot mostly upward with slight inward bias.
         let upwardAngle: CGFloat = -CGFloat.pi / 2
-        let inwardBias: CGFloat = CGFloat.pi / 9
+        let inwardBias = CGFloat.pi / 9
         let baseAngle: CGFloat = isLeftCannon ? (upwardAngle + inwardBias) : (upwardAngle - inwardBias)
 
         return colors.flatMap { color in

@@ -347,7 +347,7 @@ final class TaskStore: ObservableObject {
 
         // Delete from CloudKit
         do {
-            try await cloudKit.deleteTask(id: task.id)
+            try await cloudKit.deleteTask(id: task.id, householdId: task.householdId)
 
             // Remove any scheduled notification
             await notificationService.removeTaskReminder(for: task)

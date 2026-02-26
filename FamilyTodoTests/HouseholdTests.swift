@@ -12,6 +12,7 @@ final class HouseholdTests: XCTestCase {
         )
 
         XCTAssertEqual(household.name, "Smith Family")
+        XCTAssertEqual(household.iconSymbol, "house.fill")
         XCTAssertEqual(household.ownerId, "user123")
         XCTAssertTrue(household.members.isEmpty)
         XCTAssertTrue(household.areas.isEmpty)
@@ -180,7 +181,7 @@ final class HouseholdStoreTests: XCTestCase {
             CachedTask.self,
             CachedShoppingItem.self,
             CachedBacklogCategory.self,
-            CachedBacklogItem.self
+            CachedBacklogItem.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -246,13 +247,14 @@ final class HouseholdStoreTests: XCTestCase {
         // Test that error cases exist
         let errors: [HouseholdError] = [
             .invalidInviteCode,
+            .displayNameAlreadyTaken,
             .householdNotFound,
             .cloudSyncRequired,
             .memberNotFound,
-            .cacheNotAvailable
+            .cacheNotAvailable,
         ]
 
-        XCTAssertEqual(errors.count, 5)
+        XCTAssertEqual(errors.count, 6)
     }
 }
 

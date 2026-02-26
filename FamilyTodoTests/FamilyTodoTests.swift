@@ -1,5 +1,5 @@
-import Combine
 import CloudKit
+import Combine
 @testable import HousePulse
 import XCTest
 
@@ -108,15 +108,39 @@ final class UserSessionTests: XCTestCase {
         XCTAssertEqual(session.userId, user.id)
         XCTAssertEqual(session.displayName, "Test User")
     }
+
+    func testAuthenticatedSessionNeedsDisplayNameConfirmationUntilConfirmed() async {
+        let authService = TestAuthenticationService()
+        let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
+
+        let user = AuthenticationService.AuthenticatedUser(
+            id: "cloudkit-user-2",
+            appleUserID: "apple-user-2",
+            email: nil,
+            displayName: nil,
+            givenName: nil,
+            familyName: nil
+        )
+        authService.currentUser = user
+        authService.authenticationState = .authenticated(userID: user.id)
+        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertTrue(session.needsDisplayNamePrompt)
+
+        session.confirmDisplayName("Tester")
+
+        XCTAssertFalse(session.needsDisplayNamePrompt)
+        XCTAssertEqual(session.displayName, "Tester")
+    }
 }
 
 @MainActor
 final class AuthenticationServiceDiagnosticsTests: XCTestCase {
     func testDiagnosticsSnapshotContainsExpectedFieldsWithoutPII() {
         #if !CI
-        let service = AuthenticationService(cloudKitContainer: nil)
+            let service = AuthenticationService(cloudKitContainer: nil)
         #else
-        let service = AuthenticationService()
+            let service = AuthenticationService()
         #endif
 
         service.signInWithApple()
@@ -167,9 +191,9 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
 
     func testDiagnosticsReportJSONIsValidJSON() throws {
         #if !CI
-        let service = AuthenticationService(cloudKitContainer: nil)
+            let service = AuthenticationService(cloudKitContainer: nil)
         #else
-        let service = AuthenticationService()
+            let service = AuthenticationService()
         #endif
         service.signInWithApple()
 

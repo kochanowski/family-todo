@@ -55,7 +55,7 @@ struct SettingsView: View {
                     columns: [
                         GridItem(.flexible()),
                         GridItem(.flexible()),
-                        GridItem(.flexible())
+                        GridItem(.flexible()),
                     ],
                     spacing: 12
                 ) {

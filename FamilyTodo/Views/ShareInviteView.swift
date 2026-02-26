@@ -19,7 +19,8 @@ struct ShareInviteView: UIViewControllerRepresentable {
         // But let's try to handle it.
 
         if let share = householdStore.share,
-           let container = householdStore.activeContainer {
+           let container = householdStore.activeContainer
+        {
             let controller = UICloudSharingController(share: share, container: container)
             controller.delegate = context.coordinator
             controller.availablePermissions = [.allowReadWrite, .allowPrivate]

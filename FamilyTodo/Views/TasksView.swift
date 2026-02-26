@@ -38,7 +38,7 @@ private struct TasksContent: View {
             switch self {
             case .assigneeRequired:
                 "Assign this task before moving it to Next."
-            case .wipLimitReached(let current, let limit):
+            case let .wipLimitReached(current, limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
             }
         }
@@ -88,9 +88,11 @@ private struct TasksContent: View {
         taskStore.setHousehold(householdId)
         _store = StateObject(wrappedValue: taskStore)
         _memberStore = StateObject(
-            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
+        )
         _backlogStore = StateObject(
-            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
+        )
         _selectedTab = selectedTab
     }
 
@@ -273,74 +275,6 @@ private struct TasksContent: View {
                 }
             }
         }
-
-        if !store.backlogTasks.isEmpty {
-            sectionHeader("IDEAS")
-                .tasksListRowStyle(taskListRowInsets)
-
-            ForEach(store.backlogTasks) { task in
-                TaskRow(
-                    task: task,
-                    assigneeName: assigneeName(for: task),
-                    assigneeId: task.assigneeId,
-                    categoryName: categoryName(for: task),
-                    categoryColor: categoryColor(for: task),
-                    wipZone: .normal,
-                    onToggle: { toggleTask(task) },
-                    onOpenDetail: { selectedTask = task }
-                )
-                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button {
-                        startTaskFromBacklog(task)
-                    } label: {
-                        Label("Start", systemImage: "play.fill")
-                    }
-                    .tint(themeStore.accentColor)
-                }
-                .rowInsertAnimation()
-                .accessibilityIdentifier("taskRowBacklog_\(task.title)")
-                .tasksListRowStyle(taskListRowInsets)
-            }
-        }
-
-        if !store.recentlyDoneTasks.isEmpty {
-            ForEach(store.recentlyDoneTasks) { task in
-                TaskRow(
-                    task: task,
-                    assigneeName: assigneeName(for: task),
-                    assigneeId: task.assigneeId,
-                    categoryName: categoryName(for: task),
-                    categoryColor: categoryColor(for: task),
-                    wipZone: .normal,
-                    onToggle: { toggleTask(task) },
-                    onOpenDetail: { selectedTask = task }
-                )
-                .swipeActions(edge: .trailing) {
-                    Button {
-                        archiveTask(task)
-                    } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                    .tint(.orange)
-                }
-                .contextMenu {
-                    Button {
-                        archiveTask(task)
-                    } label: {
-                        Label("Move to History", systemImage: "archivebox")
-                    }
-
-                    Button {
-                        toggleTask(task)
-                    } label: {
-                        Label("Undo Complete", systemImage: "arrow.uturn.backward")
-                    }
-                }
-                .rowInsertAnimation()
-                .accessibilityIdentifier("taskRowCompleted_\(task.title)")
-                .tasksListRowStyle(taskListRowInsets)
-            }
-        }
     }
 
     @ViewBuilder
@@ -432,7 +366,8 @@ private struct TasksContent: View {
                                     .stroke(Color.primary.opacity(0.08), lineWidth: 0.6)
                             }
                             .matchedGeometryEffect(
-                                id: "tasks-filter-indicator", in: tasksFilterGlassNamespace)
+                                id: "tasks-filter-indicator", in: tasksFilterGlassNamespace
+                            )
                     }
                 }
             }
@@ -444,7 +379,6 @@ private struct TasksContent: View {
         }
     }
 
-    @ViewBuilder
     private var unifiedListHeader: some View {
         HStack {
             if activeFilter == .active {
@@ -515,7 +449,8 @@ private struct TasksContent: View {
         if newStatus == .next {
             if let existingAssignee = task.assigneeId {
                 let validation = store.validateNextTransition(
-                    assigneeId: existingAssignee, excludingTaskId: task.id)
+                    assigneeId: existingAssignee, excludingTaskId: task.id
+                )
                 guard validation == .ok else {
                     handleNextTransitionValidation(validation)
                     HapticManager.warning()
@@ -605,7 +540,7 @@ private struct TasksContent: View {
             activeBanner = nil
         case .assigneeRequired:
             showBanner(.assigneeRequired)
-        case .wipLimitReached(let current, let limit):
+        case let .wipLimitReached(current, limit):
             showBanner(.wipLimitReached(current: current, limit: limit))
         }
     }
@@ -768,8 +703,7 @@ private struct TasksContent: View {
         _ = _Concurrency.Task {
             let resolvedCategoryId: UUID? =
                 if let backlogCategoryId = task.backlogCategoryId,
-                    backlogStore.categories.contains(where: { $0.id == backlogCategoryId })
-                {
+                backlogStore.categories.contains(where: { $0.id == backlogCategoryId }) {
                     backlogCategoryId
                 } else {
                     backlogStore.categories.first?.id
@@ -1228,8 +1162,8 @@ private struct TaskDetailSheet: View {
     }
 }
 
-extension View {
-    fileprivate func tasksListRowStyle(_ insets: EdgeInsets) -> some View {
+private extension View {
+    func tasksListRowStyle(_ insets: EdgeInsets) -> some View {
         listRowInsets(insets)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)

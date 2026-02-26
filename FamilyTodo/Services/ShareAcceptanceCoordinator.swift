@@ -33,7 +33,12 @@ final class ShareAcceptanceCoordinator: ObservableObject {
             return
         }
 
-        let displayName = userSession.displayName ?? "Me"
+        guard let displayName = userSession.displayName,
+              !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            lastErrorMessage = "Set your display name before joining a household."
+            return
+        }
 
         if let metadata = pendingMetadata {
             await processMetadata(

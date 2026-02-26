@@ -385,7 +385,7 @@ final class ShoppingListStore: ObservableObject {
 
             if isCloudSyncEnabled {
                 do {
-                    try await cloudKit.deleteShoppingItem(id: item.id)
+                    try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
                 } catch {
                     self.error = error
                 }
@@ -450,7 +450,7 @@ final class ShoppingListStore: ObservableObject {
             }
 
             do {
-                try await cloudKit.deleteShoppingItem(id: item.id)
+                try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
             } catch {
                 self.error = error
             }
@@ -486,7 +486,7 @@ final class ShoppingListStore: ObservableObject {
         }
 
         do {
-            try await cloudKit.deleteShoppingItem(id: item.id)
+            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
 
             // Remove from cache
             if let context = modelContext {

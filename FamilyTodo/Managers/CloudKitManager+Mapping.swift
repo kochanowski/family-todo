@@ -34,6 +34,7 @@ extension CloudKitManager {
         let record = CKRecord(recordType: "Household", recordID: recordID(for: household.id))
         record["id"] = household.id.uuidString as CKRecordValue
         record["name"] = household.name as CKRecordValue
+        record["iconSymbol"] = household.iconSymbol as CKRecordValue
         record["ownerId"] = household.ownerId as CKRecordValue
         record["createdAt"] = household.createdAt as CKRecordValue
         record["updatedAt"] = household.updatedAt as CKRecordValue
@@ -55,6 +56,7 @@ extension CloudKitManager {
         return Household(
             id: id,
             name: name,
+            iconSymbol: (record["iconSymbol"] as? String) ?? "house.fill",
             ownerId: ownerId,
             createdAt: createdAt,
             updatedAt: updatedAt

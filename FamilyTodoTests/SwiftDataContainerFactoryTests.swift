@@ -1,5 +1,5 @@
-@testable import HousePulse
 import Foundation
+@testable import HousePulse
 import SwiftData
 import XCTest
 

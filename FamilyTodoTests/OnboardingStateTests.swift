@@ -3,7 +3,9 @@ import XCTest
 
 @MainActor
 final class OnboardingStateTests: XCTestCase {
-    private var defaults: UserDefaults { .standard }
+    private var defaults: UserDefaults {
+        .standard
+    }
 
     override func setUp() {
         super.setUp()
@@ -21,7 +23,7 @@ final class OnboardingStateTests: XCTestCase {
         state.completeOnboarding()
         state.selectSyncMethod(.iCloud)
 
-        XCTAssertEqual(state.currentState, .mainApp)
+        XCTAssertEqual(state.currentState, .householdSetup)
         XCTAssertEqual(state.syncMethod, .iCloud)
     }
 
@@ -35,7 +37,35 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(state.syncMethod, .local)
     }
 
+    func testCompleteAuthCloudWithoutHouseholdRoutesToSetup() {
+        let state = OnboardingState()
+        state.completeOnboarding()
+
+        state.completeAuth(syncMethod: .iCloud, isGuest: false, hasHousehold: false)
+
+        XCTAssertEqual(state.currentState, .householdSetup)
+    }
+
+    func testCompleteAuthCloudWithHouseholdRoutesToMainApp() {
+        let state = OnboardingState()
+        state.completeOnboarding()
+
+        state.completeAuth(syncMethod: .iCloud, isGuest: false, hasHousehold: true)
+
+        XCTAssertEqual(state.currentState, .mainApp)
+    }
+
+    func testCompleteAuthGuestRoutesToMainApp() {
+        let state = OnboardingState()
+        state.completeOnboarding()
+
+        state.completeAuth(syncMethod: .local, isGuest: true, hasHousehold: false)
+
+        XCTAssertEqual(state.currentState, .mainApp)
+    }
+
     private func clearOnboardingKeys() {
+        defaults.removeObject(forKey: "hasSeenOnboarding")
         defaults.removeObject(forKey: "hasCompletedOnboarding")
         defaults.removeObject(forKey: "syncMethod")
         defaults.removeObject(forKey: "householdStatus")

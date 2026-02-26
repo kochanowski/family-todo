@@ -6,6 +6,8 @@ import UIKit
 /// More screen - hub for settings, profile, and configuration
 struct MoreView: View {
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.modelContext) private var modelContext
 
@@ -20,13 +22,20 @@ struct MoreView: View {
             // Menu items
             ScrollView {
                 VStack(spacing: 16) {
-                    // Profile card
+                    // Household hero card
                     NavigationLink {
                         ProfileView()
                     } label: {
-                        ProfileCard()
+                        HouseholdHeroCard()
                     }
                     .buttonStyle(.plain)
+
+                    if userSession.isGuest {
+                        GuestUpgradeBanner {
+                            userSession.endGuestSession()
+                            onboardingState.openAuth()
+                        }
+                    }
 
                     // Settings group
                     VStack(spacing: 0) {
@@ -98,45 +107,30 @@ struct MoreView: View {
     }
 }
 
-// MARK: - Profile Card
+// MARK: - Household Hero
 
-struct ProfileCard: View {
+struct HouseholdHeroCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
 
     var body: some View {
-        HStack(spacing: 16) {
-            // Avatar stack
-            ZStack {
-                Circle()
-                    .fill(themeStore.accentColor)
-                    .frame(width: 44, height: 44)
-                    .overlay {
-                        Text(String(userSession.displayName?.prefix(1) ?? "U"))
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                // .offset(x: -10) // TODO: Multi-avatar logic
-            }
-            .frame(width: 44)
+        VStack(spacing: 14) {
+            Image(systemName: householdStore.currentHousehold?.iconSymbol ?? "house.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(userSession.displayName ?? "User")
-                    .font(themeStore.font(for: .profileName))
+            Text(householdStore.currentHousehold?.name ?? "No Household")
+                .font(themeStore.font(for: .profileName))
+                .multilineTextAlignment(.center)
 
-                Text(householdStore.currentHousehold?.name ?? "No Household")
-                    .font(themeStore.font(for: .bodySmall))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+            Text(userSession.displayName ?? "User")
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(themeStore.contentSecondaryColor)
         }
-        .padding(16)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 22)
+        .padding(.horizontal, 16)
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
@@ -145,6 +139,33 @@ struct ProfileCard: View {
 
     private var cardBackground: Color {
         themeStore.surfaceColor
+    }
+}
+
+struct GuestUpgradeBanner: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    let onUpgrade: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Unlock syncing & sharing")
+                .font(themeStore.font(for: .inlineTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+
+            Text("Sign in with Apple to join households, invite members, and keep devices in sync.")
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(themeStore.contentSecondaryColor)
+
+            Button("Sign in with Apple", action: onUpgrade)
+                .font(themeStore.font(for: .buttonLabel))
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(themeStore.surfaceColor)
+        )
     }
 }
 
@@ -197,8 +218,9 @@ struct ProfileView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
-    @State private var editedHouseholdName = ""
-    @State private var showRenameHousehold = false
+    @State private var inlineHouseholdName = ""
+    @State private var renameTask: _Concurrency.Task<Void, Never>?
+    @State private var isRenamingHousehold = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
     @State private var actionErrorMessage: String?
@@ -207,7 +229,35 @@ struct ProfileView: View {
         List {
             Section("Household") {
                 if let household = householdStore.currentHousehold {
-                    LabeledContent("Name", value: household.name)
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Household name", text: $inlineHouseholdName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled(true)
+                            .font(themeStore.font(for: .inlineTitle))
+                            .onAppear {
+                                if inlineHouseholdName.isEmpty {
+                                    inlineHouseholdName = household.name
+                                }
+                            }
+                            .onChange(of: household.name) { _, newValue in
+                                if inlineHouseholdName != newValue {
+                                    inlineHouseholdName = newValue
+                                }
+                            }
+                            .onChange(of: inlineHouseholdName) { _, newValue in
+                                scheduleInlineHouseholdRename(newValue)
+                            }
+
+                        if isRenamingHousehold {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Saving...")
+                                    .font(themeStore.font(for: .bodySmall))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
+                            }
+                        }
+                    }
                 } else {
                     Text("No Household Selected")
                 }
@@ -226,12 +276,6 @@ struct ProfileView: View {
             }
 
             Section("Household Actions") {
-                Button("Rename Household") {
-                    editedHouseholdName = householdStore.currentHousehold?.name ?? ""
-                    showRenameHousehold = true
-                }
-                .disabled(householdStore.currentHousehold == nil)
-
                 Button("Leave Household", role: .destructive) {
                     showLeaveConfirmation = true
                 }
@@ -247,17 +291,6 @@ struct ProfileView: View {
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showRenameHousehold) {
-            AppPromptSheet(
-                title: "Rename Household",
-                placeholder: "Household name",
-                text: $editedHouseholdName,
-                primaryTitle: "Save",
-                onSubmit: { _ in
-                    renameHousehold()
-                }
-            )
-        }
         .sheet(isPresented: $showLeaveConfirmation) {
             AppConfirmationSheet(
                 title: "Leave household?",
@@ -284,13 +317,30 @@ struct ProfileView: View {
         } message: {
             Text(actionErrorMessage ?? "Unknown error")
         }
+        .onDisappear {
+            renameTask?.cancel()
+            renameTask = nil
+        }
     }
 
-    private func renameHousehold() {
-        _ = _Concurrency.Task {
+    private func scheduleInlineHouseholdRename(_ name: String) {
+        renameTask?.cancel()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let currentHousehold = householdStore.currentHousehold else { return }
+        guard !trimmed.isEmpty, trimmed != currentHousehold.name else { return }
+
+        isRenamingHousehold = true
+        renameTask = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(nanoseconds: 450_000_000)
+            guard !_Concurrency.Task.isCancelled else {
+                isRenamingHousehold = false
+                return
+            }
             do {
-                try await householdStore.renameCurrentHousehold(editedHouseholdName)
+                try await householdStore.renameCurrentHousehold(trimmed)
+                isRenamingHousehold = false
             } catch {
+                isRenamingHousehold = false
                 actionErrorMessage = error.localizedDescription
             }
         }
@@ -504,7 +554,8 @@ struct RepetitiveTasksView: View {
                                 .foregroundStyle(.secondary)
 
                             if let categoryId = chore.categoryId,
-                               let category = backlogStore.categories.first(where: { $0.id == categoryId }) {
+                               let category = backlogStore.categories.first(where: { $0.id == categoryId })
+                            {
                                 Text(category.title)
                                     .font(themeStore.font(for: .chip))
                                     .foregroundStyle(category.color)
@@ -764,5 +815,8 @@ private struct CompletedTasksContent: View {
 
 #Preview {
     MoreView()
+        .environmentObject(UserSession.shared)
+        .environmentObject(HouseholdStore())
+        .environmentObject(OnboardingState())
         .environmentObject(ThemeStore())
 }

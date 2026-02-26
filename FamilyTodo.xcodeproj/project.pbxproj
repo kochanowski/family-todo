@@ -703,6 +703,9 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_HPCloudKitEnabled = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.kochanowski.housepulse;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = housepulse;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Allow camera access to scan household invite QR codes.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -744,6 +747,9 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_HPCloudKitEnabled = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.kochanowski.housepulse;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = housepulse;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Allow camera access to scan household invite QR codes.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

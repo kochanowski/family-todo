@@ -297,7 +297,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "9A8F86"),
                     primaryTextColor: Color(hex: "4E4741"),
                     secondaryTextColor: Color(hex: "6E655E")
-                )
+                ),
             ])
         case .retro:
             ThemePalette(cardThemes: [
@@ -342,7 +342,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "F78166"),
                     primaryTextColor: Color(hex: "E6EDF3"),
                     secondaryTextColor: Color(hex: "8B949E")
-                )
+                ),
             ])
         case .paper:
             ThemePalette(cardThemes: [
@@ -387,7 +387,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "8D6E63"),
                     primaryTextColor: Color(hex: "3E2723"),
                     secondaryTextColor: Color(hex: "5D4037")
-                )
+                ),
             ])
         }
     }
@@ -668,7 +668,7 @@ final class ThemeStore: ObservableObject {
             "cpu",
             "die.face.5.fill",
             "square.stack.3d.up",
-            "floppy.disk"
+            "floppy.disk",
         ]
         return candidates.first(where: { UIImage(systemName: $0) != nil }) ?? "circle.fill"
     }
@@ -815,14 +815,14 @@ final class ThemeStore: ObservableObject {
                 Color(hex: "00FF41"),
                 Color(hex: "FFDD57"),
                 Color(hex: "FF6B9D"),
-                Color(hex: "00D4FF")
+                Color(hex: "00D4FF"),
             ]
         case .paper:
             [
                 Color(hex: "8B4513"),
                 Color(hex: "A1887F"),
                 Color(hex: "DDB892"),
-                Color(hex: "6D4C41")
+                Color(hex: "6D4C41"),
             ]
         }
     }
@@ -890,7 +890,8 @@ final class ThemeStore: ObservableObject {
                 postScriptName: variant.fontName,
                 familyAliases: variant.familyAliases
             ),
-                let custom = UIFont(name: resolvedName, size: scaledCustomSize) {
+                let custom = UIFont(name: resolvedName, size: scaledCustomSize)
+            {
                 return custom
             }
             return .systemFont(ofSize: baseSize, weight: weight)
@@ -956,7 +957,8 @@ final class ThemeStore: ObservableObject {
         }
 
         if let fallbackUIFontName,
-           UIFont(name: fallbackUIFontName, size: baseSize) != nil {
+           UIFont(name: fallbackUIFontName, size: baseSize) != nil
+        {
             return .custom(fallbackUIFontName, size: baseSize)
         }
 
@@ -979,7 +981,8 @@ final class ThemeStore: ObservableObject {
         familyAliases: [String]
     ) -> String? {
         if fontRegistration.isFontAvailable(postScriptName: postScriptName) ||
-            UIFont(name: postScriptName, size: 12) != nil {
+            UIFont(name: postScriptName, size: 12) != nil
+        {
             return postScriptName
         }
 
