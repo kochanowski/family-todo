@@ -7,6 +7,7 @@
       "fields": [
         { "name": "id", "type": "String", "queryable": true, "sortable": false },
         { "name": "name", "type": "String", "queryable": false, "sortable": false },
+        { "name": "icon", "type": "String", "queryable": false, "sortable": false },
         { "name": "iconSymbol", "type": "String", "queryable": false, "sortable": false },
         { "name": "ownerId", "type": "String", "queryable": false, "sortable": false },
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
