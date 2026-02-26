@@ -218,7 +218,10 @@ struct RootView: View {
         .alert(
             "Invitation Error",
             isPresented: Binding(
-                get: { shareAcceptanceCoordinator.lastErrorMessage != nil },
+                get: {
+                    onboardingState.currentState == .mainApp
+                        && shareAcceptanceCoordinator.lastErrorMessage != nil
+                },
                 set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
             )
         ) {
@@ -232,6 +235,7 @@ struct RootView: View {
 
     private var pendingProcessingKey: String {
         [
+            onboardingState.currentState.rawValue,
             userSession.sessionMode.rawValue,
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",

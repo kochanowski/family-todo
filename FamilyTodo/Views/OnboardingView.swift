@@ -151,7 +151,7 @@ struct CreateHouseholdSheet: View {
                 _ = try await householdStore.createHousehold(
                     name: name,
                     userId: userId,
-                    displayName: displayName
+                    displayName: resolvedDisplayNameForMembership()
                 )
                 dismiss()
             } catch {
@@ -159,6 +159,13 @@ struct CreateHouseholdSheet: View {
                 isCreating = false
             }
         }
+    }
+
+    private func resolvedDisplayNameForMembership() -> String {
+        if let validated = try? DisplayNameValidator.validate(displayName) {
+            return validated
+        }
+        return "Member"
     }
 }
 
@@ -222,7 +229,7 @@ struct JoinHouseholdSheet: View {
                 try await householdStore.joinHousehold(
                     inviteCode: code,
                     userId: userId,
-                    displayName: displayName
+                    displayName: resolvedDisplayNameForMembership()
                 )
                 dismiss()
             } catch {
@@ -230,6 +237,13 @@ struct JoinHouseholdSheet: View {
                 isJoining = false
             }
         }
+    }
+
+    private func resolvedDisplayNameForMembership() -> String {
+        if let validated = try? DisplayNameValidator.validate(displayName) {
+            return validated
+        }
+        return "Member"
     }
 }
 

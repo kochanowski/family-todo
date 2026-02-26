@@ -5,6 +5,10 @@ struct CreateHouseholdView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @Environment(\.dismiss) private var dismiss
+
+    private let allowsJoin: Bool
+    private let showsCloseButton: Bool
 
     @State private var householdName = ""
     @State private var isCreating = false
@@ -18,6 +22,11 @@ struct CreateHouseholdView: View {
     @FocusState private var isTextFieldFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
+
+    init(allowsJoin: Bool = true, showsCloseButton: Bool = false) {
+        self.allowsJoin = allowsJoin
+        self.showsCloseButton = showsCloseButton
+    }
 
     var body: some View {
         NavigationStack {
@@ -116,18 +125,20 @@ struct CreateHouseholdView: View {
                     .disabled(householdName.isEmpty || isCreating || !userSession.hasActiveSession)
                     .padding(.horizontal, 40)
 
-                    // Join Link
-                    Button {
-                        showJoinSheet = true
-                    } label: {
-                        Text("Have an invite code? ")
-                            .foregroundStyle(.secondary)
-                            + Text("Join Household")
-                            .foregroundStyle(.primary)
-                            .bold()
+                    if allowsJoin {
+                        // Join Link
+                        Button {
+                            showJoinSheet = true
+                        } label: {
+                            Text("Have an invite code? ")
+                                .foregroundStyle(.secondary)
+                                + Text("Join Household")
+                                .foregroundStyle(.primary)
+                                .bold()
+                        }
+                        .font(.system(size: 15))
+                        .disabled(!canJoinViaInvite || isCreating)
                     }
-                    .font(.system(size: 15))
-                    .disabled(!canJoinViaInvite)
 
                     if !userSession.hasActiveSession {
                         Text("Sign in or continue as guest before creating or joining household.")
@@ -148,8 +159,17 @@ struct CreateHouseholdView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if showsCloseButton {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                    }
+                }
+            }
             .sheet(isPresented: $showJoinSheet) {
-                CreateJoinSheet(
+                HouseholdJoinSheet(
                     joinCode: $joinCode,
                     onJoin: joinHousehold,
                     onPasteFromClipboard: {
@@ -203,11 +223,14 @@ struct CreateHouseholdView: View {
                 let newHousehold = try await householdStore.createHousehold(
                     name: householdName,
                     userId: userId,
-                    displayName: resolvedDisplayName(),
+                    displayName: fallbackDisplayNameForMembership(),
                     iconSymbol: selectedIconSymbol
                 )
                 userSession.setCurrentHousehold(newHousehold.id)
                 onboardingState.completeHouseholdSetup(withHousehold: true)
+                if showsCloseButton {
+                    dismiss()
+                }
             } catch {
                 joinErrorMessage = error.localizedDescription
                 print("Error creating household: \(error)")
@@ -217,6 +240,7 @@ struct CreateHouseholdView: View {
     }
 
     private func joinHousehold() {
+        guard allowsJoin else { return }
         guard canJoinViaInvite else {
             joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
             return
@@ -235,7 +259,7 @@ struct CreateHouseholdView: View {
         _Concurrency.Task {
             do {
                 let normalizedInvite = try InviteInputNormalizer.normalizeInput(joinCode)
-                let displayName = try resolvedDisplayName()
+                let displayName = fallbackDisplayNameForMembership()
                 if normalizedInvite.requiresConfirmation {
                     pendingCustomJoinInviteCode = normalizedInvite.inviteCode
                     showCustomJoinConfirmation = true
@@ -257,6 +281,7 @@ struct CreateHouseholdView: View {
     }
 
     private func confirmCustomJoin() {
+        guard allowsJoin else { return }
         guard let inviteCode = pendingCustomJoinInviteCode else { return }
         guard canJoinViaInvite else {
             joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
@@ -274,7 +299,7 @@ struct CreateHouseholdView: View {
                 try await performJoinHousehold(
                     inviteCode: inviteCode,
                     userId: userId,
-                    displayName: resolvedDisplayName()
+                    displayName: fallbackDisplayNameForMembership()
                 )
             } catch {
                 joinErrorMessage = error.localizedDescription
@@ -300,11 +325,13 @@ struct CreateHouseholdView: View {
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
-    private func resolvedDisplayName() throws -> String {
-        guard let displayName = userSession.displayName else {
-            throw DisplayNameValidationError.empty
+    private func fallbackDisplayNameForMembership() -> String {
+        if let displayName = userSession.displayName,
+           let validated = try? DisplayNameValidator.validate(displayName)
+        {
+            return validated
         }
-        return try DisplayNameValidator.validate(displayName)
+        return userSession.isGuest ? "Guest" : "Member"
     }
 
     private static let availableHouseholdSymbols = [
@@ -318,7 +345,7 @@ struct CreateHouseholdView: View {
 
 // MARK: - Join Sheet (local to this view)
 
-private struct CreateJoinSheet: View {
+struct HouseholdJoinSheet: View {
     @Binding var joinCode: String
     let onJoin: () -> Void
     let onPasteFromClipboard: () -> Void

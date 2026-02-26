@@ -1,6 +1,6 @@
 # CLOUD_SYNC_PROFILES
 
-Last updated: 2026-02-25
+Last updated: 2026-02-26
 
 ## Profiles
 
@@ -22,3 +22,20 @@ Last updated: 2026-02-25
 ## Recommendation
 - Keep day-to-day UI checks that touch auth/share on `sync-enabled`.
 - Use `preview-local` only for isolated visual or non-sync development.
+
+## CloudKit Schema CI Gate
+- TestFlight deploy flow now runs a reusable schema workflow first:
+  - `.github/workflows/cloudkit-schema.yml`
+  - validates `cloudkit/schema/housepulse-schema.json`
+  - applies schema to CloudKit Development
+  - promotes schema to CloudKit Production automatically
+- Required secret for schema operations:
+  - `CLOUDKIT_MANAGEMENT_TOKEN` (CloudKit management token)
+- Existing `TEAM_ID` secret is reused.
+- `CONTAINER_ID` is fixed to `iCloud.com.kochanowski.housepulse`.
+
+## Manual Trigger
+- You can run schema gate manually via `workflow_dispatch`:
+  - `promote_to_production=true|false`
+  - `dry_run=true|false`
+  - `schema_source=cloudkit/schema/housepulse-schema.json`

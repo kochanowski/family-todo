@@ -119,7 +119,7 @@ class HouseholdStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let validatedDisplayName = try DisplayNameValidator.validate(displayName)
+        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
         let trimmedHouseholdName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedHouseholdName.isEmpty else {
             throw HouseholdError.invalidInviteCode
@@ -219,7 +219,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
-        let validatedDisplayName = try DisplayNameValidator.validate(displayName)
+        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.participantShared)
@@ -248,7 +248,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
-        let validatedDisplayName = try DisplayNameValidator.validate(displayName)
+        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.participantShared)
@@ -421,6 +421,13 @@ class HouseholdStore: ObservableObject {
             role: role
         )
         _ = try await cloudKit.saveMember(member)
+    }
+
+    private func normalizedMembershipDisplayName(from rawDisplayName: String) -> String {
+        if let validated = try? DisplayNameValidator.validate(rawDisplayName) {
+            return validated
+        }
+        return syncMode == .localOnly ? "Guest" : "Member"
     }
 
     func clearCurrentHousehold() {

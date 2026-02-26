@@ -26,17 +26,14 @@ final class ShareAcceptanceCoordinator: ObservableObject {
         onboardingState: OnboardingState
     ) async {
         guard !isProcessing else { return }
+        guard onboardingState.currentState == .mainApp else { return }
         guard userSession.hasActiveSession,
               userSession.syncMode == .cloud,
-              let userId = userSession.userId
-        else {
-            return
-        }
-
-        guard let displayName = userSession.displayName,
+              let userId = userSession.userId,
+              !userSession.needsDisplayNamePrompt,
+              let displayName = userSession.displayName,
               !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
-            lastErrorMessage = "Set your display name before joining a household."
             return
         }
 

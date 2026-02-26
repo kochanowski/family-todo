@@ -1,6 +1,6 @@
 # TESTING_CI_POLICY
 
-Last updated: 2026-02-25
+Last updated: 2026-02-26
 
 ## Why this policy exists
 Build time on macOS runners must stay short for rapid UI iteration. Tests are split between fast CI and full nightly/manual regression.
@@ -12,6 +12,10 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 - SwiftLint
 - No XCTest by default
 - Supports `cloud_sync_profile` override (`preview-local` / `sync-enabled`)
+- For release/TestFlight branches, runs CloudKit schema gate before deploy:
+  - validate schema contract
+  - apply Development schema
+  - promote Production schema
 
 ### `nightly.yml` (scheduled + manual)
 - Full `xcodebuild test` suite
@@ -26,6 +30,7 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 ## Expected usage
 - **Daily:** PR build + lint only
 - **Regression:** nightly + manual dispatch before merges/releases
+- **Release/TestFlight:** schema gate must be green before deploy job starts
 
 ## Manual iPhone checklist (physical device — iPhone 15, iOS 26.2.1)
 

@@ -9,4 +9,10 @@
 |----|------|---|-------|------|
 | #664 | 7:04 PM | 🔵 | App entry point configures ThemeStore as global EnvironmentObject | ~369 |
 | #639 | 6:59 PM | 🔵 | TabView implementation uses native iOS components with version-specific handling | ~470 |
+
+### Feb 17, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #705 | 11:12 AM | 🔵 | App Root Injects ThemeStore and Sets Preferred Color Scheme | ~498 |
 </claude-mem-context>

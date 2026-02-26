@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 2026-02-25
+Last updated: 2026-02-26
 
 ## Implemented (current redesign branch)
 
@@ -35,6 +35,11 @@ Last updated: 2026-02-25
   - Sign in with Apple
 - App target defaults to `HPCloudKitEnabled = YES`
 - Added camera usage description + remote notification background mode
+- Added CloudKit schema CI workflow (`.github/workflows/cloudkit-schema.yml`):
+  - reusable + manual dispatch
+  - schema contract validation from `cloudkit/schema/housepulse-schema.json`
+  - Development apply + automatic Production promote
+  - `ios-ci.yml` blocks TestFlight deploy until schema gate succeeds
 
 ## Tests added
 - `InviteInputNormalizerTests`
