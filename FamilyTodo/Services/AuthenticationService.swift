@@ -1,338 +1,705 @@
+import CloudKit
+import Foundation
+
 #if !CI
-    import AuthenticationServices
-    import CloudKit
-    import Foundation
+import AuthenticationServices
+import UIKit
+#endif
 
-    /// Service responsible for handling Sign in with Apple authentication
-    /// and CloudKit user identity management
-    @MainActor
-    final class AuthenticationService: NSObject, ObservableObject {
-        #if CI
-            private static let containerIdentifier = "iCloud.com.example.familytodo"
-        #else
-            private static let containerIdentifier = "iCloud.com.kochanowski.housepulse"
-        #endif
+enum AuthDiagnosticStage: String, Codable {
+    case startupStatusCheck
+    case signInTapped
+    case authorizationReceived
+    case authorizationCancelled
+    case cloudKitUserFetch
+    case signInFailed
+}
 
-        // MARK: - Published Properties
+enum AuthMappedErrorCategory: String, Codable {
+    case notAuthenticated
+    case missingEntitlement
+    case badContainer
+    case permissionFailure
+    case cloudKitNotAvailable
+    case authorizationCancelled
+    case authorizationFailed
+    case genericFailure
+}
 
-        @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
-        @Published private(set) var currentUser: AuthenticatedUser?
+struct AuthDiagnosticEntry: Codable {
+    let timestampISO8601: String
+    let stage: AuthDiagnosticStage
+    let state: String
+    let errorSummary: String?
+}
 
-        // MARK: - Private Properties
+struct AuthDiagnosticsSnapshot: Codable {
+    let timestampISO8601: String
+    let appVersion: String
+    let appBuild: String
+    let bundleIdentifier: String
+    let osVersion: String
+    let hpCloudKitEnabled: Bool
+    let containerIdentifier: String
+    let lastCKAccountStatusRaw: Int?
+    let authenticationState: String
+    let mappedErrorCategory: String?
+    let errorDomain: String?
+    let errorCode: Int?
+    let errorDescription: String?
+    let reflectedError: String?
+    let underlyingErrorChain: [String]
+    let recentEntries: [AuthDiagnosticEntry]
+}
 
-        private lazy var cloudKitContainer: CKContainer? = makeCloudKitContainer()
-        private var currentNonce: String?
+#if !CI
+/// Service responsible for handling Sign in with Apple authentication
+/// and CloudKit user identity management
+@MainActor
+final class AuthenticationService: NSObject, ObservableObject {
+    #if CI
+    private static let containerIdentifier = "iCloud.com.example.familytodo"
+    #else
+    private static let containerIdentifier = "iCloud.com.kochanowski.housepulse"
+    #endif
 
-        // MARK: - Initialization
+    // MARK: - Published Properties
 
-        init(cloudKitContainer: CKContainer? = nil) {
-            super.init()
-            if let cloudKitContainer {
-                self.cloudKitContainer = cloudKitContainer
+    @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
+    @Published private(set) var currentUser: AuthenticatedUser?
+    @Published private(set) var latestDiagnostics: AuthDiagnosticsSnapshot?
+
+    // MARK: - Private Properties
+
+    private lazy var cloudKitContainer: CKContainer? = makeCloudKitContainer()
+    private var recentDiagnosticEntries: [AuthDiagnosticEntry] = []
+    private var lastCKAccountStatusRaw: Int?
+    private var lastMappedErrorCategory: AuthMappedErrorCategory?
+    private var lastErrorDomain: String?
+    private var lastErrorCode: Int?
+    private var lastErrorDescription: String?
+    private var lastReflectedError: String?
+    private var lastUnderlyingErrorChain: [String] = []
+
+    private static let maxDiagnosticEntries = 20
+
+    // MARK: - Initialization
+
+    init(cloudKitContainer: CKContainer? = nil) {
+        super.init()
+        if let cloudKitContainer {
+            self.cloudKitContainer = cloudKitContainer
+        }
+        refreshLatestDiagnostics()
+    }
+
+    // MARK: - Authentication State
+
+    enum AuthenticationState {
+        case unauthenticated
+        case authenticating
+        case authenticated(userID: String)
+        case error(AuthenticationError)
+    }
+
+    enum AuthenticationError: LocalizedError {
+        case cancelled
+        case failed(Error)
+        case cloudKitNotAvailable
+        case userNotFound
+
+        var errorDescription: String? {
+            switch self {
+            case .cancelled:
+                "Authentication was cancelled"
+            case let .failed(error):
+                "Authentication failed: \(error.localizedDescription)"
+            case .cloudKitNotAvailable:
+                "CloudKit is not available. Please check your iCloud settings."
+            case .userNotFound:
+                "User not found in CloudKit"
             }
         }
+    }
 
-        // MARK: - Authentication State
+    // MARK: - Authenticated User Model
 
-        enum AuthenticationState {
-            case unauthenticated
-            case authenticating
-            case authenticated(userID: String)
-            case error(AuthenticationError)
+    struct AuthenticatedUser: Identifiable {
+        let id: String // CloudKit record name
+        let appleUserID: String
+        let email: String?
+        let displayName: String?
+        let givenName: String?
+        let familyName: String?
+    }
+
+    // MARK: - Public Methods
+
+    /// Initiates Sign in with Apple flow.
+    func signInWithApple() {
+        authenticationState = .authenticating
+        recordDiagnostic(stage: .signInTapped)
+
+        guard cloudKitContainer != nil else {
+            let error = AuthenticationError.cloudKitNotAvailable
+            updateErrorContext(from: error, category: .cloudKitNotAvailable)
+            authenticationState = .error(error)
+            recordDiagnostic(stage: .signInFailed, error: error)
+            return
         }
 
-        enum AuthenticationError: LocalizedError {
-            case cancelled
-            case failed(Error)
-            case cloudKitNotAvailable
-            case userNotFound
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
 
-            var errorDescription: String? {
-                switch self {
-                case .cancelled:
-                    "Authentication was cancelled"
-                case let .failed(error):
-                    "Authentication failed: \(error.localizedDescription)"
-                case .cloudKitNotAvailable:
-                    "CloudKit is not available. Please check your iCloud settings."
-                case .userNotFound:
-                    "User not found in CloudKit"
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        controller.performRequests()
+    }
+
+    /// Signs out the current user.
+    func signOut() {
+        currentUser = nil
+        authenticationState = .unauthenticated
+        clearErrorContext()
+        refreshLatestDiagnostics()
+    }
+
+    /// Checks CloudKit account status and attempts silent user restore.
+    func checkCloudKitStatus() async {
+        recordDiagnostic(stage: .startupStatusCheck)
+
+        guard let cloudKitContainer else {
+            clearAuthenticatedState()
+            return
+        }
+
+        do {
+            let status = try await cloudKitContainer.accountStatus()
+            lastCKAccountStatusRaw = status.rawValue
+            refreshLatestDiagnostics()
+
+            switch status {
+            case .available:
+                do {
+                    try await fetchCloudKitUserIdentity()
+                } catch {
+                    clearAuthenticatedState()
+                    let category = Self.mappedErrorCategory(for: error)
+                    updateErrorContext(from: error, category: category)
+                    recordDiagnostic(stage: .signInFailed, error: error)
                 }
-            }
-        }
-
-        // MARK: - Authenticated User Model
-
-        struct AuthenticatedUser: Identifiable {
-            let id: String // CloudKit Record ID
-            let appleUserID: String
-            let email: String?
-            let displayName: String?
-            let givenName: String?
-            let familyName: String?
-        }
-
-        // MARK: - Public Methods
-
-        /// Initiates Sign in with Apple flow
-        func signInWithApple() {
-            guard cloudKitContainer != nil else {
-                authenticationState = .error(.cloudKitNotAvailable)
-                return
-            }
-            authenticationState = .authenticating
-
-            let request = ASAuthorizationAppleIDProvider().createRequest()
-            request.requestedScopes = [.fullName, .email]
-
-            let controller = ASAuthorizationController(authorizationRequests: [request])
-            controller.delegate = self
-            controller.presentationContextProvider = self
-            controller.performRequests()
-        }
-
-        /// Signs out the current user
-        func signOut() {
-            currentUser = nil
-            authenticationState = .unauthenticated
-        }
-
-        /// Checks CloudKit account status and fetches user identity
-        func checkCloudKitStatus() async {
-            guard let cloudKitContainer else {
+            case .noAccount, .restricted, .couldNotDetermine, .temporarilyUnavailable:
                 clearAuthenticatedState()
-                return
-            }
-            do {
-                let status = try await cloudKitContainer.accountStatus()
-
-                switch status {
-                case .available:
-                    do {
-                        try await fetchCloudKitUserIdentity()
-                    } catch {
-                        clearAuthenticatedState()
-                    }
-                case .noAccount:
-                    clearAuthenticatedState()
-                case .restricted:
-                    clearAuthenticatedState()
-                case .couldNotDetermine:
-                    clearAuthenticatedState()
-                case .temporarilyUnavailable:
-                    clearAuthenticatedState()
-                @unknown default:
-                    clearAuthenticatedState()
-                }
-            } catch {
+            @unknown default:
                 clearAuthenticatedState()
             }
+        } catch {
+            clearAuthenticatedState()
+            let category = Self.mappedErrorCategory(for: error)
+            updateErrorContext(from: error, category: category)
+            recordDiagnostic(stage: .signInFailed, error: error)
+        }
+    }
+
+    func diagnosticsReportJSON() -> String {
+        if latestDiagnostics == nil {
+            refreshLatestDiagnostics()
         }
 
-        // MARK: - Private Methods
+        guard let latestDiagnostics else {
+            return "{\"error\":\"No diagnostics available\"}"
+        }
 
-        private func fetchCloudKitUserIdentity() async throws {
-            guard let cloudKitContainer else {
-                throw AuthenticationError.cloudKitNotAvailable
-            }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        guard let data = try? encoder.encode(latestDiagnostics),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return "{\"error\":\"Diagnostics encoding failed\"}"
+        }
+
+        return json
+    }
+
+    func clearDiagnosticsHistory() {
+        recentDiagnosticEntries.removeAll()
+        clearErrorContext()
+        lastCKAccountStatusRaw = nil
+        latestDiagnostics = nil
+    }
+
+    // MARK: - Private Methods
+
+    private func fetchCloudKitUserIdentity() async throws {
+        guard let cloudKitContainer else {
+            throw AuthenticationError.cloudKitNotAvailable
+        }
+
+        do {
+            recordDiagnostic(stage: .cloudKitUserFetch)
+
             let userRecordID = try await cloudKitContainer.userRecordID()
             let userID = userRecordID.recordName
 
-            // Update authentication state
+            // Keep no PII in diagnostics: only state transitions, no record name.
             authenticationState = .authenticated(userID: userID)
-
-            // Note: Apple ID credentials are stored separately by Sign in with Apple
-            // We only store the CloudKit user ID for data association
             currentUser = AuthenticatedUser(
                 id: userID,
-                appleUserID: userID, // Simplified for now
-                email: nil, // Will be populated from Sign in with Apple credentials
+                appleUserID: userID,
+                email: nil,
                 displayName: nil,
                 givenName: nil,
                 familyName: nil
             )
+            clearErrorContext()
+            refreshLatestDiagnostics()
+        } catch {
+            recordDiagnostic(stage: .cloudKitUserFetch, error: error)
+            throw error
         }
+    }
 
-        private func handleAppleIDCredential(_ credential: ASAuthorizationAppleIDCredential) async {
-            do {
-                // Fetch CloudKit user identity
-                try await fetchCloudKitUserIdentity()
+    private func handleAppleIDCredential(_ credential: ASAuthorizationAppleIDCredential) async {
+        recordDiagnostic(stage: .authorizationReceived)
 
-                // Update user with Apple ID information
-                if let currentUser {
-                    let updatedUser = AuthenticatedUser(
-                        id: currentUser.id,
-                        appleUserID: credential.user,
-                        email: credential.email,
-                        displayName: [credential.fullName?.givenName, credential.fullName?.familyName]
-                            .compactMap { $0 }
-                            .joined(separator: " "),
-                        givenName: credential.fullName?.givenName,
-                        familyName: credential.fullName?.familyName
-                    )
+        do {
+            try await fetchCloudKitUserIdentity()
 
-                    self.currentUser = updatedUser
-                }
-            } catch {
-                authenticationState = .error(mapSignInError(error))
-            }
-        }
-
-        private func makeCloudKitContainer() -> CKContainer? {
-            guard isCloudKitEnabled() else {
-                return nil
-            }
-            return CKContainer(identifier: Self.containerIdentifier)
-        }
-
-        private func isCloudKitEnabled() -> Bool {
-            if let enabled = Bundle.main.object(forInfoDictionaryKey: "HPCloudKitEnabled") as? Bool {
-                return enabled
-            }
-            return false
-        }
-
-        private func clearAuthenticatedState() {
-            currentUser = nil
-            authenticationState = .unauthenticated
-        }
-
-        private func mapSignInError(_ error: Error) -> AuthenticationError {
-            if let authError = error as? AuthenticationError {
-                return authError
+            if let currentUser {
+                let updatedUser = AuthenticatedUser(
+                    id: currentUser.id,
+                    appleUserID: credential.user,
+                    email: credential.email,
+                    displayName: [credential.fullName?.givenName, credential.fullName?.familyName]
+                        .compactMap { $0 }
+                        .joined(separator: " "),
+                    givenName: credential.fullName?.givenName,
+                    familyName: credential.fullName?.familyName
+                )
+                self.currentUser = updatedUser
             }
 
-            let nsError = error as NSError
-            guard nsError.domain == CKError.errorDomain,
-                  let code = CKError.Code(rawValue: nsError.code)
-            else {
-                return .failed(error)
-            }
+            clearErrorContext()
+            refreshLatestDiagnostics()
+        } catch {
+            let mappedError = mapSignInError(error)
+            let category = Self.mappedErrorCategory(for: error)
+            updateErrorContext(from: error, category: category)
+            authenticationState = .error(mappedError)
+            recordDiagnostic(stage: .signInFailed, error: error)
+        }
+    }
 
-            switch code {
-            case .notAuthenticated, .permissionFailure, .missingEntitlement, .badContainer:
-                return .cloudKitNotAvailable
-            default:
-                return .failed(error)
+    private func mapSignInError(_ error: Error) -> AuthenticationError {
+        if let authError = error as? AuthenticationError {
+            return authError
+        }
+
+        switch Self.mappedErrorCategory(for: error) {
+        case .notAuthenticated,
+             .missingEntitlement,
+             .badContainer,
+             .permissionFailure,
+             .cloudKitNotAvailable:
+            return .cloudKitNotAvailable
+        case .authorizationCancelled:
+            return .cancelled
+        case .authorizationFailed, .genericFailure:
+            return .failed(error)
+        }
+    }
+
+    private func makeCloudKitContainer() -> CKContainer? {
+        guard isCloudKitEnabled() else {
+            return nil
+        }
+        return CKContainer(identifier: Self.containerIdentifier)
+    }
+
+    private func isCloudKitEnabled() -> Bool {
+        if let enabled = Bundle.main.object(forInfoDictionaryKey: "HPCloudKitEnabled") as? Bool {
+            return enabled
+        }
+        return false
+    }
+
+    private func clearAuthenticatedState() {
+        currentUser = nil
+        authenticationState = .unauthenticated
+        refreshLatestDiagnostics()
+    }
+
+    private func clearErrorContext() {
+        lastMappedErrorCategory = nil
+        lastErrorDomain = nil
+        lastErrorCode = nil
+        lastErrorDescription = nil
+        lastReflectedError = nil
+        lastUnderlyingErrorChain = []
+    }
+
+    private func updateErrorContext(from error: Error, category: AuthMappedErrorCategory) {
+        let nsError = error as NSError
+
+        lastMappedErrorCategory = category
+        lastErrorDomain = nsError.domain
+        lastErrorCode = nsError.code
+        lastErrorDescription = nsError.localizedDescription
+        lastReflectedError = String(reflecting: error)
+        lastUnderlyingErrorChain = Self.underlyingErrorChain(from: nsError)
+        refreshLatestDiagnostics()
+    }
+
+    private func recordDiagnostic(stage: AuthDiagnosticStage, error: Error? = nil) {
+        let entry = AuthDiagnosticEntry(
+            timestampISO8601: Self.isoTimestamp(),
+            stage: stage,
+            state: authenticationState.diagnosticState,
+            errorSummary: error.map { Self.errorSummary($0) }
+        )
+
+        recentDiagnosticEntries.append(entry)
+        if recentDiagnosticEntries.count > Self.maxDiagnosticEntries {
+            recentDiagnosticEntries.removeFirst(recentDiagnosticEntries.count - Self.maxDiagnosticEntries)
+        }
+
+        refreshLatestDiagnostics()
+    }
+
+    private func refreshLatestDiagnostics() {
+        latestDiagnostics = AuthDiagnosticsSnapshot(
+            timestampISO8601: Self.isoTimestamp(),
+            appVersion: Self.infoValue(for: "CFBundleShortVersionString"),
+            appBuild: Self.infoValue(for: "CFBundleVersion"),
+            bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            hpCloudKitEnabled: isCloudKitEnabled(),
+            containerIdentifier: Self.containerIdentifier,
+            lastCKAccountStatusRaw: lastCKAccountStatusRaw,
+            authenticationState: authenticationState.diagnosticState,
+            mappedErrorCategory: lastMappedErrorCategory?.rawValue,
+            errorDomain: lastErrorDomain,
+            errorCode: lastErrorCode,
+            errorDescription: lastErrorDescription,
+            reflectedError: lastReflectedError,
+            underlyingErrorChain: lastUnderlyingErrorChain,
+            recentEntries: recentDiagnosticEntries
+        )
+    }
+
+    private static func errorSummary(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "domain=\(nsError.domain) | code=\(nsError.code) | description=\(nsError.localizedDescription)"
+    }
+
+    private static func infoValue(for key: String) -> String {
+        if let value = Bundle.main.object(forInfoDictionaryKey: key) as? String {
+            return value
+        }
+        return "unknown"
+    }
+
+    private static func isoTimestamp(date: Date = Date()) -> String {
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - ASAuthorizationControllerDelegate
+
+extension AuthenticationService: ASAuthorizationControllerDelegate {
+    nonisolated func authorizationController(
+        controller _: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            return
+        }
+
+        _Concurrency.Task { [weak self] in
+            guard let self else { return }
+            await handleAppleIDCredential(credential)
+        }
+    }
+
+    nonisolated func authorizationController(
+        controller _: ASAuthorizationController,
+        didCompleteWithError error: Error
+    ) {
+        _Concurrency.Task { [weak self] in
+            guard let self else { return }
+
+            if let authError = error as? ASAuthorizationError,
+               authError.code == .canceled {
+                await handleAuthorizationCancelled()
+            } else {
+                await handleAuthorizationFailure(error)
             }
         }
     }
 
-    // MARK: - ASAuthorizationControllerDelegate
-
-    extension AuthenticationService: ASAuthorizationControllerDelegate {
-        nonisolated func authorizationController(
-            controller _: ASAuthorizationController,
-            didCompleteWithAuthorization authorization: ASAuthorization
-        ) {
-            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-                return
-            }
-
-            _Concurrency.Task { [weak self] in
-                guard let self else { return }
-                await handleAppleIDCredential(credential)
-            }
-        }
-
-        nonisolated func authorizationController(
-            controller _: ASAuthorizationController,
-            didCompleteWithError error: Error
-        ) {
-            _Concurrency.Task { [weak self] in
-                guard let self else { return }
-
-                if let authError = error as? ASAuthorizationError,
-                   authError.code == .canceled {
-                    await updateAuthenticationState(.unauthenticated)
-                } else {
-                    await updateAuthenticationState(.error(.failed(error)))
-                }
-            }
-        }
-
-        /// Helper to update state from nonisolated context
-        private func updateAuthenticationState(_ newState: AuthenticationState) async {
-            authenticationState = newState
-        }
+    private func handleAuthorizationCancelled() async {
+        authenticationState = .unauthenticated
+        clearErrorContext()
+        recordDiagnostic(stage: .authorizationCancelled)
     }
 
-    // MARK: - ASAuthorizationControllerPresentationContextProviding
-
-    extension AuthenticationService: ASAuthorizationControllerPresentationContextProviding {
-        @MainActor
-        func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-            // Return the key window
-            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                  let window = scene.windows.first
-            else {
-                fatalError("No window found for presenting Sign in with Apple")
-            }
-            return window
-        }
+    private func handleAuthorizationFailure(_ error: Error) async {
+        let mappedError = mapSignInError(error)
+        let category = Self.mappedErrorCategory(for: error)
+        updateErrorContext(from: error, category: category)
+        authenticationState = .error(mappedError)
+        recordDiagnostic(stage: .signInFailed, error: error)
     }
-#else
-    import CloudKit
-    import Foundation
+}
 
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+
+extension AuthenticationService: ASAuthorizationControllerPresentationContextProviding {
     @MainActor
-    final class AuthenticationService: NSObject, ObservableObject {
-        @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
-        @Published private(set) var currentUser: AuthenticatedUser?
+    func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first
+        else {
+            fatalError("No window found for presenting Sign in with Apple")
+        }
+        return window
+    }
+}
+#else
+@MainActor
+final class AuthenticationService: NSObject, ObservableObject {
+    @Published private(set) var authenticationState: AuthenticationState = .unauthenticated
+    @Published private(set) var currentUser: AuthenticatedUser?
+    @Published private(set) var latestDiagnostics: AuthDiagnosticsSnapshot?
 
-        private lazy var cloudKitContainer: CKContainer = .default()
+    private static let containerIdentifier = "iCloud.com.example.familytodo"
+    private var recentDiagnosticEntries: [AuthDiagnosticEntry] = []
+    private static let maxDiagnosticEntries = 20
 
-        override init() {
-            super.init()
+    enum AuthenticationState {
+        case unauthenticated
+        case authenticating
+        case authenticated(userID: String)
+        case error(AuthenticationError)
+    }
+
+    enum AuthenticationError: LocalizedError {
+        case cancelled
+        case failed(Error)
+        case cloudKitNotAvailable
+        case userNotFound
+
+        var errorDescription: String? {
+            switch self {
+            case .cancelled:
+                "Authentication was cancelled"
+            case let .failed(error):
+                "Authentication failed: \(error.localizedDescription)"
+            case .cloudKitNotAvailable:
+                "CloudKit is not available. Please check your iCloud settings."
+            case .userNotFound:
+                "User not found in CloudKit"
+            }
+        }
+    }
+
+    struct AuthenticatedUser: Identifiable {
+        let id: String
+        let appleUserID: String
+        let email: String?
+        let displayName: String?
+        let givenName: String?
+        let familyName: String?
+    }
+
+    override init() {
+        super.init()
+        refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
+    }
+
+    func signInWithApple() {
+        authenticationState = .error(.cloudKitNotAvailable)
+        recordDiagnostic(stage: .signInFailed, error: AuthenticationError.cloudKitNotAvailable)
+        refreshLatestDiagnostics(mappedErrorCategory: .cloudKitNotAvailable, error: AuthenticationError.cloudKitNotAvailable)
+    }
+
+    func signOut() {
+        currentUser = nil
+        authenticationState = .unauthenticated
+        refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
+    }
+
+    func checkCloudKitStatus() async {
+        authenticationState = .unauthenticated
+        recordDiagnostic(stage: .startupStatusCheck)
+        refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
+    }
+
+    func diagnosticsReportJSON() -> String {
+        if latestDiagnostics == nil {
+            refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
         }
 
-        enum AuthenticationState {
-            case unauthenticated
-            case authenticating
-            case authenticated(userID: String)
-            case error(AuthenticationError)
+        guard let latestDiagnostics else {
+            return "{\"error\":\"No diagnostics available\"}"
         }
 
-        enum AuthenticationError: LocalizedError {
-            case cancelled
-            case failed(Error)
-            case cloudKitNotAvailable
-            case userNotFound
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
-            var errorDescription: String? {
-                switch self {
-                case .cancelled:
-                    "Authentication was cancelled"
-                case let .failed(error):
-                    "Authentication failed: \(error.localizedDescription)"
-                case .cloudKitNotAvailable:
-                    "CloudKit is not available. Please check your iCloud settings."
-                case .userNotFound:
-                    "User not found in CloudKit"
-                }
+        guard let data = try? encoder.encode(latestDiagnostics),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return "{\"error\":\"Diagnostics encoding failed\"}"
+        }
+
+        return json
+    }
+
+    func clearDiagnosticsHistory() {
+        recentDiagnosticEntries.removeAll()
+        latestDiagnostics = nil
+    }
+
+    private func recordDiagnostic(stage: AuthDiagnosticStage, error: Error? = nil) {
+        let entry = AuthDiagnosticEntry(
+            timestampISO8601: Self.isoTimestamp(),
+            stage: stage,
+            state: authenticationState.diagnosticState,
+            errorSummary: error.map { Self.errorSummary($0) }
+        )
+
+        recentDiagnosticEntries.append(entry)
+        if recentDiagnosticEntries.count > Self.maxDiagnosticEntries {
+            recentDiagnosticEntries.removeFirst(recentDiagnosticEntries.count - Self.maxDiagnosticEntries)
+        }
+    }
+
+    private func refreshLatestDiagnostics(mappedErrorCategory: AuthMappedErrorCategory?, error: Error?) {
+        let nsError = error.map { $0 as NSError }
+
+        latestDiagnostics = AuthDiagnosticsSnapshot(
+            timestampISO8601: Self.isoTimestamp(),
+            appVersion: Self.infoValue(for: "CFBundleShortVersionString"),
+            appBuild: Self.infoValue(for: "CFBundleVersion"),
+            bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            hpCloudKitEnabled: false,
+            containerIdentifier: Self.containerIdentifier,
+            lastCKAccountStatusRaw: nil,
+            authenticationState: authenticationState.diagnosticState,
+            mappedErrorCategory: mappedErrorCategory?.rawValue,
+            errorDomain: nsError?.domain,
+            errorCode: nsError?.code,
+            errorDescription: nsError?.localizedDescription,
+            reflectedError: error.map(String.init(reflecting:)),
+            underlyingErrorChain: nsError.map(Self.underlyingErrorChain(from:)) ?? [],
+            recentEntries: recentDiagnosticEntries
+        )
+    }
+
+    private static func errorSummary(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "domain=\(nsError.domain) | code=\(nsError.code) | description=\(nsError.localizedDescription)"
+    }
+
+    private static func infoValue(for key: String) -> String {
+        if let value = Bundle.main.object(forInfoDictionaryKey: key) as? String {
+            return value
+        }
+        return "unknown"
+    }
+
+    private static func isoTimestamp(date: Date = Date()) -> String {
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: date)
+    }
+}
+#endif
+
+extension AuthenticationService {
+    static func mappedErrorCategory(for error: Error) -> AuthMappedErrorCategory {
+        if let authError = error as? AuthenticationError {
+            switch authError {
+            case .cancelled:
+                return .authorizationCancelled
+            case .cloudKitNotAvailable:
+                return .cloudKitNotAvailable
+            case .failed, .userNotFound:
+                return .genericFailure
             }
         }
 
-        struct AuthenticatedUser: Identifiable {
-            let id: String
-            let appleUserID: String
-            let email: String?
-            let displayName: String?
-            let givenName: String?
-            let familyName: String?
+        let nsError = error as NSError
+        if nsError.domain == CKError.errorDomain,
+           let code = CKError.Code(rawValue: nsError.code) {
+            switch code {
+            case .notAuthenticated:
+                return .notAuthenticated
+            case .missingEntitlement:
+                return .missingEntitlement
+            case .badContainer:
+                return .badContainer
+            case .permissionFailure:
+                return .permissionFailure
+            default:
+                return .genericFailure
+            }
         }
 
-        func signInWithApple() {
-            authenticationState = .error(.cloudKitNotAvailable)
+        #if !CI
+        if let authorizationError = error as? ASAuthorizationError {
+            if authorizationError.code == .canceled {
+                return .authorizationCancelled
+            }
+            return .authorizationFailed
+        }
+        #endif
+
+        return .genericFailure
+    }
+
+    static func underlyingErrorChain(from nsError: NSError) -> [String] {
+        var chain: [String] = []
+        var currentError: NSError? = nsError
+        var visited = Set<ObjectIdentifier>()
+
+        while let error = currentError {
+            let objectID = ObjectIdentifier(error)
+            if !visited.insert(objectID).inserted {
+                break
+            }
+
+            let summary = "domain=\(error.domain) | code=\(error.code) | description=\(error.localizedDescription)"
+            chain.append(summary)
+
+            if let underlyingNSError = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+                currentError = underlyingNSError
+            } else if let underlyingError = error.userInfo[NSUnderlyingErrorKey] as? Error {
+                currentError = underlyingError as NSError
+            } else {
+                currentError = nil
+            }
         }
 
-        func signOut() {
-            currentUser = nil
-            authenticationState = .unauthenticated
-        }
+        return chain
+    }
+}
 
-        func checkCloudKitStatus() async {
-            authenticationState = .error(.cloudKitNotAvailable)
+private extension AuthenticationService.AuthenticationState {
+    var diagnosticState: String {
+        switch self {
+        case .unauthenticated:
+            return "unauthenticated"
+        case .authenticating:
+            return "authenticating"
+        case .authenticated:
+            return "authenticated"
+        case .error:
+            return "error"
         }
     }
-#endif
+}

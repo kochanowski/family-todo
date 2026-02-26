@@ -1,4 +1,5 @@
 import Combine
+import CloudKit
 @testable import HousePulse
 import XCTest
 
@@ -21,6 +22,7 @@ final class UserSessionTests: XCTestCase {
     private final class TestAuthenticationService: AuthenticationServiceType {
         @Published var authenticationState: AuthenticationService.AuthenticationState = .unauthenticated
         @Published var currentUser: AuthenticationService.AuthenticatedUser?
+        @Published var latestDiagnostics: AuthDiagnosticsSnapshot?
 
         func signInWithApple() {
             authenticationState = .authenticating
@@ -32,6 +34,14 @@ final class UserSessionTests: XCTestCase {
         }
 
         func checkCloudKitStatus() async {}
+
+        func diagnosticsReportJSON() -> String {
+            "{}"
+        }
+
+        func clearDiagnosticsHistory() {
+            latestDiagnostics = nil
+        }
 
         func getChangePublisher() -> AnyPublisher<Void, Never> {
             objectWillChange.map { _ in () }.eraseToAnyPublisher()
@@ -97,5 +107,68 @@ final class UserSessionTests: XCTestCase {
         XCTAssertEqual(session.sessionMode, .signedIn)
         XCTAssertEqual(session.userId, user.id)
         XCTAssertEqual(session.displayName, "Test User")
+    }
+}
+
+@MainActor
+final class AuthenticationServiceDiagnosticsTests: XCTestCase {
+    func testDiagnosticsSnapshotContainsExpectedFieldsWithoutPII() {
+        #if !CI
+        let service = AuthenticationService(cloudKitContainer: nil)
+        #else
+        let service = AuthenticationService()
+        #endif
+
+        service.signInWithApple()
+
+        guard let snapshot = service.latestDiagnostics else {
+            XCTFail("Expected diagnostics snapshot to be available")
+            return
+        }
+
+        XCTAssertFalse(snapshot.containerIdentifier.isEmpty)
+        XCTAssertFalse(snapshot.bundleIdentifier.isEmpty)
+        XCTAssertFalse(snapshot.osVersion.isEmpty)
+        XCTAssertFalse(snapshot.recentEntries.isEmpty)
+        XCTAssertNotNil(snapshot.mappedErrorCategory)
+
+        let report = service.diagnosticsReportJSON()
+        XCTAssertFalse(report.contains("appleUserID"))
+        XCTAssertFalse(report.contains("recordName"))
+        XCTAssertFalse(report.contains("email"))
+    }
+
+    func testMappedErrorCategoryClassifiesCommonCloudKitErrors() {
+        XCTAssertEqual(
+            AuthenticationService.mappedErrorCategory(for: CKError(.notAuthenticated)),
+            .notAuthenticated
+        )
+        XCTAssertEqual(
+            AuthenticationService.mappedErrorCategory(for: CKError(.missingEntitlement)),
+            .missingEntitlement
+        )
+        XCTAssertEqual(
+            AuthenticationService.mappedErrorCategory(for: CKError(.badContainer)),
+            .badContainer
+        )
+        XCTAssertEqual(
+            AuthenticationService.mappedErrorCategory(for: CKError(.permissionFailure)),
+            .permissionFailure
+        )
+    }
+
+    func testDiagnosticsReportJSONIsValidJSON() throws {
+        #if !CI
+        let service = AuthenticationService(cloudKitContainer: nil)
+        #else
+        let service = AuthenticationService()
+        #endif
+        service.signInWithApple()
+
+        let json = service.diagnosticsReportJSON()
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let object = try JSONSerialization.jsonObject(with: data)
+
+        XCTAssertNotNil(object)
     }
 }

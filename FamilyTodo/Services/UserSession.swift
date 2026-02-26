@@ -16,10 +16,13 @@ enum SessionMode: String, Equatable {
 protocol AuthenticationServiceType: ObservableObject {
     var authenticationState: AuthenticationService.AuthenticationState { get }
     var currentUser: AuthenticationService.AuthenticatedUser? { get }
+    var latestDiagnostics: AuthDiagnosticsSnapshot? { get }
 
     func signInWithApple()
     func signOut()
     func checkCloudKitStatus() async
+    func diagnosticsReportJSON() -> String
+    func clearDiagnosticsHistory()
 
     /// Provide type-erased publisher for observation
     func getChangePublisher() -> AnyPublisher<Void, Never>
