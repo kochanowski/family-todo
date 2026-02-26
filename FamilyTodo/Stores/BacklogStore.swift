@@ -446,7 +446,7 @@ final class BacklogStore: ObservableObject {
             _ = try await cloudKit.saveBacklogItem(updatedItem)
         } catch {
             self.error = error
-            await loadData()
+            // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
         }
     }
 

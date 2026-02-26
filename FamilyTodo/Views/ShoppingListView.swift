@@ -788,6 +788,8 @@ struct RestockSheet: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(themeStore.canvasColor)
                     .environment(\.font, themeStore.font(for: .listRowTitle))
                 }
             }
@@ -832,8 +834,9 @@ struct RestockSheet: View {
                 )
             }
         }
+        .background(themeStore.canvasColor.ignoresSafeArea())
         .presentationDetents([.medium, .large])
-        .presentationBackground(.ultraThinMaterial)
+        .presentationBackground(themeStore.canvasColor)
     }
 }
 

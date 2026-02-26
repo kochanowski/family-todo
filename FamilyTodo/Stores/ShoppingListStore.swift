@@ -227,8 +227,7 @@ final class ShoppingListStore: ObservableObject {
             }
         } catch {
             self.error = error
-            // Keep in cache with pending status
-            await loadItems()
+            // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
         }
     }
 

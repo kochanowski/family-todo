@@ -227,6 +227,13 @@ actor CloudKitManager {
         return sharedZoneContext.zoneByHouseholdId[householdId]
     }
 
+    private func clearCachedZone(for householdId: UUID?) {
+        guard let householdId else { return }
+        sharedZoneContext.zoneByHouseholdId.removeValue(forKey: householdId)
+        persistSharedZoneContext()
+        print("CloudKitScope: cleared cached zone for household \(householdId)")
+    }
+
     private func allSharedZoneIDs() async throws -> [CKRecordZone.ID] {
         let zones = try await sharedDatabase.allRecordZones()
         let zoneIDs = zones.map(\.zoneID)
@@ -236,6 +243,33 @@ actor CloudKitManager {
             print("CloudKitScope: resolved shared zones [\(names)]")
         }
         return zoneIDs
+    }
+
+    private func isRetryableZoneResolutionError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+
+        switch ckError.code {
+        case .zoneNotFound, .unknownItem, .permissionFailure:
+            return true
+        case .partialFailure:
+            if let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+                return partialErrors.values.contains { isRetryableZoneResolutionError($0) }
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func resolveSharedZone(for householdId: UUID) async throws -> CKRecordZone.ID? {
+        if let cachedZone = resolveCachedZone(for: householdId) {
+            return cachedZone
+        }
+
+        let householdPredicate = NSPredicate(format: "id == %@", householdId.uuidString)
+        let householdQuery = CKQuery(recordType: "Household", predicate: householdPredicate)
+        _ = try await queryRecords(householdQuery, householdId: householdId)
+        return resolveCachedZone(for: householdId)
     }
 
     private func queryRecords(
@@ -256,24 +290,70 @@ actor CloudKitManager {
             return records
 
         case .participantShared:
-            var zoneIDs: [CKRecordZone.ID] = []
-            if let cachedZone = resolveCachedZone(for: householdId) {
-                zoneIDs = [cachedZone]
+            let cachedZone = resolveCachedZone(for: householdId)
+            let initialZoneIDs: [CKRecordZone.ID]
+            if let cachedZone {
+                initialZoneIDs = [cachedZone]
             } else {
-                zoneIDs = try await allSharedZoneIDs()
+                initialZoneIDs = try await allSharedZoneIDs()
             }
 
             var aggregatedByRecordName: [String: CKRecord] = [:]
-            for zoneID in zoneIDs {
+            var needsZoneRefresh = false
+
+            for zoneID in initialZoneIDs {
                 print("CloudKitScope: query participantShared \(query.recordType) in zone \(zoneID.zoneName)")
-                let (results, _) = try await db.records(matching: query, inZoneWith: zoneID)
-                for (_, result) in results {
-                    guard case let .success(record) = result else { continue }
-                    aggregatedByRecordName[record.recordID.recordName] = record
+                do {
+                    let (results, _) = try await db.records(matching: query, inZoneWith: zoneID)
+                    for (_, result) in results {
+                        guard case let .success(record) = result else { continue }
+                        aggregatedByRecordName[record.recordID.recordName] = record
+                    }
+                } catch {
+                    if isRetryableZoneResolutionError(error) {
+                        needsZoneRefresh = true
+                        print(
+                            "CloudKitScope: query failed in zone \(zoneID.zoneName). scheduling shared-zone refresh"
+                        )
+                        continue
+                    }
+                    throw error
                 }
             }
 
-            let records = Array(aggregatedByRecordName.values)
+            var records = Array(aggregatedByRecordName.values)
+
+            if let cachedZone, (records.isEmpty || needsZoneRefresh) {
+                clearCachedZone(for: householdId)
+                var fallbackZones = try await allSharedZoneIDs()
+                fallbackZones.removeAll(where: { $0 == cachedZone })
+
+                if !fallbackZones.isEmpty {
+                    print("CloudKitScope: retrying participantShared query across refreshed zones")
+                    var fallbackByRecordName: [String: CKRecord] = [:]
+                    for zoneID in fallbackZones {
+                        print(
+                            "CloudKitScope: query participantShared \(query.recordType) fallback zone \(zoneID.zoneName)"
+                        )
+                        do {
+                            let (results, _) = try await db.records(matching: query, inZoneWith: zoneID)
+                            for (_, result) in results {
+                                guard case let .success(record) = result else { continue }
+                                fallbackByRecordName[record.recordID.recordName] = record
+                            }
+                        } catch {
+                            if isRetryableZoneResolutionError(error) {
+                                continue
+                            }
+                            throw error
+                        }
+                    }
+                    if !fallbackByRecordName.isEmpty {
+                        records = Array(fallbackByRecordName.values)
+                    }
+                }
+            }
+
             records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId) }
             return records
         }
@@ -364,11 +444,7 @@ actor CloudKitManager {
             zoneID = resolveZoneForRecordName(record.recordID.recordName)
         }
         if zoneID == nil, let householdId {
-            // Query household in each zone and lock context.
-            let householdPredicate = NSPredicate(format: "id == %@", householdId.uuidString)
-            let householdQuery = CKQuery(recordType: "Household", predicate: householdPredicate)
-            _ = try await queryRecords(householdQuery, householdId: householdId)
-            zoneID = resolveCachedZone(for: householdId)
+            zoneID = try await resolveSharedZone(for: householdId)
         }
 
         guard let zoneID else { return record }
@@ -383,6 +459,37 @@ actor CloudKitManager {
             rewritten[key] = record[key]
         }
         return rewritten
+    }
+
+    private func saveRecordWithZoneRecovery(
+        _ record: CKRecord,
+        householdId: UUID?
+    ) async throws -> CKRecord {
+        let db = await activeHouseholdDatabase
+        let scopedRecord = try await recordForSave(record, householdId: householdId)
+        do {
+            let saved = try await db.save(scopedRecord)
+            rememberRecordZone(saved, explicitHouseholdId: householdId)
+            return saved
+        } catch {
+            guard householdScope == .participantShared,
+                  let householdId,
+                  isRetryableZoneResolutionError(error)
+            else {
+                throw error
+            }
+
+            print(
+                "CloudKitScope: save \(record.recordType) failed in participant scope, retrying with refreshed zone context"
+            )
+            clearCachedZone(for: householdId)
+            _ = try await resolveSharedZone(for: householdId)
+
+            let retryRecord = try await recordForSave(record, householdId: householdId)
+            let saved = try await db.save(retryRecord)
+            rememberRecordZone(saved, explicitHouseholdId: householdId)
+            return saved
+        }
     }
 
     enum CloudKitManagerError: LocalizedError {
@@ -418,11 +525,7 @@ actor CloudKitManager {
 
     func saveHousehold(_ household: Household) async throws -> CKRecord {
         let record = householdRecord(from: household)
-        let scopedRecord = try await recordForSave(record, householdId: household.id)
-        let db = await activeHouseholdDatabase
-        let saved = try await db.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: household.id)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: household.id)
     }
 
     func fetchHousehold(id: UUID) async throws -> Household {
@@ -438,11 +541,7 @@ actor CloudKitManager {
 
     func saveMember(_ member: Member) async throws -> CKRecord {
         let record = memberRecord(from: member)
-        let scopedRecord = try await recordForSave(record, householdId: member.householdId)
-        let db = await activeHouseholdDatabase
-        let saved = try await db.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: member.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: member.householdId)
     }
 
     func fetchMember(id: UUID) async throws -> Member {
@@ -495,10 +594,7 @@ actor CloudKitManager {
 
     func saveArea(_ area: Area) async throws -> CKRecord {
         let record = areaRecord(from: area)
-        let scopedRecord = try await recordForSave(record, householdId: area.householdId)
-        let saved = try await activeHouseholdDatabase.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: area.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: area.householdId)
     }
 
     func fetchArea(id: UUID) async throws -> Area {
@@ -531,10 +627,7 @@ actor CloudKitManager {
 
     func saveTask(_ task: Task) async throws -> CKRecord {
         let record = taskRecord(from: task)
-        let scopedRecord = try await recordForSave(record, householdId: task.householdId)
-        let saved = try await activeHouseholdDatabase.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: task.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: task.householdId)
     }
 
     func fetchTask(id: UUID) async throws -> Task {
@@ -599,10 +692,7 @@ actor CloudKitManager {
 
     func saveRecurringChore(_ chore: RecurringChore) async throws -> CKRecord {
         let record = recurringChoreRecord(from: chore)
-        let scopedRecord = try await recordForSave(record, householdId: chore.householdId)
-        let saved = try await activeHouseholdDatabase.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: chore.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: chore.householdId)
     }
 
     func fetchRecurringChore(id: UUID) async throws -> RecurringChore {
@@ -635,10 +725,7 @@ actor CloudKitManager {
 
     func saveShoppingItem(_ item: ShoppingItem) async throws -> CKRecord {
         let record = shoppingItemRecord(from: item)
-        let scopedRecord = try await recordForSave(record, householdId: item.householdId)
-        let saved = try await activeHouseholdDatabase.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: item.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: item.householdId)
     }
 
     func fetchShoppingItem(id: UUID) async throws -> ShoppingItem {
@@ -671,10 +758,7 @@ actor CloudKitManager {
 
     func saveBacklogCategory(_ category: BacklogCategory) async throws -> CKRecord {
         let record = backlogCategoryRecord(from: category)
-        let scopedRecord = try await recordForSave(record, householdId: category.householdId)
-        let saved = try await activeHouseholdDatabase.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: category.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: category.householdId)
     }
 
     func fetchBacklogCategory(id: UUID) async throws -> BacklogCategory {
@@ -707,10 +791,7 @@ actor CloudKitManager {
 
     func saveBacklogItem(_ item: BacklogItem) async throws -> CKRecord {
         let record = backlogItemRecord(from: item)
-        let scopedRecord = try await recordForSave(record, householdId: item.householdId)
-        let saved = try await activeHouseholdDatabase.save(scopedRecord)
-        rememberRecordZone(saved, explicitHouseholdId: item.householdId)
-        return saved
+        return try await saveRecordWithZoneRecovery(record, householdId: item.householdId)
     }
 
     func fetchBacklogItem(id: UUID) async throws -> BacklogItem {
