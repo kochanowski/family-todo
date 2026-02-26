@@ -75,7 +75,11 @@ expected_types_file="$tmp_dir/expected-types.txt"
 actual_types_file="$tmp_dir/actual-types.txt"
 
 jq -r '.recordTypes[].name' "$SCHEMA_JSON" | sort -u > "$expected_types_file"
-awk '/^RECORD TYPE / {print $3}' "$prod_ckdb_file" | sort -u > "$actual_types_file"
+awk '
+  match($0, /^[[:space:]]*RECORD TYPE[[:space:]]+([A-Za-z0-9_]+)/, captures) {
+    print captures[1]
+  }
+' "$prod_ckdb_file" | sort -u > "$actual_types_file"
 
 missing_types="$(comm -23 "$expected_types_file" "$actual_types_file" || true)"
 
