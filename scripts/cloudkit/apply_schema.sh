@@ -152,7 +152,7 @@ else
       expected_types_file="$tmp_dir/expected-types.txt"
       actual_types_file="$tmp_dir/actual-types.txt"
       jq -r '.recordTypes[].name' "$SCHEMA_JSON" | sort -u > "$expected_types_file"
-      awk '/^[[:space:]]*RECORD TYPE[[:space:]]+/ {print $3}' "$dev_export_ckdb_file" | sort -u > "$actual_types_file"
+      awk '/^[[:space:]]*RECORD TYPE[[:space:]]+/ {name=$3; gsub(/"/, "", name); gsub(/\r/, "", name); print name}' "$dev_export_ckdb_file" | sort -u > "$actual_types_file"
 
       missing_contract_types="$(comm -23 "$expected_types_file" "$actual_types_file" || true)"
       if [[ -n "$missing_contract_types" ]]; then

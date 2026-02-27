@@ -82,8 +82,8 @@ actual_dev_types_file="$tmp_dir/actual-development-types.txt"
 required_types_file="$tmp_dir/required-types.txt"
 
 jq -r '.recordTypes[].name' "$SCHEMA_JSON" | sort -u > "$expected_types_file"
-awk '/^[[:space:]]*RECORD TYPE[[:space:]]+/ {print $3}' "$prod_ckdb_file" | sort -u > "$actual_types_file"
-awk '/^[[:space:]]*RECORD TYPE[[:space:]]+/ {print $3}' "$dev_ckdb_file" | sort -u > "$actual_dev_types_file"
+awk '/^[[:space:]]*RECORD TYPE[[:space:]]+/ {name=$3; gsub(/"/, "", name); gsub(/\r/, "", name); print name}' "$prod_ckdb_file" | sort -u > "$actual_types_file"
+awk '/^[[:space:]]*RECORD TYPE[[:space:]]+/ {name=$3; gsub(/"/, "", name); gsub(/\r/, "", name); print name}' "$dev_ckdb_file" | sort -u > "$actual_dev_types_file"
 {
   cat "$expected_types_file"
   tr ',' '\n' <<<"$REQUIRED_SYSTEM_TYPES" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d'
