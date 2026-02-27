@@ -76,7 +76,8 @@ required_map='{
   "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
   "ShoppingItem": ["id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
   "BacklogCategory": ["id", "householdId", "title", "sortOrder", "createdAt", "updatedAt"],
-  "BacklogItem": ["id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"]
+  "BacklogItem": ["id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"],
+  "InviteToken": ["code", "householdId", "shareURL", "createdAt", "expiresAt", "isRevoked", "usesCount", "lastRedeemedAt"]
 }'
 
 required_indexes='{
@@ -87,7 +88,8 @@ required_indexes='{
   "RecurringChore": { "query": ["householdId"], "sort": ["title"] },
   "ShoppingItem": { "query": ["householdId"], "sort": ["sortOrder"] },
   "BacklogCategory": { "query": ["householdId"], "sort": ["sortOrder"] },
-  "BacklogItem": { "query": ["householdId", "categoryId"], "sort": ["createdAt"] }
+  "BacklogItem": { "query": ["householdId", "categoryId"], "sort": ["createdAt"] },
+  "InviteToken": { "query": ["code", "householdId", "isRevoked", "expiresAt"], "sort": ["createdAt"] }
 }'
 
 errors=()

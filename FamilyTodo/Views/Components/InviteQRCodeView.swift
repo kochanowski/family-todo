@@ -8,6 +8,7 @@ struct InviteQRCodeView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var inviteURL: URL?
+    @State private var inviteCode: String?
     @State private var isLoading = true
     @State private var errorMessage: String?
 
@@ -37,6 +38,17 @@ struct InviteQRCodeView: View {
                         Text("Scan this QR code to join household")
                             .font(.headline)
 
+                        if let inviteCode {
+                            VStack(spacing: 8) {
+                                Text("Invite code")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(inviteCode)
+                                    .font(.system(size: 30, weight: .bold, design: .monospaced))
+                                    .textSelection(.enabled)
+                            }
+                        }
+
                         Text(inviteURL.absoluteString)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -44,13 +56,25 @@ struct InviteQRCodeView: View {
                             .textSelection(.enabled)
                             .padding(.horizontal)
 
-                        Button {
-                            UIPasteboard.general.string = inviteURL.absoluteString
-                        } label: {
-                            Label("Copy invite link", systemImage: "doc.on.doc")
-                                .frame(maxWidth: .infinity)
+                        VStack(spacing: 10) {
+                            if let inviteCode {
+                                Button {
+                                    UIPasteboard.general.string = inviteCode
+                                } label: {
+                                    Label("Copy invite code", systemImage: "number")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+
+                            Button {
+                                UIPasteboard.general.string = inviteURL.absoluteString
+                            } label: {
+                                Label("Copy invite link", systemImage: "doc.on.doc")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.borderedProminent)
                         .padding(.horizontal)
                     }
                     .padding(.vertical)
@@ -77,6 +101,7 @@ struct InviteQRCodeView: View {
 
         do {
             inviteURL = try await householdStore.fetchInviteURL()
+            inviteCode = try? await householdStore.fetchOrCreateInviteCode()
             errorMessage = nil
         } catch {
             errorMessage = "Could not prepare invite. Check CloudKit diagnostics in Profile."

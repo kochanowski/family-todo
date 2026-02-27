@@ -17,6 +17,7 @@ class HouseholdStore: ObservableObject {
     @Published var isLoading = false
     @Published var error: Error?
     @Published var share: CKShare?
+    @Published var activeInviteCode: String?
 
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
@@ -231,9 +232,42 @@ class HouseholdStore: ObservableObject {
         throw CloudKitManager.CloudKitManagerError.shareNotCreated
     }
 
+    func fetchOrCreateInviteCode() async throws -> String {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+        guard syncMode == .cloud else {
+            throw HouseholdError.cloudSyncRequired
+        }
+
+        if let activeInviteCode {
+            do {
+                let token = try await cloudKit.fetchInviteToken(code: activeInviteCode)
+                if token.householdId == household.id, token.isActive() {
+                    self.activeInviteCode = token.code
+                    return token.code
+                }
+            } catch {
+                // Token may no longer exist or be inactive - fall through and recreate.
+            }
+        }
+
+        let token = try await cloudKit.createInviteCode(for: household)
+        activeInviteCode = token.code
+        return token.code
+    }
+
     // MARK: - Join Household
 
     func joinHousehold(inviteCode: String, userId: String, displayName: String) async throws {
+        try await joinHousehold(
+            withInviteInput: inviteCode,
+            userId: userId,
+            displayName: displayName
+        )
+    }
+
+    func joinHousehold(withInviteInput input: String, userId: String, displayName: String) async throws {
         isLoading = true
         defer { isLoading = false }
 
@@ -244,10 +278,15 @@ class HouseholdStore: ObservableObject {
         let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
-        await cloudKit.setHouseholdScope(.participantShared)
-
-        // Accept the share using the invite code (CloudKit share URL)
-        let household = try await cloudKit.acceptShare(inviteCode: inviteCode)
+        let normalizedInvite = try InviteInputNormalizer.normalizeInput(input)
+        let isInviteCodeFlow = InviteInputNormalizer.normalizeInviteCodeToken(normalizedInvite.inviteCode) != nil
+        let household: Household
+        if isInviteCodeFlow {
+            household = try await cloudKit.redeemInviteCode(normalizedInvite.inviteCode)
+        } else {
+            await cloudKit.setHouseholdScope(.participantShared)
+            household = try await cloudKit.acceptShare(inviteCode: normalizedInvite.inviteCode)
+        }
         await cloudKit.setHouseholdScope(.participantShared)
 
         try await upsertMembership(
@@ -504,6 +543,7 @@ class HouseholdStore: ObservableObject {
     func clearCurrentHousehold() {
         currentHousehold = nil
         share = nil
+        activeInviteCode = nil
         activeContainer = nil
         activeShare = nil
         _ = _Concurrency.Task { [cloudKit] in

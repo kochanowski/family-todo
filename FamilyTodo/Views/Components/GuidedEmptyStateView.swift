@@ -9,7 +9,8 @@ struct GuidedEmptyStateView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var showCreateFlow = false
     @State private var showJoinSheet = false
-    @State private var joinCode = ""
+    @State private var joinInput = ""
+    @State private var joinInviteCode = ""
     @State private var isJoining = false
     @State private var joinErrorMessage: String?
     @State private var pendingCustomJoinInviteCode: String?
@@ -95,10 +96,11 @@ struct GuidedEmptyStateView: View {
         }
         .sheet(isPresented: $showJoinSheet) {
             HouseholdJoinSheet(
-                joinCode: $joinCode,
+                inviteCodeToken: $joinInviteCode,
+                inviteLink: $joinInput,
                 onJoin: joinHousehold,
                 onPasteFromClipboard: {
-                    joinCode = UIPasteboard.general.string ?? ""
+                    joinInput = UIPasteboard.general.string ?? ""
                 }
             )
             .presentationDetents([.medium])
@@ -140,7 +142,8 @@ struct GuidedEmptyStateView: View {
             joinErrorMessage = "Could not determine your account identity."
             return
         }
-        guard !joinCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let rawInviteInput = preferredJoinInput()
+        guard !rawInviteInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !isJoining else { return }
 
         isJoining = true
@@ -148,7 +151,7 @@ struct GuidedEmptyStateView: View {
 
         _Concurrency.Task {
             do {
-                let normalizedInvite = try InviteInputNormalizer.normalizeInput(joinCode)
+                let normalizedInvite = try InviteInputNormalizer.normalizeInput(rawInviteInput)
                 if normalizedInvite.requiresConfirmation {
                     pendingCustomJoinInviteCode = normalizedInvite.inviteCode
                     showCustomJoinConfirmation = true
@@ -192,7 +195,7 @@ struct GuidedEmptyStateView: View {
     private func performJoinHousehold(inviteCode: String, userId: String) async throws {
         householdStore.setSyncMode(userSession.syncMode)
         try await householdStore.joinHousehold(
-            inviteCode: inviteCode,
+            withInviteInput: inviteCode,
             userId: userId,
             displayName: fallbackDisplayNameForMembership()
         )
@@ -201,9 +204,17 @@ struct GuidedEmptyStateView: View {
             userSession.setCurrentHousehold(household.id)
         }
 
-        joinCode = ""
+        joinInput = ""
+        joinInviteCode = ""
         showJoinSheet = false
         onboardingState.completeHouseholdSetup(withHousehold: true)
+    }
+
+    private func preferredJoinInput() -> String {
+        if let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode) {
+            return normalizedCode
+        }
+        return joinInput
     }
 
     private func fallbackDisplayNameForMembership() -> String {

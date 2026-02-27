@@ -24,13 +24,13 @@ final class InviteInputNormalizerTests: XCTestCase {
     }
 
     func testNormalizeAcceptsShortCode() throws {
-        let normalized = try InviteInputNormalizer.normalize("ABCD1234")
-        XCTAssertEqual(normalized, "https://www.icloud.com/share/ABCD1234")
+        let normalized = try InviteInputNormalizer.normalize(" a7b9xq ")
+        XCTAssertEqual(normalized, "A7B9XQ")
     }
 
     func testNormalizeAcceptsCustomHousepulseDeepLinkWithCode() throws {
-        let normalized = try InviteInputNormalizer.normalize("housepulse://join/ABCD1234")
-        XCTAssertEqual(normalized, "https://www.icloud.com/share/ABCD1234")
+        let normalized = try InviteInputNormalizer.normalize("housepulse://join/a7b9xq")
+        XCTAssertEqual(normalized, "A7B9XQ")
     }
 
     func testNormalizeAcceptsCustomHousepulseDeepLinkWithURLPayload() throws {
@@ -40,12 +40,35 @@ final class InviteInputNormalizerTests: XCTestCase {
     }
 
     func testNormalizeInputMarksCustomDeepLinkForConfirmation() throws {
-        let normalized = try InviteInputNormalizer.normalizeInput("housepulse://join/ABCD1234")
-        XCTAssertEqual(normalized.kind, .customScheme)
+        let normalized = try InviteInputNormalizer.normalizeInput("housepulse://join/A7B9XQ")
+        XCTAssertEqual(normalized.inviteCode, "A7B9XQ")
         XCTAssertTrue(normalized.requiresConfirmation)
+    }
+
+    func testNormalizeAcceptsCustomHousepulseDeepLinkWithBase64URLPayload() throws {
+        let shareURL = "https://www.icloud.com/share/abcd1234"
+        let payload = Data(shareURL.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+
+        let normalized = try InviteInputNormalizer.normalize("housepulse://join?u=\(payload)")
+        XCTAssertEqual(normalized, shareURL)
     }
 
     func testNormalizeRejectsEmptyValue() {
         XCTAssertThrowsError(try InviteInputNormalizer.normalize("   \n  "))
+    }
+
+    func testNormalizeInviteCodeTokenRejectsInvalidLengthAndCharacters() {
+        XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("AB12"))
+        XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("AB12-3"))
+        XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("AB12C34"))
+        XCTAssertEqual(InviteInputNormalizer.normalizeInviteCodeToken("ab12c"), "AB12C")
+    }
+
+    func testNormalizedURLRejectsShortCodeValue() {
+        XCTAssertThrowsError(try InviteInputNormalizer.normalizedURL(from: "A7B9XQ"))
     }
 }

@@ -151,6 +151,23 @@
         "query": ["householdId", "categoryId"],
         "sort": ["createdAt"]
       }
+    },
+    {
+      "name": "InviteToken",
+      "fields": [
+        { "name": "code", "type": "String", "queryable": true, "sortable": false },
+        { "name": "householdId", "type": "String", "queryable": true, "sortable": false },
+        { "name": "shareURL", "type": "String", "queryable": false, "sortable": false },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": true },
+        { "name": "expiresAt", "type": "Date", "queryable": true, "sortable": false },
+        { "name": "isRevoked", "type": "Int64", "queryable": true, "sortable": false },
+        { "name": "usesCount", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "lastRedeemedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["code", "householdId", "isRevoked", "expiresAt"],
+        "sort": ["createdAt"]
+      }
     }
   ]
 }

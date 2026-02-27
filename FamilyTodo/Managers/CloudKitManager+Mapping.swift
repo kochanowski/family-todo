@@ -464,4 +464,56 @@ extension CloudKitManager {
             updatedAt: updatedAt
         )
     }
+
+    // MARK: - InviteToken Mapping
+
+    func inviteTokenRecord(from token: InviteToken) -> CKRecord {
+        let record = CKRecord(
+            recordType: "InviteToken",
+            recordID: CKRecord.ID(recordName: token.id)
+        )
+        record["code"] = token.code as CKRecordValue
+        record["householdId"] = token.householdId.uuidString as CKRecordValue
+        record["shareURL"] = token.shareURL as CKRecordValue
+        record["createdAt"] = token.createdAt as CKRecordValue
+        record["expiresAt"] = token.expiresAt as CKRecordValue
+        record["isRevoked"] = (token.isRevoked ? 1 : 0) as CKRecordValue
+        record["usesCount"] = Int64(token.usesCount) as CKRecordValue
+        if let lastRedeemedAt = token.lastRedeemedAt {
+            record["lastRedeemedAt"] = lastRedeemedAt as CKRecordValue
+        }
+        return record
+    }
+
+    func inviteToken(from record: CKRecord) throws -> InviteToken {
+        guard
+            let code = record["code"] as? String,
+            let householdRaw = record["householdId"] as? String,
+            let householdId = UUID(uuidString: householdRaw),
+            let shareURL = record["shareURL"] as? String,
+            let createdAt = record["createdAt"] as? Date,
+            let expiresAt = record["expiresAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        let isRevokedRaw =
+            record["isRevoked"] as? Int64
+                ?? Int64(record["isRevoked"] as? Int ?? 0)
+        let usesCountRaw =
+            record["usesCount"] as? Int64
+                ?? Int64(record["usesCount"] as? Int ?? 0)
+
+        return InviteToken(
+            id: record.recordID.recordName,
+            code: code,
+            householdId: householdId,
+            shareURL: shareURL,
+            createdAt: createdAt,
+            expiresAt: expiresAt,
+            isRevoked: isRevokedRaw == 1,
+            usesCount: max(Int(usesCountRaw), 0),
+            lastRedeemedAt: record["lastRedeemedAt"] as? Date
+        )
+    }
 }

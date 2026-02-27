@@ -2,8 +2,28 @@ import CloudKit
 import SwiftData
 import SwiftUI
 
+@MainActor
+final class MemberManagementUIState: ObservableObject {
+    enum Route: Identifiable {
+        case shareInvite(share: CKShare, container: CKContainer)
+        case inviteQR
+
+        var id: String {
+            switch self {
+            case let .shareInvite(share, _):
+                "share-\(share.recordID.recordName)"
+            case .inviteQR:
+                "invite-qr"
+            }
+        }
+    }
+
+    @Published var route: Route?
+}
+
 struct MemberManagementView: View {
     @StateObject private var memberStore: MemberStore
+    @StateObject private var uiState = MemberManagementUIState()
     @EnvironmentObject var householdStore: HouseholdStore
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
@@ -21,10 +41,6 @@ struct MemberManagementView: View {
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
     @State private var isPreparingShareInvite = false
-    @State private var preparedShare: CKShare?
-    @State private var preparedContainer: CKContainer?
-    @State private var showShareInvite = false
-    @State private var showInviteQR = false
 
     private var currentUserIsOwner: Bool {
         guard let userId = userSession.userId else { return false }
@@ -67,6 +83,15 @@ struct MemberManagementView: View {
                     Button("OK") {}
                 } message: {
                     Text(errorMessage)
+                }
+                .sheet(item: $uiState.route) { route in
+                    switch route {
+                    case let .shareInvite(share, container):
+                        ShareInviteView(share: share, container: container)
+                    case .inviteQR:
+                        InviteQRCodeView()
+                            .environmentObject(householdStore)
+                    }
                 }
         }
         .task {
@@ -135,29 +160,11 @@ struct MemberManagementView: View {
                 .disabled(isPreparingShareInvite)
 
                 Button {
-                    showInviteQR = true
+                    uiState.route = .inviteQR
                 } label: {
                     Label("Show Invite QR", systemImage: "qrcode")
                 }
                 .disabled(isPreparingShareInvite)
-            }
-            .sheet(isPresented: $showShareInvite, onDismiss: {
-                preparedShare = nil
-                preparedContainer = nil
-            }) {
-                if let preparedShare, let preparedContainer {
-                    ShareInviteView(share: preparedShare, container: preparedContainer)
-                } else {
-                    ContentUnavailableView(
-                        "Invite unavailable",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text("Could not prepare household invite. Check diagnostics and try again.")
-                    )
-                }
-            }
-            .sheet(isPresented: $showInviteQR) {
-                InviteQRCodeView()
-                    .environmentObject(householdStore)
             }
         }
     }
@@ -228,9 +235,8 @@ struct MemberManagementView: View {
 
         do {
             let (share, container) = try await householdStore.createShare()
-            preparedShare = share
-            preparedContainer = container
-            showShareInvite = true
+            _ = try? await householdStore.fetchOrCreateInviteCode()
+            uiState.route = .shareInvite(share: share, container: container)
         } catch {
             errorMessage = error.localizedDescription
             showErrorAlert = true

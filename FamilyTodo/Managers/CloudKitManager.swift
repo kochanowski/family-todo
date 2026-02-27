@@ -49,6 +49,9 @@ actor CloudKitManager {
 
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
+    private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+    private static let inviteCodeLength = 6
+    private static let inviteCodeMaxAttempts = 12
 
     /// Gets the shared container, must call ensureReady() first
     private var container: CKContainer {
@@ -72,6 +75,12 @@ actor CloudKitManager {
     private var sharedDatabase: CKDatabase {
         get async {
             await container.sharedCloudDatabase
+        }
+    }
+
+    private var publicDatabase: CKDatabase {
+        get async {
+            await container.publicCloudDatabase
         }
     }
 
@@ -269,6 +278,14 @@ actor CloudKitManager {
         _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.clear()
         }
+    }
+
+    nonisolated static func generateInviteCode(length: Int = 6) -> String {
+        let resolvedLength = max(5, length)
+        var generator = SystemRandomNumberGenerator()
+        return String((0..<resolvedLength).map { _ in
+            inviteCodeAlphabet.randomElement(using: &generator) ?? "A"
+        })
     }
 
     private func ownerZoneID(for householdId: UUID) -> CKRecordZone.ID {
@@ -733,6 +750,11 @@ actor CloudKitManager {
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord
         case shareNotCreated
+        case inviteCodeInvalid
+        case inviteCodeNotFound
+        case inviteCodeExpired
+        case inviteCodeRevoked
+        case inviteCodeUnavailable
         case networkUnavailable
         case notAuthenticated
         case quotaExceeded
@@ -745,6 +767,16 @@ actor CloudKitManager {
                 "Invalid record data"
             case .shareNotCreated:
                 "Failed to create share"
+            case .inviteCodeInvalid:
+                "The invite code is invalid."
+            case .inviteCodeNotFound:
+                "Invite code was not found."
+            case .inviteCodeExpired:
+                "This invite code has expired."
+            case .inviteCodeRevoked:
+                "This invite code is no longer active."
+            case .inviteCodeUnavailable:
+                "Could not generate a unique invite code. Try again."
             case .networkUnavailable:
                 "No internet connection. Changes will sync when online."
             case .notAuthenticated:
@@ -1415,6 +1447,172 @@ actor CloudKitManager {
     /// Get share URL for inviting members
     func getShareURL(for householdId: UUID) async throws -> URL? {
         try await fetchShare(for: householdId)?.url
+    }
+
+    // MARK: - Invite Code (Public DB Fallback)
+
+    private func fetchInviteTokenRecordIfExists(
+        code: String,
+        database: CKDatabase
+    ) async throws -> CKRecord? {
+        let recordID = CKRecord.ID(recordName: code)
+        do {
+            return try await database.record(for: recordID)
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            return nil
+        }
+    }
+
+    func createInviteCode(for household: Household) async throws -> InviteToken {
+        try await checkAvailability()
+        setHouseholdScope(.ownerPrivate)
+
+        var stage = "inviteCode.create.ensureShare"
+        do {
+            let share = try await createShare(for: household)
+            guard let shareURL = share.url else {
+                let error = CloudKitManagerError.shareNotCreated
+                recordCloudKitFailure(error, operation: stage)
+                throw error
+            }
+
+            stage = "inviteCode.create.lookupExisting"
+            let db = await publicDatabase
+            let now = Date()
+            let existingPredicate = NSPredicate(
+                format: "householdId == %@ AND isRevoked == %@",
+                household.id.uuidString,
+                NSNumber(value: Int64(0))
+            )
+            let existingQuery = CKQuery(recordType: "InviteToken", predicate: existingPredicate)
+            existingQuery.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            let (existingResults, _) = try await db.records(matching: existingQuery)
+            for (_, result) in existingResults {
+                guard case let .success(record) = result else { continue }
+                let token = try inviteToken(from: record)
+                if token.isActive(at: now) {
+                    clearCloudKitFailure()
+                    return token
+                }
+            }
+
+            stage = "inviteCode.create.save"
+            for _ in 0..<Self.inviteCodeMaxAttempts {
+                let code = Self.generateInviteCode(length: Self.inviteCodeLength)
+                if try await fetchInviteTokenRecordIfExists(code: code, database: db) != nil {
+                    continue
+                }
+
+                let token = InviteToken(
+                    id: code,
+                    code: code,
+                    householdId: household.id,
+                    shareURL: shareURL.absoluteString,
+                    createdAt: now,
+                    expiresAt: now.addingTimeInterval(InviteToken.ttl),
+                    isRevoked: false,
+                    usesCount: 0,
+                    lastRedeemedAt: nil
+                )
+
+                do {
+                    _ = try await db.save(inviteTokenRecord(from: token))
+                    clearCloudKitFailure()
+                    return token
+                } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                    continue
+                } catch {
+                    recordCloudKitFailure(error, operation: stage)
+                    throw error
+                }
+            }
+
+            let error = CloudKitManagerError.inviteCodeUnavailable
+            recordCloudKitFailure(error, operation: "inviteCode.create.exhausted")
+            throw error
+        } catch {
+            if let managerError = error as? CloudKitManagerError,
+               case .inviteCodeUnavailable = managerError
+            {
+                throw error
+            }
+            recordCloudKitFailure(error, operation: stage)
+            throw error
+        }
+    }
+
+    func fetchInviteToken(code rawCode: String) async throws -> InviteToken {
+        try await checkAvailability()
+        guard let code = InviteInputNormalizer.normalizeInviteCodeToken(rawCode) else {
+            throw CloudKitManagerError.inviteCodeInvalid
+        }
+
+        let db = await publicDatabase
+        guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
+            throw CloudKitManagerError.inviteCodeNotFound
+        }
+
+        return try inviteToken(from: record)
+    }
+
+    func redeemInviteCode(_ rawCode: String) async throws -> Household {
+        var stage = "inviteCode.redeem.fetchToken"
+        do {
+            try await checkAvailability()
+            let token = try await fetchInviteToken(code: rawCode)
+            let now = Date()
+            if token.isRevoked {
+                throw CloudKitManagerError.inviteCodeRevoked
+            }
+            if token.isExpired(at: now) {
+                throw CloudKitManagerError.inviteCodeExpired
+            }
+
+            stage = "inviteCode.redeem.metadata"
+            guard let shareURL = URL(string: token.shareURL) else {
+                throw CloudKitManagerError.inviteCodeInvalid
+            }
+
+            let ckContainer = await container
+            let metadata = try await ckContainer.shareMetadata(for: shareURL)
+
+            stage = "inviteCode.redeem.acceptShare"
+            let household = try await acceptShare(metadata: metadata)
+
+            stage = "inviteCode.redeem.usageUpdate"
+            let db = await publicDatabase
+            if let record = try await fetchInviteTokenRecordIfExists(code: token.code, database: db) {
+                record["usesCount"] = Int64(token.usesCount + 1) as CKRecordValue
+                record["lastRedeemedAt"] = now as CKRecordValue
+                do {
+                    _ = try await saveRecordWithChangedKeys(record, database: db)
+                } catch {
+                    recordCloudKitFailure(error, operation: stage)
+                }
+            }
+
+            clearCloudKitFailure()
+            return household
+        } catch {
+            recordCloudKitFailure(error, operation: stage)
+            throw error
+        }
+    }
+
+    func revokeInviteCode(_ rawCode: String) async throws {
+        try await checkAvailability()
+        guard let code = InviteInputNormalizer.normalizeInviteCodeToken(rawCode) else {
+            throw CloudKitManagerError.inviteCodeInvalid
+        }
+
+        let db = await publicDatabase
+        guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
+            throw CloudKitManagerError.inviteCodeNotFound
+        }
+
+        record["isRevoked"] = Int64(1) as CKRecordValue
+        _ = try await saveRecordWithChangedKeys(record, database: db)
+        clearCloudKitFailure()
     }
 
     /// Accept a CloudKit share invitation and return shared household.

@@ -177,7 +177,7 @@ struct JoinHouseholdSheet: View {
     let userId: String
     let displayName: String
 
-    @State private var inviteCode = ""
+    @State private var inviteInput = ""
     @State private var isJoining = false
     @State private var errorMessage: String?
 
@@ -185,12 +185,12 @@ struct JoinHouseholdSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Invite code", text: $inviteCode)
+                    TextField("Invite code or link", text: $inviteInput)
                         .textContentType(.oneTimeCode)
-                        .autocapitalization(.none)
+                        .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                 } footer: {
-                    Text("Ask the household owner for the invite code")
+                    Text("Ask the household owner for a 5-6 character code or invite link")
                 }
 
                 if let errorMessage {
@@ -210,7 +210,7 @@ struct JoinHouseholdSheet: View {
                     Button("Join") {
                         joinHousehold()
                     }
-                    .disabled(inviteCode.trimmingCharacters(in: .whitespaces).isEmpty || isJoining)
+                    .disabled(inviteInput.trimmingCharacters(in: .whitespaces).isEmpty || isJoining)
                 }
             }
             .interactiveDismissDisabled(isJoining)
@@ -218,8 +218,8 @@ struct JoinHouseholdSheet: View {
     }
 
     private func joinHousehold() {
-        let code = inviteCode.trimmingCharacters(in: .whitespaces)
-        guard !code.isEmpty else { return }
+        let input = preferredInviteInput()
+        guard !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
 
         isJoining = true
         errorMessage = nil
@@ -227,7 +227,7 @@ struct JoinHouseholdSheet: View {
         _Concurrency.Task {
             do {
                 try await householdStore.joinHousehold(
-                    inviteCode: code,
+                    withInviteInput: input,
                     userId: userId,
                     displayName: resolvedDisplayNameForMembership()
                 )
@@ -244,6 +244,13 @@ struct JoinHouseholdSheet: View {
             return validated
         }
         return "Member"
+    }
+
+    private func preferredInviteInput() -> String {
+        if let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput) {
+            return normalizedCode
+        }
+        return inviteInput.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

@@ -7,9 +7,9 @@ enum InviteInputNormalizationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .empty:
-            "Invite link is empty."
+            "Invite input is empty."
         case .invalidFormat:
-            "Invite link format is invalid."
+            "Invite format is invalid."
         }
     }
 }
@@ -48,9 +48,9 @@ enum InviteInputNormalizer {
             return NormalizedInviteInput(inviteCode: urlInvite, kind: .iCloudURL)
         }
 
-        if isShortCode(trimmed) {
+        if let normalizedCode = normalizeInviteCodeToken(trimmed) {
             return NormalizedInviteInput(
-                inviteCode: makeICloudShareURL(fromShortCode: trimmed),
+                inviteCode: normalizedCode,
                 kind: .shortCode
             )
         }
@@ -60,10 +60,20 @@ enum InviteInputNormalizer {
 
     static func normalizedURL(from raw: String) throws -> URL {
         let normalized = try normalize(raw)
-        guard let url = URL(string: normalized) else {
+        guard let urlString = normalizeICloudShareURL(normalized),
+              let url = URL(string: urlString)
+        else {
             throw InviteInputNormalizationError.invalidFormat
         }
         return url
+    }
+
+    static func normalizeInviteCodeToken(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmed.count >= 5, trimmed.count <= 6 else { return nil }
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
+        return trimmed
     }
 
     private static func normalizeCustomSchemeIfNeeded(_ input: String) throws -> NormalizedInviteInput? {
@@ -91,8 +101,14 @@ enum InviteInputNormalizer {
             let name = $0.name.lowercased()
             return name == "code" || name == "invite"
         })?.value
+        let payloadFromEncodedURL = components.queryItems?.first(where: {
+            let name = $0.name.lowercased()
+            return name == "u" || name == "shareurl"
+        })?.value
 
-        guard let payloadRaw = payloadFromPath ?? payloadFromQuery,
+        let decodedURLPayload = payloadFromEncodedURL.flatMap(decodeBase64URLPayload)
+
+        guard let payloadRaw = payloadFromPath ?? payloadFromQuery ?? decodedURLPayload,
               !payloadRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
             throw InviteInputNormalizationError.invalidFormat
@@ -105,9 +121,9 @@ enum InviteInputNormalizer {
             return NormalizedInviteInput(inviteCode: urlInvite, kind: .customScheme)
         }
 
-        if isShortCode(trimmedPayload) {
+        if let normalizedCode = normalizeInviteCodeToken(trimmedPayload) {
             return NormalizedInviteInput(
-                inviteCode: makeICloudShareURL(fromShortCode: trimmedPayload),
+                inviteCode: normalizedCode,
                 kind: .customScheme
             )
         }
@@ -140,15 +156,28 @@ enum InviteInputNormalizer {
         return url.absoluteString
     }
 
-    private static func isShortCode(_ input: String) -> Bool {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 6, trimmed.count <= 160 else { return false }
-        return trimmed.unicodeScalars.allSatisfy {
-            CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_")).contains($0)
-        }
-    }
+    private static func decodeBase64URLPayload(_ payload: String) -> String? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
-    private static func makeICloudShareURL(fromShortCode shortCode: String) -> String {
-        "https://www.icloud.com/share/\(shortCode)"
+        var base64 = trimmed
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        let padding = base64.count % 4
+        if padding > 0 {
+            base64 += String(repeating: "=", count: 4 - padding)
+        }
+
+        guard
+            let data = Data(base64Encoded: base64),
+            let decoded = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !decoded.isEmpty
+        else {
+            return nil
+        }
+
+        return decoded
     }
 }
