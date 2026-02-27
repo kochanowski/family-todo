@@ -80,6 +80,62 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(store.doneTasks.isEmpty)
     }
 
+    func testMergeCloudSnapshot_PrefersPendingUploadVersion() async {
+        let localTask = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Local Task",
+            status: .done,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+        let cloudVersion = Task(
+            id: localTask.id,
+            householdId: householdId,
+            title: "Cloud Task",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        let cached = CachedTask(from: localTask)
+        cached.syncStatusRaw = "pendingUpload"
+        modelContainer.mainContext.insert(cached)
+        try? modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let pendingSnapshot = store.pendingSyncSnapshot(from: [cached])
+        let merged = store.mergeCloudSnapshot([cloudVersion], with: pendingSnapshot)
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged.first?.id, localTask.id)
+        XCTAssertEqual(merged.first?.status, .done)
+        XCTAssertEqual(merged.first?.title, "Local Task")
+    }
+
+    func testLoadFromCache_HidesPendingDeleteTasks() async {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "To Delete",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        let cached = CachedTask(from: task)
+        cached.syncStatusRaw = "pendingDelete"
+        modelContainer.mainContext.insert(cached)
+        try? modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        XCTAssertTrue(store.tasks.isEmpty)
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {

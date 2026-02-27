@@ -234,7 +234,7 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("Shopping")
                     .font(themeStore.font(for: .screenHeader))
@@ -287,6 +287,9 @@ private struct ShoppingListContent: View {
                 }
             }
             .padding(.top, 2)
+            .alignmentGuide(.firstTextBaseline) { dimensions in
+                dimensions[VerticalAlignment.top]
+            }
         }
     }
 

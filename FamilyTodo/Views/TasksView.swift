@@ -33,6 +33,7 @@ private struct TasksContent: View {
     private enum InlineBanner: Equatable {
         case assigneeRequired
         case wipLimitReached(current: Int, limit: Int)
+        case moveToIdeasFailed
 
         var text: String {
             switch self {
@@ -40,6 +41,8 @@ private struct TasksContent: View {
                 "Assign this task before moving it to Next."
             case let .wipLimitReached(current, limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
+            case .moveToIdeasFailed:
+                "Couldn't move task to Ideas. Try again."
             }
         }
     }
@@ -701,31 +704,43 @@ private struct TasksContent: View {
         }
 
         _ = _Concurrency.Task {
-            let resolvedCategoryId: UUID? =
-                if let backlogCategoryId = task.backlogCategoryId,
-                backlogStore.categories.contains(where: { $0.id == backlogCategoryId }) {
-                    backlogCategoryId
-                } else {
-                    backlogStore.categories.first?.id
+            if userSession.syncMode == .localOnly {
+                do {
+                    _ = try await backlogStore.createFromTask(task)
+                    await store.deleteTask(task)
+                } catch {
+                    await MainActor.run {
+                        showBanner(.moveToIdeasFailed)
+                    }
+                    HapticManager.warning()
                 }
 
-            guard let resolvedCategoryId else {
                 await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        hiddenMovedToIdeasIds.remove(task.id)
-                    }
+                    hiddenMovedToIdeasIds.remove(task.id)
                 }
                 return
             }
 
-            await backlogStore.addItem(
-                to: resolvedCategoryId,
-                title: task.title,
-                assigneeId: task.assigneeId,
-                notes: task.notes
-            )
+            await MainActor.run {
+                store.removeTaskLocally(task)
+            }
 
-            await store.deleteTask(task)
+            do {
+                let createdBacklogItem = try await backlogStore.createFromTask(task)
+                do {
+                    try await store.deleteTaskRemote(id: task.id, householdId: task.householdId)
+                } catch {
+                    _ = await backlogStore.deleteItem(createdBacklogItem)
+                    throw error
+                }
+            } catch {
+                await MainActor.run {
+                    store.restoreTaskLocally(task)
+                    showBanner(.moveToIdeasFailed)
+                }
+                HapticManager.warning()
+            }
+
             await MainActor.run {
                 hiddenMovedToIdeasIds.remove(task.id)
             }

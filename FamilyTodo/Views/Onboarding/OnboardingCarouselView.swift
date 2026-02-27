@@ -5,28 +5,34 @@ import SwiftUI
 struct OnboardingSlide: Identifiable {
     let id: Int
     let icon: String
-    let headline: String
-    let subtext: String
+    let title: String
+    let subtitle: String
 }
 
 private let slides: [OnboardingSlide] = [
     OnboardingSlide(
         id: 0,
-        icon: "cloud.fill",
-        headline: "Sync your home.",
-        subtext: "Keep your shopping lists and daily tasks perfectly in sync with your partner."
+        icon: "cart.fill",
+        title: "Smart Shopping",
+        subtitle: "Build and restore grocery lists quickly with one-tap recent purchases."
     ),
     OnboardingSlide(
         id: 1,
-        icon: "basket.fill",
-        headline: "Never forget the milk.",
-        subtext: "Items move to 'Restock' when checked, ready to be added back for the next trip."
+        icon: "checklist",
+        title: "Clear Your Mind",
+        subtitle: "Turn home chaos into clear, assignable tasks everyone can see."
     ),
     OnboardingSlide(
         id: 2,
-        icon: "square.3.layers.3d",
-        headline: "Dream together.",
-        subtext: "A dedicated backlog for home projects, vacations, and gift ideas."
+        icon: "slider.horizontal.3",
+        title: "Make It Yours",
+        subtitle: "Pick the theme and workflow that feels right for your household."
+    ),
+    OnboardingSlide(
+        id: 3,
+        icon: "person.2.fill",
+        title: "Better Together",
+        subtitle: "Invite members and keep shopping, tasks, and ideas in sync."
     ),
 ]
 
@@ -118,11 +124,11 @@ private struct OnboardingSlideView: View {
             }
 
             VStack(spacing: 12) {
-                Text(slide.headline)
+                Text(slide.title)
                     .font(.system(size: 28, weight: .bold))
                     .multilineTextAlignment(.center)
 
-                Text(slide.subtext)
+                Text(slide.subtitle)
                     .font(.system(size: 17))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

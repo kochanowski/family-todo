@@ -1,66 +1,42 @@
-# HousePulse (Family Todo)
+# HousePulse (FamilyTodo)
 
-iOS household app for shared shopping, tasks, and backlog management. Built with SwiftUI + CloudKit + SwiftData.
+iOS app do współdzielenia obowiązków domowych: Shopping, Tasks, Ideas i Household management.
 
-## What it does
+## Stack
+- iOS 17+ (iOS 26+ dla części efektów systemowych)
+- SwiftUI (`TabView` shell)
+- SwiftData (cache/offline-first)
+- CloudKit (sync + household sharing przez `CKShare`)
+- Sign in with Apple + Guest mode
+- GitHub Actions (build, lint, schema gate, TestFlight deploy)
 
-A shared household hub where family members manage daily tasks, shopping lists, and long-term backlog — with offline-first sync, gentle nudges (not nagging), and a WIP limit of 3 tasks per person.
+## Current app modules
+- Shopping: rapid entry, buy/unbuy, Recently Purchased, restock flow.
+- Tasks: active/completed, assignment, transitions z Ideas.
+- Ideas (Backlog): categories, assign, promote do task.
+- More: profile/household, member management, settings.
 
-**4 tabs:** Shopping 🛒 · Tasks ✓ · Backlog 📦 · More ⋯
+## CloudKit/TestFlight notes
+- App target domyślnie działa z `HPCloudKitEnabled=YES`.
+- CI schema gate:
+- waliduje kontrakt schemy (`cloudkit/schema/housepulse-schema.json`),
+- aplikuje Development,
+- weryfikuje Production, w tym systemowy `cloudkit.share`.
+- TestFlight deploy jest blokowany, jeśli schema gate nie przejdzie.
+- Jednorazowy bootstrap `cloudkit.share` bez Xcode wymaga CloudKit Console:
+- Development Private DB -> `Act As iCloud Account` -> custom zone -> save `Household` -> `Share Record` -> `Deploy Schema Changes` Dev -> Prod.
 
-## Tech stack
+## Documentation
+- [`AGENTS.md`](AGENTS.md) - decyzje produktowe/techniczne i runbook sesji.
+- [`STATUS.md`](STATUS.md) - aktualny stan wdrożenia.
+- [`TODO.md`](TODO.md) - aktywne i domknięte zadania.
+- [`docs/current/CLOUD_SYNC_PROFILES.md`](docs/current/CLOUD_SYNC_PROFILES.md) - profile sync i schema gate.
+- [`docs/current/TESTING_CI_POLICY.md`](docs/current/TESTING_CI_POLICY.md) - polityka CI/testów.
+- [`docs/current/ROADMAP.md`](docs/current/ROADMAP.md) - roadmap.
 
-- **iOS 17+** (iOS 26+ for Liquid Glass effects)
-- **SwiftUI** + custom floating tab bar
-- **SwiftData** for offline-first cache
-- **CloudKit** for sync + household sharing (CKShare)
-- **Sign in with Apple** + guest mode
-- **GitHub Actions** CI (build + lint)
-- **Branch:** `rebuild/swiftui-clean-impl`
-
-## Status (2026-02-15)
-
-**✅ Working:** Shopping (rapid entry, buy/unbuy, restock), Tasks (CRUD, WIP limit, completion), Backlog (categories + items), Auth (Apple + guest), CloudKit sync, Notifications, Onboarding, 4 Themes, Member management, Household sharing.
-
-**⚠️ Stubs:** Task detail/edit, recurring chores, areas/rooms, sign out, join household flow, notification settings, backlog→task promotion.
-
-**See:** `claude-codex-TODO.md` for the full merged roadmap (Phases 0-9).
-
-## Key documentation
-
-| File | Purpose |
-|------|---------|
-| [`CLAUDE.md`](CLAUDE.md) | Agent guidance + full project context |
-| [`claude-codex-TODO.md`](claude-codex-TODO.md) | **Merged implementation roadmap** (source of truth for next steps) |
-| [`STATUS.md`](STATUS.md) | Current implementation status |
-| [`docs/current/ROADMAP.md`](docs/current/ROADMAP.md) | Prioritized roadmap (Now / Next / Later) |
-| [`docs/current/TESTING_CI_POLICY.md`](docs/current/TESTING_CI_POLICY.md) | CI and testing policy |
-| [`docs/current/CLOUD_SYNC_PROFILES.md`](docs/current/CLOUD_SYNC_PROFILES.md) | Cloud sync profile switching |
-
-## Architecture docs
-
-| File | Purpose |
-|------|---------|
-| [`Product Specification: House Pulse.md`](<Product Specification: House Pulse.md>) | Product spec |
-| [`Product Specification: First Launch.md`](<Product Specification: First Launch.md>) | First launch / onboarding spec |
-| [`docs/2026-01-10_adr-001-cloudkit-backend.md`](docs/2026-01-10_adr-001-cloudkit-backend.md) | ADR: CloudKit as backend |
-| [`docs/2026-01-12_adr-002-error-handling-offline-first.md`](docs/2026-01-12_adr-002-error-handling-offline-first.md) | ADR: Error handling + offline-first |
-| [`docs/2026-01-11_cloudkit-schema.md`](docs/2026-01-11_cloudkit-schema.md) | CloudKit record types schema |
-
-## CI
-
-- **PR/push:** build + SwiftLint (`.github/workflows/ios-ci.yml`)
-- **Nightly/manual:** full regression tests (`.github/workflows/nightly.yml`)
-- Cloud sync tests require `HPCloudKitEnabled=YES` profile — see [`CLOUD_SYNC_PROFILES.md`](docs/current/CLOUD_SYNC_PROFILES.md)
-
-## Development
-
-Dev on Linux → GitHub Actions for build/test → iPhone 15 (iOS 26.2.1) for physical testing.
-
+## CI quick checks
 ```bash
-# Pre-commit checks
-pre-commit run --all-files
-
-# Check CI
 gh run list --limit 5
+gh run view <run_id> --json status,conclusion,jobs
+gh run view <run_id> --log-failed
 ```

@@ -307,6 +307,76 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Item Operations
 
+    @discardableResult
+    func createFromTask(_ task: Task, fallbackCategoryId: UUID? = nil) async throws -> BacklogItem {
+        guard let householdId else {
+            throw HouseholdError.householdNotFound
+        }
+
+        let resolvedCategoryId: UUID?
+        if let backlogCategoryId = task.backlogCategoryId,
+           categories.contains(where: { $0.id == backlogCategoryId })
+        {
+            resolvedCategoryId = backlogCategoryId
+        } else if let fallbackCategoryId,
+                  categories.contains(where: { $0.id == fallbackCategoryId })
+        {
+            resolvedCategoryId = fallbackCategoryId
+        } else {
+            resolvedCategoryId = categories.first?.id
+        }
+
+        guard let categoryId = resolvedCategoryId else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        let item = BacklogItem(
+            categoryId: categoryId,
+            householdId: householdId,
+            title: task.title,
+            assigneeId: task.assigneeId,
+            notes: task.notes
+        )
+
+        withAnimation {
+            items.insert(item, at: 0)
+        }
+
+        if let context = modelContext {
+            let cached = CachedBacklogItem(from: item)
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+            context.insert(cached)
+            try? context.save()
+        }
+
+        guard isCloudSyncEnabled else {
+            return item
+        }
+
+        do {
+            _ = try await cloudKit.saveBacklogItem(item)
+            if let context = modelContext {
+                let descriptor = FetchDescriptor<CachedBacklogItem>(
+                    predicate: #Predicate { $0.id == item.id }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.syncStatusRaw = "synced"
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
+            return item
+        } catch {
+            self.error = error
+            withAnimation {
+                items.removeAll { $0.id == item.id }
+            }
+            removeCachedItem(id: item.id)
+            throw error
+        }
+    }
+
     func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil, notes: String? = nil) async {
         guard let householdId else { return }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
