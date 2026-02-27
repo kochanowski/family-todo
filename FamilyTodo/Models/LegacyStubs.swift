@@ -23,7 +23,7 @@ struct Area: Identifiable, Codable {
         [
             Area(name: "Kitchen", icon: "refrigerator", colorHex: "#FF5733"),
             Area(name: "Living Room", icon: "sofa", colorHex: "#33FF57"),
-            Area(name: "Bathroom", icon: "shower", colorHex: "#3357FF")
+            Area(name: "Bathroom", icon: "shower", colorHex: "#3357FF"),
         ]
     }
 
@@ -34,7 +34,7 @@ struct Area: Identifiable, Codable {
             Area(householdId: householdId, name: "Bathroom", icon: "shower", colorHex: "#3357FF", sortOrder: 2),
             Area(householdId: householdId, name: "Bedroom", icon: "bed.double", colorHex: "#FF33A1", sortOrder: 3),
             Area(householdId: householdId, name: "Garden", icon: "leaf", colorHex: "#A1FF33", sortOrder: 4),
-            Area(householdId: householdId, name: "Other", icon: "folder", colorHex: "#808080", sortOrder: 5)
+            Area(householdId: householdId, name: "Other", icon: "folder", colorHex: "#808080", sortOrder: 5),
         ]
     }
 
@@ -177,6 +177,7 @@ enum HouseholdError: Error, Equatable {
     case householdNotFound
     case cloudSyncRequired
     case invalidInviteCode
+    case displayNameAlreadyTaken
     case cacheNotAvailable
     case notAuthorized
     case transferOwnershipRequired
@@ -193,6 +194,8 @@ extension HouseholdError: LocalizedError {
             "This action requires cloud sync."
         case .invalidInviteCode:
             "The invite code is invalid."
+        case .displayNameAlreadyTaken:
+            "This display name is already used in the household."
         case .cacheNotAvailable:
             "Local cache is unavailable."
         case .notAuthorized:

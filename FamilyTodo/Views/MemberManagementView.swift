@@ -1,3 +1,4 @@
+import CloudKit
 import SwiftData
 import SwiftUI
 
@@ -5,6 +6,7 @@ struct MemberManagementView: View {
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject var householdStore: HouseholdStore
     @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @Environment(\.modelContext) private var modelContext
 
     init(householdId: UUID) {
@@ -18,7 +20,11 @@ struct MemberManagementView: View {
     @State private var memberToDelete: Member?
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
+    @State private var isPreparingShareInvite = false
+    @State private var preparedShare: CKShare?
+    @State private var preparedContainer: CKContainer?
     @State private var showShareInvite = false
+    @State private var showInviteQR = false
 
     private var currentUserIsOwner: Bool {
         guard let userId = userSession.userId else { return false }
@@ -74,8 +80,21 @@ struct MemberManagementView: View {
 
     private var listContent: some View {
         List {
+            diagnosticsSection
             membersSection
             inviteSection
+        }
+    }
+
+    @ViewBuilder
+    private var diagnosticsSection: some View {
+        if cloudKitDiagnostics.lastCloudKitError != nil {
+            Section {
+                CloudKitDiagnosticsBanner()
+                    .environmentObject(cloudKitDiagnostics)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .listRowBackground(Color.clear)
+            }
         }
     }
 
@@ -99,13 +118,45 @@ struct MemberManagementView: View {
         if currentUserIsOwner, householdStore.currentHousehold != nil {
             Section("Invite New Members") {
                 Button {
-                    showShareInvite = true
+                    _Concurrency.Task {
+                        await prepareShareInvite()
+                    }
                 } label: {
-                    Label("Invite Member", systemImage: "person.badge.plus")
+                    if isPreparingShareInvite {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Preparing invite...")
+                        }
+                    } else {
+                        Label("Invite Member", systemImage: "person.badge.plus")
+                    }
+                }
+                .disabled(isPreparingShareInvite)
+
+                Button {
+                    showInviteQR = true
+                } label: {
+                    Label("Show Invite QR", systemImage: "qrcode")
+                }
+                .disabled(isPreparingShareInvite)
+            }
+            .sheet(isPresented: $showShareInvite, onDismiss: {
+                preparedShare = nil
+                preparedContainer = nil
+            }) {
+                if let preparedShare, let preparedContainer {
+                    ShareInviteView(share: preparedShare, container: preparedContainer)
+                } else {
+                    ContentUnavailableView(
+                        "Invite unavailable",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text("Could not prepare household invite. Check diagnostics and try again.")
+                    )
                 }
             }
-            .sheet(isPresented: $showShareInvite) {
-                ShareInviteView(isPresented: $showShareInvite)
+            .sheet(isPresented: $showInviteQR) {
+                InviteQRCodeView()
                     .environmentObject(householdStore)
             }
         }
@@ -167,6 +218,23 @@ struct MemberManagementView: View {
         }
 
         memberToDelete = nil
+    }
+
+    private func prepareShareInvite() async {
+        guard !isPreparingShareInvite else { return }
+
+        isPreparingShareInvite = true
+        defer { isPreparingShareInvite = false }
+
+        do {
+            let (share, container) = try await householdStore.createShare()
+            preparedShare = share
+            preparedContainer = container
+            showShareInvite = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showErrorAlert = true
+        }
     }
 }
 

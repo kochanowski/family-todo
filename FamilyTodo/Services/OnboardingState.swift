@@ -4,7 +4,7 @@ import SwiftUI
 
 enum LaunchState: String {
     case onboarding
-    case syncChoice
+    case auth
     case householdSetup
     case mainApp
 }
@@ -28,7 +28,8 @@ enum HouseholdStatus: String {
 
 @MainActor
 final class OnboardingState: ObservableObject {
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @AppStorage("hasCompletedOnboarding") private var legacyHasCompletedOnboarding = false
     @AppStorage("syncMethod") private var syncMethodRaw = SyncMethod.none.rawValue
     @AppStorage("householdStatus") private var householdStatusRaw = HouseholdStatus.none.rawValue
     @AppStorage("lastLaunchState") private var lastLaunchStateRaw = LaunchState.onboarding.rawValue
@@ -52,26 +53,40 @@ final class OnboardingState: ObservableObject {
     }
 
     init() {
+        migrateLegacyIfNeeded()
         determineInitialState()
     }
 
     // MARK: - State Determination
 
-    private func determineInitialState() {
-        if hasCompletedOnboarding {
-            currentState = .mainApp
-        } else {
-            // Resume from last state if user quit mid-flow
-            let lastState = LaunchState(rawValue: lastLaunchStateRaw) ?? .onboarding
-            switch lastState {
-            case .householdSetup:
-                // User quit during household setup, resume there
-                currentState = .householdSetup
-            case .syncChoice:
-                currentState = .syncChoice
-            default:
-                currentState = .onboarding
+    private func migrateLegacyIfNeeded() {
+        if !hasSeenOnboarding, legacyHasCompletedOnboarding {
+            hasSeenOnboarding = true
+            if lastLaunchStateRaw == "syncChoice" {
+                lastLaunchStateRaw = LaunchState.auth.rawValue
             }
+        }
+    }
+
+    private func determineInitialState() {
+        guard hasSeenOnboarding else {
+            currentState = .onboarding
+            return
+        }
+
+        switch lastLaunchStateRaw {
+        case LaunchState.onboarding.rawValue:
+            currentState = .auth
+        case LaunchState.auth.rawValue:
+            currentState = .auth
+        case LaunchState.householdSetup.rawValue:
+            currentState = .householdSetup
+        case LaunchState.mainApp.rawValue:
+            currentState = .mainApp
+        case "syncChoice":
+            currentState = .auth
+        default:
+            currentState = .auth
         }
     }
 
@@ -79,29 +94,37 @@ final class OnboardingState: ObservableObject {
 
     func completeOnboarding() {
         HapticManager.selection()
-        currentState = .syncChoice
-        lastLaunchStateRaw = LaunchState.syncChoice.rawValue
+        hasSeenOnboarding = true
+        currentState = .auth
+        lastLaunchStateRaw = LaunchState.auth.rawValue
     }
 
-    func selectSyncMethod(_ method: SyncMethod) {
+    func completeAuth(syncMethod method: SyncMethod, isGuest: Bool, hasHousehold: Bool) {
         HapticManager.mediumTap()
+        hasSeenOnboarding = true
         syncMethod = method
-        currentState = .householdSetup
-        lastLaunchStateRaw = LaunchState.householdSetup.rawValue
+        householdStatus = hasHousehold ? .active : .none
+
+        if isGuest {
+            currentState = .mainApp
+        } else {
+            currentState = hasHousehold ? .mainApp : .householdSetup
+        }
+        lastLaunchStateRaw = currentState.rawValue
     }
 
     func completeHouseholdSetup(withHousehold: Bool) {
         HapticManager.success()
+        hasSeenOnboarding = true
         householdStatus = withHousehold ? .active : .none
-        hasCompletedOnboarding = true
         currentState = .mainApp
         lastLaunchStateRaw = LaunchState.mainApp.rawValue
     }
 
     func skipHouseholdSetup() {
         HapticManager.lightTap()
+        hasSeenOnboarding = true
         householdStatus = .none
-        hasCompletedOnboarding = true
         currentState = .mainApp
         lastLaunchStateRaw = LaunchState.mainApp.rawValue
     }
@@ -109,7 +132,14 @@ final class OnboardingState: ObservableObject {
     // MARK: - Household Management (for empty state actions)
 
     func openHouseholdSetup() {
+        hasSeenOnboarding = true
         currentState = .householdSetup
+        lastLaunchStateRaw = LaunchState.householdSetup.rawValue
+    }
+
+    func openAuth() {
+        currentState = .auth
+        lastLaunchStateRaw = LaunchState.auth.rawValue
     }
 
     func activateHousehold() {
@@ -117,11 +147,19 @@ final class OnboardingState: ObservableObject {
         objectWillChange.send()
     }
 
+    // MARK: - Legacy Compatibility
+
+    /// Temporary compatibility method for old SyncSelectionView call sites.
+    func selectSyncMethod(_ method: SyncMethod) {
+        completeAuth(syncMethod: method, isGuest: method == .local, hasHousehold: false)
+    }
+
     // MARK: - Debug
 
     #if DEBUG
         func resetOnboarding() {
-            hasCompletedOnboarding = false
+            hasSeenOnboarding = false
+            legacyHasCompletedOnboarding = false
             syncMethodRaw = SyncMethod.none.rawValue
             householdStatusRaw = HouseholdStatus.none.rawValue
             lastLaunchStateRaw = LaunchState.onboarding.rawValue

@@ -4,139 +4,164 @@ import SwiftUI
 
 @main
 struct FamilyTodoApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegateBridge.self) private var appDelegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var themeStore: ThemeStore
     @StateObject private var householdStore = HouseholdStore()
     @StateObject private var onboardingState = OnboardingState()
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
+    @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
+    @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
+    @State private var startupRecoveryMessage: String?
+    @State private var startupBootstrapState: StartupBootstrapState
+    @State private var startupDiagnostics: BootstrapDiagnostics?
+
+    private let sharedModelContainer: ModelContainer?
+
+    private static let appSchema = Schema([
+        CachedTask.self,
+        CachedMember.self,
+        CachedShoppingItem.self,
+        CachedBacklogCategory.self,
+        CachedBacklogItem.self,
+        CachedHousehold.self,
+        CachedArea.self,
+        CachedRecurringChore.self,
+    ])
 
     init() {
         let fontRegistrationReport = FontRegistrar.registerBundledFonts()
         _themeStore = StateObject(
             wrappedValue: ThemeStore(initialFontReport: fontRegistrationReport)
         )
-    }
 
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            CachedTask.self,
-            CachedMember.self,
-            CachedShoppingItem.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedHousehold.self,
-            CachedArea.self,
-            CachedRecurringChore.self
-        ])
         #if CI
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: true
+            let bootstrapResult = SwiftDataContainerFactory.bootstrap(
+                schema: Self.appSchema,
+                isCI: true
             )
         #else
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false
+            let bootstrapResult = SwiftDataContainerFactory.bootstrap(
+                schema: Self.appSchema
             )
         #endif
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            #if CI
-                // In CI, return a minimal container
-                do {
-                    return try ModelContainer(
-                        for: schema,
-                        configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
-                    )
-                } catch {
-                    fatalError("Could not create CI ModelContainer: \(error)")
-                }
-            #else
-                // Recovery path for incompatible/corrupted local SwiftData store.
-                // This prevents app launch crash on migration failures in TestFlight production data.
-                print("⚠️ ModelContainer migration failed: \(error)")
-                print("⚠️ Destroying local store and retrying...")
 
-                let appSupportURL =
-                    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-                        ?? URL(fileURLWithPath: NSTemporaryDirectory())
-                let defaultStoreURL = appSupportURL.appendingPathComponent("default.store")
-                let storePath = defaultStoreURL.path
-
-                for suffix in ["", "-shm", "-wal"] {
-                    try? FileManager.default.removeItem(atPath: storePath + suffix)
-                }
-
-                do {
-                    return try ModelContainer(for: schema, configurations: [modelConfiguration])
-                } catch {
-                    fatalError("Could not create ModelContainer after reset: \(error)")
-                }
-            #endif
-        }
-    }()
+        sharedModelContainer = bootstrapResult.container
+        _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
+        _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
+        _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
+    }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(userSession)
-                .environmentObject(themeStore)
-                .environmentObject(householdStore)
-                .environmentObject(onboardingState)
-                .environmentObject(subscriptionManager)
-                .environmentObject(celebrationManager)
-                .modelContainer(sharedModelContainer)
+            if startupBootstrapState == .emergency || sharedModelContainer == nil {
+                StartupRecoveryView(
+                    message: startupRecoveryMessage
+                        ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
+                    diagnostics: startupDiagnostics
+                )
                 .preferredColorScheme(themeStore.colorScheme)
-                .overlay {
-                    CelebrationOverlay(
-                        manager: celebrationManager,
-                        messageFont: themeStore.font(for: .celebrationMessage),
-                        accentPalette: themeStore.confettiAccentPalette
-                    )
-                }
-                .task {
-                    householdStore.setModelContext(sharedModelContainer.mainContext)
-                    householdStore.setSyncMode(userSession.syncMode)
+            } else if let sharedModelContainer {
+                RootView()
+                    .environmentObject(userSession)
+                    .environmentObject(themeStore)
+                    .environmentObject(householdStore)
+                    .environmentObject(onboardingState)
+                    .environmentObject(subscriptionManager)
+                    .environmentObject(celebrationManager)
+                    .environmentObject(shareAcceptanceCoordinator)
+                    .environmentObject(cloudKitDiagnostics)
+                    .modelContainer(sharedModelContainer)
+                    .preferredColorScheme(themeStore.colorScheme)
+                    .overlay {
+                        CelebrationOverlay(
+                            manager: celebrationManager,
+                            messageFont: themeStore.font(for: .celebrationMessage),
+                            accentPalette: themeStore.confettiAccentPalette
+                        )
+                    }
+                    .task {
+                        appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                        appDelegate.flushPendingInviteIfNeeded()
+                        householdStore.setModelContext(sharedModelContainer.mainContext)
+                        householdStore.setSyncMode(userSession.syncMode)
 
-                    // Configure for UI Testing if needed
-                    UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+                        // Configure for UI Testing if needed
+                        UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
 
-                    #if !CI
-                        await userSession.checkAuthenticationStatus()
-                        // Configure subscriptions only for cloud users with household
-                        // Skip for guest users (localOnly mode) to avoid CloudKit access
-                        if userSession.syncMode == .cloud,
-                           let userId = userSession.userId,
-                           let householdId = userSession.currentHouseholdID {
-                            subscriptionManager.configure(userId: userId, householdId: householdId)
+                        #if !CI
+                            await userSession.checkAuthenticationStatus()
+                            // Configure subscriptions only for cloud users with household
+                            // Skip for guest users (localOnly mode) to avoid CloudKit access
+                            if userSession.syncMode == .cloud,
+                               let userId = userSession.userId,
+                               let householdId = userSession.currentHouseholdID
+                            {
+                                subscriptionManager.configure(userId: userId, householdId: householdId)
+                            }
+                        #endif
+
+                        await shareAcceptanceCoordinator.processPendingIfPossible(
+                            userSession: userSession,
+                            householdStore: householdStore,
+                            onboardingState: onboardingState
+                        )
+
+                        await ChoreScheduler.shared.runIfNeeded(
+                            householdId: userSession.currentHouseholdID,
+                            modelContext: sharedModelContainer.mainContext,
+                            syncMode: userSession.syncMode
+                        )
+
+                        #if !CI
+                            // Re-schedule daily digest on every app launch.
+                            let notifSettings = NotificationSettingsStore()
+                            NotificationService.shared.setSettingsStore(notifSettings)
+                            await NotificationService.shared.checkAuthorizationStatus()
+                            if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
+                                let components = Calendar.current.dateComponents(
+                                    [.hour, .minute],
+                                    from: notifSettings.reminderTime
+                                )
+                                await NotificationService.shared.scheduleDailyDigest(
+                                    at: components.hour ?? 8,
+                                    minute: components.minute ?? 0
+                                )
+                            }
+                        #endif
+                    }
+                    .onOpenURL { url in
+                        if url.scheme?.lowercased() == "housepulse" {
+                            do {
+                                let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
+                                shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
+                            } catch {
+                                shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                            }
+                            return
                         }
-                    #endif
 
-                    await ChoreScheduler.shared.runIfNeeded(
-                        householdId: userSession.currentHouseholdID,
-                        modelContext: sharedModelContainer.mainContext,
-                        syncMode: userSession.syncMode
-                    )
-
-                    #if !CI
-                        // Re-schedule daily digest on every app launch.
-                        let notifSettings = NotificationSettingsStore()
-                        NotificationService.shared.setSettingsStore(notifSettings)
-                        await NotificationService.shared.checkAuthorizationStatus()
-                        if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
-                            let components = Calendar.current.dateComponents(
-                                [.hour, .minute],
-                                from: notifSettings.reminderTime
-                            )
-                            await NotificationService.shared.scheduleDailyDigest(
-                                at: components.hour ?? 8,
-                                minute: components.minute ?? 0
-                            )
+                        if let host = url.host?.lowercased(),
+                           host.contains("icloud.com")
+                        {
+                            shareAcceptanceCoordinator.enqueue(inviteURL: url)
                         }
-                    #endif
-                }
+                    }
+                    .alert(
+                        "Recovery Complete",
+                        isPresented: Binding(
+                            get: { startupRecoveryMessage != nil },
+                            set: { if !$0 { startupRecoveryMessage = nil } }
+                        )
+                    ) {
+                        Button("OK", role: .cancel) {
+                            startupRecoveryMessage = nil
+                        }
+                    } message: {
+                        Text(startupRecoveryMessage ?? "")
+                    }
+            }
         }
     }
 }
@@ -145,6 +170,9 @@ struct FamilyTodoApp: App {
 
 struct RootView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
 
     var body: some View {
         Group {
@@ -153,20 +181,70 @@ struct RootView: View {
                 OnboardingCarouselView()
                     .transition(.opacity)
 
-            case .syncChoice:
-                SyncSelectionView()
+            case .auth:
+                SignInView()
                     .transition(.opacity)
 
             case .householdSetup:
-                CreateHouseholdView()
-                    .transition(.opacity)
+                if userSession.hasActiveSession {
+                    CreateHouseholdView()
+                        .transition(.opacity)
+                } else {
+                    SignInView()
+                        .transition(.opacity)
+                }
 
             case .mainApp:
-                ContentView()
-                    .transition(.opacity)
+                if userSession.hasActiveSession {
+                    ContentView()
+                        .transition(.opacity)
+                } else {
+                    SignInView()
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: onboardingState.currentState)
+        .onChange(of: userSession.hasActiveSession) { _, hasSession in
+            if !hasSession, onboardingState.currentState != .onboarding {
+                onboardingState.openAuth()
+            }
+        }
+        .task(id: pendingProcessingKey) {
+            await shareAcceptanceCoordinator.processPendingIfPossible(
+                userSession: userSession,
+                householdStore: householdStore,
+                onboardingState: onboardingState
+            )
+        }
+        .alert(
+            "Invitation Error",
+            isPresented: Binding(
+                get: {
+                    onboardingState.currentState == .mainApp
+                        && shareAcceptanceCoordinator.lastErrorMessage != nil
+                },
+                set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                shareAcceptanceCoordinator.clearError()
+            }
+        } message: {
+            Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
+        }
+    }
+
+    private var pendingProcessingKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+            userSession.hasConfirmedDisplayName ? "named" : "unnamed",
+            shareAcceptanceCoordinator.pendingInviteCode ?? "none",
+            shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "none",
+        ].joined(separator: "|")
     }
 }
 
@@ -187,7 +265,8 @@ struct UITestHelper {
 
         // Check for specific scenario
         if let scenarioIndex = args.firstIndex(of: "-seedScenario"),
-           scenarioIndex + 1 < args.count {
+           scenarioIndex + 1 < args.count
+        {
             let scenario = args[scenarioIndex + 1]
             applyScenario(scenario, context: modelContext)
         }
@@ -277,7 +356,7 @@ struct UITestHelper {
         let items = [
             ShoppingItem(householdId: householdId, title: "Milk", isBought: false),
             ShoppingItem(householdId: householdId, title: "Bread", isBought: false),
-            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true)
+            ShoppingItem(householdId: householdId, title: "Eggs", isBought: true),
         ]
         for item in items {
             context.insert(CachedShoppingItem(from: item))
@@ -293,7 +372,7 @@ struct UITestHelper {
         let tasks = [
             Task(householdId: householdId, title: "Pay bills", status: .next, taskType: .oneOff),
             Task(householdId: householdId, title: "Call mom", status: .next, taskType: .oneOff),
-            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff)
+            Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff),
         ]
         tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
@@ -310,7 +389,7 @@ struct UITestHelper {
 
         let items = [
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Olive Oil"),
-            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices")
+            BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
     }

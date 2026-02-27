@@ -27,7 +27,7 @@ private let slides: [OnboardingSlide] = [
         icon: "square.3.layers.3d",
         headline: "Dream together.",
         subtext: "A dedicated backlog for home projects, vacations, and gift ideas."
-    )
+    ),
 ]
 
 // MARK: - Onboarding Carousel View

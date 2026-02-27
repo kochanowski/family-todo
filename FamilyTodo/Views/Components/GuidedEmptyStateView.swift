@@ -1,9 +1,19 @@
 import SwiftUI
+import UIKit
 
 struct GuidedEmptyStateView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var userSession: UserSession
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var showCreateFlow = false
+    @State private var showJoinSheet = false
+    @State private var joinCode = ""
+    @State private var isJoining = false
+    @State private var joinErrorMessage: String?
+    @State private var pendingCustomJoinInviteCode: String?
+    @State private var showCustomJoinConfirmation = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -40,8 +50,8 @@ struct GuidedEmptyStateView: View {
             VStack(spacing: 12) {
                 // Primary - Create
                 Button {
-                    // Open household creation modal
-                    onboardingState.openHouseholdSetup()
+                    showJoinSheet = false
+                    showCreateFlow = true
                 } label: {
                     Text("Create Household")
                         .font(.headline)
@@ -53,27 +63,162 @@ struct GuidedEmptyStateView: View {
                                 .fill(Color.blue)
                         )
                 }
+                .disabled(showJoinSheet)
 
                 // Secondary - Join
                 Button {
-                    // For now, same action
-                    onboardingState.openHouseholdSetup()
+                    showCreateFlow = false
+                    showJoinSheet = true
                 } label: {
                     Text("Join Existing")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.primary)
                 }
+                .disabled(showCreateFlow || !canJoinViaInvite)
             }
             .padding(.horizontal, 40)
+
+            if !canJoinViaInvite {
+                Text("Joining requires Apple/iCloud sign in.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(colorScheme == .dark ? .black : .systemBackground))
+        .fullScreenCover(isPresented: $showCreateFlow) {
+            CreateHouseholdView(allowsJoin: false, showsCloseButton: true)
+        }
+        .sheet(isPresented: $showJoinSheet) {
+            HouseholdJoinSheet(
+                joinCode: $joinCode,
+                onJoin: joinHousehold,
+                onPasteFromClipboard: {
+                    joinCode = UIPasteboard.general.string ?? ""
+                }
+            )
+            .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showCustomJoinConfirmation) {
+            AppConfirmationSheet(
+                title: "Join this household?",
+                message: "This invite uses a custom deep link. Confirm before joining.",
+                primaryTitle: "Join",
+                onPrimary: confirmCustomJoin
+            )
+        }
+        .alert("Action failed", isPresented: Binding(
+            get: { joinErrorMessage != nil },
+            set: { if !$0 { joinErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(joinErrorMessage ?? "Unknown error")
+        }
+        .onChange(of: userSession.currentHouseholdID) { _, newValue in
+            guard newValue != nil else { return }
+            showCreateFlow = false
+            showJoinSheet = false
+            pendingCustomJoinInviteCode = nil
+        }
+    }
+
+    private var canJoinViaInvite: Bool {
+        userSession.hasActiveSession && userSession.syncMode == .cloud
+    }
+
+    private func joinHousehold() {
+        guard canJoinViaInvite else {
+            joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
+            return
+        }
+        guard let userId = userSession.userId else {
+            joinErrorMessage = "Could not determine your account identity."
+            return
+        }
+        guard !joinCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !isJoining else { return }
+
+        isJoining = true
+        joinErrorMessage = nil
+
+        _Concurrency.Task {
+            do {
+                let normalizedInvite = try InviteInputNormalizer.normalizeInput(joinCode)
+                if normalizedInvite.requiresConfirmation {
+                    pendingCustomJoinInviteCode = normalizedInvite.inviteCode
+                    showCustomJoinConfirmation = true
+                    isJoining = false
+                    return
+                }
+
+                try await performJoinHousehold(inviteCode: normalizedInvite.inviteCode, userId: userId)
+            } catch {
+                joinErrorMessage = error.localizedDescription
+            }
+
+            isJoining = false
+        }
+    }
+
+    private func confirmCustomJoin() {
+        guard canJoinViaInvite else {
+            joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
+            return
+        }
+        guard let userId = userSession.userId else {
+            joinErrorMessage = "Could not determine your account identity."
+            return
+        }
+        guard let inviteCode = pendingCustomJoinInviteCode else { return }
+
+        pendingCustomJoinInviteCode = nil
+        isJoining = true
+
+        _Concurrency.Task {
+            do {
+                try await performJoinHousehold(inviteCode: inviteCode, userId: userId)
+            } catch {
+                joinErrorMessage = error.localizedDescription
+            }
+            isJoining = false
+        }
+    }
+
+    private func performJoinHousehold(inviteCode: String, userId: String) async throws {
+        householdStore.setSyncMode(userSession.syncMode)
+        try await householdStore.joinHousehold(
+            inviteCode: inviteCode,
+            userId: userId,
+            displayName: fallbackDisplayNameForMembership()
+        )
+
+        if let household = householdStore.currentHousehold {
+            userSession.setCurrentHousehold(household.id)
+        }
+
+        joinCode = ""
+        showJoinSheet = false
+        onboardingState.completeHouseholdSetup(withHousehold: true)
+    }
+
+    private func fallbackDisplayNameForMembership() -> String {
+        if let displayName = userSession.displayName,
+           let validated = try? DisplayNameValidator.validate(displayName)
+        {
+            return validated
+        }
+        return userSession.isGuest ? "Guest" : "Member"
     }
 }
 
 #Preview {
     GuidedEmptyStateView()
         .environmentObject(OnboardingState())
+        .environmentObject(HouseholdStore())
+        .environmentObject(UserSession.shared)
 }

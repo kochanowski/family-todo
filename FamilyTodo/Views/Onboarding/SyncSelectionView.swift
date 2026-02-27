@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SyncSelectionView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var userSession: UserSession
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -30,6 +31,9 @@ struct SyncSelectionView: View {
                 VStack(spacing: 16) {
                     // Primary Option - iCloud
                     Button {
+                        if userSession.isGuest {
+                            userSession.endGuestSession()
+                        }
                         onboardingState.selectSyncMethod(.iCloud)
                     } label: {
                         HStack(spacing: 16) {
@@ -85,6 +89,7 @@ struct SyncSelectionView: View {
 
                     // Secondary Option - Guest
                     Button {
+                        userSession.startGuestSession()
                         onboardingState.selectSyncMethod(.local)
                     } label: {
                         HStack(spacing: 16) {
@@ -139,4 +144,5 @@ struct SyncSelectionView: View {
 #Preview {
     SyncSelectionView()
         .environmentObject(OnboardingState())
+        .environmentObject(UserSession.shared)
 }

@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "containerIdentifier": "iCloud.com.kochanowski.housepulse",
+  "recordTypes": [
+    {
+      "name": "Household",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": true, "sortable": false },
+        { "name": "name", "type": "String", "queryable": false, "sortable": false },
+        { "name": "icon", "type": "String", "queryable": false, "sortable": false },
+        { "name": "iconSymbol", "type": "String", "queryable": false, "sortable": false },
+        { "name": "ownerId", "type": "String", "queryable": false, "sortable": false },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["id"],
+        "sort": []
+      }
+    },
+    {
+      "name": "Member",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "userId", "type": "String", "queryable": true, "sortable": false },
+        { "name": "displayName", "type": "String", "queryable": false, "sortable": false },
+        { "name": "role", "type": "String", "queryable": false, "sortable": false },
+        { "name": "joinedAt", "type": "Date", "queryable": false, "sortable": true },
+        { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId", "userId"],
+        "sort": ["joinedAt"]
+      }
+    },
+    {
+      "name": "Area",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "name", "type": "String", "queryable": false, "sortable": false },
+        { "name": "icon", "type": "String", "queryable": false, "sortable": false },
+        { "name": "sortOrder", "type": "Int64", "queryable": false, "sortable": true },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId"],
+        "sort": ["sortOrder"]
+      }
+    },
+    {
+      "name": "Task",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "title", "type": "String", "queryable": false, "sortable": false },
+        { "name": "status", "type": "String", "queryable": true, "sortable": false },
+        { "name": "assigneeId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "assigneeIds", "type": "ReferenceList", "queryable": false, "sortable": false },
+        { "name": "backlogCategoryId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "areaId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "dueDate", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "completedAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "completedById", "type": "String", "queryable": false, "sortable": false },
+        { "name": "taskType", "type": "String", "queryable": false, "sortable": false },
+        { "name": "recurringChoreId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "notes", "type": "String", "queryable": false, "sortable": false },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": true }
+      ],
+      "indexes": {
+        "query": ["householdId", "status", "assigneeId"],
+        "sort": ["updatedAt"]
+      }
+    },
+    {
+      "name": "RecurringChore",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "title", "type": "String", "queryable": false, "sortable": true },
+        { "name": "recurrenceType", "type": "String", "queryable": false, "sortable": false },
+        { "name": "recurrenceDay", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "recurrenceDayOfMonth", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "recurrenceInterval", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "defaultAssigneeIds", "type": "ReferenceList", "queryable": false, "sortable": false },
+        { "name": "defaultAssigneeId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "areaId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "categoryId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "lastGeneratedDate", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "nextScheduledDate", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "notes", "type": "String", "queryable": false, "sortable": false },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId"],
+        "sort": ["title"]
+      }
+    },
+    {
+      "name": "ShoppingItem",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "title", "type": "String", "queryable": false, "sortable": false },
+        { "name": "quantityValue", "type": "String", "queryable": false, "sortable": false },
+        { "name": "quantityUnit", "type": "String", "queryable": false, "sortable": false },
+        { "name": "isBought", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "boughtAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "restockCount", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "sortOrder", "type": "Int64", "queryable": false, "sortable": true },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId"],
+        "sort": ["sortOrder"]
+      }
+    },
+    {
+      "name": "BacklogCategory",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "title", "type": "String", "queryable": false, "sortable": false },
+        { "name": "sortOrder", "type": "Int64", "queryable": false, "sortable": true },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId"],
+        "sort": ["sortOrder"]
+      }
+    },
+    {
+      "name": "BacklogItem",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "categoryId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "title", "type": "String", "queryable": false, "sortable": false },
+        { "name": "assigneeId", "type": "Reference", "queryable": false, "sortable": false },
+        { "name": "notes", "type": "String", "queryable": false, "sortable": false },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": true },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId", "categoryId"],
+        "sort": ["createdAt"]
+      }
+    }
+  ]
+}

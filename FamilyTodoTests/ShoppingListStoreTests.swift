@@ -92,6 +92,74 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertTrue(store.recentItems.isEmpty)
     }
 
+    func testMergeCloudSnapshot_PendingUploadWinsAndPendingDeleteRemoved() async {
+        let baseDate = Date()
+        let pendingID = UUID()
+        let deleteID = UUID()
+        let cloudOnlyID = UUID()
+
+        let pendingLocal = ShoppingItem(
+            id: pendingID,
+            householdId: householdId,
+            title: "Milk (local pending)",
+            isBought: true,
+            boughtAt: baseDate,
+            updatedAt: baseDate.addingTimeInterval(10)
+        )
+        let cloudPending = ShoppingItem(
+            id: pendingID,
+            householdId: householdId,
+            title: "Milk (cloud stale)",
+            isBought: false,
+            updatedAt: baseDate
+        )
+        let cloudDeleted = ShoppingItem(
+            id: deleteID,
+            householdId: householdId,
+            title: "To delete",
+            isBought: false,
+            updatedAt: baseDate
+        )
+        let cloudOnly = ShoppingItem(
+            id: cloudOnlyID,
+            householdId: householdId,
+            title: "Cloud item",
+            isBought: false,
+            updatedAt: baseDate
+        )
+
+        let snapshot = ShoppingListStore.PendingSyncSnapshot(
+            pendingUploadByID: [pendingID: pendingLocal],
+            pendingDeleteIDs: [deleteID]
+        )
+
+        let merged = store.mergeCloudSnapshot([cloudPending, cloudDeleted, cloudOnly], with: snapshot)
+
+        XCTAssertEqual(merged.count, 2)
+        XCTAssertTrue(merged.contains(where: { $0.id == cloudOnlyID }))
+        XCTAssertTrue(merged.contains(where: { $0.id == pendingID && $0.isBought }))
+        XCTAssertFalse(merged.contains(where: { $0.id == deleteID }))
+    }
+
+    func testUpdateItem_UpsertsCacheWhenRowMissing() async throws {
+        let item = ShoppingItem(
+            householdId: householdId,
+            title: "Upsert check",
+            isBought: true
+        )
+
+        await store.updateItem(item)
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.id == item.id }
+        )
+        let cached = try modelContainer.mainContext.fetch(descriptor)
+
+        XCTAssertEqual(cached.count, 1)
+        XCTAssertEqual(cached.first?.title, "Upsert check")
+        XCTAssertEqual(cached.first?.isBought, true)
+    }
+
     private func createBoughtItem(title: String) async {
         await store.createItem(title: title)
 

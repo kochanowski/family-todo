@@ -14,6 +14,11 @@ final class ShoppingListStore: ObservableObject {
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
 
+    struct PendingSyncSnapshot {
+        var pendingUploadByID: [UUID: ShoppingItem]
+        var pendingDeleteIDs: Set<UUID>
+    }
+
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
     }
@@ -75,7 +80,8 @@ final class ShoppingListStore: ObservableObject {
         error = nil
 
         // 1. Load from cache first (instant UI)
-        loadFromCache()
+        let cachedItems = loadFromCache()
+        let pendingSnapshot = pendingSyncSnapshot(from: cachedItems)
 
         if !isCloudSyncEnabled {
             isLoading = false
@@ -87,7 +93,7 @@ final class ShoppingListStore: ObservableObject {
             // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
             let fetchedItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
-            items = fetchedItems
+            items = mergeCloudSnapshot(fetchedItems, with: pendingSnapshot)
 
             // 3. Update cache
             syncToCache(fetchedItems)
@@ -99,8 +105,8 @@ final class ShoppingListStore: ObservableObject {
         isLoading = false
     }
 
-    private func loadFromCache() {
-        guard let context = modelContext, let householdId else { return }
+    private func loadFromCache() -> [CachedShoppingItem] {
+        guard let context = modelContext, let householdId else { return [] }
 
         let descriptor = FetchDescriptor<CachedShoppingItem>(
             predicate: #Predicate { $0.householdId == householdId }
@@ -108,7 +114,9 @@ final class ShoppingListStore: ObservableObject {
 
         if let cachedItems = try? context.fetch(descriptor) {
             items = cachedItems.map { $0.toShoppingItem() }
+            return cachedItems
         }
+        return []
     }
 
     private func syncToCache(_ items: [ShoppingItem]) {
@@ -120,6 +128,9 @@ final class ShoppingListStore: ObservableObject {
             )
 
             if let existing = try? context.fetch(descriptor).first {
+                if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "pendingDelete" {
+                    continue
+                }
                 existing.update(from: item)
             } else {
                 let cached = CachedShoppingItem(from: item)
@@ -148,13 +159,11 @@ final class ShoppingListStore: ObservableObject {
         items.append(item)
 
         // Save to cache with pending status
-        if let context = modelContext {
-            let cached = CachedShoppingItem(from: item)
-            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            context.insert(cached)
-            try? context.save()
-        }
+        upsertCachedItem(
+            item,
+            syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date()
+        )
 
         if !isCloudSyncEnabled {
             return
@@ -195,17 +204,11 @@ final class ShoppingListStore: ObservableObject {
         }
 
         // Save to cache with pending status
-        if let context = modelContext {
-            let descriptor = FetchDescriptor<CachedShoppingItem>(
-                predicate: #Predicate { $0.id == item.id }
-            )
-            if let cached = try? context.fetch(descriptor).first {
-                cached.update(from: updatedItem)
-                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                try? context.save()
-            }
-        }
+        upsertCachedItem(
+            updatedItem,
+            syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date()
+        )
 
         if !isCloudSyncEnabled {
             return
@@ -227,8 +230,7 @@ final class ShoppingListStore: ObservableObject {
             }
         } catch {
             self.error = error
-            // Keep in cache with pending status
-            await loadItems()
+            // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
         }
     }
 
@@ -316,20 +318,13 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private func updateCachedOrder(for orderedItems: [ShoppingItem]) {
-        guard let context = modelContext else { return }
-
         for item in orderedItems {
-            let itemId = item.id
-            let descriptor = FetchDescriptor<CachedShoppingItem>(
-                predicate: #Predicate { $0.id == itemId }
+            upsertCachedItem(
+                item,
+                syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
+                lastSyncedAt: isCloudSyncEnabled ? nil : Date()
             )
-            if let cached = try? context.fetch(descriptor).first {
-                cached.update(from: item)
-                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            }
         }
-        try? context.save()
     }
 
     private func markCachedItemSynced(itemId: UUID) {
@@ -385,7 +380,7 @@ final class ShoppingListStore: ObservableObject {
 
             if isCloudSyncEnabled {
                 do {
-                    try await cloudKit.deleteShoppingItem(id: item.id)
+                    try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
                 } catch {
                     self.error = error
                 }
@@ -450,7 +445,7 @@ final class ShoppingListStore: ObservableObject {
             }
 
             do {
-                try await cloudKit.deleteShoppingItem(id: item.id)
+                try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
             } catch {
                 self.error = error
             }
@@ -486,7 +481,7 @@ final class ShoppingListStore: ObservableObject {
         }
 
         do {
-            try await cloudKit.deleteShoppingItem(id: item.id)
+            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
 
             // Remove from cache
             if let context = modelContext {
@@ -515,5 +510,75 @@ final class ShoppingListStore: ObservableObject {
 
     private func recentTimestamp(for item: ShoppingItem) -> Date {
         item.boughtAt ?? item.updatedAt
+    }
+
+    func pendingSyncSnapshot(from cachedItems: [CachedShoppingItem]) -> PendingSyncSnapshot {
+        var pendingUploadByID: [UUID: ShoppingItem] = [:]
+        var pendingDeleteIDs = Set<UUID>()
+
+        for cached in cachedItems {
+            switch cached.syncStatusRaw {
+            case "pendingUpload":
+                pendingUploadByID[cached.id] = cached.toShoppingItem()
+            case "pendingDelete":
+                pendingDeleteIDs.insert(cached.id)
+            default:
+                continue
+            }
+        }
+
+        return PendingSyncSnapshot(
+            pendingUploadByID: pendingUploadByID,
+            pendingDeleteIDs: pendingDeleteIDs
+        )
+    }
+
+    func mergeCloudSnapshot(
+        _ cloudItems: [ShoppingItem],
+        with pendingSnapshot: PendingSyncSnapshot
+    ) -> [ShoppingItem] {
+        var mergedByID: [UUID: ShoppingItem] = Dictionary(
+            uniqueKeysWithValues: cloudItems.map { ($0.id, $0) }
+        )
+
+        for (id, pendingItem) in pendingSnapshot.pendingUploadByID {
+            mergedByID[id] = pendingItem
+        }
+        for id in pendingSnapshot.pendingDeleteIDs {
+            mergedByID.removeValue(forKey: id)
+        }
+
+        return mergedByID.values.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
+    private func upsertCachedItem(
+        _ item: ShoppingItem,
+        syncStatusRaw: String,
+        lastSyncedAt: Date?
+    ) {
+        guard let context = modelContext else { return }
+
+        let itemId = item.id
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.id == itemId }
+        )
+
+        if let cached = try? context.fetch(descriptor).first {
+            cached.update(from: item)
+            cached.syncStatusRaw = syncStatusRaw
+            cached.lastSyncedAt = lastSyncedAt
+        } else {
+            let cached = CachedShoppingItem(from: item)
+            cached.syncStatusRaw = syncStatusRaw
+            cached.lastSyncedAt = lastSyncedAt
+            context.insert(cached)
+        }
+
+        try? context.save()
     }
 }

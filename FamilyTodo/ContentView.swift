@@ -2,16 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject private var userSession: UserSession
-
     var body: some View {
-        Group {
-            if userSession.hasActiveSession {
-                MainAppView()
-            } else {
-                SignInView()
-            }
-        }
+        MainAppView()
     }
 }
 
@@ -86,10 +78,12 @@ struct MainAppView: View {
         guard !hasBootstrappedHousehold else { return }
         hasBootstrappedHousehold = true
 
-        guard userSession.currentHouseholdID == nil, let userId = userSession.userId else { return }
+        guard let userId = userSession.userId else { return }
 
         await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
-        if let household = householdStore.currentHousehold {
+        if let household = householdStore.currentHousehold,
+           userSession.currentHouseholdID != household.id
+        {
             userSession.setCurrentHousehold(household.id)
         }
     }

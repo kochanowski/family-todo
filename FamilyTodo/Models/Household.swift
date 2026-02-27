@@ -3,6 +3,7 @@ import Foundation
 struct Household: Identifiable, Codable {
     let id: UUID
     var name: String
+    var iconSymbol: String
     let ownerId: String
     let createdAt: Date
     var updatedAt: Date
@@ -13,12 +14,14 @@ struct Household: Identifiable, Codable {
     init(
         id: UUID = UUID(),
         name: String = "",
+        iconSymbol: String = "house.fill",
         ownerId: String = "",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
         self.id = id
         self.name = name
+        self.iconSymbol = iconSymbol
         self.ownerId = ownerId
         self.createdAt = createdAt
         self.updatedAt = updatedAt

@@ -60,12 +60,23 @@ class MemberStore: ObservableObject {
     // MARK: - Operations
 
     func updateMember(id: UUID, displayName: String, currentUserId: String?) async throws {
-        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+        let trimmedName = try DisplayNameValidator.validate(displayName)
         try assertCanEditMember(id: id, currentUserId: currentUserId)
+
+        let normalizedKey = DisplayNameValidator.normalizedKey(trimmedName)
+        if members.contains(where: {
+            $0.id != id &&
+                $0.isActive &&
+                DisplayNameValidator.normalizedKey($0.displayName) == normalizedKey
+        }) {
+            throw HouseholdError.displayNameAlreadyTaken
+        }
 
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
         var member = members[index]
+        if member.displayName == trimmedName {
+            return
+        }
 
         // Optimistic Update
         let oldName = member.displayName
@@ -76,8 +87,13 @@ class MemberStore: ObservableObject {
         updateCachedMember(member)
 
         if syncMode == .cloud {
+            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
             do {
-                _ = try await cloudKit.saveMember(member)
+                _ = try await cloudKit.updateMemberDisplayName(
+                    memberId: member.id,
+                    householdId: member.householdId,
+                    newDisplayName: trimmedName
+                )
             } catch {
                 // Revert
                 member.displayName = oldName
@@ -117,8 +133,13 @@ class MemberStore: ObservableObject {
         updateCachedMember(updatedMember)
 
         if syncMode == .cloud {
+            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
             do {
-                _ = try await cloudKit.saveMember(updatedMember)
+                _ = try await cloudKit.updateMemberRole(
+                    memberId: updatedMember.id,
+                    householdId: updatedMember.householdId,
+                    newRole: updatedMember.role
+                )
             } catch {
                 members[index] = member // revert
                 updateCachedMember(member)
@@ -144,8 +165,9 @@ class MemberStore: ObservableObject {
         deleteCachedMember(id: id)
 
         if syncMode == .cloud {
+            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
             do {
-                try await cloudKit.deleteMember(id: id)
+                try await cloudKit.deleteMember(id: id, householdId: member.householdId)
             } catch {
                 // Revert
                 members.insert(member, at: index)
@@ -223,6 +245,16 @@ class MemberStore: ObservableObject {
     }
 
     // MARK: - Permissions
+
+    private func setCloudScopeForCurrentUser(currentUserId: String?) async {
+        guard syncMode == .cloud else { return }
+        guard let currentUserId else { return }
+        guard let currentUserMember = members.first(where: { $0.userId == currentUserId }) else { return }
+
+        let scope: CloudKitManager.HouseholdDatabaseScope =
+            currentUserMember.role == .owner ? .ownerPrivate : .participantShared
+        await cloudKit.setHouseholdScope(scope)
+    }
 
     private func assertOwnerPermissions(currentUserId: String?) throws {
         guard let userId = currentUserId,

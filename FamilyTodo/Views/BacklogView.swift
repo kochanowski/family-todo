@@ -27,9 +27,9 @@ private struct BacklogContent: View {
             switch self {
             case .assigneeRequired:
                 "Assign this item before moving it to Tasks/NEXT."
-            case .wipLimitReached(let current, let limit):
+            case let .wipLimitReached(current, limit):
                 "WIP limit reached (\(current)/\(limit)). Complete one active task first."
-            case .failed(let message):
+            case let .failed(message):
                 message
             }
         }
@@ -57,9 +57,11 @@ private struct BacklogContent: View {
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
-            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
+        )
         _memberStore = StateObject(
-            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
+        )
     }
 
     var body: some View {
@@ -70,7 +72,8 @@ private struct BacklogContent: View {
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
                 .padding(
-                    .bottom, activeBanner == nil ? AppChromeMetrics.screenHeaderBottomPadding : 8)
+                    .bottom, activeBanner == nil ? AppChromeMetrics.screenHeaderBottomPadding : 8
+                )
 
             if let activeBanner {
                 BacklogStatusBanner(text: activeBanner.text)
@@ -378,10 +381,10 @@ private struct BacklogContent: View {
         case .assigneeRequired:
             HapticManager.warning()
             showBanner(.assigneeRequired)
-        case .wipLimitReached(let current, let limit):
+        case let .wipLimitReached(current, limit):
             HapticManager.warning()
             showBanner(.wipLimitReached(current: current, limit: limit))
-        case .failed(let message):
+        case let .failed(message):
             HapticManager.warning()
             showBanner(.failed(message))
         }
@@ -443,7 +446,7 @@ private struct BacklogContent: View {
     private func scheduleComposerFocus(for categoryId: UUID) {
         // Keyboard + layout updates can race each other in scroll containers.
         // Retry focus a few times to keep the composer deterministic.
-        for attempt in 0..<4 {
+        for attempt in 0 ..< 4 {
             let delay = 0.03 + (Double(attempt) * 0.05)
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 guard activeComposerCategoryId == categoryId else { return }
@@ -666,21 +669,25 @@ struct CategoryCard: View {
 
             VStack(spacing: 6) {
                 ForEach(items) { item in
+                    let canPromote = item.assigneeId != nil
                     BacklogItemRow(
                         item: item,
                         assigneeName: assigneeNameFor(item.assigneeId),
+                        canPromote: canPromote,
                         onTap: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
                         onPromote: { onPromoteItem(item) },
                         onDelete: { onDeleteItem(item) }
                     )
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                        Button {
-                            onPromoteItem(item)
-                        } label: {
-                            Label("Promote", systemImage: "arrow.up.circle")
+                        if canPromote {
+                            Button {
+                                onPromoteItem(item)
+                            } label: {
+                                Label("Promote", systemImage: "arrow.up.circle")
+                            }
+                            .tint(.blue)
                         }
-                        .tint(.blue)
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
@@ -844,6 +851,7 @@ struct BacklogItemRow: View {
 
     let item: BacklogItem
     let assigneeName: String?
+    let canPromote: Bool
     let onTap: () -> Void
     let onAssign: () -> Void
     let onPromote: () -> Void
@@ -883,13 +891,16 @@ struct BacklogItemRow: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: onPromote) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                        .frame(width: 32, height: 32)
+                if canPromote {
+                    Button(action: onPromote) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .scale))
                 }
-                .buttonStyle(.plain)
 
                 Button(action: onDelete) {
                     Image(systemName: "trash")
@@ -910,6 +921,7 @@ struct BacklogItemRow: View {
         .onTapGesture {
             onTap()
         }
+        .animation(.easeInOut(duration: 0.2), value: canPromote)
     }
 }
 

@@ -10,6 +10,10 @@ extension CloudKitManager {
         CKRecord.ID(recordName: id.uuidString)
     }
 
+    func recordID(for id: UUID, in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+    }
+
     func reference(for id: UUID) -> CKRecord.Reference {
         CKRecord.Reference(recordID: recordID(for: id), action: .none)
     }
@@ -34,6 +38,7 @@ extension CloudKitManager {
         let record = CKRecord(recordType: "Household", recordID: recordID(for: household.id))
         record["id"] = household.id.uuidString as CKRecordValue
         record["name"] = household.name as CKRecordValue
+        record["iconSymbol"] = household.iconSymbol as CKRecordValue
         record["ownerId"] = household.ownerId as CKRecordValue
         record["createdAt"] = household.createdAt as CKRecordValue
         record["updatedAt"] = household.updatedAt as CKRecordValue
@@ -55,6 +60,7 @@ extension CloudKitManager {
         return Household(
             id: id,
             name: name,
+            iconSymbol: (record["iconSymbol"] as? String) ?? "house.fill",
             ownerId: ownerId,
             createdAt: createdAt,
             updatedAt: updatedAt

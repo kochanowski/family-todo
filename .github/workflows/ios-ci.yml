@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, r4-features]
+    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -201,6 +201,21 @@ jobs:
             --data-urlencode "text=${MSG}"
 
   # ─────────────────────────────────────────────────────────────
+  # CloudKit schema gate (Development -> Production)
+  # ─────────────────────────────────────────────────────────────
+  cloudkit-schema:
+    name: CloudKit Schema Gate
+    needs: [build-and-test, swiftlint]
+    # Run whenever TestFlight deploy would run.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login'))
+    uses: ./.github/workflows/cloudkit-schema.yml
+    with:
+      promote_to_production: true
+      dry_run: false
+      schema_source: cloudkit/schema/housepulse-schema.json
+    secrets: inherit
+
+  # ─────────────────────────────────────────────────────────────
   # Deploy to TestFlight (Fastlane)
   # ─────────────────────────────────────────────────────────────
   deploy-testflight:
@@ -208,9 +223,9 @@ jobs:
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
-    needs: [build-and-test, swiftlint]
-    # Only run on manual dispatch, tags starting with 'v', or pushes to main or feature/continue-mvp
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features'))
+    needs: [build-and-test, swiftlint, cloudkit-schema]
+    # Only run on manual dispatch, tags starting with 'v', or pushes to release/testing branches.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login'))
 
     steps:
       - name: Checkout
@@ -302,9 +317,13 @@ jobs:
           PROVISIONING_PROFILE_NAME: ${{ secrets.PROVISIONING_PROFILE_NAME }}
           # Build number from GitHub run
           BUILD_NUMBER: ${{ github.run_number }}
+          # Force CloudKit-enabled TestFlight archives.
+          HP_CLOUDKIT_ENABLED: "YES"
           # Use the keychain we created in CI (avoid fastlane creating another)
           SKIP_FASTLANE_SETUP_CI: "1"
-        run: bundle exec fastlane beta
+        run: |
+          echo "Deploy profile: HPCloudKitEnabled=$HP_CLOUDKIT_ENABLED"
+          bundle exec fastlane beta
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -319,7 +338,7 @@ jobs:
   notify-failure:
     name: Notify Failure (Telegram)
     runs-on: ubuntu-latest
-    needs: [build-and-test, swiftlint, deploy-testflight]
+    needs: [build-and-test, swiftlint, cloudkit-schema, deploy-testflight]
     if: failure()
 
     steps:

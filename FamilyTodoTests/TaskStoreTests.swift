@@ -119,7 +119,7 @@ final class WIPLimitLogicTests: XCTestCase {
     func testCanMoveToNext_UnderLimit() {
         let tasks = [
             makeTask(status: .next, assigneeId: assigneeId),
-            makeTask(status: .next, assigneeId: assigneeId)
+            makeTask(status: .next, assigneeId: assigneeId),
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
@@ -132,7 +132,7 @@ final class WIPLimitLogicTests: XCTestCase {
         let tasks = [
             makeTask(status: .next, assigneeId: assigneeId),
             makeTask(status: .next, assigneeId: assigneeId),
-            makeTask(status: .next, assigneeId: assigneeId)
+            makeTask(status: .next, assigneeId: assigneeId),
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
@@ -145,7 +145,7 @@ final class WIPLimitLogicTests: XCTestCase {
         let tasks = [
             makeTask(status: .next, assigneeId: otherAssigneeId),
             makeTask(status: .next, assigneeId: otherAssigneeId),
-            makeTask(status: .next, assigneeId: otherAssigneeId)
+            makeTask(status: .next, assigneeId: otherAssigneeId),
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
@@ -159,7 +159,7 @@ final class WIPLimitLogicTests: XCTestCase {
             makeTask(status: .backlog, assigneeId: assigneeId),
             makeTask(status: .backlog, assigneeId: assigneeId),
             makeTask(status: .backlog, assigneeId: assigneeId),
-            makeTask(status: .backlog, assigneeId: assigneeId)
+            makeTask(status: .backlog, assigneeId: assigneeId),
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
@@ -173,7 +173,7 @@ final class WIPLimitLogicTests: XCTestCase {
             makeTask(status: .done, assigneeId: assigneeId),
             makeTask(status: .done, assigneeId: assigneeId),
             makeTask(status: .done, assigneeId: assigneeId),
-            makeTask(status: .done, assigneeId: assigneeId)
+            makeTask(status: .done, assigneeId: assigneeId),
         ]
 
         let currentCount = tasks.filter { $0.status == .next && $0.assigneeId == assigneeId }.count
@@ -189,7 +189,7 @@ final class WIPLimitLogicTests: XCTestCase {
             makeTask(status: .backlog, assigneeId: assigneeId),
             makeTask(status: .next, assigneeId: assigneeId),
             makeTask(status: .done, assigneeId: assigneeId),
-            makeTask(status: .backlog, assigneeId: otherAssigneeId)
+            makeTask(status: .backlog, assigneeId: otherAssigneeId),
         ]
 
         let backlogTasks = tasks.filter { $0.status == .backlog }
@@ -202,7 +202,7 @@ final class WIPLimitLogicTests: XCTestCase {
             makeTask(status: .backlog, assigneeId: assigneeId),
             makeTask(status: .next, assigneeId: assigneeId),
             makeTask(status: .next, assigneeId: otherAssigneeId),
-            makeTask(status: .done, assigneeId: assigneeId)
+            makeTask(status: .done, assigneeId: assigneeId),
         ]
 
         let nextTasks = tasks.filter { $0.status == .next }
@@ -215,7 +215,7 @@ final class WIPLimitLogicTests: XCTestCase {
             makeTask(status: .backlog, assigneeId: assigneeId),
             makeTask(status: .next, assigneeId: assigneeId),
             makeTask(status: .done, assigneeId: assigneeId),
-            makeTask(status: .done, assigneeId: otherAssigneeId)
+            makeTask(status: .done, assigneeId: otherAssigneeId),
         ]
 
         let doneTasks = tasks.filter { $0.status == .done }
@@ -239,7 +239,7 @@ final class WIPLimitLogicTests: XCTestCase {
         let tasks = [
             Task(householdId: householdId, title: "Later", status: .backlog, dueDate: nextWeek, taskType: .oneOff),
             Task(householdId: householdId, title: "Sooner", status: .backlog, dueDate: tomorrow, taskType: .oneOff),
-            Task(householdId: householdId, title: "No date", status: .backlog, taskType: .oneOff)
+            Task(householdId: householdId, title: "No date", status: .backlog, taskType: .oneOff),
         ]
 
         let sorted = tasks.filter { $0.status == .backlog }
@@ -268,7 +268,7 @@ final class WIPLimitLogicTests: XCTestCase {
             Task(householdId: householdId, title: "Recent", status: .done, completedAt: now, taskType: .oneOff),
             Task(
                 householdId: householdId, title: "Yesterday", status: .done, completedAt: yesterday, taskType: .oneOff
-            )
+            ),
         ]
 
         let sorted = tasks.filter { $0.status == .done }

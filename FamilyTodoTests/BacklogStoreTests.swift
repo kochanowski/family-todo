@@ -14,7 +14,7 @@ final class BacklogStoreTests: XCTestCase {
         let schema = Schema([
             CachedBacklogItem.self,
             CachedBacklogCategory.self,
-            CachedTask.self
+            CachedTask.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         modelContainer = try ModelContainer(for: schema, configurations: [config])

@@ -1,0 +1,156 @@
+name: CloudKit Schema Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote_to_production:
+        description: Promote schema to CloudKit production after development apply
+        required: true
+        default: true
+        type: boolean
+      dry_run:
+        description: Validate and generate schema artifacts without importing
+        required: true
+        default: false
+        type: boolean
+      schema_source:
+        description: Path to schema contract JSON file
+        required: true
+        default: cloudkit/schema/housepulse-schema.json
+        type: string
+  workflow_call:
+    inputs:
+      promote_to_production:
+        required: false
+        default: true
+        type: boolean
+      dry_run:
+        required: false
+        default: false
+        type: boolean
+      schema_source:
+        required: false
+        default: cloudkit/schema/housepulse-schema.json
+        type: string
+    secrets:
+      TEAM_ID:
+        required: true
+      CLOUDKIT_MANAGEMENT_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-schema:
+    name: Validate CloudKit Schema Contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate schema contract
+        env:
+          CONTAINER_ID: iCloud.com.kochanowski.housepulse
+        run: |
+          set -euo pipefail
+          scripts/cloudkit/validate_schema.sh "${{ inputs.schema_source }}"
+
+      - name: Upload validation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudkit-schema-contract
+          path: ${{ inputs.schema_source }}
+          retention-days: 14
+
+  apply-development:
+    name: Apply Schema (Development)
+    runs-on: macos-15
+    needs: [validate-schema]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode and cktool availability
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun cktool --help | head -n 20
+
+      - name: Apply schema to development
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          CONTAINER_ID: iCloud.com.kochanowski.housepulse
+          CLOUDKIT_MANAGEMENT_TOKEN: ${{ secrets.CLOUDKIT_MANAGEMENT_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          mkdir -p cloudkit/artifacts
+          scripts/cloudkit/apply_schema.sh "${{ inputs.schema_source }}" 2>&1 | tee cloudkit/artifacts/workflow-apply-development.log
+
+      - name: Upload development logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudkit-schema-apply-development
+          path: cloudkit/artifacts
+          retention-days: 14
+
+  promote-production:
+    name: Verify Schema (Production + System Share Types)
+    runs-on: macos-15
+    needs: [apply-development]
+    if: ${{ inputs.promote_to_production }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode and cktool availability
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun cktool --help | head -n 20
+
+      - name: Verify production schema and CKShare system type
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          CONTAINER_ID: iCloud.com.kochanowski.housepulse
+          CLOUDKIT_MANAGEMENT_TOKEN: ${{ secrets.CLOUDKIT_MANAGEMENT_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          mkdir -p cloudkit/artifacts
+          scripts/cloudkit/promote_schema.sh "${{ inputs.schema_source }}" 2>&1 | tee cloudkit/artifacts/workflow-promote-production.log
+
+      - name: Upload production logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudkit-schema-promote-production
+          path: cloudkit/artifacts
+          retention-days: 14
+
+  report:
+    name: CloudKit Schema Report
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [validate-schema, apply-development, promote-production]
+
+    steps:
+      - name: Write schema report
+        run: |
+          {
+            echo "## CloudKit Schema Gate"
+            echo ""
+            echo "- Schema source: \`${{ inputs.schema_source }}\`"
+            echo "- Dry run: \`${{ inputs.dry_run }}\`"
+            echo "- Promote to production: \`${{ inputs.promote_to_production }}\`"
+            echo ""
+            echo "### Job results"
+            echo "- validate-schema: **${{ needs.validate-schema.result }}**"
+            echo "- apply-development: **${{ needs.apply-development.result }}**"
+            echo "- promote-production: **${{ needs.promote-production.result }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
