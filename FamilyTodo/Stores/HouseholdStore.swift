@@ -182,6 +182,7 @@ class HouseholdStore: ObservableObject {
         // Check availability and get container from CloudKitManager
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.ownerPrivate)
+        _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: household.id)
         try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
         let container = await cloudKit.getContainer()
 
@@ -204,22 +205,15 @@ class HouseholdStore: ObservableObject {
             return existingURL
         }
 
-        if share == nil {
-            do {
-                _ = try await createShare()
-                if let createdURL = share?.url {
-                    return createdURL
-                }
-            } catch CloudKitManager.CloudKitManagerError.shareNotCreated {
-                if let fallbackShare = try await cloudKit.fetchShare(for: household.id) {
-                    share = fallbackShare
-                    activeContainer = await cloudKit.getContainer()
-                    if let fallbackURL = fallbackShare.url {
-                        return fallbackURL
-                    }
-                }
-                throw CloudKitManager.CloudKitManagerError.shareNotCreated
+        do {
+            let (createdShare, container) = try await createShare()
+            share = createdShare
+            activeContainer = container
+            if let createdURL = createdShare.url {
+                return createdURL
             }
+        } catch CloudKitManager.CloudKitManagerError.shareNotCreated {
+            // Fallbacks below.
         }
 
         if let fallbackShare = try await cloudKit.fetchShare(for: household.id) {
@@ -234,7 +228,7 @@ class HouseholdStore: ObservableObject {
             return shareURL
         }
 
-        throw HouseholdError.invalidInviteCode
+        throw CloudKitManager.CloudKitManagerError.shareNotCreated
     }
 
     // MARK: - Join Household

@@ -294,4 +294,17 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitOperation)
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitErrorTimestampISO8601)
     }
+
+    func testRecordKeepsCreateShareStageOperationName() {
+        CloudKitDiagnosticsState.shared.record(
+            error: CloudKitManager.CloudKitManagerError.shareNotCreated,
+            operation: "createShare.final"
+        )
+
+        let payload = CloudKitDiagnosticsState.shared.lastCloudKitError
+        XCTAssertNotNil(payload)
+        XCTAssertTrue(payload?.contains("operation=createShare.final") == true)
+        XCTAssertTrue(payload?.contains("Failed to create share") == true)
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.lastCloudKitOperation, "createShare.final")
+    }
 }
