@@ -308,3 +308,45 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertEqual(CloudKitDiagnosticsState.shared.lastCloudKitOperation, "createShare.final")
     }
 }
+
+@MainActor
+final class ShareAcceptanceCoordinatorTests: XCTestCase {
+    private func makeUserDefaults() -> UserDefaults {
+        let suiteName = "ShareAcceptanceCoordinatorTests-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Failed to create UserDefaults suite")
+            return .standard
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
+    func testEnqueueInviteURLPersistsAndRestoresPendingInvite() {
+        let defaults = makeUserDefaults()
+        let coordinator = ShareAcceptanceCoordinator(userDefaults: defaults)
+        let inviteURL = URL(string: "https://www.icloud.com/share/AbCdEf123")!
+
+        coordinator.enqueue(inviteURL: inviteURL)
+
+        XCTAssertEqual(coordinator.pendingInviteCode, inviteURL.absoluteString)
+        XCTAssertEqual(coordinator.pendingSource, .onOpenURL)
+        XCTAssertNotNil(coordinator.pendingTimestampISO8601)
+
+        let restored = ShareAcceptanceCoordinator(userDefaults: defaults)
+        XCTAssertEqual(restored.pendingInviteCode, inviteURL.absoluteString)
+        XCTAssertEqual(restored.pendingSource, .onOpenURL)
+        XCTAssertNotNil(restored.pendingTimestampISO8601)
+    }
+
+    func testClearPendingPersistentRemovesStoredInvite() {
+        let defaults = makeUserDefaults()
+        let coordinator = ShareAcceptanceCoordinator(userDefaults: defaults)
+
+        coordinator.enqueue(rawInviteCode: "ABCD1234")
+        XCTAssertNotNil(defaults.string(forKey: "ShareAcceptanceCoordinator.pendingInviteCode"))
+
+        coordinator.clearPendingPersistent()
+        let restored = ShareAcceptanceCoordinator(userDefaults: defaults)
+        XCTAssertNil(restored.pendingInviteCode)
+    }
+}

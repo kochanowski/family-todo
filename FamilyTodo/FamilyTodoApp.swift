@@ -132,13 +132,6 @@ struct FamilyTodoApp: App {
                         #endif
                     }
                     .onOpenURL { url in
-                        if let host = url.host?.lowercased(),
-                           host.contains("icloud.com")
-                        {
-                            shareAcceptanceCoordinator.enqueue(inviteURL: url)
-                            return
-                        }
-
                         if url.scheme?.lowercased() == "housepulse" {
                             do {
                                 let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
@@ -146,6 +139,13 @@ struct FamilyTodoApp: App {
                             } catch {
                                 shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
                             }
+                            return
+                        }
+
+                        if let host = url.host?.lowercased(),
+                           host.contains("icloud.com")
+                        {
+                            shareAcceptanceCoordinator.enqueue(inviteURL: url)
                         }
                     }
                     .alert(

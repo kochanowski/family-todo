@@ -19,6 +19,12 @@ actor CloudKitManager {
         case final
     }
 
+    private enum AcceptShareStage: String {
+        case acceptOperation
+        case fetchRoot
+        case finalize
+    }
+
     private struct SharedZoneContext {
         var zoneByHouseholdId: [UUID: CKRecordZone.ID] = [:]
         var zoneByRecordName: [String: CKRecordZone.ID] = [:]
@@ -1211,6 +1217,22 @@ actor CloudKitManager {
         return try await fetchShareRecord(withID: shareReference.recordID, database: database)
     }
 
+    private func ensureReadWriteSharePermission(
+        _ share: CKShare,
+        database: CKDatabase
+    ) async throws -> CKShare {
+        guard share.publicPermission != .readWrite else {
+            return share
+        }
+
+        share.publicPermission = .readWrite
+        let saved = try await saveRecordWithChangedKeys(share, database: database)
+        guard let savedShare = saved as? CKShare else {
+            throw CloudKitManagerError.invalidRecord
+        }
+        return savedShare
+    }
+
     private func pollForExistingShare(
         rootRecordID: CKRecord.ID,
         database: CKDatabase,
@@ -1239,7 +1261,7 @@ actor CloudKitManager {
     ) async throws -> CKShare? {
         let share = CKShare(rootRecord: householdRecord)
         share[CKShare.SystemFieldKey.title] = householdName as CKRecordValue
-        share.publicPermission = .none
+        share.publicPermission = .readWrite
 
         return try await withCheckedThrowingContinuation { continuation in
             let modifyOperation = CKModifyRecordsOperation(
@@ -1247,22 +1269,36 @@ actor CloudKitManager {
                 recordIDsToDelete: nil
             )
             modifyOperation.savePolicy = .ifServerRecordUnchanged
+            modifyOperation.isAtomic = true
             modifyOperation.qualityOfService = .userInitiated
 
             var savedShare: CKShare?
+            var firstFailure: Error?
+            let shareRecordID = share.recordID
 
-            modifyOperation.perRecordSaveBlock = { _, result in
-                if case let .success(record) = result, let ckShare = record as? CKShare {
-                    savedShare = ckShare
+            modifyOperation.perRecordSaveBlock = { recordID, result in
+                switch result {
+                case let .success(record):
+                    if let ckShare = record as? CKShare {
+                        savedShare = ckShare
+                    }
+                case let .failure(error):
+                    if firstFailure == nil || recordID == shareRecordID {
+                        firstFailure = error
+                    }
                 }
             }
 
             modifyOperation.modifyRecordsResultBlock = { result in
                 switch result {
                 case .success:
+                    if let firstFailure {
+                        continuation.resume(throwing: firstFailure)
+                        return
+                    }
                     continuation.resume(returning: savedShare)
                 case let .failure(error):
-                    continuation.resume(throwing: self.categorizeError(error))
+                    continuation.resume(throwing: error)
                 }
             }
 
@@ -1298,8 +1334,10 @@ actor CloudKitManager {
             if let shareReference = householdRecord.share,
                let existingShare = try await fetchShareRecord(withID: shareReference.recordID, database: db)
             {
+                stage = .modifyRecords
+                let normalizedShare = try await ensureReadWriteSharePermission(existingShare, database: db)
                 clearCloudKitFailure()
-                return existingShare
+                return normalizedShare
             }
 
             stage = .modifyRecords
@@ -1327,8 +1365,9 @@ actor CloudKitManager {
             }
 
             if let createdShare {
+                let normalizedShare = try await ensureReadWriteSharePermission(createdShare, database: db)
                 clearCloudKitFailure()
-                return createdShare
+                return normalizedShare
             }
 
             stage = .fallbackPoll
@@ -1336,8 +1375,9 @@ actor CloudKitManager {
                 rootRecordID: householdRecord.recordID,
                 database: db
             ) {
+                let normalizedShare = try await ensureReadWriteSharePermission(fallbackShare, database: db)
                 clearCloudKitFailure()
-                return fallbackShare
+                return normalizedShare
             }
 
             stage = .final
@@ -1360,7 +1400,10 @@ actor CloudKitManager {
             let db = await privateDatabase
             let record = try await fetchOwnerHouseholdRecordStrict(householdId: householdId)
             guard let shareReference = record.share else { return nil }
-            return try await fetchShareRecord(withID: shareReference.recordID, database: db)
+            guard let share = try await fetchShareRecord(withID: shareReference.recordID, database: db) else {
+                return nil
+            }
+            return try await ensureReadWriteSharePermission(share, database: db)
         case .participantShared:
             let record = try await fetchHouseholdRecord(id: householdId)
             guard let shareReference = record.share else { return nil }
@@ -1376,34 +1419,76 @@ actor CloudKitManager {
 
     /// Accept a CloudKit share invitation and return shared household.
     func acceptShare(metadata: CKShare.Metadata) async throws -> Household {
-        let ckContainer = await container
-        let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
-        acceptOperation.qualityOfService = .userInitiated
+        var stage: AcceptShareStage = .acceptOperation
+        do {
+            let ckContainer = await container
+            let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
+            acceptOperation.qualityOfService = .userInitiated
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            acceptOperation.perShareResultBlock = { _, result in
-                switch result {
-                case .success:
-                    continuation.resume()
-                case let .failure(error):
-                    continuation.resume(throwing: self.categorizeError(error))
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                acceptOperation.acceptSharesResultBlock = { result in
+                    switch result {
+                    case .success:
+                        continuation.resume()
+                    case let .failure(error):
+                        continuation.resume(throwing: error)
+                    }
                 }
+                ckContainer.add(acceptOperation)
             }
-            ckContainer.add(acceptOperation)
+
+            setHouseholdScope(.participantShared)
+            if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
+                setSharedZoneContext(householdId: householdId, zoneID: metadata.rootRecordID.zoneID)
+            }
+
+            stage = .fetchRoot
+            let db = await sharedDatabase
+            let record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+
+            stage = .finalize
+            if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
+                rememberRecordZone(record, explicitHouseholdId: householdId)
+            } else {
+                rememberRecordZone(record, explicitHouseholdId: nil)
+            }
+
+            clearCloudKitFailure()
+            return try household(from: record)
+        } catch {
+            recordCloudKitFailure(error, operation: "acceptShare.\(stage.rawValue)")
+            throw error
+        }
+    }
+
+    private func fetchAcceptedRootRecord(
+        metadata: CKShare.Metadata,
+        database: CKDatabase
+    ) async throws -> CKRecord {
+        let backoffDelays: [UInt64] = [
+            500_000_000,
+            1_000_000_000,
+            2_000_000_000,
+            3_000_000_000,
+            4_000_000_000,
+        ]
+
+        var lastError: Error?
+        for attempt in 0..<backoffDelays.count {
+            do {
+                return try await database.record(for: metadata.rootRecordID)
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                lastError = ckError
+                guard attempt < backoffDelays.count - 1 else {
+                    break
+                }
+                try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
+            } catch {
+                throw error
+            }
         }
 
-        setHouseholdScope(.participantShared)
-        if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
-            setSharedZoneContext(householdId: householdId, zoneID: metadata.rootRecordID.zoneID)
-        }
-        let db = await sharedDatabase
-        let record = try await db.record(for: metadata.rootRecordID)
-        if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
-            rememberRecordZone(record, explicitHouseholdId: householdId)
-        } else {
-            rememberRecordZone(record, explicitHouseholdId: nil)
-        }
-        return try household(from: record)
+        throw lastError ?? CKError(.unknownItem)
     }
 
     /// Accept a share using an invite code (share URL string)

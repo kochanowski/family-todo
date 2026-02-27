@@ -710,6 +710,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CKSharingSupported = YES;
 				INFOPLIST_KEY_HPCloudKitEnabled = YES;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.kochanowski.housepulse;
@@ -754,6 +755,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CKSharingSupported = YES;
 				INFOPLIST_KEY_HPCloudKitEnabled = YES;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
 				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = com.kochanowski.housepulse;

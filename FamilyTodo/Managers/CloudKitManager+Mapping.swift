@@ -10,6 +10,10 @@ extension CloudKitManager {
         CKRecord.ID(recordName: id.uuidString)
     }
 
+    func recordID(for id: UUID, in zoneID: CKRecordZone.ID) -> CKRecord.ID {
+        CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+    }
+
     func reference(for id: UUID) -> CKRecord.Reference {
         CKRecord.Reference(recordID: recordID(for: id), action: .none)
     }
