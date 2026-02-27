@@ -293,7 +293,10 @@ import_status=$?
 set -e
 
 if [[ $import_status -ne 0 ]]; then
-  if grep -qi "invalid attempt to delete cloudkit managed record type" "$apply_log_file"; then
+  if grep -qi "endpoint not applicable in the environment 'production'" "$apply_log_file"; then
+    echo "CloudKitSchema: production import endpoint is not available for this token/cktool mode." | tee -a "$apply_log_file"
+    echo "CloudKitSchema: switching to verification-only mode for Production." | tee -a "$apply_log_file"
+  elif grep -qi "invalid attempt to delete cloudkit managed record type" "$apply_log_file"; then
     echo "CloudKitSchema: production import attempted to remove CloudKit-managed type(s); retrying with managed cloudkit.* record types preserved." | tee -a "$apply_log_file"
     run_export production "$prod_before_ckdb_file" "$prod_before_log_file"
     build_managed_safe_ckdb "$contract_ckdb_file" "$prod_before_ckdb_file" "$retry_ckdb_file" "$apply_log_file" "$merged_types_file"
