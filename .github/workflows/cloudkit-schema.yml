@@ -99,7 +99,7 @@ jobs:
           retention-days: 14
 
   promote-production:
-    name: Verify Schema (Production)
+    name: Verify Schema (Production + System Share Types)
     runs-on: macos-15
     needs: [apply-development]
     if: ${{ inputs.promote_to_production }}
@@ -114,7 +114,7 @@ jobs:
           xcodebuild -version
           xcrun cktool --help | head -n 20
 
-      - name: Verify production schema
+      - name: Verify production schema and CKShare system type
         env:
           TEAM_ID: ${{ secrets.TEAM_ID }}
           CONTAINER_ID: iCloud.com.kochanowski.housepulse

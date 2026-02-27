@@ -28,9 +28,10 @@ Last updated: 2026-02-26
   - `.github/workflows/cloudkit-schema.yml`
   - validates `cloudkit/schema/housepulse-schema.json`
   - applies schema to CloudKit Development
-  - verifies Production schema has required record types
+  - verifies Production schema has required record types (including `cloudkit.share` for CKShare invites)
 - If production schema is missing required record types, workflow fails with manual action:
   - CloudKit Console (Production) -> `Deploy Schema Changes...`
+- If `cloudkit.share` is missing in Development, create at least one CKShare in Development first, then deploy schema changes to Production.
 - Required secret for schema operations:
   - `CLOUDKIT_MANAGEMENT_TOKEN` (CloudKit management token)
 - Existing `TEAM_ID` secret is reused.
