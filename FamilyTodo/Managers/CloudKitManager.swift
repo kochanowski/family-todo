@@ -245,13 +245,13 @@ actor CloudKitManager {
     }
 
     nonisolated private func recordCloudKitFailure(_ error: Error, operation: String) {
-        Task { @MainActor in
+        _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.record(error: error, operation: operation)
         }
     }
 
     nonisolated private func clearCloudKitFailure() {
-        Task { @MainActor in
+        _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.clear()
         }
     }
