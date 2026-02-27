@@ -524,7 +524,7 @@ struct ShoppingItemRow: View {
     let onEdit: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: ShoppingRowLayout.spacing) {
             ThemedCheckbox(
                 isChecked: item.isBought,
                 onToggle: onToggle,
@@ -546,11 +546,19 @@ struct ShoppingItemRow: View {
             }
             .buttonStyle(.plain)
 
-            Spacer()
+            Color.clear
+                .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
-        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .padding(.vertical, ShoppingRowLayout.verticalPadding)
         .accessibilityIdentifier("shoppingItemRow_\(item.title)")
     }
+}
+
+private enum ShoppingRowLayout {
+    static let spacing: CGFloat = 10
+    static let verticalPadding: CGFloat = 6
+    static let trailingSlotWidth: CGFloat = 24
 }
 
 private struct ShoppingItemInlineEditRow: View {
@@ -565,10 +573,14 @@ private struct ShoppingItemInlineEditRow: View {
     @State private var isCancelling = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
-                .frame(width: 22, height: 22)
+        HStack(spacing: ShoppingRowLayout.spacing) {
+            ThemedCheckbox(
+                isChecked: isBought,
+                onToggle: onToggle,
+                size: 20,
+                style: .circle
+            )
+            .accessibilityIdentifier("shoppingInlineEditToggle")
 
             TextField("Item name", text: $text)
                 .font(themeStore.font(for: .listRowTitle))
@@ -590,8 +602,10 @@ private struct ShoppingItemInlineEditRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
-        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .padding(.vertical, ShoppingRowLayout.verticalPadding)
         .onAppear {
             isCancelling = false
             DispatchQueue.main.async {

@@ -88,7 +88,11 @@ class MemberStore: ObservableObject {
 
         if syncMode == .cloud {
             do {
-                _ = try await cloudKit.saveMember(member)
+                _ = try await cloudKit.updateMemberDisplayName(
+                    memberId: member.id,
+                    householdId: member.householdId,
+                    newDisplayName: trimmedName
+                )
             } catch {
                 // Revert
                 member.displayName = oldName
