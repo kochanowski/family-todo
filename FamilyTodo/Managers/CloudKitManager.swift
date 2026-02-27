@@ -112,18 +112,27 @@ actor CloudKitManager {
         // Return cached result if available
         if let isAvailable = self.isAvailable {
             if !isAvailable {
-                throw CloudKitManagerError.notAuthenticated
+                let error = CloudKitManagerError.notAuthenticated
+                recordCloudKitFailure(error, operation: "checkAvailability.cached")
+                throw error
             }
             return
         }
 
-        let ckContainer = await container
-        let status = try await ckContainer.accountStatus()
-        let isAvailable = status == .available
-        self.isAvailable = isAvailable
+        do {
+            let ckContainer = await container
+            let status = try await ckContainer.accountStatus()
+            let isAvailable = status == .available
+            self.isAvailable = isAvailable
 
-        if !isAvailable {
-            throw CloudKitManagerError.notAuthenticated
+            if !isAvailable {
+                let error = CloudKitManagerError.notAuthenticated
+                recordCloudKitFailure(error, operation: "checkAvailability.status")
+                throw error
+            }
+        } catch {
+            recordCloudKitFailure(error, operation: "checkAvailability.accountStatus")
+            throw error
         }
     }
 
@@ -235,6 +244,18 @@ actor CloudKitManager {
         print("CloudKitScope: cleared cached zone for household \(householdId)")
     }
 
+    nonisolated private func recordCloudKitFailure(_ error: Error, operation: String) {
+        Task { @MainActor in
+            CloudKitDiagnosticsState.shared.record(error: error, operation: operation)
+        }
+    }
+
+    nonisolated private func clearCloudKitFailure() {
+        Task { @MainActor in
+            CloudKitDiagnosticsState.shared.clear()
+        }
+    }
+
     private func ownerZoneID(for householdId: UUID) -> CKRecordZone.ID {
         CKRecordZone.ID(
             zoneName: "\(Self.ownerHouseholdZonePrefix)\(householdId.uuidString)",
@@ -265,35 +286,56 @@ actor CloudKitManager {
 
     func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
         guard householdScope == .ownerPrivate else { return }
-
-        let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
-        let householdRecord = try await fetchRecord(id: householdId, householdId: householdId)
-        guard householdRecord.recordID.zoneID != targetZoneID else {
-            rememberRecordZone(householdRecord, explicitHouseholdId: householdId)
-            return
-        }
-
-        print(
-            "CloudKitScope: migrating household \(householdId) from zone \(householdRecord.recordID.zoneID.zoneName) to \(targetZoneID.zoneName)"
-        )
-
-        let migratedRecordID = CKRecord.ID(
-            recordName: householdRecord.recordID.recordName,
-            zoneID: targetZoneID
-        )
-        let migratedRecord = CKRecord(recordType: householdRecord.recordType, recordID: migratedRecordID)
-        for key in householdRecord.allKeys() {
-            migratedRecord[key] = householdRecord[key]
-        }
-
-        let db = await privateDatabase
-        let savedRecord = try await db.save(migratedRecord)
-        rememberRecordZone(savedRecord, explicitHouseholdId: householdId)
-
         do {
-            _ = try await db.deleteRecord(withID: householdRecord.recordID)
-        } catch let ckError as CKError where ckError.code == .unknownItem {
-            // Record may be already removed in concurrent migration.
+            let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+            let householdRecord = try await fetchRecord(id: householdId, householdId: householdId)
+            let db = await privateDatabase
+            var authoritativeRecord = householdRecord
+
+            if householdRecord.recordID.zoneID != targetZoneID {
+                print(
+                    "CloudKitScope: migrating household \(householdId) from zone \(householdRecord.recordID.zoneID.zoneName) to \(targetZoneID.zoneName)"
+                )
+
+                let targetRecordID = CKRecord.ID(
+                    recordName: householdRecord.recordID.recordName,
+                    zoneID: targetZoneID
+                )
+                let migratedRecord = CKRecord(recordType: householdRecord.recordType, recordID: targetRecordID)
+                for key in householdRecord.allKeys() {
+                    migratedRecord[key] = householdRecord[key]
+                }
+
+                do {
+                    authoritativeRecord = try await db.save(migratedRecord)
+                } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                    authoritativeRecord = try await db.record(for: targetRecordID)
+                }
+
+                do {
+                    _ = try await db.deleteRecord(withID: householdRecord.recordID)
+                } catch let ckError as CKError where ckError.code == .unknownItem {
+                    // Source may be already removed by concurrent migration.
+                }
+            }
+
+            let defaultRecordID = CKRecord.ID(
+                recordName: householdId.uuidString,
+                zoneID: CKRecordZone.default().zoneID
+            )
+            if authoritativeRecord.recordID != defaultRecordID {
+                do {
+                    _ = try await db.deleteRecord(withID: defaultRecordID)
+                } catch let ckError as CKError where ckError.code == .unknownItem {
+                    // No legacy default-zone duplicate.
+                }
+            }
+
+            setSharedZoneContext(householdId: householdId, zoneID: authoritativeRecord.recordID.zoneID)
+            rememberRecordZone(authoritativeRecord, explicitHouseholdId: householdId)
+        } catch {
+            recordCloudKitFailure(error, operation: "migrateHouseholdToCustomZoneIfNeeded")
+            throw error
         }
     }
 
@@ -581,6 +623,7 @@ actor CloudKitManager {
             return saved
         } catch {
             guard isRetryableZoneResolutionError(error) else {
+                recordCloudKitFailure(error, operation: "saveRecordWithZoneRecovery.initial.\(record.recordType)")
                 throw error
             }
 
@@ -597,9 +640,14 @@ actor CloudKitManager {
             print(
                 "CloudKitScope: retry save \(record.recordType) in \(scopeName) zone \(retryRecord.recordID.zoneID.zoneName)"
             )
-            let saved = try await db.save(retryRecord)
-            rememberRecordZone(saved, explicitHouseholdId: householdId)
-            return saved
+            do {
+                let saved = try await db.save(retryRecord)
+                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                return saved
+            } catch {
+                recordCloudKitFailure(error, operation: "saveRecordWithZoneRecovery.retry.\(record.recordType)")
+                throw error
+            }
         }
     }
 
@@ -668,7 +716,9 @@ actor CloudKitManager {
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
         }
         let record = householdRecord(from: household)
-        return try await saveRecordWithZoneRecovery(record, householdId: household.id)
+        let saved = try await saveRecordWithZoneRecovery(record, householdId: household.id)
+        clearCloudKitFailure()
+        return saved
     }
 
     func fetchHousehold(id: UUID) async throws -> Household {
@@ -710,10 +760,11 @@ actor CloudKitManager {
         return try await saveRecordWithZoneRecovery(record, householdId: member.householdId)
     }
 
-    func updateMemberDisplayName(
+    private func updateMemberRecord(
         memberId: UUID,
         householdId: UUID,
-        newDisplayName: String
+        operationName: String,
+        mutate: (CKRecord) -> Void
     ) async throws -> CKRecord {
         let db = await activeHouseholdDatabase
         let scopeName = householdScope == .ownerPrivate ? "ownerPrivate" : "participantShared"
@@ -721,30 +772,60 @@ actor CloudKitManager {
 
         while true {
             let existingRecord = try await fetchRecord(id: memberId, householdId: householdId)
-            existingRecord["displayName"] = newDisplayName as CKRecordValue
+            mutate(existingRecord)
 
             do {
                 print(
-                    "CloudKitScope: patch Member.displayName in \(scopeName) zone \(existingRecord.recordID.zoneID.zoneName)"
+                    "CloudKitScope: patch Member (\(operationName)) in \(scopeName) zone \(existingRecord.recordID.zoneID.zoneName)"
                 )
                 let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
                 rememberRecordZone(saved, explicitHouseholdId: householdId)
+                clearCloudKitFailure()
                 return saved
             } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
                 retryCount += 1
-                print("CloudKitScope: Member.displayName patch conflicted, retrying after refetch")
+                print("CloudKitScope: Member patch (\(operationName)) conflicted, retrying after refetch")
                 continue
             } catch {
                 guard retryCount == 0, isRetryableZoneResolutionError(error) else {
+                    recordCloudKitFailure(error, operation: "updateMemberRecord.\(operationName)")
                     throw error
                 }
 
                 retryCount += 1
-                print("CloudKitScope: Member.displayName patch failed, refreshing zone context and retrying")
+                print("CloudKitScope: Member patch (\(operationName)) failed, refreshing zone context and retrying")
                 sharedZoneContext.zoneByRecordName.removeValue(forKey: memberId.uuidString)
                 clearCachedZone(for: householdId)
                 _ = try await resolveHouseholdZone(for: householdId)
             }
+        }
+    }
+
+    func updateMemberDisplayName(
+        memberId: UUID,
+        householdId: UUID,
+        newDisplayName: String
+    ) async throws -> CKRecord {
+        try await updateMemberRecord(
+            memberId: memberId,
+            householdId: householdId,
+            operationName: "displayName"
+        ) { record in
+            record["displayName"] = newDisplayName as CKRecordValue
+        }
+    }
+
+    func updateMemberRole(
+        memberId: UUID,
+        householdId: UUID,
+        newRole: Member.MemberRole
+    ) async throws -> CKRecord {
+        try await updateMemberRecord(
+            memberId: memberId,
+            householdId: householdId,
+            operationName: "role"
+        ) { record in
+            record["role"] = newRole.rawValue as CKRecordValue
         }
     }
 
@@ -1048,57 +1129,74 @@ actor CloudKitManager {
 
     /// Create a CKShare for a household
     func createShare(for household: Household) async throws -> CKShare {
-        if householdScope == .ownerPrivate {
-            try await migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
-        }
-        let householdRecord = try await fetchHouseholdRecord(id: household.id)
-        guard householdRecord.recordID.zoneID != CKRecordZone.default().zoneID else {
-            throw CloudKitManagerError.shareNotCreated
-        }
-        let db = await activeHouseholdDatabase
-
-        let share = CKShare(rootRecord: householdRecord)
-        share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
-        share.publicPermission = .none // Private - requires invitation
-
-        let modifyOperation = CKModifyRecordsOperation(
-            recordsToSave: [householdRecord, share],
-            recordIDsToDelete: nil
-        )
-        modifyOperation.savePolicy = .changedKeys
-
-        return try await withCheckedThrowingContinuation { continuation in
-            var savedShare: CKShare?
-
-            modifyOperation.perRecordSaveBlock = { _, result in
-                if case let .success(record) = result, let ckshare = record as? CKShare {
-                    savedShare = ckshare
-                }
+        do {
+            if householdScope == .ownerPrivate {
+                _ = try await ensureHouseholdOwnerZone(householdId: household.id)
+                try await migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
             }
 
-            modifyOperation.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    if let share = savedShare {
-                        continuation.resume(returning: share)
-                    } else {
-                        _Concurrency.Task {
-                            do {
-                                let fallbackShare = try await self.fetchExistingShare(
-                                    for: householdRecord.recordID
-                                )
-                                continuation.resume(returning: fallbackShare)
-                            } catch {
-                                continuation.resume(throwing: CloudKitManagerError.shareNotCreated)
+            let householdRecord = try await fetchHouseholdRecord(id: household.id)
+            guard householdRecord.recordID.zoneID != CKRecordZone.default().zoneID else {
+                throw CloudKitManagerError.shareNotCreated
+            }
+            let db = await activeHouseholdDatabase
+
+            let share = CKShare(rootRecord: householdRecord)
+            share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
+            share.publicPermission = .none // Private - requires invitation
+
+            let modifyOperation = CKModifyRecordsOperation(
+                recordsToSave: [householdRecord, share],
+                recordIDsToDelete: nil
+            )
+            modifyOperation.savePolicy = .changedKeys
+
+            let createdShare = try await withCheckedThrowingContinuation { continuation in
+                var savedShare: CKShare?
+
+                modifyOperation.perRecordSaveBlock = { _, result in
+                    if case let .success(record) = result, let ckshare = record as? CKShare {
+                        savedShare = ckshare
+                    }
+                }
+
+                modifyOperation.modifyRecordsResultBlock = { result in
+                    switch result {
+                    case .success:
+                        if let share = savedShare {
+                            continuation.resume(returning: share)
+                        } else {
+                            _Concurrency.Task {
+                                do {
+                                    let fallbackShare = try await self.fetchExistingShare(
+                                        for: householdRecord.recordID
+                                    )
+                                    continuation.resume(returning: fallbackShare)
+                                } catch {
+                                    let shareError = CloudKitManagerError.shareNotCreated
+                                    self.recordCloudKitFailure(
+                                        shareError,
+                                        operation: "createShare.fallbackFetch"
+                                    )
+                                    continuation.resume(throwing: shareError)
+                                }
                             }
                         }
+                    case let .failure(error):
+                        let categorized = self.categorizeError(error)
+                        self.recordCloudKitFailure(categorized, operation: "createShare.modifyRecords")
+                        continuation.resume(throwing: categorized)
                     }
-                case let .failure(error):
-                    continuation.resume(throwing: self.categorizeError(error))
                 }
+
+                db.add(modifyOperation)
             }
 
-            db.add(modifyOperation)
+            clearCloudKitFailure()
+            return createdShare
+        } catch {
+            recordCloudKitFailure(error, operation: "createShare")
+            throw error
         }
     }
 

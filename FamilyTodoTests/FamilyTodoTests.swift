@@ -258,3 +258,40 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
         XCTAssertEqual(invalidStringResult.rawType, "String")
     }
 }
+
+@MainActor
+final class CloudKitDiagnosticsStateTests: XCTestCase {
+    override func setUp() async throws {
+        try await super.setUp()
+        CloudKitDiagnosticsState.shared.clear()
+    }
+
+    func testRecordFormatsFullCloudKitPayload() {
+        let error = NSError(domain: "CKErrorDomain", code: 42, userInfo: [
+            NSLocalizedDescriptionKey: "Failed to save record.",
+        ])
+
+        CloudKitDiagnosticsState.shared.record(error: error, operation: "createShare")
+
+        let payload = CloudKitDiagnosticsState.shared.lastCloudKitError
+        XCTAssertNotNil(payload)
+        XCTAssertTrue(payload?.contains("operation=createShare") == true)
+        XCTAssertTrue(payload?.contains("domain=CKErrorDomain") == true)
+        XCTAssertTrue(payload?.contains("code=42") == true)
+        XCTAssertTrue(payload?.contains("description=Failed to save record.") == true)
+        XCTAssertTrue(payload?.contains("reflecting=Error Domain=CKErrorDomain Code=42") == true)
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.lastCloudKitOperation, "createShare")
+        XCTAssertNotNil(CloudKitDiagnosticsState.shared.lastCloudKitErrorTimestampISO8601)
+    }
+
+    func testClearRemovesDiagnosticsPayload() {
+        let error = NSError(domain: "CKErrorDomain", code: 1, userInfo: nil)
+        CloudKitDiagnosticsState.shared.record(error: error, operation: "saveHousehold")
+
+        CloudKitDiagnosticsState.shared.clear()
+
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitError)
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitOperation)
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitErrorTimestampISO8601)
+    }
+}

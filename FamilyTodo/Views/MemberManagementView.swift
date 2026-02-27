@@ -5,6 +5,7 @@ struct MemberManagementView: View {
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject var householdStore: HouseholdStore
     @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @Environment(\.modelContext) private var modelContext
 
     init(householdId: UUID) {
@@ -75,8 +76,21 @@ struct MemberManagementView: View {
 
     private var listContent: some View {
         List {
+            diagnosticsSection
             membersSection
             inviteSection
+        }
+    }
+
+    @ViewBuilder
+    private var diagnosticsSection: some View {
+        if cloudKitDiagnostics.lastCloudKitError != nil {
+            Section {
+                CloudKitDiagnosticsBanner()
+                    .environmentObject(cloudKitDiagnostics)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .listRowBackground(Color.clear)
+            }
         }
     }
 

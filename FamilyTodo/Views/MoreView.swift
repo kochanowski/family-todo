@@ -218,6 +218,7 @@ struct ProfileView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @State private var inlineHouseholdName = ""
     @State private var renameTask: _Concurrency.Task<Void, Never>?
     @State private var isRenamingHousehold = false
@@ -227,6 +228,15 @@ struct ProfileView: View {
 
     var body: some View {
         List {
+            if cloudKitDiagnostics.lastCloudKitError != nil {
+                Section {
+                    CloudKitDiagnosticsBanner()
+                        .environmentObject(cloudKitDiagnostics)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                        .listRowBackground(Color.clear)
+                }
+            }
+
             Section("Household") {
                 if let household = householdStore.currentHousehold {
                     VStack(alignment: .leading, spacing: 8) {

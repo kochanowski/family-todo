@@ -12,6 +12,7 @@ struct FamilyTodoApp: App {
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
+    @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
     @State private var startupRecoveryMessage: String?
     @State private var startupBootstrapState: StartupBootstrapState
     @State private var startupDiagnostics: BootstrapDiagnostics?
@@ -70,6 +71,7 @@ struct FamilyTodoApp: App {
                     .environmentObject(subscriptionManager)
                     .environmentObject(celebrationManager)
                     .environmentObject(shareAcceptanceCoordinator)
+                    .environmentObject(cloudKitDiagnostics)
                     .modelContainer(sharedModelContainer)
                     .preferredColorScheme(themeStore.colorScheme)
                     .overlay {

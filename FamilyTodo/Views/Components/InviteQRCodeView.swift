@@ -79,7 +79,7 @@ struct InviteQRCodeView: View {
             inviteURL = try await householdStore.fetchInviteURL()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Could not prepare invite. Check CloudKit diagnostics in Profile."
         }
     }
 

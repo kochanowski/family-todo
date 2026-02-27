@@ -142,6 +142,7 @@ class HouseholdStore: ObservableObject {
             // Check CloudKit availability first
             try await cloudKit.checkAvailability()
             await cloudKit.setHouseholdScope(.ownerPrivate)
+            _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: newHousehold.id)
 
             _ = try await cloudKit.saveHousehold(newHousehold)
 
