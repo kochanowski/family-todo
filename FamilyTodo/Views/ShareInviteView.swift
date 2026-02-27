@@ -60,7 +60,7 @@ struct ShareInviteView: UIViewControllerRepresentable {
 
         func cloudSharingController(_: UICloudSharingController, failedToSaveShareWithError error: Error) {
             print("Failed to save share: \(error)")
-            Task { @MainActor in
+            _Concurrency.Task { @MainActor in
                 CloudKitDiagnosticsState.shared.record(
                     error: error,
                     operation: "UICloudSharingController.failedToSaveShare"
