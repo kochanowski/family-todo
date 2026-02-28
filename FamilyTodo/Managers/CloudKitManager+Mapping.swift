@@ -38,7 +38,6 @@ extension CloudKitManager {
         let record = CKRecord(recordType: "Household", recordID: recordID(for: household.id))
         record["id"] = household.id.uuidString as CKRecordValue
         record["name"] = household.name as CKRecordValue
-        record["colorHex"] = household.colorHex as CKRecordValue
         record["iconSymbol"] = household.iconSymbol as CKRecordValue
         record["ownerId"] = household.ownerId as CKRecordValue
         record["createdAt"] = household.createdAt as CKRecordValue
@@ -61,7 +60,6 @@ extension CloudKitManager {
         return Household(
             id: id,
             name: name,
-            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.migratedHex(for: id),
             iconSymbol: (record["iconSymbol"] as? String) ?? "house.fill",
             ownerId: ownerId,
             createdAt: createdAt,
@@ -392,6 +390,7 @@ extension CloudKitManager {
         record["id"] = category.id.uuidString as CKRecordValue
         record["householdId"] = reference(for: category.householdId)
         record["title"] = category.title as CKRecordValue
+        record["colorHex"] = category.colorHex as CKRecordValue
         record["sortOrder"] = category.sortOrder as CKRecordValue
         record["createdAt"] = category.createdAt as CKRecordValue
         record["updatedAt"] = category.updatedAt as CKRecordValue
@@ -411,12 +410,16 @@ extension CloudKitManager {
             throw CloudKitManagerError.invalidRecord
         }
 
-        let sortOrder = record["sortOrder"] as? Int ?? 0
+        let sortOrder =
+            record["sortOrder"] as? Int
+                ?? (record["sortOrder"] as? Int64).map(Int.init)
+                ?? 0
 
         return BacklogCategory(
             id: id,
             householdId: householdId,
             title: title,
+            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.migratedHex(for: id),
             sortOrder: sortOrder,
             createdAt: createdAt,
             updatedAt: updatedAt

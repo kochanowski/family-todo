@@ -153,12 +153,21 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Category Operations
 
-    func addCategory(_ title: String) async {
+    func addCategory(_ title: String, colorHex: String? = nil) async {
         guard let householdId else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        let categoryId = UUID()
+        let resolvedColorHex = resolveCategoryColorHex(
+            requested: colorHex,
+            stableId: categoryId
+        )
 
         let category = BacklogCategory(
+            id: categoryId,
             householdId: householdId,
-            title: title,
+            title: trimmedTitle,
+            colorHex: resolvedColorHex,
             sortOrder: categories.count
         )
 
@@ -245,12 +254,29 @@ final class BacklogStore: ObservableObject {
     }
 
     func renameCategory(_ category: BacklogCategory, newTitle: String) async {
+        await updateCategory(
+            category,
+            newTitle: newTitle,
+            newColorHex: category.colorHex
+        )
+    }
+
+    func updateCategory(
+        _ category: BacklogCategory,
+        newTitle: String,
+        newColorHex: String
+    ) async {
         let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         guard let index = categories.firstIndex(where: { $0.id == category.id }) else { return }
+        let resolvedColorHex = resolveCategoryColorHex(
+            requested: newColorHex,
+            stableId: category.id
+        )
 
         var updatedCategory = categories[index]
         updatedCategory.title = trimmedTitle
+        updatedCategory.colorHex = resolvedColorHex
         updatedCategory.updatedAt = Date()
 
         withAnimation {
@@ -579,6 +605,7 @@ final class BacklogStore: ObservableObject {
                     "Couldn't remove item from Ideas. Promotion was rolled back."
                 )
             }
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
             return .success(createdTaskId: createdTaskId)
         case .assigneeRequired:
             return .assigneeRequired
@@ -605,6 +632,15 @@ final class BacklogStore: ObservableObject {
             cached.lastSyncedAt = Date()
             try? context.save()
         }
+    }
+
+    private func resolveCategoryColorHex(requested: String?, stableId: UUID) -> String {
+        guard let normalized = MemberColorToken.normalize(hex: requested),
+              MemberColorToken.isAllowed(hex: normalized)
+        else {
+            return MemberColorToken.migratedHex(for: stableId)
+        }
+        return normalized
     }
 
     private func pendingSyncSnapshot(from cachedItems: [CachedBacklogItem]) -> PendingSyncSnapshot {

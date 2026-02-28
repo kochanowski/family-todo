@@ -142,7 +142,7 @@ struct HouseholdHeroCard: View {
     }
 
     private var householdColor: Color {
-        Color(hex: householdStore.currentHousehold?.colorHex ?? MemberColorToken.fallbackHex)
+        themeStore.accentTabColor
     }
 }
 

@@ -3,6 +3,11 @@ import Foundation
 import SwiftData
 import SwiftUI
 
+extension Notification.Name {
+    static let memberProfileDidChange = Notification.Name("HousePulse.memberProfileDidChange")
+    static let taskBoardDataDidChange = Notification.Name("HousePulse.taskBoardDataDidChange")
+}
+
 /// Main store for task management with offline-first architecture.
 /// Follows ADR-002: optimistic UI updates with background sync.
 @MainActor

@@ -39,7 +39,9 @@ struct ShareInviteView: UIViewControllerRepresentable {
         }
 
         func itemTitle(for _: UICloudSharingController) -> String? {
-            (parent.share[CKShare.SystemFieldKey.title] as? String) ?? "Household"
+            CloudKitManager.sanitizeShareTitle(
+                parent.share[CKShare.SystemFieldKey.title] as? String
+            )
         }
 
         // Optional: specific thumbnail

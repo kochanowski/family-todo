@@ -235,7 +235,7 @@ private struct ShoppingListContent: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 Text("Shopping")
                     .font(themeStore.font(for: .screenHeader))
                     .foregroundStyle(themeStore.contentPrimaryColor)

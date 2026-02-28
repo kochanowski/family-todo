@@ -170,6 +170,8 @@ class MemberStore: ObservableObject {
                 throw error
             }
         }
+
+        NotificationCenter.default.post(name: .memberProfileDidChange, object: nil)
     }
 
     func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {

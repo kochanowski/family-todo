@@ -43,7 +43,7 @@ struct ProfileView: View {
     var body: some View {
         List {
             diagnosticsSection
-            myProfileSection
+            profileHeroRow
             householdSection
             membersSection
             inviteSection
@@ -134,8 +134,8 @@ struct ProfileView: View {
         }
     }
 
-    private var myProfileSection: some View {
-        Section("My Profile") {
+    private var profileHeroRow: some View {
+        Section {
             if let currentMember {
                 Button {
                     showEditProfile = true
@@ -145,11 +145,21 @@ struct ProfileView: View {
                             name: currentMember.displayName,
                             colorHex: currentMember.colorHex
                         )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(currentMember.displayName)
+                                .font(themeStore.font(for: .inlineTitle))
+                                .foregroundStyle(themeStore.contentPrimaryColor)
+                            Text("Tap to edit profile & color")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                        }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.tertiary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } else {
@@ -167,13 +177,10 @@ struct ProfileView: View {
                     showEditHousehold = true
                 } label: {
                     HStack(spacing: 12) {
-                        Circle()
-                            .fill(Color(hex: household.colorHex))
-                            .frame(width: 24, height: 24)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(household.name)
                                 .foregroundStyle(themeStore.contentPrimaryColor)
-                            Text("Name & color")
+                            Text("Name")
                                 .font(themeStore.font(for: .bodySmall))
                                 .foregroundStyle(themeStore.contentSecondaryColor)
                         }
@@ -182,6 +189,8 @@ struct ProfileView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.tertiary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } else {
@@ -246,7 +255,7 @@ struct ProfileView: View {
                             Text("Preparing invite...")
                         }
                     } else {
-                        Label("Invite Member", systemImage: "person.badge.plus")
+                        Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
                     }
                 }
                 .disabled(isPreparingShareInvite || !currentUserIsOwner)
@@ -512,14 +521,12 @@ private struct EditHouseholdView: View {
     let household: Household
 
     @State private var name: String
-    @State private var selectedColorHex: String
     @State private var isSaving = false
     @State private var errorMessage: String?
 
     init(household: Household) {
         self.household = household
         _name = State(initialValue: household.name)
-        _selectedColorHex = State(initialValue: household.colorHex)
     }
 
     var body: some View {
@@ -528,30 +535,6 @@ private struct EditHouseholdView: View {
                 TextField("Household name", text: $name)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
-            }
-
-            Section("Household Color") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
-                    ForEach(MemberColorToken.allCases, id: \.self) { token in
-                        let hex = token.hex
-                        Button {
-                            selectedColorHex = hex
-                        } label: {
-                            Circle()
-                                .fill(Color(hex: hex))
-                                .frame(width: 34, height: 34)
-                                .overlay {
-                                    if selectedColorHex == hex {
-                                        Circle()
-                                            .stroke(Color.primary, lineWidth: 2)
-                                            .padding(1)
-                                    }
-                                }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 4)
             }
         }
         .navigationTitle("Edit Household")
@@ -596,7 +579,6 @@ private struct EditHouseholdView: View {
             do {
                 try await householdStore.updateCurrentHousehold(
                     name: trimmedName,
-                    colorHex: selectedColorHex,
                     userId: userId
                 )
                 isSaving = false

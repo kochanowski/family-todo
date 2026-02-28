@@ -75,7 +75,7 @@ required_map='{
   "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "createdAt", "updatedAt"],
   "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
   "ShoppingItem": ["id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
-  "BacklogCategory": ["id", "householdId", "title", "sortOrder", "createdAt", "updatedAt"],
+  "BacklogCategory": ["id", "householdId", "title", "colorHex", "sortOrder", "createdAt", "updatedAt"],
   "BacklogItem": ["id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"],
   "InviteToken": ["code", "householdId", "shareURL", "createdAt", "expiresAt", "isRevoked", "usesCount", "lastRedeemedAt"]
 }'

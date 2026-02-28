@@ -53,6 +53,29 @@ actor CloudKitManager {
     private static let inviteCodeLength = 6
     private static let inviteCodeMaxAttempts = 12
 
+    static func sanitizeShareTitle(_ rawValue: String?) -> String {
+        guard let rawValue else {
+            return "Household"
+        }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "Household"
+        }
+
+        let suffixes = ["(owner)", "(właściciel)"]
+        for suffix in suffixes {
+            if trimmed.localizedCaseInsensitiveHasSuffix(suffix) {
+                let endIndex = trimmed.index(
+                    trimmed.endIndex,
+                    offsetBy: -suffix.count
+                )
+                let cleaned = trimmed[..<endIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                return cleaned.isEmpty ? "Household" : String(cleaned)
+            }
+        }
+        return trimmed
+    }
+
     /// Gets the shared container, must call ensureReady() first
     private var container: CKContainer {
         get async {
@@ -841,17 +864,44 @@ actor CloudKitManager {
         return saved
     }
 
-    func fetchHousehold(id: UUID) async throws -> Household {
+    func updateHouseholdMetadata(
+        householdId: UUID,
+        newName: String,
+        newIconSymbol: String
+    ) async throws -> CKRecord {
         let db = await activeHouseholdDatabase
+        var retryCount = 0
+
+        while true {
+            let existingRecord = try await fetchRecord(id: householdId, householdId: householdId)
+            existingRecord["name"] = newName as CKRecordValue
+            existingRecord["iconSymbol"] = newIconSymbol as CKRecordValue
+            existingRecord["updatedAt"] = Date() as CKRecordValue
+
+            do {
+                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
+                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                clearCloudKitFailure()
+                return saved
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
+                retryCount += 1
+                continue
+            } catch {
+                guard retryCount == 0, isRetryableZoneResolutionError(error) else {
+                    recordCloudKitFailure(error, operation: "updateHouseholdMetadata")
+                    throw error
+                }
+
+                retryCount += 1
+                sharedZoneContext.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+                clearCachedZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId)
+            }
+        }
+    }
+
+    func fetchHousehold(id: UUID) async throws -> Household {
         let record = try await fetchRecord(id: id, householdId: id)
-        let migratedColor = await migrateColorIfNeeded(
-            for: record,
-            stableId: id,
-            explicitHouseholdId: id,
-            operation: "household.fetch",
-            database: db
-        )
-        record["colorHex"] = migratedColor as CKRecordValue
         return try household(from: record)
     }
 
@@ -1332,15 +1382,27 @@ actor CloudKitManager {
         return try await fetchShareRecord(withID: shareReference.recordID, database: database)
     }
 
-    private func ensureReadWriteSharePermission(
+    private func ensureShareMetadata(
         _ share: CKShare,
+        householdName: String,
         database: CKDatabase
     ) async throws -> CKShare {
-        guard share.publicPermission != .readWrite else {
+        let sanitizedTitle = Self.sanitizeShareTitle(householdName)
+        let existingTitle = (share[CKShare.SystemFieldKey.title] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldUpdateTitle = existingTitle != sanitizedTitle
+        let shouldUpdatePermission = share.publicPermission != .readWrite
+
+        guard shouldUpdateTitle || shouldUpdatePermission else {
             return share
         }
 
-        share.publicPermission = .readWrite
+        if shouldUpdatePermission {
+            share.publicPermission = .readWrite
+        }
+        if shouldUpdateTitle {
+            share[CKShare.SystemFieldKey.title] = sanitizedTitle as CKRecordValue
+        }
         let saved = try await saveRecordWithChangedKeys(share, database: database)
         guard let savedShare = saved as? CKShare else {
             throw CloudKitManagerError.invalidRecord
@@ -1375,7 +1437,7 @@ actor CloudKitManager {
         database: CKDatabase
     ) async throws -> CKShare? {
         let share = CKShare(rootRecord: householdRecord)
-        share[CKShare.SystemFieldKey.title] = householdName as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = Self.sanitizeShareTitle(householdName) as CKRecordValue
         share.publicPermission = .readWrite
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -1450,7 +1512,11 @@ actor CloudKitManager {
                let existingShare = try await fetchShareRecord(withID: shareReference.recordID, database: db)
             {
                 stage = .modifyRecords
-                let normalizedShare = try await ensureReadWriteSharePermission(existingShare, database: db)
+                let normalizedShare = try await ensureShareMetadata(
+                    existingShare,
+                    householdName: household.name,
+                    database: db
+                )
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -1480,7 +1546,11 @@ actor CloudKitManager {
             }
 
             if let createdShare {
-                let normalizedShare = try await ensureReadWriteSharePermission(createdShare, database: db)
+                let normalizedShare = try await ensureShareMetadata(
+                    createdShare,
+                    householdName: household.name,
+                    database: db
+                )
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -1490,7 +1560,11 @@ actor CloudKitManager {
                 rootRecordID: householdRecord.recordID,
                 database: db
             ) {
-                let normalizedShare = try await ensureReadWriteSharePermission(fallbackShare, database: db)
+                let normalizedShare = try await ensureShareMetadata(
+                    fallbackShare,
+                    householdName: household.name,
+                    database: db
+                )
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -1518,7 +1592,12 @@ actor CloudKitManager {
             guard let share = try await fetchShareRecord(withID: shareReference.recordID, database: db) else {
                 return nil
             }
-            return try await ensureReadWriteSharePermission(share, database: db)
+            let householdName = (record["name"] as? String) ?? "Household"
+            return try await ensureShareMetadata(
+                share,
+                householdName: householdName,
+                database: db
+            )
         case .participantShared:
             let record = try await fetchHouseholdRecord(id: householdId)
             guard let shareReference = record.share else { return nil }

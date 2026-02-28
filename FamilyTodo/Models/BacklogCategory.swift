@@ -5,6 +5,7 @@ struct BacklogCategory: Identifiable, Codable {
     let id: UUID
     let householdId: UUID
     var title: String
+    var colorHex: String
     var sortOrder: Int
     let createdAt: Date
     var updatedAt: Date
@@ -13,6 +14,7 @@ struct BacklogCategory: Identifiable, Codable {
         id: UUID = UUID(),
         householdId: UUID,
         title: String,
+        colorHex: String = MemberColorToken.fallbackHex,
         sortOrder: Int = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -20,6 +22,12 @@ struct BacklogCategory: Identifiable, Codable {
         self.id = id
         self.householdId = householdId
         self.title = title
+        let normalizedColor = MemberColorToken.normalize(hex: colorHex)
+        if let normalizedColor, MemberColorToken.isAllowed(hex: normalizedColor) {
+            self.colorHex = normalizedColor
+        } else {
+            self.colorHex = MemberColorToken.migratedHex(for: id)
+        }
         self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -58,29 +66,7 @@ struct BacklogItem: Identifiable, Codable {
 }
 
 extension BacklogCategory {
-    /// Palette of cheerful, stable colors used for category tagging.
-    static let categoryPalette: [Color] = [
-        .purple,
-        .orange,
-        .teal,
-        .pink,
-        .indigo,
-        .mint,
-        .brown,
-        .cyan,
-        Color(red: 0.95, green: 0.4, blue: 0.3), // coral
-        Color(red: 0.3, green: 0.7, blue: 0.4), // emerald
-        Color(red: 0.6, green: 0.2, blue: 0.8), // violet
-        Color(red: 0.2, green: 0.6, blue: 0.9), // sky blue
-        Color(red: 0.9, green: 0.6, blue: 0.1), // amber
-        Color(red: 0.4, green: 0.8, blue: 0.7), // aquamarine
-        Color(red: 0.85, green: 0.3, blue: 0.5), // rose
-        Color(red: 0.5, green: 0.7, blue: 0.2), // lime
-    ]
-
-    /// Deterministic color derived from category id.
     var color: Color {
-        let hash = abs(id.hashValue)
-        return Self.categoryPalette[hash % Self.categoryPalette.count]
+        Color(hex: colorHex)
     }
 }

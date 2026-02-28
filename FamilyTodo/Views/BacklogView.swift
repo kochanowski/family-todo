@@ -42,11 +42,13 @@ private struct BacklogContent: View {
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
+    @State private var newCategoryColorHex = MemberColorToken.randomHex()
     @State private var activeBanner: PromotionBanner?
     @State private var pendingPromotionItem: BacklogItem?
     @State private var selectedAssigneeIdForPromotion: UUID?
     @State private var pendingAssignmentItem: BacklogItem?
     @State private var selectedAssigneeIdForAssignment: UUID?
+    @State private var editingCategory: BacklogCategory?
     @State private var editingItem: BacklogItem?
     @State private var activeComposerCategoryId: UUID?
     @State private var composerText = ""
@@ -137,10 +139,8 @@ private struct BacklogContent: View {
                                     onPromoteItem: { item in
                                         promoteItem(item)
                                     },
-                                    onRenameCategory: { newTitle in
-                                        _ = _Concurrency.Task {
-                                            await store.renameCategory(category, newTitle: newTitle)
-                                        }
+                                    onEditCategory: {
+                                        editingCategory = category
                                     },
                                     onDeleteCategory: {
                                         _ = _Concurrency.Task {
@@ -175,18 +175,38 @@ private struct BacklogContent: View {
             await memberStore.loadMembers()
         }
         .sheet(isPresented: $isAddingCategory) {
-            AppPromptSheet(
+            CategoryEditorSheet(
                 title: "New Category",
-                placeholder: "Category Name",
-                text: $newCategoryName,
+                initialName: newCategoryName,
+                initialColorHex: newCategoryColorHex,
                 primaryTitle: "Create",
                 onCancel: {
                     newCategoryName = ""
+                    newCategoryColorHex = MemberColorToken.randomHex()
                 },
-                onSubmit: { name in
+                onSubmit: { name, colorHex in
                     newCategoryName = ""
+                    newCategoryColorHex = MemberColorToken.randomHex()
                     HapticManager.lightTap()
-                    _ = _Concurrency.Task { await store.addCategory(name) }
+                    _ = _Concurrency.Task { await store.addCategory(name, colorHex: colorHex) }
+                }
+            )
+        }
+        .sheet(item: $editingCategory) { category in
+            CategoryEditorSheet(
+                title: "Edit Category",
+                initialName: category.title,
+                initialColorHex: category.colorHex,
+                primaryTitle: "Save",
+                onCancel: {},
+                onSubmit: { newName, newColorHex in
+                    _ = _Concurrency.Task {
+                        await store.updateCategory(
+                            category,
+                            newTitle: newName,
+                            newColorHex: newColorHex
+                        )
+                    }
                 }
             )
         }
@@ -321,6 +341,7 @@ private struct BacklogContent: View {
             Spacer()
 
             Button {
+                newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
             } label: {
                 Image(systemName: "folder.badge.plus")
@@ -338,6 +359,7 @@ private struct BacklogContent: View {
             Text("Create a category to start organizing your ideas.")
         } actions: {
             Button("Create Category") {
+                newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
             }
             .buttonStyle(.borderedProminent)
@@ -568,7 +590,7 @@ private struct BacklogAssigneePickerSheet: View {
                                 .font(themeStore.font(for: .inlineTitle))
                                 .foregroundStyle(.primary)
                             Spacer()
-                            if selectedAssigneeId == member.id {
+                            if !autoConfirmOnSelection, selectedAssigneeId == member.id {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.blue)
                             }
@@ -617,30 +639,33 @@ struct CategoryCard: View {
     let onEditItem: (BacklogItem) -> Void
     let onAssignItem: (BacklogItem) -> Void
     let onPromoteItem: (BacklogItem) -> Void
-    let onRenameCategory: (String) -> Void
+    let onEditCategory: () -> Void
     let onDeleteCategory: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var showDeleteConfirmation = false
-    @State private var showRenameAlert = false
-    @State private var renameCategoryText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(category.title.uppercased())
-                    .font(themeStore.font(for: .sectionHeader))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(category.color)
+                        .frame(width: 10, height: 10)
+
+                    Text(category.title.uppercased())
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                }
 
                 Spacer()
 
                 Menu {
                     Button {
-                        renameCategoryText = category.title
-                        showRenameAlert = true
+                        onEditCategory()
                     } label: {
-                        Label("Rename Category", systemImage: "pencil")
+                        Label("Edit Category", systemImage: "pencil")
                     }
 
                     Button(role: .destructive) {
@@ -776,17 +801,6 @@ struct CategoryCard: View {
                     withAnimation(WowAnimation.easeOut) {
                         onDeleteCategory()
                     }
-                }
-            )
-        }
-        .sheet(isPresented: $showRenameAlert) {
-            AppPromptSheet(
-                title: "Rename Category",
-                placeholder: "Category Name",
-                text: $renameCategoryText,
-                primaryTitle: "Save",
-                onSubmit: { newTitle in
-                    onRenameCategory(newTitle)
                 }
             )
         }

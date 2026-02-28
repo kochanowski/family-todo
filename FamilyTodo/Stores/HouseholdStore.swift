@@ -134,7 +134,6 @@ class HouseholdStore: ObservableObject {
 
         let newHousehold = Household(
             name: trimmedHouseholdName,
-            colorHex: MemberColorToken.randomHex(),
             iconSymbol: iconSymbol,
             ownerId: userId
         )
@@ -338,14 +337,12 @@ class HouseholdStore: ObservableObject {
         }
         try await updateCurrentHousehold(
             name: name,
-            colorHex: currentHousehold.colorHex,
             userId: currentHousehold.ownerId
         )
     }
 
     func updateCurrentHousehold(
         name: String,
-        colorHex: String,
         userId: String
     ) async throws {
         guard var household = currentHousehold else {
@@ -356,18 +353,12 @@ class HouseholdStore: ObservableObject {
         guard !trimmedName.isEmpty else {
             throw HouseholdError.invalidInviteCode
         }
-        guard let normalizedColorHex = MemberColorToken.normalize(hex: colorHex),
-              MemberColorToken.isAllowed(hex: normalizedColorHex)
-        else {
-            throw HouseholdError.invalidInviteCode
-        }
 
-        guard trimmedName != household.name || normalizedColorHex != household.colorHex else {
+        guard trimmedName != household.name else {
             return
         }
 
         household.name = trimmedName
-        household.colorHex = normalizedColorHex
         household.updatedAt = Date()
 
         if syncMode == .cloud {
@@ -376,7 +367,11 @@ class HouseholdStore: ObservableObject {
             guard members.contains(where: { $0.userId == userId && $0.isActive }) else {
                 throw HouseholdError.notAuthorized
             }
-            _ = try await cloudKit.saveHousehold(household)
+            _ = try await cloudKit.updateHouseholdMetadata(
+                householdId: household.id,
+                newName: household.name,
+                newIconSymbol: household.iconSymbol
+            )
         }
 
         updateCache(with: household)
@@ -594,16 +589,7 @@ class HouseholdStore: ObservableObject {
         // For now, simple fetch
         let descriptor = FetchDescriptor<CachedHousehold>()
         do {
-            guard let cached = try context.fetch(descriptor).first else { return nil }
-            let migratedColor = MemberColorToken.normalize(hex: cached.colorHex)
-                .flatMap { MemberColorToken.isAllowed(hex: $0) ? $0 : nil }
-                ?? MemberColorToken.migratedHex(for: cached.id)
-
-            if cached.colorHex != migratedColor {
-                cached.colorHex = migratedColor
-                try? context.save()
-            }
-            return cached
+            return try context.fetch(descriptor).first
         } catch {
             print("Fetch error: \(error)")
             return nil

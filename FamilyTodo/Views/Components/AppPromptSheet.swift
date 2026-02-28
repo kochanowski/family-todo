@@ -100,3 +100,93 @@ struct AppPromptSheet: View {
         dismiss()
     }
 }
+
+struct CategoryEditorSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    let primaryTitle: String
+    let onCancel: () -> Void
+    let onSubmit: (String, String) -> Void
+
+    @State private var name: String
+    @State private var selectedColorHex: String
+
+    init(
+        title: String,
+        initialName: String,
+        initialColorHex: String,
+        primaryTitle: String,
+        onCancel: @escaping () -> Void,
+        onSubmit: @escaping (String, String) -> Void
+    ) {
+        self.title = title
+        self.primaryTitle = primaryTitle
+        self.onCancel = onCancel
+        self.onSubmit = onSubmit
+        _name = State(initialValue: initialName)
+        _selectedColorHex = State(
+            initialValue: MemberColorToken.normalize(hex: initialColorHex) ?? MemberColorToken.fallbackHex
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Category Name") {
+                    TextField("Category Name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(true)
+                }
+
+                Section("Category Color") {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
+                        spacing: 12
+                    ) {
+                        ForEach(MemberColorToken.allCases, id: \.self) { token in
+                            let hex = token.hex
+                            Button {
+                                selectedColorHex = hex
+                            } label: {
+                                Circle()
+                                    .fill(Color(hex: hex))
+                                    .frame(width: 34, height: 34)
+                                    .overlay {
+                                        if selectedColorHex == hex {
+                                            Circle()
+                                                .stroke(Color.primary, lineWidth: 2)
+                                                .padding(1)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(primaryTitle) {
+                        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedName.isEmpty else { return }
+                        onSubmit(trimmedName, selectedColorHex)
+                        dismiss()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}

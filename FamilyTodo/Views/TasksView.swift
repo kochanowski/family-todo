@@ -155,6 +155,22 @@ private struct TasksContent: View {
             await refreshData()
             hasInitialMetadataLoaded = true
         }
+        .onChange(of: selectedTab) { _, newTab in
+            guard newTab == .tasks else { return }
+            _ = _Concurrency.Task {
+                await refreshData()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await refreshData()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await refreshData()
+            }
+        }
         .sheet(item: $pendingCleanupAction) { action in
             AppConfirmationSheet(
                 title: "Completed Tasks Cleanup",
