@@ -24,8 +24,8 @@ Ten plik jest źródłem prawdy dla kroków po deployu i będzie aktualizowany p
   - `code`, `householdId`, `shareURL`, `createdAt`, `expiresAt`, `isRevoked`, `usesCount`, `lastRedeemedAt`
 2. CloudKit Console -> Public Database -> Security Roles dla `InviteToken`:
 - `_world`: `read`
-- `_icloud`: `create`
-- `_creator`: `read/write/delete`
+- `_icloud`: `read/create`
+- `_creator`: `read/write` (w nowym UI CloudKit często nie ma osobnego toggle `delete`).
 3. Deploy schema changes Development -> Production (jeśli nie zrobił tego workflow).
 4. TestFlight smoke:
 - owner widzi 6-znakowy kod invite,
@@ -43,3 +43,10 @@ Ten plik jest źródłem prawdy dla kroków po deployu i będzie aktualizowany p
 
 ## Notatka
 `cloudkit.share` to typ systemowy CloudKit. Nie dodajemy go ręcznie do `housepulse-schema.json`.
+
+## Guardrail CI (ważne)
+Od teraz skrypty `scripts/cloudkit/apply_schema.sh` i `scripts/cloudkit/promote_schema.sh`
+najpierw eksportują schemę z docelowego środowiska i dołączają istniejące bloki
+`SECURITY ROLE` do ckdb przed `import-schema`.
+To zapobiega przypadkowemu usuwaniu uprawnień (np. `InviteToken` w `_world/_icloud/_creator`)
+przy kolejnych migracjach.

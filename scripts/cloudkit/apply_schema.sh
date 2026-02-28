@@ -117,6 +117,18 @@ list_record_types_from_ckdb() {
   ' "$ckdb_file" | sort -u
 }
 
+list_security_roles_from_ckdb() {
+  local ckdb_file="$1"
+  awk '
+    /^[[:space:]]*SECURITY ROLE[[:space:]]+/ {
+      name=$3
+      gsub(/"/, "", name)
+      gsub(/\r/, "", name)
+      print name
+    }
+  ' "$ckdb_file" | sort -u
+}
+
 extract_record_type_block() {
   local ckdb_file="$1"
   local record_type_name="$2"
@@ -199,6 +211,85 @@ build_managed_safe_ckdb() {
   done <<< "$managed_type_names"
 }
 
+extract_security_role_block() {
+  local ckdb_file="$1"
+  local role_name="$2"
+
+  awk -v target="$role_name" '
+    function flush_block() {
+      if (capture && current_name == target) {
+        printf "%s", block
+        found = 1
+      }
+      capture = 0
+      block = ""
+      current_name = ""
+    }
+
+    /^[[:space:]]*SECURITY ROLE[[:space:]]+/ {
+      flush_block()
+      capture = 1
+      block = $0 ORS
+      current_name = $3
+      gsub(/"/, "", current_name)
+      gsub(/\r/, "", current_name)
+      next
+    }
+
+    {
+      if (capture) {
+        block = block $0 ORS
+        if ($0 ~ /^[[:space:]]*\);[[:space:]]*$/) {
+          flush_block()
+          if (found) {
+            exit 0
+          }
+        }
+      }
+    }
+
+    END {
+      if (!found && capture && current_name == target) {
+        printf "%s", block
+        found = 1
+      }
+      if (!found) {
+        exit 1
+      }
+    }
+  ' "$ckdb_file"
+}
+
+build_role_safe_ckdb() {
+  local desired_ckdb="$1"
+  local export_ckdb="$2"
+  local output_ckdb="$3"
+  local log_file="$4"
+
+  cp "$desired_ckdb" "$output_ckdb"
+
+  local role_names
+  role_names="$(list_security_roles_from_ckdb "$export_ckdb" || true)"
+  if [[ -z "$role_names" ]]; then
+    echo "CloudKitSchema: no SECURITY ROLE blocks found in environment export." | tee -a "$log_file"
+    return 0
+  fi
+
+  while IFS= read -r role_name; do
+    [[ -z "$role_name" ]] && continue
+
+    if list_security_roles_from_ckdb "$output_ckdb" | grep -Fxq "$role_name"; then
+      continue
+    fi
+
+    {
+      echo ""
+      extract_security_role_block "$export_ckdb" "$role_name"
+    } >> "$output_ckdb"
+    echo "CloudKitSchema: appended SECURITY ROLE '$role_name' to preserve existing access rules." | tee -a "$log_file"
+  done <<< "$role_names"
+}
+
 verify_contract_record_types_exist_in_development() {
   local schema_json="$1"
   local development_export_ckdb="$2"
@@ -245,6 +336,7 @@ log_file="$tmp_dir/cktool-apply-development.log"
 dev_export_ckdb_file="$tmp_dir/development-schema-export.ckdb"
 dev_export_log_file="$tmp_dir/cktool-development-schema-export.log"
 managed_retry_ckdb_file="$tmp_dir/schema-with-managed-types.ckdb"
+role_safe_ckdb_file="$tmp_dir/schema-with-security-roles.ckdb"
 managed_retry_log_file="$tmp_dir/cktool-apply-development-managed-retry.log"
 merged_types_file="$tmp_dir/merged-types.txt"
 
@@ -256,8 +348,21 @@ echo "CloudKitSchema: applying schema to development environment for container=$
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "CloudKitSchema: DRY_RUN=true, skipping import-schema command."
 else
+  import_ckdb_file="$ckdb_file"
   set +e
-  run_import "$ckdb_file" "$log_file"
+  run_export_development "$dev_export_ckdb_file" "$dev_export_log_file"
+  pre_export_status=$?
+  set -e
+
+  if [[ $pre_export_status -eq 0 ]]; then
+    build_role_safe_ckdb "$ckdb_file" "$dev_export_ckdb_file" "$role_safe_ckdb_file" "$log_file"
+    import_ckdb_file="$role_safe_ckdb_file"
+  else
+    echo "CloudKitSchema: warning: failed to export Development schema before import; proceeding without SECURITY ROLE preservation merge." | tee -a "$log_file"
+  fi
+
+  set +e
+  run_import "$import_ckdb_file" "$log_file"
   import_status=$?
   set -e
 
@@ -267,7 +372,7 @@ else
       echo "CloudKitSchema: exporting Development schema and retrying import with managed cloudkit.* record types preserved." | tee -a "$log_file"
 
       run_export_development "$dev_export_ckdb_file" "$dev_export_log_file"
-      build_managed_safe_ckdb "$ckdb_file" "$dev_export_ckdb_file" "$managed_retry_ckdb_file" "$log_file" "$merged_types_file"
+      build_managed_safe_ckdb "$import_ckdb_file" "$dev_export_ckdb_file" "$managed_retry_ckdb_file" "$log_file" "$merged_types_file"
 
       set +e
       run_import "$managed_retry_ckdb_file" "$managed_retry_log_file"
@@ -301,6 +406,9 @@ if [[ -f "$dev_export_log_file" ]]; then
 fi
 if [[ -f "$managed_retry_ckdb_file" ]]; then
   cp "$managed_retry_ckdb_file" "$REPO_ROOT/cloudkit/artifacts/housepulse-schema.managed-retry.ckdb"
+fi
+if [[ -f "$role_safe_ckdb_file" ]]; then
+  cp "$role_safe_ckdb_file" "$REPO_ROOT/cloudkit/artifacts/housepulse-schema.role-safe.ckdb"
 fi
 if [[ -f "$managed_retry_log_file" ]]; then
   cp "$managed_retry_log_file" "$REPO_ROOT/cloudkit/artifacts/cktool-apply-development-managed-retry.log"
