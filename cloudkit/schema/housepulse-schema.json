@@ -172,5 +172,30 @@
         "sort": ["createdAt"]
       }
     }
+  ],
+  "securityRoles": [
+    {
+      "name": "_world",
+      "recordTypePermissions": [
+        { "recordType": "Users", "read": true },
+        { "recordType": "cloudkit.share", "read": true },
+        { "recordType": "InviteToken", "read": true }
+      ]
+    },
+    {
+      "name": "_icloud",
+      "recordTypePermissions": [
+        { "recordType": "cloudkit.share", "read": true },
+        { "recordType": "InviteToken", "create": true, "read": true }
+      ]
+    },
+    {
+      "name": "_creator",
+      "recordTypePermissions": [
+        { "recordType": "Users", "write": true },
+        { "recordType": "cloudkit.share", "write": true },
+        { "recordType": "InviteToken", "read": true, "write": true }
+      ]
+    }
   ]
 }

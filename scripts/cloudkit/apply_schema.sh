@@ -23,25 +23,59 @@ render_ckdb() {
       else error("Unsupported type: \(.)")
       end;
 
+    def permission_list:
+      [
+        if .create == true then "CREATE" else empty end,
+        if .read == true then "READ" else empty end,
+        if .write == true then "WRITE" else empty end
+      ];
+
+    def render_record_types:
+      (
+        .recordTypes
+        | map(
+            "RECORD TYPE \(.name) (\n"
+            + (
+                .fields
+                | map(
+                    "  \"\(.name)\" "
+                    + (.type | to_type)
+                    + (if .queryable then " QUERYABLE" else "" end)
+                    + (if .sortable then " SORTABLE" else "" end)
+                  )
+                | join(",\n")
+              )
+            + "\n);"
+          )
+        | join("\n\n")
+      );
+
+    def render_security_roles:
+      (
+        (.securityRoles // [])
+        | map(
+            "SECURITY ROLE \(.name) (\n"
+            + (
+                .recordTypePermissions
+                | map(
+                    "  RECORD TYPE \"\(.recordType)\" "
+                    + ((permission_list) | join(", "))
+                  )
+                | join(",\n")
+              )
+            + "\n);"
+          )
+        | join("\n\n")
+      );
+
     "DEFINE SCHEMA\n"
+    + render_record_types
     + (
-      .recordTypes
-      | map(
-          "RECORD TYPE \(.name) (\n"
-          + (
-              .fields
-              | map(
-                  "  \"\(.name)\" "
-                  + (.type | to_type)
-                  + (if .queryable then " QUERYABLE" else "" end)
-                  + (if .sortable then " SORTABLE" else "" end)
-                )
-              | join(",\n")
-            )
-          + "\n);"
-        )
-      | join("\n\n")
-    )
+        if ((.securityRoles // []) | length) > 0
+        then "\n\n" + render_security_roles
+        else ""
+        end
+      )
   ' "$input_json" > "$output_ckdb"
 }
 
@@ -312,6 +346,80 @@ verify_contract_record_types_exist_in_development() {
   return 0
 }
 
+list_security_role_permissions_from_ckdb() {
+  local ckdb_file="$1"
+
+  awk '
+    function trim(value) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      return value
+    }
+
+    /^[[:space:]]*SECURITY ROLE[[:space:]]+/ {
+      role_name = $3
+      gsub(/"/, "", role_name)
+      gsub(/\r/, "", role_name)
+      in_role = 1
+      next
+    }
+
+    in_role && /^[[:space:]]*\);[[:space:]]*$/ {
+      in_role = 0
+      role_name = ""
+      next
+    }
+
+    in_role && /^[[:space:]]*RECORD TYPE[[:space:]]+/ {
+      line = $0
+      if (match(line, /^[[:space:]]*RECORD TYPE[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/, captures)) {
+        record_type = captures[1]
+        permissions_blob = captures[2]
+        gsub(/\r/, "", permissions_blob)
+        gsub(/[);]/, "", permissions_blob)
+        split_count = split(permissions_blob, permissions, ",")
+        for (index = 1; index <= split_count; index++) {
+          permission = toupper(trim(permissions[index]))
+          if (permission != "") {
+            print role_name "|" record_type "|" permission
+          }
+        }
+      }
+    }
+  ' "$ckdb_file" | sort -u
+}
+
+verify_required_security_role_permissions_in_development() {
+  local schema_json="$1"
+  local development_ckdb="$2"
+  local tmp_dir="$3"
+
+  local expected_permissions_file="$tmp_dir/expected-security-permissions.txt"
+  local development_permissions_file="$tmp_dir/development-security-permissions.txt"
+
+  jq -r '
+    (.securityRoles // [])[] as $role
+    | ($role.recordTypePermissions // [])[] as $permission
+    | [
+        if ($permission.create // false) then "CREATE" else empty end,
+        if ($permission.read // false) then "READ" else empty end,
+        if ($permission.write // false) then "WRITE" else empty end
+      ][]
+    | "\($role.name)|\($permission.recordType)|\(.)"
+  ' "$schema_json" | sort -u > "$expected_permissions_file"
+
+  list_security_role_permissions_from_ckdb "$development_ckdb" > "$development_permissions_file"
+
+  local missing_permissions
+  missing_permissions="$(comm -23 "$expected_permissions_file" "$development_permissions_file" || true)"
+  if [[ -n "$missing_permissions" ]]; then
+    echo "CloudKitSchema: development schema is missing required security role permission(s):" >&2
+    echo "$missing_permissions" | sed 's/^/ - /' >&2
+    return 1
+  fi
+
+  return 0
+}
+
 if [[ -z "$TEAM_ID" ]]; then
   echo "CloudKitSchema: TEAM_ID is required." >&2
   exit 1
@@ -412,6 +520,11 @@ if [[ -f "$role_safe_ckdb_file" ]]; then
 fi
 if [[ -f "$managed_retry_log_file" ]]; then
   cp "$managed_retry_log_file" "$REPO_ROOT/cloudkit/artifacts/cktool-apply-development-managed-retry.log"
+fi
+
+if [[ -f "$dev_export_ckdb_file" ]]; then
+  verify_contract_record_types_exist_in_development "$SCHEMA_JSON" "$dev_export_ckdb_file" "$tmp_dir" "after apply"
+  verify_required_security_role_permissions_in_development "$SCHEMA_JSON" "$dev_export_ckdb_file" "$tmp_dir"
 fi
 
 echo "CloudKitSchema: development schema apply finished."
