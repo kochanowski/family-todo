@@ -64,11 +64,11 @@ actor CloudKitManager {
 
         let suffixes = ["(owner)", "(właściciel)"]
         for suffix in suffixes {
-            if trimmed.localizedCaseInsensitiveHasSuffix(suffix) {
-                let endIndex = trimmed.index(
-                    trimmed.endIndex,
-                    offsetBy: -suffix.count
-                )
+            if trimmed.range(
+                of: suffix,
+                options: [.caseInsensitive, .anchored, .backwards]
+            ) != nil {
+                let endIndex = trimmed.index(trimmed.endIndex, offsetBy: -suffix.count)
                 let cleaned = trimmed[..<endIndex].trimmingCharacters(in: .whitespacesAndNewlines)
                 return cleaned.isEmpty ? "Household" : String(cleaned)
             }
