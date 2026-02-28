@@ -3,7 +3,6 @@ import Combine
 import SwiftData
 import SwiftUI
 
-// swiftlint:disable type_body_length
 @MainActor
 class MemberStore: ObservableObject {
     @Published var members: [Member] = []
@@ -351,7 +350,6 @@ class MemberStore: ObservableObject {
         members.filter { $0.isActive && $0.role == .owner }.count
     }
 }
-// swiftlint:enable type_body_length
 
 enum MemberStoreError: LocalizedError, Equatable {
     case ownerPermissionsRequired

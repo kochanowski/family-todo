@@ -3,7 +3,6 @@ import SwiftData
 import SwiftUI
 
 /// Store for shared shopping list management
-// swiftlint:disable type_body_length
 @MainActor
 final class ShoppingListStore: ObservableObject {
     @Published private(set) var items: [ShoppingItem] = []
@@ -583,4 +582,3 @@ final class ShoppingListStore: ObservableObject {
         try? context.save()
     }
 }
-// swiftlint:enable type_body_length

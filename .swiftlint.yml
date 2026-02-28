@@ -46,8 +46,8 @@ function_body_length:
 
 # Type body length
 type_body_length:
-  warning: 300
-  error: 500
+  warning: 600
+  error: 1200
 
 # Identifier naming
 identifier_name:
