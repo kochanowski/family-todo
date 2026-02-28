@@ -38,6 +38,7 @@ extension CloudKitManager {
         let record = CKRecord(recordType: "Household", recordID: recordID(for: household.id))
         record["id"] = household.id.uuidString as CKRecordValue
         record["name"] = household.name as CKRecordValue
+        record["colorHex"] = household.colorHex as CKRecordValue
         record["iconSymbol"] = household.iconSymbol as CKRecordValue
         record["ownerId"] = household.ownerId as CKRecordValue
         record["createdAt"] = household.createdAt as CKRecordValue
@@ -60,6 +61,7 @@ extension CloudKitManager {
         return Household(
             id: id,
             name: name,
+            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.migratedHex(for: id),
             iconSymbol: (record["iconSymbol"] as? String) ?? "house.fill",
             ownerId: ownerId,
             createdAt: createdAt,
@@ -106,7 +108,7 @@ extension CloudKitManager {
             role: role,
             joinedAt: joinedAt,
             isActive: isActiveValue == 1,
-            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.defaultHex(for: id)
+            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.migratedHex(for: id)
         )
     }
 

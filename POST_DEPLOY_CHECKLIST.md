@@ -32,14 +32,17 @@ Ten plik jest źródłem prawdy dla kroków po deployu i będzie aktualizowany p
 - invitee może dołączyć po wpisaniu kodu,
 - link/QR nadal działają.
 
-## Co musisz zrobić ręcznie po tym wdrożeniu (Member colors + profile edit)
-1. Uruchom workflow `cloudkit-schema` (Development) i potwierdź, że przechodzi walidacja dla `Member.colorHex`.
+## Co musisz zrobić ręcznie po tym wdrożeniu (Member/Household colors + unified settings)
+1. Uruchom workflow `cloudkit-schema` (Development) i potwierdź, że przechodzi walidacja dla:
+- `Member.colorHex`
+- `Household.colorHex`
 2. CloudKit Console -> `Deploy Schema Changes...`:
-- wypchnij zmiany Development -> Production (pole `Member.colorHex`).
+- wypchnij zmiany Development -> Production (pole `Household.colorHex` i ewentualne zaległe zmiany `Member.colorHex`).
 3. Nowy build TestFlight dopiero po kroku 2.
 4. Smoke test:
 - More -> Profile -> Edit Profile: zmiana nazwy i koloru zapisuje się poprawnie,
-- Tasks: chip assignee ma trwały kolor po restarcie aplikacji.
+- More -> Household Settings -> Household: zmiana nazwy i koloru household zapisuje się poprawnie,
+- Tasks/Ideas: chip assignee ma ten sam trwały kolor po restarcie aplikacji.
 
 ## Notatka
 `cloudkit.share` to typ systemowy CloudKit. Nie dodajemy go ręcznie do `housepulse-schema.json`.

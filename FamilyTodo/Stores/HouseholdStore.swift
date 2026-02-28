@@ -134,6 +134,7 @@ class HouseholdStore: ObservableObject {
 
         let newHousehold = Household(
             name: trimmedHouseholdName,
+            colorHex: MemberColorToken.randomHex(),
             iconSymbol: iconSymbol,
             ownerId: userId
         )
@@ -152,7 +153,8 @@ class HouseholdStore: ObservableObject {
                 householdId: newHousehold.id,
                 userId: userId,
                 displayName: validatedDisplayName,
-                role: .owner
+                role: .owner,
+                colorHex: MemberColorToken.randomHex()
             )
             _ = try await cloudKit.saveMember(owner)
         }
@@ -331,6 +333,21 @@ class HouseholdStore: ObservableObject {
     // MARK: - Household Management
 
     func renameCurrentHousehold(_ name: String) async throws {
+        guard let currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+        try await updateCurrentHousehold(
+            name: name,
+            colorHex: currentHousehold.colorHex,
+            userId: currentHousehold.ownerId
+        )
+    }
+
+    func updateCurrentHousehold(
+        name: String,
+        colorHex: String,
+        userId: String
+    ) async throws {
         guard var household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
@@ -339,12 +356,26 @@ class HouseholdStore: ObservableObject {
         guard !trimmedName.isEmpty else {
             throw HouseholdError.invalidInviteCode
         }
+        guard let normalizedColorHex = MemberColorToken.normalize(hex: colorHex),
+              MemberColorToken.isAllowed(hex: normalizedColorHex)
+        else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        guard trimmedName != household.name || normalizedColorHex != household.colorHex else {
+            return
+        }
 
         household.name = trimmedName
+        household.colorHex = normalizedColorHex
         household.updatedAt = Date()
 
         if syncMode == .cloud {
-            await cloudKit.setHouseholdScope(.ownerPrivate)
+            await setCloudScope(for: household, userId: userId)
+            let members = try await cloudKit.fetchMembers(householdId: household.id)
+            guard members.contains(where: { $0.userId == userId && $0.isActive }) else {
+                throw HouseholdError.notAuthorized
+            }
             _ = try await cloudKit.saveHousehold(household)
         }
 
@@ -501,7 +532,8 @@ class HouseholdStore: ObservableObject {
             householdId: householdId,
             userId: userId,
             displayName: displayName,
-            role: role
+            role: role,
+            colorHex: MemberColorToken.randomHex()
         )
         _ = try await cloudKit.saveMember(member)
     }
@@ -562,7 +594,16 @@ class HouseholdStore: ObservableObject {
         // For now, simple fetch
         let descriptor = FetchDescriptor<CachedHousehold>()
         do {
-            return try context.fetch(descriptor).first
+            guard let cached = try context.fetch(descriptor).first else { return nil }
+            let migratedColor = MemberColorToken.normalize(hex: cached.colorHex)
+                .flatMap { MemberColorToken.isAllowed(hex: $0) ? $0 : nil }
+                ?? MemberColorToken.migratedHex(for: cached.id)
+
+            if cached.colorHex != migratedColor {
+                cached.colorHex = migratedColor
+                try? context.save()
+            }
+            return cached
         } catch {
             print("Fetch error: \(error)")
             return nil
@@ -655,7 +696,8 @@ class HouseholdStore: ObservableObject {
             householdId: householdId,
             userId: userId,
             displayName: displayName,
-            role: .owner
+            role: .owner,
+            colorHex: MemberColorToken.randomHex()
         )
         context.insert(CachedMember(from: ownerMember))
 

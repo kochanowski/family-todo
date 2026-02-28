@@ -77,6 +77,8 @@ private struct TasksContent: View {
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
+    @State private var hasInitialMetadataLoaded = false
+    @State private var hasStartedInitialLoad = false
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
     @Binding private var selectedTab: AppTab
@@ -125,34 +127,33 @@ private struct TasksContent: View {
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.bottom, 8)
 
-            List {
-                if activeFilter == .active {
-                    activeTasksContent
-                } else {
-                    completedTasksContent
+            if hasInitialMetadataLoaded {
+                List {
+                    if activeFilter == .active {
+                        activeTasksContent
+                    } else {
+                        completedTasksContent
+                    }
                 }
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(Color.clear)
-            .padding(.bottom, listBottomInset)
-            .refreshable {
-                store.setSyncMode(userSession.syncMode)
-                memberStore.setSyncMode(userSession.syncMode)
-                backlogStore.setSyncMode(userSession.syncMode)
-                await store.loadTasks()
-                await memberStore.loadMembers()
-                await backlogStore.loadData()
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .padding(.bottom, listBottomInset)
+                .refreshable {
+                    await refreshData()
+                }
+            } else {
+                ProgressView("Loading tasks...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 40)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
-            store.setSyncMode(userSession.syncMode)
-            memberStore.setSyncMode(userSession.syncMode)
-            backlogStore.setSyncMode(userSession.syncMode)
-            await store.loadTasks()
-            await memberStore.loadMembers()
-            await backlogStore.loadData()
+            guard !hasStartedInitialLoad else { return }
+            hasStartedInitialLoad = true
+            await refreshData()
+            hasInitialMetadataLoaded = true
         }
         .sheet(item: $pendingCleanupAction) { action in
             AppConfirmationSheet(
@@ -248,8 +249,7 @@ private struct TasksContent: View {
 
                     TaskRow(
                         task: task,
-                        assigneeName: assigneeName(for: task),
-                        assigneeColor: assigneeColor(for: task),
+                        assignee: assignee(for: task),
                         categoryName: categoryName(for: task),
                         categoryColor: categoryColor(for: task),
                         wipZone: wipZone(for: index),
@@ -271,7 +271,6 @@ private struct TasksContent: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-                    .rowInsertAnimation()
                     .accessibilityIdentifier("taskRow_\(task.title)")
                     .tasksListRowStyle(taskListRowInsets)
                 }
@@ -293,8 +292,7 @@ private struct TasksContent: View {
             ForEach(store.doneTasks) { task in
                 TaskRow(
                     task: task,
-                    assigneeName: assigneeName(for: task),
-                    assigneeColor: assigneeColor(for: task),
+                    assignee: assignee(for: task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -309,7 +307,6 @@ private struct TasksContent: View {
                     }
                     .tint(.orange)
                 }
-                .rowInsertAnimation()
                 .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
                 .tasksListRowStyle(taskListRowInsets)
             }
@@ -561,18 +558,9 @@ private struct TasksContent: View {
         }
     }
 
-    private func assigneeName(for task: Task) -> String? {
+    private func assignee(for task: Task) -> Member? {
         guard let assigneeId = task.assigneeId else { return nil }
-        return memberStore.members.first(where: { $0.id == assigneeId })?.displayName
-    }
-
-    private func assigneeColor(for task: Task) -> Color? {
-        guard let assigneeId = task.assigneeId,
-              let colorHex = memberStore.members.first(where: { $0.id == assigneeId })?.colorHex
-        else {
-            return nil
-        }
-        return Color(hex: colorHex)
+        return memberStore.members.first(where: { $0.id == assigneeId })
     }
 
     private func categoryName(for task: Task) -> String? {
@@ -696,6 +684,18 @@ private struct TasksContent: View {
         case .keepLast30Days:
             "This removes completed tasks older than 30 days."
         }
+    }
+
+    private func refreshData() async {
+        store.setSyncMode(userSession.syncMode)
+        memberStore.setSyncMode(userSession.syncMode)
+        backlogStore.setSyncMode(userSession.syncMode)
+
+        async let loadTasks = store.loadTasks()
+        async let loadMembers = memberStore.loadMembers()
+        async let loadBacklog = backlogStore.loadData()
+
+        _ = await (loadTasks, loadMembers, loadBacklog)
     }
 
     private func archiveTask(_ task: Task) {
@@ -890,8 +890,7 @@ struct TaskRow: View {
     @EnvironmentObject private var themeStore: ThemeStore
 
     let task: Task
-    let assigneeName: String?
-    let assigneeColor: Color?
+    let assignee: Member?
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
@@ -929,22 +928,11 @@ struct TaskRow: View {
                                 .background(Capsule().fill(categoryColor.opacity(0.12)))
                             }
 
-                            if let assigneeName {
-                                let memberColor = assigneeColor ?? .secondary
-                                HStack(spacing: 4) {
-                                    Text(String(assigneeName.prefix(1)).uppercased())
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(Circle().fill(memberColor))
-                                    Text(assigneeName)
-                                        .font(themeStore.font(for: .bodySmall))
-                                        .foregroundStyle(memberColor)
-                                }
-                                .padding(.trailing, 8)
-                                .padding(.leading, 2)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(memberColor.opacity(0.12)))
+                            if let assignee {
+                                MemberBadgeView(
+                                    name: assignee.displayName,
+                                    colorHex: assignee.colorHex
+                                )
                             }
 
                             if let dueDate = task.dueDate {

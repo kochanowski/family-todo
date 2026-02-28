@@ -5,6 +5,7 @@ import SwiftData
 final class CachedHousehold {
     @Attribute(.unique) var id: UUID
     var name: String
+    var colorHex: String
     var iconSymbol: String
     var ownerId: String
     var createdAt: Date
@@ -13,6 +14,7 @@ final class CachedHousehold {
     init(
         id: UUID = UUID(),
         name: String = "",
+        colorHex: String = MemberColorToken.fallbackHex,
         iconSymbol: String = "house.fill",
         ownerId: String = "",
         createdAt: Date = Date(),
@@ -20,6 +22,7 @@ final class CachedHousehold {
     ) {
         self.id = id
         self.name = name
+        self.colorHex = colorHex
         self.iconSymbol = iconSymbol
         self.ownerId = ownerId
         self.createdAt = createdAt
@@ -29,6 +32,7 @@ final class CachedHousehold {
     init(from household: Household) {
         id = household.id
         name = household.name
+        colorHex = household.colorHex
         iconSymbol = household.iconSymbol
         ownerId = household.ownerId
         createdAt = household.createdAt
@@ -39,6 +43,7 @@ final class CachedHousehold {
         Household(
             id: id,
             name: name,
+            colorHex: colorHex,
             iconSymbol: iconSymbol,
             ownerId: ownerId,
             createdAt: createdAt,
@@ -48,6 +53,7 @@ final class CachedHousehold {
 
     func update(from household: Household) {
         name = household.name
+        colorHex = household.colorHex
         iconSymbol = household.iconSymbol
         ownerId = household.ownerId
         updatedAt = household.updatedAt

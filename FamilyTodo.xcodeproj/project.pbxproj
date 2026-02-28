@@ -70,7 +70,8 @@
 		F0B100000000000000000003 /* AppDelegateBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000003 /* AppDelegateBridge.swift */; };
 		310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5698A6FED3C457788B6A60C /* CachedMember.swift */; };
 		DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */; };
-		004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */; };
+		C9E8A1B2C3D4E5F607182930 /* MemberBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */; };
+		HSSET000000000000000001 /* HouseholdSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSSET000000000000000002 /* HouseholdSettingsView.swift */; };
 		UITEST00000000000000003 /* FamilyTodoUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST00000000000000002 /* FamilyTodoUITests.swift */; };
 		NEWFILE0000000000000001 /* ShoppingListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000011 /* ShoppingListView.swift */; };
 		NEWFILE0000000000000002 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000012 /* TasksView.swift */; };
@@ -178,7 +179,8 @@
 		CELEB3000000000000000001 /* CelebrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationManager.swift; sourceTree = "<group>"; };
 		D5698A6FED3C457788B6A60C /* CachedMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedMember.swift; sourceTree = "<group>"; };
 		1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedShoppingItem.swift; sourceTree = "<group>"; };
-		AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
+		C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberBadgeView.swift; sourceTree = "<group>"; };
+		HSSET000000000000000002 /* HouseholdSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSettingsView.swift; sourceTree = "<group>"; };
 		UITEST00000000000000002 /* FamilyTodoUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoUITests.swift; sourceTree = "<group>"; };
 		UITEST0000000000000000D /* FamilyTodoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		NEWFILE0000000000000011 /* ShoppingListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListView.swift; sourceTree = "<group>"; };
@@ -400,9 +402,9 @@
 				NEWFILE0000000000000012 /* TasksView.swift */,
 				NEWFILE0000000000000013 /* BacklogView.swift */,
 				NEWFILE0000000000000014 /* MoreView.swift */,
+				HSSET000000000000000002 /* HouseholdSettingsView.swift */,
 				SETTVIEW000000000000002 /* SettingsView.swift */,
 				NEWGROUP000000000000001 /* Components */,
-				AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
 				D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
@@ -426,6 +428,7 @@
 					CELEB4000000000000000001 /* CelebrationOverlay.swift */,
 					F0A100000000000000000004 /* InviteQRCodeView.swift */,
 					F0A100000000000000000005 /* QRCodeScannerView.swift */,
+					C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
 			);
@@ -590,7 +593,6 @@
 				F1A2B3C4D5E6F708192A3B4D /* InviteToken.swift in Sources */,
 				310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */,
 				DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */,
-				004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */,
 				58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */,
 				CELEB1000000000000000001 /* CelebrationManager.swift in Sources */,
 				F0B100000000000000000002 /* ShareAcceptanceCoordinator.swift in Sources */,
@@ -617,6 +619,7 @@
 				NEWFILE0000000000000002 /* TasksView.swift in Sources */,
 				NEWFILE0000000000000003 /* BacklogView.swift in Sources */,
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
+				HSSET000000000000000001 /* HouseholdSettingsView.swift in Sources */,
 					SETTVIEW000000000000001 /* SettingsView.swift in Sources */,
 					B1C2D3E4F5A60718293B4C51 /* AppModalActionRow.swift in Sources */,
 					B1C2D3E4F5A60718293B4C53 /* AppConfirmationSheet.swift in Sources */,
@@ -624,7 +627,8 @@
 					CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */,
 					SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
 					D1C0D1A1A1A1A1A1A1A1A1A3 /* CloudKitDiagnosticsBanner.swift in Sources */,
-				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
+					C9E8A1B2C3D4E5F607182930 /* MemberBadgeView.swift in Sources */,
+					NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
 				CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */,
 				F0B100000000000000000004 /* InviteQRCodeView.swift in Sources */,

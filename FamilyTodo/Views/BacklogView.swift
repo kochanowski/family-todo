@@ -98,8 +98,8 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
-                                    assigneeNameFor: { assigneeId in
-                                        assigneeName(for: assigneeId)
+                                    assigneeFor: { assigneeId in
+                                        assignee(for: assigneeId)
                                     },
                                     isAddingItem: activeComposerCategoryId == category.id,
                                     newItemText: Binding(
@@ -307,9 +307,9 @@ private struct BacklogContent: View {
         return activeMembers.first { $0.userId == userId }
     }
 
-    private func assigneeName(for assigneeId: UUID?) -> String? {
+    private func assignee(for assigneeId: UUID?) -> Member? {
         guard let assigneeId else { return nil }
-        return activeMembers.first(where: { $0.id == assigneeId })?.displayName
+        return activeMembers.first(where: { $0.id == assigneeId })
     }
 
     private var header: some View {
@@ -606,7 +606,7 @@ private struct BacklogAssigneePickerSheet: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
-    let assigneeNameFor: (UUID?) -> String?
+    let assigneeFor: (UUID?) -> Member?
     let isAddingItem: Bool
     @Binding var newItemText: String
     let focusedComposerCategoryId: FocusState<UUID?>.Binding
@@ -670,7 +670,7 @@ struct CategoryCard: View {
                     let canPromote = item.assigneeId != nil
                     BacklogItemRow(
                         item: item,
-                        assigneeName: assigneeNameFor(item.assigneeId),
+                        assignee: assigneeFor(item.assigneeId),
                         canPromote: canPromote,
                         onTap: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
@@ -848,7 +848,7 @@ struct BacklogItemRow: View {
     @EnvironmentObject private var themeStore: ThemeStore
 
     let item: BacklogItem
-    let assigneeName: String?
+    let assignee: Member?
     let canPromote: Bool
     let onTap: () -> Void
     let onAssign: () -> Void
@@ -864,17 +864,11 @@ struct BacklogItemRow: View {
                     .foregroundStyle(themeStore.contentPrimaryColor)
                     .strikethrough(false)
 
-                if let assigneeName {
-                    Text(assigneeName)
-                        .font(themeStore.font(for: .chip))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule().fill(
-                                Color.secondary.opacity(colorScheme == .dark ? 0.2 : 0.12)
-                            )
-                        )
+                if let assignee {
+                    MemberBadgeView(
+                        name: assignee.displayName,
+                        colorHex: assignee.colorHex
+                    )
                 }
             }
 

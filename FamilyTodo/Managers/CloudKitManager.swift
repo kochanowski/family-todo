@@ -747,6 +747,44 @@ actor CloudKitManager {
         }
     }
 
+    private func resolvedPaletteColor(
+        rawColorHex: String?,
+        stableId: UUID
+    ) -> (hex: String, requiresMigration: Bool) {
+        guard let normalized = MemberColorToken.normalize(hex: rawColorHex),
+              MemberColorToken.isAllowed(hex: normalized)
+        else {
+            return (MemberColorToken.migratedHex(for: stableId), true)
+        }
+        if rawColorHex != normalized {
+            return (normalized, true)
+        }
+        return (normalized, false)
+    }
+
+    private func migrateColorIfNeeded(
+        for record: CKRecord,
+        stableId: UUID,
+        explicitHouseholdId: UUID?,
+        operation: String,
+        database: CKDatabase
+    ) async -> String {
+        let currentColor = record["colorHex"] as? String
+        let colorState = resolvedPaletteColor(rawColorHex: currentColor, stableId: stableId)
+        guard colorState.requiresMigration else {
+            return colorState.hex
+        }
+
+        record["colorHex"] = colorState.hex as CKRecordValue
+        do {
+            let saved = try await saveRecordWithChangedKeys(record, database: database)
+            rememberRecordZone(saved, explicitHouseholdId: explicitHouseholdId)
+        } catch {
+            print("CloudKitScope: \(operation) color migration skipped: \(error.localizedDescription)")
+        }
+        return colorState.hex
+    }
+
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord
         case shareNotCreated
@@ -804,7 +842,16 @@ actor CloudKitManager {
     }
 
     func fetchHousehold(id: UUID) async throws -> Household {
+        let db = await activeHouseholdDatabase
         let record = try await fetchRecord(id: id, householdId: id)
+        let migratedColor = await migrateColorIfNeeded(
+            for: record,
+            stableId: id,
+            explicitHouseholdId: id,
+            operation: "household.fetch",
+            database: db
+        )
+        record["colorHex"] = migratedColor as CKRecordValue
         return try household(from: record)
     }
 
@@ -969,8 +1016,28 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Member", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
 
+        let db = await activeHouseholdDatabase
         let records = try await queryRecords(query, householdId: householdId)
-        return try records.map(member(from:))
+        var migratedRecords: [CKRecord] = []
+        migratedRecords.reserveCapacity(records.count)
+
+        for record in records {
+            let stableId = UUID(uuidString: record.recordID.recordName) ??
+                UUID(uuidString: record["id"] as? String ?? "")
+            if let stableId {
+                let migratedColor = await migrateColorIfNeeded(
+                    for: record,
+                    stableId: stableId,
+                    explicitHouseholdId: householdId,
+                    operation: "member.fetch",
+                    database: db
+                )
+                record["colorHex"] = migratedColor as CKRecordValue
+            }
+            migratedRecords.append(record)
+        }
+
+        return try migratedRecords.map(member(from:))
     }
 
     // MARK: - Area

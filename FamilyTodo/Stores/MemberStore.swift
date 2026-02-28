@@ -11,7 +11,7 @@ class MemberStore: ObservableObject {
 
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
-    private let householdId: UUID?
+    private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
@@ -21,6 +21,10 @@ class MemberStore: ObservableObject {
 
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+    }
+
+    func setHousehold(_ id: UUID?) {
+        householdId = id
     }
 
     func setSyncMode(_ mode: SyncMode) {
@@ -55,6 +59,11 @@ class MemberStore: ObservableObject {
             print("Error loading members: \(error)")
             self.error = error
         }
+    }
+
+    func activeMember(for userId: String?) -> Member? {
+        guard let userId else { return nil }
+        return members.first(where: { $0.userId == userId && $0.isActive })
     }
 
     // MARK: - Operations
@@ -248,7 +257,30 @@ class MemberStore: ObservableObject {
         )
 
         do {
-            return try context.fetch(descriptor).map { $0.toMember() }
+            let cachedMembers = try context.fetch(descriptor)
+            var didMigrate = false
+            let resolvedMembers = cachedMembers.map { cached -> Member in
+                let resolvedColor: String
+                if let normalized = MemberColorToken.normalize(hex: cached.colorHex),
+                   MemberColorToken.isAllowed(hex: normalized)
+                {
+                    resolvedColor = normalized
+                } else {
+                    resolvedColor = MemberColorToken.migratedHex(for: cached.id)
+                }
+
+                if cached.colorHex != resolvedColor {
+                    cached.colorHex = resolvedColor
+                    didMigrate = true
+                }
+                return cached.toMember()
+            }
+
+            if didMigrate {
+                try? context.save()
+            }
+
+            return resolvedMembers
         } catch {
             print("Cache fetch error: \(error)")
             return []
