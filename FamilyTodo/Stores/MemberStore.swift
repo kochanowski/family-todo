@@ -3,8 +3,8 @@ import Combine
 import SwiftData
 import SwiftUI
 
-@MainActor
 // swiftlint:disable type_body_length
+@MainActor
 class MemberStore: ObservableObject {
     @Published var members: [Member] = []
     @Published var isLoading = false
