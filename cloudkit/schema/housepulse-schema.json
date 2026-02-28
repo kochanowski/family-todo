@@ -25,6 +25,7 @@
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "userId", "type": "String", "queryable": true, "sortable": false },
         { "name": "displayName", "type": "String", "queryable": false, "sortable": false },
+        { "name": "colorHex", "type": "String", "queryable": false, "sortable": false },
         { "name": "role", "type": "String", "queryable": false, "sortable": false },
         { "name": "joinedAt", "type": "Date", "queryable": false, "sortable": true },
         { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false }

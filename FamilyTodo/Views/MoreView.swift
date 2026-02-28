@@ -219,6 +219,7 @@ struct ProfileView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
+    @Environment(\.modelContext) private var modelContext
     @State private var inlineHouseholdName = ""
     @State private var renameTask: _Concurrency.Task<Void, Never>?
     @State private var isRenamingHousehold = false
@@ -234,6 +235,32 @@ struct ProfileView: View {
                         .environmentObject(cloudKitDiagnostics)
                         .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                         .listRowBackground(Color.clear)
+                }
+            }
+
+            Section("Profile") {
+                if let householdId = householdStore.currentHousehold?.id {
+                    NavigationLink {
+                        EditProfileView(householdId: householdId, modelContext: modelContext)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(Color(hex: currentDisplayColorHex))
+                                .frame(width: 22, height: 22)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(userSession.displayName ?? "Member")
+                                    .foregroundStyle(themeStore.contentPrimaryColor)
+                                Text("Display name & color")
+                                    .font(themeStore.font(for: .bodySmall))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
+                            }
+                        }
+                    }
+                } else {
+                    Text("Create or join a household to edit profile.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
             }
 
@@ -333,6 +360,13 @@ struct ProfileView: View {
         }
     }
 
+    private var currentDisplayColorHex: String {
+        if let member = householdStore.currentHousehold?.members.first(where: { $0.userId == userSession.userId }) {
+            return member.colorHex
+        }
+        return MemberColorToken.fallbackHex
+    }
+
     private func scheduleInlineHouseholdRename(_ name: String) {
         renameTask?.cancel()
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -382,6 +416,132 @@ struct ProfileView: View {
                 userSession.clearCurrentHousehold()
             } catch {
                 actionErrorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct EditProfileView: View {
+    @StateObject private var memberStore: MemberStore
+
+    @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var displayName = ""
+    @State private var selectedColorHex = MemberColorToken.fallbackHex
+    @State private var hasLoaded = false
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    private let modelContext: ModelContext
+
+    init(householdId: UUID, modelContext: ModelContext) {
+        self.modelContext = modelContext
+        _memberStore = StateObject(wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext))
+    }
+
+    var body: some View {
+        Form {
+            Section("Display Name") {
+                TextField("Display name", text: $displayName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled(true)
+            }
+
+            Section("Profile Color") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
+                    ForEach(MemberColorToken.allCases, id: \.self) { token in
+                        let hex = token.hex
+                        Button {
+                            selectedColorHex = hex
+                        } label: {
+                            Circle()
+                                .fill(Color(hex: hex))
+                                .frame(width: 34, height: 34)
+                                .overlay {
+                                    if selectedColorHex == hex {
+                                        Circle()
+                                            .stroke(Color.primary, lineWidth: 2)
+                                            .padding(1)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .navigationTitle("Edit Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Cancel") {
+                    dismiss()
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    saveProfile()
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Text("Save")
+                    }
+                }
+                .disabled(isSaving || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .alert("Save failed", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Unknown error")
+        }
+        .task {
+            guard !hasLoaded else { return }
+            hasLoaded = true
+            memberStore.setModelContext(modelContext)
+            memberStore.setSyncMode(userSession.syncMode)
+            await memberStore.loadMembers()
+            hydrateInitialValues()
+        }
+    }
+
+    private func hydrateInitialValues() {
+        guard let userId = userSession.userId else { return }
+        if let currentMember = memberStore.members.first(where: { $0.userId == userId }) {
+            displayName = currentMember.displayName
+            selectedColorHex = currentMember.colorHex
+            return
+        }
+
+        displayName = userSession.displayName ?? ""
+        selectedColorHex = MemberColorToken.fallbackHex
+    }
+
+    private func saveProfile() {
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        isSaving = true
+        _ = _Concurrency.Task {
+            do {
+                try await memberStore.updateCurrentUserProfile(
+                    displayName: trimmedName,
+                    colorHex: selectedColorHex,
+                    currentUserId: userSession.userId
+                )
+                userSession.confirmDisplayName(trimmedName)
+                isSaving = false
+                dismiss()
+            } catch {
+                isSaving = false
+                errorMessage = error.localizedDescription
             }
         }
     }

@@ -62,17 +62,17 @@ final class TaskStore: ObservableObject {
 
     var backlogTasks: [Task] {
         tasks.filter { $0.status == .backlog }
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+            .sorted(by: Self.activeTaskSort)
     }
 
     var nextTasks: [Task] {
         tasks.filter { $0.status == .next }
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+            .sorted(by: Self.activeTaskSort)
     }
 
     var doneTasks: [Task] {
         tasks.filter { $0.status == .done }
-            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+            .sorted(by: Self.completedTaskSort)
     }
 
     /// Recently completed tasks shown on Tasks tab (last 24h).
@@ -573,6 +573,30 @@ final class TaskStore: ObservableObject {
             taskType: taskType,
             recurringChoreId: recurringChoreId
         )
+    }
+
+    private static func activeTaskSort(_ lhs: Task, _ rhs: Task) -> Bool {
+        let lhsDue = lhs.dueDate ?? .distantFuture
+        let rhsDue = rhs.dueDate ?? .distantFuture
+        if lhsDue != rhsDue {
+            return lhsDue < rhsDue
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt < rhs.createdAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func completedTaskSort(_ lhs: Task, _ rhs: Task) -> Bool {
+        let lhsCompleted = lhs.completedAt ?? .distantPast
+        let rhsCompleted = rhs.completedAt ?? .distantPast
+        if lhsCompleted != rhsCompleted {
+            return lhsCompleted > rhsCompleted
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 }
 

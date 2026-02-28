@@ -135,7 +135,6 @@ private struct TasksContent: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
-            .animation(.easeInOut(duration: 0.22), value: visibleNextTasks.map(\.id))
             .padding(.bottom, listBottomInset)
             .refreshable {
                 store.setSyncMode(userSession.syncMode)
@@ -250,7 +249,7 @@ private struct TasksContent: View {
                     TaskRow(
                         task: task,
                         assigneeName: assigneeName(for: task),
-                        assigneeId: task.assigneeId,
+                        assigneeColor: assigneeColor(for: task),
                         categoryName: categoryName(for: task),
                         categoryColor: categoryColor(for: task),
                         wipZone: wipZone(for: index),
@@ -295,7 +294,7 @@ private struct TasksContent: View {
                 TaskRow(
                     task: task,
                     assigneeName: assigneeName(for: task),
-                    assigneeId: task.assigneeId,
+                    assigneeColor: assigneeColor(for: task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: .normal,
@@ -565,6 +564,15 @@ private struct TasksContent: View {
     private func assigneeName(for task: Task) -> String? {
         guard let assigneeId = task.assigneeId else { return nil }
         return memberStore.members.first(where: { $0.id == assigneeId })?.displayName
+    }
+
+    private func assigneeColor(for task: Task) -> Color? {
+        guard let assigneeId = task.assigneeId,
+              let colorHex = memberStore.members.first(where: { $0.id == assigneeId })?.colorHex
+        else {
+            return nil
+        }
+        return Color(hex: colorHex)
     }
 
     private func categoryName(for task: Task) -> String? {
@@ -883,7 +891,7 @@ struct TaskRow: View {
 
     let task: Task
     let assigneeName: String?
-    let assigneeId: UUID?
+    let assigneeColor: Color?
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
@@ -922,7 +930,7 @@ struct TaskRow: View {
                             }
 
                             if let assigneeName {
-                                let memberColor = Self.memberColor(for: assigneeId)
+                                let memberColor = assigneeColor ?? .secondary
                                 HStack(spacing: 4) {
                                     Text(String(assigneeName.prefix(1)).uppercased())
                                         .font(.system(size: 10, weight: .bold))
@@ -1043,14 +1051,6 @@ struct TaskRow: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         return formatter
-    }
-
-    /// Deterministic color for a member based on their ID hash.
-    private static func memberColor(for id: UUID?) -> Color {
-        guard let id else { return .secondary }
-        let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .indigo, .mint]
-        let hash = abs(id.hashValue)
-        return colors[hash % colors.count]
     }
 }
 

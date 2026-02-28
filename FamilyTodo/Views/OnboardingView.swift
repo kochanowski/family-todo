@@ -124,6 +124,11 @@ struct CreateHouseholdSheet: View {
             }
             .navigationTitle("Create Household")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    householdName = defaultHouseholdName()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -166,6 +171,13 @@ struct CreateHouseholdSheet: View {
             return validated
         }
         return "Member"
+    }
+
+    private func defaultHouseholdName() -> String {
+        if let validated = try? DisplayNameValidator.validate(displayName) {
+            return "\(validated)'s Household"
+        }
+        return "My Household"
     }
 }
 

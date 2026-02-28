@@ -88,7 +88,7 @@ struct CreateHouseholdView: View {
                             .focused($isTextFieldFocused)
                             .submitLabel(.done)
                             .onSubmit {
-                                if !householdName.isEmpty {
+                                if !householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     createHousehold()
                                 }
                             }
@@ -120,10 +120,16 @@ struct CreateHouseholdView: View {
                         .padding(.vertical, 16)
                         .background(
                             Capsule()
-                                .fill(householdName.isEmpty ? Color.secondary : Color.blue)
+                                .fill(
+                                    householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? Color.secondary : Color.blue
+                                )
                         )
                     }
-                    .disabled(householdName.isEmpty || isCreating || !userSession.hasActiveSession)
+                    .disabled(
+                        householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                            isCreating || !userSession.hasActiveSession
+                    )
                     .padding(.horizontal, 40)
 
                     if allowsJoin {
@@ -197,6 +203,9 @@ struct CreateHouseholdView: View {
                 Text(joinErrorMessage ?? "Unknown error")
             }
             .onAppear {
+                if householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    householdName = defaultHouseholdName()
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     isTextFieldFocused = true
                 }
@@ -209,6 +218,7 @@ struct CreateHouseholdView: View {
     }
 
     private func createHousehold() {
+        householdName = householdName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !householdName.isEmpty else { return }
         guard userSession.hasActiveSession, let userId = userSession.userId else {
             joinErrorMessage = "Sign in or continue as guest before creating household."
@@ -343,6 +353,18 @@ struct CreateHouseholdView: View {
             return validated
         }
         return userSession.isGuest ? "Guest" : "Member"
+    }
+
+    private func defaultHouseholdName() -> String {
+        let rawName = userSession.preferredDisplayName ??
+            userSession.displayName ??
+            userSession.user?.givenName
+        if let rawName,
+           let validated = try? DisplayNameValidator.validate(rawName)
+        {
+            return "\(validated)'s Household"
+        }
+        return "My Household"
     }
 
     private static let availableHouseholdSymbols = [

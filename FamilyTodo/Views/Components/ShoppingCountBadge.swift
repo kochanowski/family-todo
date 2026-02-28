@@ -21,9 +21,6 @@ struct ShoppingCountBadge: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Capsule().fill(themeStore.accentTabColor))
-            .alignmentGuide(.firstTextBaseline) { dimensions in
-                dimensions[VerticalAlignment.center]
-            }
     }
 
     private var retroCoin: some View {
@@ -47,8 +44,5 @@ struct ShoppingCountBadge: View {
                 .padding(.horizontal, 2)
         }
         .frame(width: 22, height: 22)
-        .alignmentGuide(.firstTextBaseline) { dimensions in
-            dimensions[VerticalAlignment.center]
-        }
     }
 }

@@ -126,9 +126,13 @@ private struct BacklogContent: View {
                                         editingItem = item
                                     },
                                     onAssignItem: { item in
+                                        guard !activeMembers.isEmpty else {
+                                            showBanner(.failed("No members available to assign."))
+                                            return
+                                        }
                                         pendingAssignmentItem = item
                                         selectedAssigneeIdForAssignment =
-                                            item.assigneeId ?? currentMember?.id
+                                            item.assigneeId ?? currentMember?.id ?? activeMembers.first?.id
                                     },
                                     onPromoteItem: { item in
                                         promoteItem(item)
@@ -202,7 +206,7 @@ private struct BacklogContent: View {
                     title: "Assign before start",
                     actionTitle: "Promote",
                     members: activeMembers,
-                    allowUnassigned: false,
+                    autoConfirmOnSelection: false,
                     selectedAssigneeId: $selectedAssigneeIdForPromotion,
                     onCancel: {
                         self.pendingPromotionItem = nil
@@ -233,7 +237,7 @@ private struct BacklogContent: View {
                 title: "Assign owner",
                 actionTitle: "Save",
                 members: activeMembers,
-                allowUnassigned: true,
+                autoConfirmOnSelection: true,
                 selectedAssigneeId: $selectedAssigneeIdForAssignment,
                 onCancel: {
                     pendingAssignmentItem = nil
@@ -241,7 +245,7 @@ private struct BacklogContent: View {
                 },
                 onConfirm: {
                     guard let item = pendingAssignmentItem else { return }
-                    let selectedAssignee = selectedAssigneeIdForAssignment
+                    guard let selectedAssignee = selectedAssigneeIdForAssignment else { return }
                     pendingAssignmentItem = nil
                     selectedAssigneeIdForAssignment = nil
                     _ = _Concurrency.Task {
@@ -538,7 +542,7 @@ private struct BacklogAssigneePickerSheet: View {
     let title: String
     let actionTitle: String
     let members: [Member]
-    let allowUnassigned: Bool
+    let autoConfirmOnSelection: Bool
     @Binding var selectedAssigneeId: UUID?
     let onCancel: () -> Void
     let onConfirm: () -> Void
@@ -546,26 +550,18 @@ private struct BacklogAssigneePickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if allowUnassigned {
-                    Button {
-                        selectedAssigneeId = nil
-                    } label: {
-                        HStack {
-                            Text("Unassigned")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if selectedAssigneeId == nil {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
+                if members.isEmpty {
+                    Text("No members available.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(.secondary)
                 }
 
                 ForEach(members) { member in
                     Button {
                         selectedAssigneeId = member.id
+                        if autoConfirmOnSelection {
+                            onConfirm()
+                        }
                     } label: {
                         HStack {
                             Text(member.displayName)
@@ -590,11 +586,13 @@ private struct BacklogAssigneePickerSheet: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(actionTitle) {
-                        onConfirm()
+                    if !autoConfirmOnSelection {
+                        Button(actionTitle) {
+                            onConfirm()
+                        }
+                        .font(themeStore.font(for: .buttonLabel))
+                        .disabled(selectedAssigneeId == nil)
                     }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .disabled(!allowUnassigned && selectedAssigneeId == nil)
                 }
             }
         }
@@ -951,7 +949,7 @@ private struct BacklogItemEditSheet: View {
         self.onDelete = onDelete
         _title = State(initialValue: item.title)
         _notes = State(initialValue: item.notes ?? "")
-        _assigneeId = State(initialValue: item.assigneeId)
+        _assigneeId = State(initialValue: item.assigneeId ?? members.first?.id)
     }
 
     var body: some View {
@@ -963,10 +961,15 @@ private struct BacklogItemEditSheet: View {
                 }
 
                 Section("Assignee") {
-                    Picker("Who", selection: $assigneeId) {
-                        Text("Unassigned").tag(UUID?.none)
-                        ForEach(members) { member in
-                            Text(member.displayName).tag(Optional(member.id))
+                    if members.isEmpty {
+                        Text("No members available.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("Who", selection: $assigneeId) {
+                            ForEach(members) { member in
+                                Text(member.displayName).tag(Optional(member.id))
+                            }
                         }
                     }
                 }

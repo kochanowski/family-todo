@@ -75,6 +75,7 @@ extension CloudKitManager {
         record["householdId"] = reference(for: member.householdId)
         record["userId"] = member.userId as CKRecordValue
         record["displayName"] = member.displayName as CKRecordValue
+        record["colorHex"] = member.colorHex as CKRecordValue
         record["role"] = member.role.rawValue as CKRecordValue
         record["joinedAt"] = member.joinedAt as CKRecordValue
         record["isActive"] = (member.isActive ? 1 : 0) as CKRecordValue
@@ -104,7 +105,8 @@ extension CloudKitManager {
             displayName: displayName,
             role: role,
             joinedAt: joinedAt,
-            isActive: isActiveValue == 1
+            isActive: isActiveValue == 1,
+            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.defaultHex(for: id)
         )
     }
 

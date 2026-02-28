@@ -385,7 +385,8 @@ class HouseholdStore: ObservableObject {
                 displayName: member.displayName,
                 role: member.role,
                 joinedAt: member.joinedAt,
-                isActive: false
+                isActive: false,
+                colorHex: member.colorHex
             )
             _ = try await cloudKit.saveMember(updatedMember)
         }
@@ -489,7 +490,8 @@ class HouseholdStore: ObservableObject {
                 displayName: displayName,
                 role: resolvedRole,
                 joinedAt: existing.joinedAt,
-                isActive: true
+                isActive: true,
+                colorHex: existing.colorHex
             )
             _ = try await cloudKit.saveMember(updated)
             return

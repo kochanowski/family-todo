@@ -897,6 +897,22 @@ actor CloudKitManager {
         }
     }
 
+    func updateMemberProfile(
+        memberId: UUID,
+        householdId: UUID,
+        newDisplayName: String,
+        newColorHex: String
+    ) async throws -> CKRecord {
+        try await updateMemberRecord(
+            memberId: memberId,
+            householdId: householdId,
+            operationName: "profile"
+        ) { record in
+            record["displayName"] = newDisplayName as CKRecordValue
+            record["colorHex"] = newColorHex as CKRecordValue
+        }
+    }
+
     func updateMemberRole(
         memberId: UUID,
         householdId: UUID,

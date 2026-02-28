@@ -92,6 +92,7 @@ final class MemberTests: XCTestCase {
         XCTAssertEqual(member.displayName, "John Doe")
         XCTAssertEqual(member.role, .owner)
         XCTAssertTrue(member.isActive)
+        XCTAssertTrue(MemberColorToken.isAllowed(hex: member.colorHex))
     }
 
     func testMemberAsRegularMember() {
@@ -143,6 +144,87 @@ final class MemberTests: XCTestCase {
         XCTAssertEqual(original.userId, decoded.userId)
         XCTAssertEqual(original.displayName, decoded.displayName)
         XCTAssertEqual(original.role, decoded.role)
+        XCTAssertEqual(original.colorHex, decoded.colorHex)
+    }
+
+    func testMemberColorPaletteContainsTenPastelTokens() {
+        XCTAssertEqual(MemberColorToken.allCases.count, 10)
+    }
+
+    func testMemberColorDefaultIsAlwaysAllowed() {
+        let memberId = UUID(uuidString: "00000000-0000-0000-0000-00000000A7B9") ?? UUID()
+        let defaultHex = MemberColorToken.defaultHex(for: memberId)
+        XCTAssertTrue(MemberColorToken.isAllowed(hex: defaultHex))
+    }
+
+    func testMemberDecodingFallsBackToDefaultColorWhenMissing() throws {
+        let payload: [String: Any] = [
+            "id": UUID().uuidString,
+            "householdId": householdId.uuidString,
+            "userId": "legacy-user",
+            "displayName": "Legacy User",
+            "role": "member",
+            "joinedAt": ISO8601DateFormatter().string(from: Date()),
+            "isActive": true,
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(Member.self, from: data)
+        XCTAssertTrue(MemberColorToken.isAllowed(hex: decoded.colorHex))
+    }
+}
+
+@MainActor
+final class MemberStoreProfileTests: XCTestCase {
+    private var modelContainer: ModelContainer!
+    private var store: MemberStore!
+    private let householdId = UUID()
+    private let userId = "profile-user"
+
+    override func setUp() async throws {
+        try await super.setUp()
+
+        let schema = Schema([CachedMember.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        modelContainer = try ModelContainer(for: schema, configurations: [config])
+
+        let initialMember = Member(
+            householdId: householdId,
+            userId: userId,
+            displayName: "Wojtek",
+            role: .owner,
+            colorHex: MemberColorToken.pastelPink.hex
+        )
+        modelContainer.mainContext.insert(CachedMember(from: initialMember))
+        try modelContainer.mainContext.save()
+
+        store = MemberStore(householdId: householdId, modelContext: modelContainer.mainContext)
+        store.setSyncMode(.localOnly)
+        await store.loadMembers()
+    }
+
+    override func tearDown() async throws {
+        store = nil
+        modelContainer = nil
+        try await super.tearDown()
+    }
+
+    func testUpdateCurrentUserProfilePersistsDisplayNameAndColorToCache() async throws {
+        try await store.updateCurrentUserProfile(
+            displayName: "Wojciech",
+            colorHex: MemberColorToken.pastelBlue.hex,
+            currentUserId: userId
+        )
+
+        XCTAssertEqual(store.members.first?.displayName, "Wojciech")
+        XCTAssertEqual(store.members.first?.colorHex, MemberColorToken.pastelBlue.hex)
+
+        let descriptor = FetchDescriptor<CachedMember>()
+        let cachedMembers = try modelContainer.mainContext.fetch(descriptor)
+        XCTAssertEqual(cachedMembers.first?.displayName, "Wojciech")
+        XCTAssertEqual(cachedMembers.first?.colorHex, MemberColorToken.pastelBlue.hex)
     }
 }
 

@@ -234,7 +234,7 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("Shopping")
                     .font(themeStore.font(for: .screenHeader))
@@ -248,7 +248,7 @@ private struct ShoppingListContent: View {
 
             Spacer(minLength: 12)
 
-            HStack(spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
                 // Clear To Buy button
                 if !store.toBuyItems.isEmpty {
                     Button {
@@ -285,10 +285,6 @@ private struct ShoppingListContent: View {
                         onClearAll: clearRecentItems
                     )
                 }
-            }
-            .padding(.top, 2)
-            .alignmentGuide(.firstTextBaseline) { dimensions in
-                dimensions[VerticalAlignment.top]
             }
         }
     }
