@@ -272,17 +272,17 @@ list_security_role_permissions_from_ckdb() {
 
     in_role && /^[[:space:]]*RECORD TYPE[[:space:]]+/ {
       line = $0
-      if (match(line, /^[[:space:]]*RECORD TYPE[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/, captures)) {
-        record_type = captures[1]
-        permissions_blob = captures[2]
-        gsub(/\r/, "", permissions_blob)
-        gsub(/[);]/, "", permissions_blob)
-        split_count = split(permissions_blob, permissions, ",")
-        for (index = 1; index <= split_count; index++) {
-          permission = toupper(trim(permissions[index]))
-          if (permission != "") {
-            print role_name "|" record_type "|" permission
-          }
+      sub(/^[[:space:]]*RECORD TYPE[[:space:]]+"/, "", line)
+      split(line, segments, "\"")
+      record_type = trim(segments[1])
+      permissions_blob = segments[2]
+      gsub(/\r/, "", permissions_blob)
+      gsub(/[);]/, "", permissions_blob)
+      split_count = split(permissions_blob, permissions, ",")
+      for (idx = 1; idx <= split_count; idx++) {
+        permission = toupper(trim(permissions[idx]))
+        if (permission != "") {
+          print role_name "|" record_type "|" permission
         }
       }
     }
