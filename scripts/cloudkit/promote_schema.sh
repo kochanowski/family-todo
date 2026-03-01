@@ -24,58 +24,24 @@ render_ckdb() {
       else error("Unsupported type: \(.)")
       end;
 
-    def permission_list:
-      [
-        if .create == true then "CREATE" else empty end,
-        if .read == true then "READ" else empty end,
-        if .write == true then "WRITE" else empty end
-      ];
-
-    def render_record_types:
-      (
-        .recordTypes
-        | map(
-            "RECORD TYPE \(.name) (\n"
-            + (
-                .fields
-                | map(
-                    "  \"\(.name)\" "
-                    + (.type | to_type)
-                    + (if .queryable then " QUERYABLE" else "" end)
-                    + (if .sortable then " SORTABLE" else "" end)
-                  )
-                | join(",\n")
-              )
-            + "\n);"
-          )
-        | join("\n\n")
-      );
-
-    def render_security_roles:
-      (
-        (.securityRoles // [])
-        | map(
-            "SECURITY ROLE \(.name) (\n"
-            + (
-                .recordTypePermissions
-                | map(
-                    "  RECORD TYPE \"\(.recordType)\" "
-                    + ((permission_list) | join(", "))
-                  )
-                | join(",\n")
-              )
-            + "\n);"
-          )
-        | join("\n\n")
-      );
-
     "DEFINE SCHEMA\n"
-    + render_record_types
     + (
-        if ((.securityRoles // []) | length) > 0
-        then "\n\n" + render_security_roles
-        else ""
-        end
+      .recordTypes
+      | map(
+          "RECORD TYPE \(.name) (\n"
+          + (
+              .fields
+              | map(
+                  "  \"\(.name)\" "
+                  + (.type | to_type)
+                  + (if .queryable then " QUERYABLE" else "" end)
+                  + (if .sortable then " SORTABLE" else "" end)
+                )
+              | join(",\n")
+            )
+          + "\n);"
+        )
+      | join("\n\n")
       )
   ' "$input_json" > "$output_ckdb"
 }
@@ -154,18 +120,6 @@ list_record_types_from_ckdb() {
   ' "$ckdb_file" | sort -u
 }
 
-list_security_roles_from_ckdb() {
-  local ckdb_file="$1"
-  awk '
-    /^[[:space:]]*SECURITY ROLE[[:space:]]+/ {
-      name=$3
-      gsub(/"/, "", name)
-      gsub(/\r/, "", name)
-      print name
-    }
-  ' "$ckdb_file" | sort -u
-}
-
 extract_record_type_block() {
   local ckdb_file="$1"
   local record_type_name="$2"
@@ -213,85 +167,6 @@ extract_record_type_block() {
       }
     }
   ' "$ckdb_file"
-}
-
-extract_security_role_block() {
-  local ckdb_file="$1"
-  local role_name="$2"
-
-  awk -v target="$role_name" '
-    function flush_block() {
-      if (capture && current_name == target) {
-        printf "%s", block
-        found = 1
-      }
-      capture = 0
-      block = ""
-      current_name = ""
-    }
-
-    /^[[:space:]]*SECURITY ROLE[[:space:]]+/ {
-      flush_block()
-      capture = 1
-      block = $0 ORS
-      current_name = $3
-      gsub(/"/, "", current_name)
-      gsub(/\r/, "", current_name)
-      next
-    }
-
-    {
-      if (capture) {
-        block = block $0 ORS
-        if ($0 ~ /^[[:space:]]*\);[[:space:]]*$/) {
-          flush_block()
-          if (found) {
-            exit 0
-          }
-        }
-      }
-    }
-
-    END {
-      if (!found && capture && current_name == target) {
-        printf "%s", block
-        found = 1
-      }
-      if (!found) {
-        exit 1
-      }
-    }
-  ' "$ckdb_file"
-}
-
-build_role_safe_ckdb() {
-  local desired_ckdb="$1"
-  local export_ckdb="$2"
-  local output_ckdb="$3"
-  local log_file="$4"
-
-  cp "$desired_ckdb" "$output_ckdb"
-
-  local role_names
-  role_names="$(list_security_roles_from_ckdb "$export_ckdb" || true)"
-  if [[ -z "$role_names" ]]; then
-    echo "CloudKitSchema: no SECURITY ROLE blocks found in environment export." | tee -a "$log_file"
-    return 0
-  fi
-
-  while IFS= read -r role_name; do
-    [[ -z "$role_name" ]] && continue
-
-    if list_security_roles_from_ckdb "$output_ckdb" | grep -Fxq "$role_name"; then
-      continue
-    fi
-
-    {
-      echo ""
-      extract_security_role_block "$export_ckdb" "$role_name"
-    } >> "$output_ckdb"
-    echo "CloudKitSchema: appended SECURITY ROLE '$role_name' to preserve existing access rules." | tee -a "$log_file"
-  done <<< "$role_names"
 }
 
 build_managed_safe_ckdb() {
@@ -435,6 +310,12 @@ verify_required_security_role_permissions_in_production() {
 
   list_security_role_permissions_from_ckdb "$production_ckdb" > "$production_permissions_file"
 
+  if [[ ! -s "$production_permissions_file" ]]; then
+    echo "CloudKitSchema: warning: production export does not include SECURITY ROLE blocks; role verification was skipped." >&2
+    echo "CloudKitSchema: manual check required in CloudKit Console -> Security Roles (ensure InviteToken permissions remain for _world, _icloud, _creator)." >&2
+    return 0
+  fi
+
   local missing_permissions
   missing_permissions="$(comm -23 "$expected_permissions_file" "$production_permissions_file" || true)"
   if [[ -n "$missing_permissions" ]]; then
@@ -468,7 +349,6 @@ trap 'rm -rf "$tmp_dir"' EXIT
 contract_ckdb_file="$tmp_dir/schema.ckdb"
 apply_log_file="$tmp_dir/cktool-apply-production.log"
 retry_ckdb_file="$tmp_dir/schema-with-managed-types.ckdb"
-role_safe_ckdb_file="$tmp_dir/schema-with-security-roles.ckdb"
 retry_log_file="$tmp_dir/cktool-apply-production-managed-retry.log"
 merged_types_file="$tmp_dir/merged-types.txt"
 prod_before_ckdb_file="$tmp_dir/production-schema-before.ckdb"
@@ -494,8 +374,7 @@ pre_export_status=$?
 set -e
 
 if [[ $pre_export_status -eq 0 ]]; then
-  build_role_safe_ckdb "$contract_ckdb_file" "$prod_before_ckdb_file" "$role_safe_ckdb_file" "$apply_log_file"
-  import_ckdb_file="$role_safe_ckdb_file"
+  echo "CloudKitSchema: Production export succeeded. SECURITY ROLE blocks are not merged because cktool import-schema rejects SECURITY ROLE definitions." | tee -a "$apply_log_file"
 else
   echo "CloudKitSchema: warning: failed to export Production schema before import; proceeding without SECURITY ROLE preservation merge." | tee -a "$apply_log_file"
 fi
@@ -550,11 +429,7 @@ fi
 if [[ -f "$retry_ckdb_file" ]]; then
   cp "$retry_ckdb_file" "$REPO_ROOT/cloudkit/artifacts/housepulse-schema.production-managed-retry.ckdb"
 fi
-if [[ -f "$role_safe_ckdb_file" ]]; then
-  cp "$role_safe_ckdb_file" "$REPO_ROOT/cloudkit/artifacts/housepulse-schema.production-role-safe.ckdb"
-fi
-
 verify_required_record_types_in_production "$SCHEMA_JSON" "$prod_ckdb_file" "$dev_ckdb_file" "$REQUIRED_SYSTEM_TYPES" "$tmp_dir"
 verify_required_security_role_permissions_in_production "$SCHEMA_JSON" "$prod_ckdb_file" "$tmp_dir"
 
-echo "CloudKitSchema: production schema contains all required record types (including system types: $REQUIRED_SYSTEM_TYPES) and required security role permissions."
+echo "CloudKitSchema: production schema contains all required record types (including system types: $REQUIRED_SYSTEM_TYPES)."
