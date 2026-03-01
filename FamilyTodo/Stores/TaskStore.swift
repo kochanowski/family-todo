@@ -197,7 +197,8 @@ final class TaskStore: ObservableObject {
         dueDate: Date? = nil,
         notes: String? = nil,
         taskType: Task.TaskType = .oneOff,
-        recurringChoreId: UUID? = nil
+        recurringChoreId: UUID? = nil,
+        order: Int? = nil
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
@@ -218,6 +219,13 @@ final class TaskStore: ObservableObject {
             []
         }
 
+        let resolvedOrder: Int
+        if status == .next {
+            resolvedOrder = order ?? (nextTaskOrderBaseline() + 1)
+        } else {
+            resolvedOrder = order ?? 0
+        }
+
         let task = Task(
             id: taskId,
             householdId: householdId,
@@ -230,7 +238,8 @@ final class TaskStore: ObservableObject {
             dueDate: dueDate,
             taskType: taskType,
             recurringChoreId: recurringChoreId,
-            notes: notes
+            notes: notes,
+            order: resolvedOrder
         )
 
         // Optimistic UI update
@@ -348,6 +357,10 @@ final class TaskStore: ObservableObject {
             updatedTask.completedAt = nil
         }
 
+        if status == .next, task.status != .next {
+            updatedTask.order = nextTaskOrderBaseline() + 1
+        }
+
         return await updateTask(updatedTask)
     }
 
@@ -411,6 +424,78 @@ final class TaskStore: ObservableObject {
     func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
         try await cloudKit.deleteTask(id: id, householdId: householdId)
         removeCachedTask(id: id)
+    }
+
+    func reorderActiveTasks(
+        from source: IndexSet,
+        to destination: Int,
+        visibleTaskIDs: [UUID]
+    ) async {
+        let visibleActiveTasks = visibleTaskIDs.compactMap { id in
+            tasks.first(where: { $0.id == id && $0.status == .next })
+        }
+        guard !visibleActiveTasks.isEmpty else { return }
+
+        var reorderedVisibleTasks = visibleActiveTasks
+        reorderedVisibleTasks.move(fromOffsets: source, toOffset: destination)
+
+        let hiddenActiveTasks = tasks
+            .filter { $0.status == .next && !visibleTaskIDs.contains($0.id) }
+            .sorted(by: Self.activeTaskSort)
+
+        let finalActiveOrder = reorderedVisibleTasks + hiddenActiveTasks
+        let updatedAt = Date()
+        var updatedByID: [UUID: Task] = [:]
+
+        for (index, task) in finalActiveOrder.enumerated() {
+            if task.order != index {
+                var updatedTask = task
+                updatedTask.order = index
+                updatedTask.updatedAt = updatedAt
+                updatedByID[updatedTask.id] = updatedTask
+            }
+        }
+
+        guard !updatedByID.isEmpty else { return }
+
+        let updatedIDs = Array(updatedByID.keys)
+        updatedIDs.forEach(beginMutation)
+        defer { updatedIDs.forEach(endMutation) }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            for index in tasks.indices {
+                if let updatedTask = updatedByID[tasks[index].id] {
+                    tasks[index] = updatedTask
+                }
+            }
+        }
+
+        for updatedTask in updatedByID.values {
+            let descriptor = FetchDescriptor<CachedTask>(
+                predicate: #Predicate { $0.id == updatedTask.id }
+            )
+            if let cached = try? modelContext.fetch(descriptor).first {
+                cached.update(from: updatedTask)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+            } else {
+                let cached = CachedTask(from: updatedTask)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+                modelContext.insert(cached)
+            }
+        }
+        try? modelContext.save()
+
+        guard isCloudSyncEnabled else { return }
+        for updatedTask in updatedByID.values.sorted(by: { $0.order < $1.order }) {
+            do {
+                _ = try await cloudKit.saveTask(updatedTask)
+                markCachedTaskSynced(id: updatedTask.id)
+            } catch {
+                self.error = error
+            }
+        }
     }
 
     /// Clears completed tasks.
@@ -580,7 +665,17 @@ final class TaskStore: ObservableObject {
         )
     }
 
+    private func nextTaskOrderBaseline() -> Int {
+        tasks
+            .filter { $0.status == .next }
+            .map(\.order)
+            .max() ?? -1
+    }
+
     private static func activeTaskSort(_ lhs: Task, _ rhs: Task) -> Bool {
+        if lhs.status == .next, rhs.status == .next, lhs.order != rhs.order {
+            return lhs.order < rhs.order
+        }
         let lhsDue = lhs.dueDate ?? .distantFuture
         let rhsDue = rhs.dueDate ?? .distantFuture
         if lhsDue != rhsDue {

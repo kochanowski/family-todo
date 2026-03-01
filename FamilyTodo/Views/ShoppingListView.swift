@@ -835,6 +835,12 @@ struct RestockSheet: View {
                                 .foregroundStyle(.red)
                         }
                         .tint(.red)
+                        .frame(width: 78, alignment: .leading)
+                    } else {
+                        Text("Clear All")
+                            .font(themeStore.font(for: .buttonLabel))
+                            .hidden()
+                            .frame(width: 78, alignment: .leading)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -844,6 +850,8 @@ struct RestockSheet: View {
                     .font(themeStore.font(for: .buttonLabel))
                     .fontWeight(.bold)
                     .tint(themeStore.accentTabColor)
+                    .frame(width: 58, alignment: .trailing)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .sheet(isPresented: $showClearAllConfirmation) {

@@ -44,6 +44,20 @@ Ten plik jest źródłem prawdy dla kroków po deployu i będzie aktualizowany p
 - Household Settings: edycja household po nazwie działa bez błędu `record to insert already exists`,
 - Invite Member: UI nie pokazuje suffixu `(właściciel)` w tytule udostępniania.
 
+## Co musisz zrobić ręcznie po tym wdrożeniu (Task reorder + onboarding restore + household icon)
+1. Uruchom workflow `cloudkit-schema` i upewnij się, że walidacja widzi nowe pole:
+- `Task.order`
+2. CloudKit Console -> `Deploy Schema Changes...`:
+- wypchnij Development -> Production dla pola `Task.order`.
+3. W oknie deploy diff rozwiń `Security Roles` i potwierdź, że **nie ma** usuwania `InviteToken` z:
+- `_world`
+- `_icloud`
+- `_creator`
+4. TestFlight smoke:
+- Tasks: `Reorder` działa na liście Active i utrzymuje kolejność po odświeżeniu,
+- Sign in po reinstalacji: jeśli membership istnieje, prompt nazwy się nie pojawia,
+- Household Settings: current user jest w sekcji Members jako `You`, a `Edit Household` zapisuje też ikonę.
+
 ## Notatka
 `cloudkit.share` to typ systemowy CloudKit. Nie dodajemy go ręcznie do `housepulse-schema.json`.
 

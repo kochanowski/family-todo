@@ -25,6 +25,7 @@ struct ProfileView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @Environment(\.modelContext) private var modelContext
 
@@ -43,7 +44,6 @@ struct ProfileView: View {
     var body: some View {
         List {
             diagnosticsSection
-            profileHeroRow
             householdSection
             membersSection
             inviteSection
@@ -120,6 +120,11 @@ struct ProfileView: View {
             memberStore.setHousehold(householdStore.currentHousehold?.id)
             await memberStore.loadMembers()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await memberStore.loadMembers()
+            }
+        }
     }
 
     @ViewBuilder
@@ -134,42 +139,6 @@ struct ProfileView: View {
         }
     }
 
-    private var profileHeroRow: some View {
-        Section {
-            if let currentMember {
-                Button {
-                    showEditProfile = true
-                } label: {
-                    HStack(spacing: 12) {
-                        MemberBadgeView(
-                            name: currentMember.displayName,
-                            colorHex: currentMember.colorHex
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(currentMember.displayName)
-                                .font(themeStore.font(for: .inlineTitle))
-                                .foregroundStyle(themeStore.contentPrimaryColor)
-                            Text("Tap to edit profile & color")
-                                .font(themeStore.font(for: .bodySmall))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text("Create or join a household to edit profile.")
-                    .font(themeStore.font(for: .bodySmall))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
-            }
-        }
-    }
-
     private var householdSection: some View {
         Section("Household") {
             if let household = householdStore.currentHousehold {
@@ -177,6 +146,10 @@ struct ProfileView: View {
                     showEditHousehold = true
                 } label: {
                     HStack(spacing: 12) {
+                        Image(systemName: household.iconSymbol)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .frame(width: 28, height: 28)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(household.name)
                                 .foregroundStyle(themeStore.contentPrimaryColor)
@@ -204,38 +177,49 @@ struct ProfileView: View {
     @ViewBuilder
     private var membersSection: some View {
         Section("Members") {
-            if otherMembers.isEmpty {
-                Text("No other members yet.")
+            if activeMembers.isEmpty {
+                Text("No members yet.")
                     .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(themeStore.contentSecondaryColor)
             } else {
-                ForEach(otherMembers) { member in
-                    HStack(spacing: 12) {
-                        MemberBadgeView(name: member.displayName, colorHex: member.colorHex)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(member.role == .owner ? "Owner" : "Member")
-                                .font(themeStore.font(for: .chip))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
+                ForEach(activeMembers) { member in
+                    if member.userId == userSession.userId {
+                        Button {
+                            showEditProfile = true
+                        } label: {
+                            memberRowContent(
+                                member: member,
+                                roleLabel: member.role == .owner ? "Owner" : "Member",
+                                showsChevron: true
+                            )
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
+                    } else {
+                        HStack(spacing: 12) {
+                            memberRowContent(
+                                member: member,
+                                roleLabel: member.role == .owner ? "Owner" : "Member",
+                                showsChevron: false
+                            )
 
-                        if currentUserIsOwner {
-                            Menu {
-                                Button(member.role == .owner ? "Change to Member" : "Make Owner") {
-                                    toggleRole(for: member)
+                            if currentUserIsOwner {
+                                Menu {
+                                    Button(member.role == .owner ? "Change to Member" : "Make Owner") {
+                                        toggleRole(for: member)
+                                    }
+                                    Button("Remove", role: .destructive) {
+                                        memberToDelete = member
+                                        showDeleteMemberConfirmation = true
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                        .foregroundStyle(themeStore.contentSecondaryColor)
+                                        .frame(width: 28, height: 28)
                                 }
-                                Button("Remove", role: .destructive) {
-                                    memberToDelete = member
-                                    showDeleteMemberConfirmation = true
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis.circle")
-                                    .foregroundStyle(themeStore.contentSecondaryColor)
-                                    .frame(width: 28, height: 28)
                             }
                         }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
                 }
             }
         }
@@ -303,13 +287,32 @@ struct ProfileView: View {
         memberStore.activeMember(for: userSession.userId)
     }
 
-    private var otherMembers: [Member] {
-        guard let currentMember else { return activeMembers }
-        return activeMembers.filter { $0.id != currentMember.id }
-    }
-
     private var currentUserIsOwner: Bool {
         currentMember?.role == .owner
+    }
+
+    private func memberRowContent(
+        member: Member,
+        roleLabel: String,
+        showsChevron: Bool
+    ) -> some View {
+        HStack(spacing: 12) {
+            MemberBadgeView(name: member.displayName, colorHex: member.colorHex)
+            VStack(alignment: .leading, spacing: 2) {
+                (Text(member.displayName)
+                    + Text(member.userId == userSession.userId ? " (You)" : ""))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                Text(roleLabel)
+                    .font(themeStore.font(for: .chip))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+            }
+            Spacer()
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
     }
 
     private func toggleRole(for member: Member) {
@@ -365,6 +368,7 @@ struct ProfileView: View {
             do {
                 try await householdStore.leaveCurrentHousehold(userId: userId)
                 userSession.clearCurrentHousehold()
+                onboardingState.openHouseholdSetup()
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
@@ -380,6 +384,7 @@ struct ProfileView: View {
             do {
                 try await householdStore.deleteCurrentHousehold(requestedBy: userId)
                 userSession.clearCurrentHousehold()
+                onboardingState.openHouseholdSetup()
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
@@ -502,7 +507,7 @@ private struct EditProfileView: View {
                     colorHex: selectedColorHex,
                     currentUserId: userSession.userId
                 )
-                userSession.confirmDisplayName(trimmedName)
+                userSession.applyProfileUpdate(displayName: trimmedName)
                 isSaving = false
                 dismiss()
             } catch {
@@ -521,12 +526,32 @@ private struct EditHouseholdView: View {
     let household: Household
 
     @State private var name: String
+    @State private var selectedIconSymbol: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+
+    private let iconOptions = [
+        "house.fill",
+        "building.2.fill",
+        "star.fill",
+        "heart.fill",
+        "leaf.fill",
+        "pawprint.fill",
+        "sparkles",
+        "cart.fill",
+        "checklist",
+        "fork.knife",
+        "bed.double.fill",
+        "figure.2.and.child.holdinghands",
+        "sun.max.fill",
+        "moon.stars.fill",
+        "bolt.heart.fill",
+    ]
 
     init(household: Household) {
         self.household = household
         _name = State(initialValue: household.name)
+        _selectedIconSymbol = State(initialValue: household.iconSymbol)
     }
 
     var body: some View {
@@ -535,6 +560,41 @@ private struct EditHouseholdView: View {
                 TextField("Household name", text: $name)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
+            }
+
+            Section("Household Icon") {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
+                    spacing: 12
+                ) {
+                    ForEach(iconOptions, id: \.self) { icon in
+                        Button {
+                            selectedIconSymbol = icon
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        selectedIconSymbol == icon
+                                            ? Color.accentColor.opacity(0.18)
+                                            : Color.secondary.opacity(0.12)
+                                    )
+                                    .frame(width: 40, height: 40)
+                                Image(systemName: icon)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                            }
+                            .overlay {
+                                if selectedIconSymbol == icon {
+                                    Circle()
+                                        .stroke(Color.accentColor, lineWidth: 2)
+                                        .frame(width: 40, height: 40)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
             }
         }
         .navigationTitle("Edit Household")
@@ -579,7 +639,8 @@ private struct EditHouseholdView: View {
             do {
                 try await householdStore.updateCurrentHousehold(
                     name: trimmedName,
-                    userId: userId
+                    userId: userId,
+                    iconSymbol: selectedIconSymbol
                 )
                 isSaving = false
                 dismiss()

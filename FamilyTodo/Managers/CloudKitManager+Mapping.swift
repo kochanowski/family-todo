@@ -186,6 +186,7 @@ extension CloudKitManager {
         if let notes = task.notes {
             record["notes"] = notes as CKRecordValue
         }
+        record["order"] = Int64(task.order) as CKRecordValue
         record["createdAt"] = task.createdAt as CKRecordValue
         record["updatedAt"] = task.updatedAt as CKRecordValue
         return record
@@ -223,6 +224,7 @@ extension CloudKitManager {
             taskType: taskType,
             recurringChoreId: uuid(from: record["recurringChoreId"] as? CKRecord.Reference),
             notes: record["notes"] as? String,
+            order: Int(record["order"] as? Int64 ?? 0),
             createdAt: createdAt,
             updatedAt: updatedAt
         )

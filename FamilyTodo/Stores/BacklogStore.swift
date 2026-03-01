@@ -274,6 +274,7 @@ final class BacklogStore: ObservableObject {
             stableId: category.id
         )
 
+        let previousCategory = categories[index]
         var updatedCategory = categories[index]
         updatedCategory.title = trimmedTitle
         updatedCategory.colorHex = resolvedColorHex
@@ -298,10 +299,41 @@ final class BacklogStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveBacklogCategory(updatedCategory)
+            _ = try await cloudKit.updateBacklogCategoryMetadata(
+                categoryId: updatedCategory.id,
+                householdId: updatedCategory.householdId,
+                newTitle: updatedCategory.title,
+                newColorHex: updatedCategory.colorHex
+            )
+
+            if let context = modelContext {
+                let categoryId = updatedCategory.id
+                let descriptor = FetchDescriptor<CachedBacklogCategory>(
+                    predicate: #Predicate { $0.id == categoryId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.syncStatusRaw = "synced"
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
         } catch {
             self.error = error
-            await loadData()
+            withAnimation {
+                categories[index] = previousCategory
+            }
+            if let context = modelContext {
+                let categoryId = previousCategory.id
+                let descriptor = FetchDescriptor<CachedBacklogCategory>(
+                    predicate: #Predicate { $0.id == categoryId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.update(from: previousCategory)
+                    cached.syncStatusRaw = "synced"
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
         }
     }
 

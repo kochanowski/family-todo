@@ -1261,6 +1261,49 @@ actor CloudKitManager {
         return try await saveRecordWithZoneRecovery(record, householdId: category.householdId)
     }
 
+    func updateBacklogCategoryMetadata(
+        categoryId: UUID,
+        householdId: UUID,
+        newTitle: String,
+        newColorHex: String
+    ) async throws -> CKRecord {
+        let db = await activeHouseholdDatabase
+        var didRetryAfterConflict = false
+
+        while true {
+            do {
+                let existingRecord = try await fetchRecord(id: categoryId, householdId: householdId)
+                existingRecord["title"] = newTitle as CKRecordValue
+                existingRecord["colorHex"] = newColorHex as CKRecordValue
+                existingRecord["updatedAt"] = Date() as CKRecordValue
+
+                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
+                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                return saved
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                if didRetryAfterConflict {
+                    recordCloudKitFailure(ckError, operation: "updateBacklogCategoryMetadata")
+                    throw ckError
+                }
+                didRetryAfterConflict = true
+                _ = try await resolveHouseholdZone(for: householdId)
+            } catch CloudKitManagerError.serverRecordChanged {
+                if didRetryAfterConflict {
+                    recordCloudKitFailure(
+                        CloudKitManagerError.serverRecordChanged,
+                        operation: "updateBacklogCategoryMetadata"
+                    )
+                    throw CloudKitManagerError.serverRecordChanged
+                }
+                didRetryAfterConflict = true
+                _ = try await resolveHouseholdZone(for: householdId)
+            } catch {
+                recordCloudKitFailure(error, operation: "updateBacklogCategoryMetadata")
+                throw error
+            }
+        }
+    }
+
     func fetchBacklogCategory(id: UUID) async throws -> BacklogCategory {
         let record = try await fetchRecord(id: id)
         return try backlogCategory(from: record)

@@ -77,7 +77,7 @@ required_map='{
   "Household": ["id", "name", "colorHex", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
   "Member": ["id", "householdId", "userId", "displayName", "colorHex", "role", "joinedAt", "isActive"],
   "Area": ["id", "householdId", "name", "icon", "sortOrder", "createdAt"],
-  "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "createdAt", "updatedAt"],
+  "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
   "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
   "ShoppingItem": ["id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
   "BacklogCategory": ["id", "householdId", "title", "colorHex", "sortOrder", "createdAt", "updatedAt"],

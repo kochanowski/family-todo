@@ -343,7 +343,8 @@ class HouseholdStore: ObservableObject {
 
     func updateCurrentHousehold(
         name: String,
-        userId: String
+        userId: String,
+        iconSymbol: String? = nil
     ) async throws {
         guard var household = currentHousehold else {
             throw HouseholdError.householdNotFound
@@ -354,11 +355,13 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.invalidInviteCode
         }
 
-        guard trimmedName != household.name else {
+        let resolvedIconSymbol = iconSymbol ?? household.iconSymbol
+        guard trimmedName != household.name || resolvedIconSymbol != household.iconSymbol else {
             return
         }
 
         household.name = trimmedName
+        household.iconSymbol = resolvedIconSymbol
         household.updatedAt = Date()
 
         if syncMode == .cloud {
@@ -370,12 +373,37 @@ class HouseholdStore: ObservableObject {
             _ = try await cloudKit.updateHouseholdMetadata(
                 householdId: household.id,
                 newName: household.name,
-                newIconSymbol: household.iconSymbol
+                newIconSymbol: resolvedIconSymbol
             )
         }
 
         updateCache(with: household)
         currentHousehold = household
+    }
+
+    func resolveMembershipDisplayName(userId: String) async -> String? {
+        guard syncMode == .cloud else { return nil }
+
+        if let household = currentHousehold {
+            await setCloudScope(for: household, userId: userId)
+            if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: household.id),
+               member.isActive
+            {
+                return member.displayName
+            }
+        }
+
+        await cloudKit.setHouseholdScope(.participantShared)
+        if let member = try? await cloudKit.fetchMemberByUserId(userId), member.isActive {
+            return member.displayName
+        }
+
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        if let member = try? await cloudKit.fetchMemberByUserId(userId), member.isActive {
+            return member.displayName
+        }
+
+        return nil
     }
 
     func leaveCurrentHousehold(userId: String) async throws {

@@ -19,6 +19,7 @@ final class CachedTask {
     var taskTypeRaw: String
     var recurringChoreId: UUID?
     var notes: String?
+    var order: Int = 0
     var createdAt: Date
     var updatedAt: Date
 
@@ -43,6 +44,7 @@ final class CachedTask {
         taskTypeRaw = task.taskType.rawValue
         recurringChoreId = task.recurringChoreId
         notes = task.notes
+        order = task.order
         createdAt = task.createdAt
         updatedAt = task.updatedAt
         syncStatusRaw = "synced"
@@ -60,6 +62,7 @@ final class CachedTask {
         completedAt = task.completedAt
         completedById = task.completedById
         notes = task.notes
+        order = task.order
         updatedAt = task.updatedAt
         lastSyncedAt = Date()
     }
@@ -80,6 +83,7 @@ final class CachedTask {
             taskType: Task.TaskType(rawValue: taskTypeRaw) ?? .oneOff,
             recurringChoreId: recurringChoreId,
             notes: notes,
+            order: order,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

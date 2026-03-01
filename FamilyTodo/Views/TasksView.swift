@@ -79,6 +79,7 @@ private struct TasksContent: View {
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
     @State private var hasInitialMetadataLoaded = false
     @State private var hasStartedInitialLoad = false
+    @State private var editMode: EditMode = .inactive
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
     @Binding private var selectedTab: AppTab
@@ -139,6 +140,7 @@ private struct TasksContent: View {
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
                 .padding(.bottom, listBottomInset)
+                .environment(\.editMode, $editMode)
                 .refreshable {
                     await refreshData()
                 }
@@ -251,13 +253,27 @@ private struct TasksContent: View {
             generator.notificationOccurred(.warning)
             print("Task Error: \(error.localizedDescription)")
         }
+        .toolbar {
+            if activeFilter == .active {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(editMode.isEditing ? "Done" : "Reorder") {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            editMode = editMode.isEditing ? .inactive : .active
+                        }
+                    }
+                    .disabled(visibleNextTasks.isEmpty)
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private var activeTasksContent: some View {
-        if !visibleNextTasks.isEmpty {
-            ForEach(Array(visibleNextTasks.enumerated()), id: \.element.id) { index, task in
+        let displayedTasks = visibleNextTasks
+        if !displayedTasks.isEmpty {
+            ForEach(displayedTasks) { task in
                 if taskBeingCompleted != task.id {
+                    let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
                     if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
                         overLimitSeparator
                             .tasksListRowStyle(taskListRowInsets)
@@ -291,6 +307,12 @@ private struct TasksContent: View {
                     .tasksListRowStyle(taskListRowInsets)
                 }
             }
+            .onMove(perform: moveActiveTasks)
+            .moveDisabled(
+                taskBeingCompleted != nil ||
+                    !hiddenPendingDeleteIds.isEmpty ||
+                    !hiddenMovedToIdeasIds.isEmpty
+            )
         }
     }
 
@@ -768,6 +790,17 @@ private struct TasksContent: View {
             await MainActor.run {
                 hiddenMovedToIdeasIds.remove(task.id)
             }
+        }
+    }
+
+    private func moveActiveTasks(from source: IndexSet, to destination: Int) {
+        let visibleIds = visibleNextTasks.map(\.id)
+        _ = _Concurrency.Task {
+            await store.reorderActiveTasks(
+                from: source,
+                to: destination,
+                visibleTaskIDs: visibleIds
+            )
         }
     }
 

@@ -15,6 +15,7 @@ struct Task: Identifiable, Codable {
     let taskType: TaskType
     var recurringChoreId: UUID?
     var notes: String?
+    var order: Int
     let createdAt: Date
     var updatedAt: Date
 
@@ -44,6 +45,7 @@ struct Task: Identifiable, Codable {
         taskType: TaskType,
         recurringChoreId: UUID? = nil,
         notes: String? = nil,
+        order: Int = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -61,6 +63,7 @@ struct Task: Identifiable, Codable {
         self.taskType = taskType
         self.recurringChoreId = recurringChoreId
         self.notes = notes
+        self.order = order
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
