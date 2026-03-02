@@ -1,7 +1,6 @@
 import SwiftData
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
@@ -58,7 +57,6 @@ private struct ShoppingListContent: View {
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
     @State private var isKeyboardVisible = false
-    @State private var draggedItem: ShoppingItem?
     @State private var didPerformInitialLoad = false
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -95,72 +93,69 @@ private struct ShoppingListContent: View {
 
                     // Items list with rapid entry
                     ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(store.toBuyItems) { item in
-                                    Group {
-                                        if itemBeingRemoved != item.id {
-                                            if editingItemId == item.id {
-                                                ShoppingItemInlineEditRow(
-                                                    text: $editingItemText,
-                                                    isBought: item.isBought,
-                                                    onToggle: {
-                                                        cancelEditingItem()
-                                                        toggleItem(item)
-                                                    },
-                                                    onSubmit: { commitEditingItem(item) },
-                                                    onCancel: cancelEditingItem
-                                                )
-                                                .accessibilityIdentifier(
-                                                    "shoppingItemEdit_\(item.title)"
-                                                )
-                                            } else {
-                                                ShoppingItemRow(
-                                                    item: item,
-                                                    onToggle: { toggleItem(item) },
-                                                    onEdit: { startEditingItem(item) }
-                                                )
-                                                .accessibilityIdentifier(
-                                                    "shoppingItem_\(item.title)"
-                                                )
-                                            }
+                        List {
+                            ForEach(store.toBuyItems) { item in
+                                Group {
+                                    if itemBeingRemoved != item.id {
+                                        if editingItemId == item.id {
+                                            ShoppingItemInlineEditRow(
+                                                text: $editingItemText,
+                                                isBought: item.isBought,
+                                                onToggle: {
+                                                    cancelEditingItem()
+                                                    toggleItem(item)
+                                                },
+                                                onSubmit: { commitEditingItem(item) },
+                                                onCancel: cancelEditingItem
+                                            )
+                                            .accessibilityIdentifier(
+                                                "shoppingItemEdit_\(item.title)"
+                                            )
+                                        } else {
+                                            ShoppingItemRow(
+                                                item: item,
+                                                onToggle: { toggleItem(item) },
+                                                onEdit: { startEditingItem(item) }
+                                            )
+                                            .accessibilityIdentifier(
+                                                "shoppingItem_\(item.title)"
+                                            )
                                         }
                                     }
-                                    .onDrag {
-                                        draggedItem = item
-                                        return NSItemProvider(
-                                            object: item.id.uuidString as NSString
-                                        )
-                                    }
-                                    .onDrop(
-                                        of: [UTType.text],
-                                        delegate: ShoppingItemReorderDropDelegate(
-                                            item: item,
-                                            items: store.toBuyItems,
-                                            draggedItem: $draggedItem,
-                                            onMove: { from, to in
-                                                store.moveToBuyItems(
-                                                    from: from, to: to, persist: false
-                                                )
-                                            },
-                                            onDrop: {
-                                                _ = _Concurrency.Task {
-                                                    await store.persistCurrentToBuyOrder()
-                                                }
-                                            }
+                                }
+                                .listRowInsets(
+                                    EdgeInsets(
+                                        top: 0,
+                                        leading: AppChromeMetrics.screenHorizontalInset,
+                                        bottom: 0,
+                                        trailing: AppChromeMetrics.screenHorizontalInset
+                                    )
+                                )
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+                            .onMove(perform: moveToBuyItems)
+
+                            // Rapid entry row (stable at bottom, no insert animation)
+                            if isRapidEntryActive {
+                                rapidEntryRow
+                                    .id("rapidEntry")
+                                    .listRowInsets(
+                                        EdgeInsets(
+                                            top: 0,
+                                            leading: AppChromeMetrics.screenHorizontalInset,
+                                            bottom: 0,
+                                            trailing: AppChromeMetrics.screenHorizontalInset
                                         )
                                     )
-                                }
-
-                                // Rapid entry row (stable at bottom, no insert animation)
-                                if isRapidEntryActive {
-                                    rapidEntryRow
-                                        .id("rapidEntry")
-                                }
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
                             }
-                            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                            .padding(.bottom, listBottomInset)
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .padding(.bottom, listBottomInset)
                         .scrollDismissesKeyboard(.interactively)
                         .refreshable {
                             store.setSyncMode(userSession.syncMode)
@@ -451,6 +446,11 @@ private struct ShoppingListContent: View {
     }
 
     // MARK: - Data Actions
+
+    private func moveToBuyItems(from source: IndexSet, to destination: Int) {
+        store.moveToBuyItems(from: source, to: destination, persist: true)
+        HapticManager.lightTap()
+    }
 
     private func toggleItem(_ item: ShoppingItem) {
         HapticManager.lightTap()
@@ -835,12 +835,6 @@ struct RestockSheet: View {
                                 .foregroundStyle(.red)
                         }
                         .tint(.red)
-                        .frame(width: 78, alignment: .leading)
-                    } else {
-                        Text("Clear All")
-                            .font(themeStore.font(for: .buttonLabel))
-                            .hidden()
-                            .frame(width: 78, alignment: .leading)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -850,8 +844,6 @@ struct RestockSheet: View {
                     .font(themeStore.font(for: .buttonLabel))
                     .fontWeight(.bold)
                     .tint(themeStore.accentTabColor)
-                    .frame(width: 58, alignment: .trailing)
-                    .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .sheet(isPresented: $showClearAllConfirmation) {
@@ -899,41 +891,6 @@ private struct RestockItemRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-    }
-}
-
-private struct ShoppingItemReorderDropDelegate: DropDelegate {
-    let item: ShoppingItem
-    let items: [ShoppingItem]
-    @Binding var draggedItem: ShoppingItem?
-    let onMove: (IndexSet, Int) -> Void
-    let onDrop: () -> Void
-
-    func dropEntered(info _: DropInfo) {
-        guard
-            let draggedItem,
-            draggedItem.id != item.id,
-            let fromIndex = items.firstIndex(where: { $0.id == draggedItem.id }),
-            let toIndex = items.firstIndex(where: { $0.id == item.id })
-        else {
-            return
-        }
-
-        onMove(
-            IndexSet(integer: fromIndex),
-            toIndex > fromIndex ? toIndex + 1 : toIndex
-        )
-    }
-
-    func dropUpdated(info _: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info _: DropInfo) -> Bool {
-        draggedItem = nil
-        onDrop()
-        HapticManager.lightTap()
-        return true
     }
 }
 

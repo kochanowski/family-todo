@@ -253,18 +253,6 @@ private struct TasksContent: View {
             generator.notificationOccurred(.warning)
             print("Task Error: \(error.localizedDescription)")
         }
-        .toolbar {
-            if activeFilter == .active {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(editMode.isEditing ? "Done" : "Reorder") {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            editMode = editMode.isEditing ? .inactive : .active
-                        }
-                    }
-                    .disabled(visibleNextTasks.isEmpty)
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -365,16 +353,23 @@ private struct TasksContent: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center) {
             Text("Tasks")
                 .font(themeStore.font(for: .screenHeader))
                 .foregroundStyle(themeStore.contentPrimaryColor)
 
             Spacer()
 
-            completedCleanupMenu
-                .opacity(activeFilter == .completed ? 1 : 0)
-                .disabled(activeFilter != .completed)
+            if activeFilter == .active {
+                Button(editMode.isEditing ? "Done" : "Reorder") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        editMode = editMode.isEditing ? .inactive : .active
+                    }
+                }
+                .disabled(visibleNextTasks.isEmpty)
+            } else {
+                completedCleanupMenu
+            }
         }
     }
 

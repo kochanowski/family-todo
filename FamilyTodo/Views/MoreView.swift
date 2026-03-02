@@ -222,9 +222,9 @@ struct CategoriesManagementView: View {
     @StateObject private var store: BacklogStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
-    @State private var newCategoryName = ""
-    @State private var renamingCategory: BacklogCategory?
-    @State private var renamingTitle = ""
+    @State private var selectedCategory: BacklogCategory?
+    @State private var isAddingCategory = false
+    @State private var newCategoryColorHex = MemberColorToken.randomHex()
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
@@ -233,10 +233,19 @@ struct CategoriesManagementView: View {
     var body: some View {
         List {
             ForEach(store.categories) { category in
-                HStack {
-                    Text(category.title)
-                    Spacer()
+                Button {
+                    selectedCategory = category
+                } label: {
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(category.color)
+                            .frame(width: 10, height: 10)
+                        Text(category.title)
+                        Spacer()
+                    }
                 }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         _ = _Concurrency.Task {
@@ -245,14 +254,6 @@ struct CategoriesManagementView: View {
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
-
-                    Button {
-                        renamingCategory = category
-                        renamingTitle = category.title
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    .tint(.orange)
                 }
             }
             .onMove { source, destination in
@@ -265,19 +266,11 @@ struct CategoriesManagementView: View {
             }
 
             Section {
-                HStack {
-                    TextField("New category", text: $newCategoryName)
-                        .onSubmit {
-                            addCategory()
-                        }
-
-                    Button {
-                        addCategory()
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(.blue)
-                    }
-                    .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button {
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                    isAddingCategory = true
+                } label: {
+                    Label("(+) New category", systemImage: "plus.circle")
                 }
             }
         }
@@ -293,33 +286,41 @@ struct CategoriesManagementView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
-        .sheet(isPresented: Binding(
-            get: { renamingCategory != nil },
-            set: { if !$0 { renamingCategory = nil } }
-        )) {
-            AppPromptSheet(
-                title: "Rename Category",
-                placeholder: "Category name",
-                text: $renamingTitle,
+        .sheet(item: $selectedCategory) { category in
+            CategoryEditorSheet(
+                title: "Edit Category",
+                initialName: category.title,
+                initialColorHex: category.colorHex,
                 primaryTitle: "Save",
-                onSubmit: { newTitle in
-                    guard let category = renamingCategory else { return }
+                onCancel: {},
+                onSubmit: { name, colorHex in
                     _ = _Concurrency.Task {
-                        await store.renameCategory(category, newTitle: newTitle)
+                        await store.updateCategory(
+                            category,
+                            newTitle: name,
+                            newColorHex: colorHex
+                        )
                     }
-                    renamingCategory = nil
                 }
             )
         }
-    }
-
-    private func addCategory() {
-        let trimmed = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        _ = _Concurrency.Task {
-            await store.addCategory(trimmed)
+        .sheet(isPresented: $isAddingCategory) {
+            CategoryEditorSheet(
+                title: "New Category",
+                initialName: "",
+                initialColorHex: newCategoryColorHex,
+                primaryTitle: "Create",
+                onCancel: {
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                },
+                onSubmit: { name, colorHex in
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                    _ = _Concurrency.Task {
+                        await store.addCategory(name, colorHex: colorHex)
+                    }
+                }
+            )
         }
-        newCategoryName = ""
     }
 }
 

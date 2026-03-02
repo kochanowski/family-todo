@@ -189,7 +189,6 @@ struct ProfileView: View {
                         } label: {
                             memberRowContent(
                                 member: member,
-                                roleLabel: member.role == .owner ? "Owner" : "Member",
                                 showsChevron: true
                             )
                         }
@@ -198,7 +197,6 @@ struct ProfileView: View {
                         HStack(spacing: 12) {
                             memberRowContent(
                                 member: member,
-                                roleLabel: member.role == .owner ? "Owner" : "Member",
                                 showsChevron: false
                             )
 
@@ -293,26 +291,26 @@ struct ProfileView: View {
 
     private func memberRowContent(
         member: Member,
-        roleLabel: String,
         showsChevron: Bool
     ) -> some View {
-        HStack(spacing: 12) {
-            MemberBadgeView(name: member.displayName, colorHex: member.colorHex)
-            VStack(alignment: .leading, spacing: 2) {
-                (Text(member.displayName)
-                    + Text(member.userId == userSession.userId ? " (You)" : ""))
-                    .foregroundStyle(themeStore.contentPrimaryColor)
-                Text(roleLabel)
+        HStack(spacing: 10) {
+            (Text(member.displayName)
+                + Text(member.userId == userSession.userId ? " (You)" : ""))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+            Spacer()
+            if member.role == .owner {
+                Text("Owner")
                     .font(themeStore.font(for: .chip))
                     .foregroundStyle(themeStore.contentSecondaryColor)
             }
-            Spacer()
             if showsChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private func toggleRole(for member: Member) {
