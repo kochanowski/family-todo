@@ -1024,6 +1024,26 @@ actor CloudKitManager {
         }
     }
 
+    func updateMemberState(
+        memberId: UUID,
+        householdId: UUID,
+        newDisplayName: String,
+        newRole: Member.MemberRole,
+        isActive: Bool,
+        colorHex: String
+    ) async throws -> CKRecord {
+        try await updateMemberRecord(
+            memberId: memberId,
+            householdId: householdId,
+            operationName: "state"
+        ) { record in
+            record["displayName"] = newDisplayName as CKRecordValue
+            record["role"] = newRole.rawValue as CKRecordValue
+            record["isActive"] = (isActive ? 1 : 0) as CKRecordValue
+            record["colorHex"] = colorHex as CKRecordValue
+        }
+    }
+
     func fetchMember(id: UUID) async throws -> Member {
         let record = try await fetchRecord(id: id)
         return try member(from: record)

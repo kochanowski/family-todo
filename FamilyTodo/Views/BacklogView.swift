@@ -55,6 +55,8 @@ private struct BacklogContent: View {
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
+    @State private var hiddenPendingPromotionIds: Set<UUID> = []
+    @State private var processingPromotionItemIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -100,6 +102,7 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
+                                    isPromotingItem: { processingPromotionItemIds.contains($0) },
                                     assigneeFor: { assigneeId in
                                         assignee(for: assigneeId)
                                     },
@@ -215,8 +218,7 @@ private struct BacklogContent: View {
                 get: { pendingPromotionItem != nil },
                 set: { isPresented in
                     if !isPresented {
-                        pendingPromotionItem = nil
-                        selectedAssigneeIdForPromotion = nil
+                        cancelPendingPromotion()
                     }
                 }
             )
@@ -229,8 +231,7 @@ private struct BacklogContent: View {
                     autoConfirmOnSelection: false,
                     selectedAssigneeId: $selectedAssigneeIdForPromotion,
                     onCancel: {
-                        self.pendingPromotionItem = nil
-                        selectedAssigneeIdForPromotion = nil
+                        cancelPendingPromotion()
                     },
                     onConfirm: {
                         guard let assigneeId = selectedAssigneeIdForPromotion else { return }
@@ -369,10 +370,13 @@ private struct BacklogContent: View {
     }
 
     private func promoteItem(_ item: BacklogItem) {
+        guard processingPromotionItemIds.insert(item.id).inserted else { return }
+
         if activeMembers.isEmpty {
             if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
                 completePromotion(of: item, assigneeId: assigneeId)
             } else {
+                processingPromotionItemIds.remove(item.id)
                 showBanner(.assigneeRequired)
             }
             return
@@ -393,10 +397,36 @@ private struct BacklogContent: View {
     }
 
     private func completePromotion(of item: BacklogItem, assigneeId: UUID) {
+        if !processingPromotionItemIds.contains(item.id) {
+            processingPromotionItemIds.insert(item.id)
+        }
+        withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+            hiddenPendingPromotionIds.insert(item.id)
+        }
+
         _ = _Concurrency.Task {
             let result = await store.promoteItemToTask(item, assigneeId: assigneeId)
-            handlePromotionResult(result)
+            await MainActor.run {
+                processingPromotionItemIds.remove(item.id)
+                switch result {
+                case .success:
+                    hiddenPendingPromotionIds.remove(item.id)
+                case .assigneeRequired, .wipLimitReached, .failed:
+                    withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+                        hiddenPendingPromotionIds.remove(item.id)
+                    }
+                }
+                handlePromotionResult(result)
+            }
         }
+    }
+
+    private func cancelPendingPromotion() {
+        if let item = pendingPromotionItem {
+            processingPromotionItemIds.remove(item.id)
+        }
+        pendingPromotionItem = nil
+        selectedAssigneeIdForPromotion = nil
     }
 
     private func handlePromotionResult(_ result: BacklogStore.PromotionResult) {
@@ -483,7 +513,10 @@ private struct BacklogContent: View {
 
     private func visibleItems(for categoryId: UUID) -> [BacklogItem] {
         store.items(for: categoryId)
-            .filter { !hiddenPendingDeleteIds.contains($0.id) }
+            .filter {
+                !hiddenPendingDeleteIds.contains($0.id) &&
+                    !hiddenPendingPromotionIds.contains($0.id)
+            }
     }
 
     private func queueDeleteItem(_ item: BacklogItem) {
@@ -564,6 +597,7 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let isPromotingItem: (UUID) -> Bool
     let assigneeFor: (UUID?) -> Member?
     let isAddingItem: Bool
     @Binding var newItemText: String
@@ -629,10 +663,12 @@ struct CategoryCard: View {
             VStack(spacing: 6) {
                 ForEach(items) { item in
                     let canPromote = item.assigneeId != nil
+                    let isPromoting = isPromotingItem(item.id)
                     BacklogItemRow(
                         item: item,
                         assignee: assigneeFor(item.assigneeId),
                         canPromote: canPromote,
+                        isPromotionDisabled: isPromoting,
                         onTap: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
                         onPromote: { onPromoteItem(item) },
@@ -646,6 +682,7 @@ struct CategoryCard: View {
                                 Label("Promote", systemImage: "arrow.up.circle")
                             }
                             .tint(.blue)
+                            .disabled(isPromoting)
                         }
                     }
                     .swipeActions(edge: .trailing) {
@@ -800,6 +837,7 @@ struct BacklogItemRow: View {
     let item: BacklogItem
     let assignee: Member?
     let canPromote: Bool
+    let isPromotionDisabled: Bool
     let onTap: () -> Void
     let onAssign: () -> Void
     let onPromote: () -> Void
@@ -841,6 +879,8 @@ struct BacklogItemRow: View {
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isPromotionDisabled)
+                    .opacity(isPromotionDisabled ? 0.45 : 1)
                     .transition(.opacity.combined(with: .scale))
                 }
 

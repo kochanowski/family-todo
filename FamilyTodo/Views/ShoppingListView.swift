@@ -125,10 +125,10 @@ private struct ShoppingListContent: View {
                                 }
                                 .listRowInsets(
                                     EdgeInsets(
-                                        top: 0,
-                                        leading: AppChromeMetrics.screenHorizontalInset,
-                                        bottom: 0,
-                                        trailing: AppChromeMetrics.screenHorizontalInset
+                                        top: 4,
+                                        leading: 16,
+                                        bottom: 4,
+                                        trailing: 16
                                     )
                                 )
                                 .listRowSeparator(.hidden)
@@ -142,10 +142,10 @@ private struct ShoppingListContent: View {
                                     .id("rapidEntry")
                                     .listRowInsets(
                                         EdgeInsets(
-                                            top: 0,
-                                            leading: AppChromeMetrics.screenHorizontalInset,
-                                            bottom: 0,
-                                            trailing: AppChromeMetrics.screenHorizontalInset
+                                            top: 4,
+                                            leading: 16,
+                                            bottom: 4,
+                                            trailing: 16
                                         )
                                     )
                                     .listRowSeparator(.hidden)
@@ -556,7 +556,7 @@ struct ShoppingItemRow: View {
 
 private enum ShoppingRowLayout {
     static let spacing: CGFloat = 10
-    static let verticalPadding: CGFloat = 6
+    static let verticalPadding: CGFloat = 3
     static let trailingSlotWidth: CGFloat = 24
 }
 
@@ -826,16 +826,17 @@ struct RestockSheet: View {
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    if !store.recentItems.isEmpty {
-                        Button(role: .destructive) {
-                            showClearAllConfirmation = true
-                        } label: {
-                            Text("Clear All")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .foregroundStyle(.red)
-                        }
-                        .tint(.red)
+                    Button(role: .destructive) {
+                        showClearAllConfirmation = true
+                    } label: {
+                        Text("Clear All")
+                            .font(themeStore.font(for: .buttonLabel))
+                            .foregroundStyle(.red)
                     }
+                    .tint(.red)
+                    .opacity(store.recentItems.isEmpty ? 0 : 1)
+                    .disabled(store.recentItems.isEmpty)
+                    .accessibilityHidden(store.recentItems.isEmpty)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {

@@ -432,17 +432,14 @@ class HouseholdStore: ObservableObject {
                 break
             }
 
-            let updatedMember = Member(
-                id: member.id,
+            _ = try await cloudKit.updateMemberState(
+                memberId: member.id,
                 householdId: member.householdId,
-                userId: member.userId,
-                displayName: member.displayName,
-                role: member.role,
-                joinedAt: member.joinedAt,
+                newDisplayName: member.displayName,
+                newRole: member.role,
                 isActive: false,
                 colorHex: member.colorHex
             )
-            _ = try await cloudKit.saveMember(updatedMember)
         }
 
         clearCurrentHousehold()
@@ -537,17 +534,14 @@ class HouseholdStore: ObservableObject {
 
             guard shouldUpdate else { return }
 
-            let updated = Member(
-                id: existing.id,
+            _ = try await cloudKit.updateMemberState(
+                memberId: existing.id,
                 householdId: existing.householdId,
-                userId: existing.userId,
-                displayName: displayName,
-                role: resolvedRole,
-                joinedAt: existing.joinedAt,
+                newDisplayName: displayName,
+                newRole: resolvedRole,
                 isActive: true,
                 colorHex: existing.colorHex
             )
-            _ = try await cloudKit.saveMember(updated)
             return
         }
 
