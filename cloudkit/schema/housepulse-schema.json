@@ -166,6 +166,8 @@
         { "name": "expiresAt", "type": "Date", "queryable": true, "sortable": false },
         { "name": "isRevoked", "type": "Int64", "queryable": true, "sortable": false },
         { "name": "usesCount", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "failedAttempts", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "lastAttemptAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "lastRedeemedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {

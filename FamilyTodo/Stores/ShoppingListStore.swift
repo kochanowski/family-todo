@@ -141,14 +141,16 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private func syncToCache(_ items: [ShoppingItem]) {
-        guard let context = modelContext else { return }
+        guard let context = modelContext, let householdId else { return }
+
+        let cacheDescriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedItems = (try? context.fetch(cacheDescriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
 
         for item in items {
-            let descriptor = FetchDescriptor<CachedShoppingItem>(
-                predicate: #Predicate { $0.id == item.id }
-            )
-
-            if let existing = try? context.fetch(descriptor).first {
+            if let existing = cachedByID[item.id] {
                 if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "pendingDelete" {
                     continue
                 }
@@ -357,12 +359,20 @@ final class ShoppingListStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
 
-        for item in orderedItems {
-            do {
-                _ = try await cloudKit.saveShoppingItem(item)
+        do {
+            try await cloudKit.saveShoppingItemsBatch(orderedItems)
+            for item in orderedItems {
                 markCachedItemSynced(itemId: item.id)
-            } catch {
-                self.error = error
+            }
+        } catch {
+            self.error = error
+            for item in orderedItems {
+                do {
+                    _ = try await cloudKit.saveShoppingItem(item)
+                    markCachedItemSynced(itemId: item.id)
+                } catch {
+                    self.error = error
+                }
             }
         }
     }
@@ -440,12 +450,30 @@ final class ShoppingListStore: ObservableObject {
                     context.delete(cached)
                 }
             }
+        }
 
-            if isCloudSyncEnabled {
+        if isCloudSyncEnabled {
+            if let householdId {
+                let boughtIDs = Set(boughtItems.map(\.id))
                 do {
-                    try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                    try await cloudKit.deleteShoppingItemsBatch(ids: boughtIDs, householdId: householdId)
                 } catch {
                     self.error = error
+                    for item in boughtItems {
+                        do {
+                            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                        } catch {
+                            self.error = error
+                        }
+                    }
+                }
+            } else {
+                for item in boughtItems {
+                    do {
+                        try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                    } catch {
+                        self.error = error
+                    }
                 }
             }
         }
@@ -506,11 +534,31 @@ final class ShoppingListStore: ObservableObject {
             if !isCloudSyncEnabled {
                 continue
             }
+        }
 
-            do {
-                try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
-            } catch {
-                self.error = error
+        if isCloudSyncEnabled {
+            if let householdId {
+                let idsToDelete = Set(itemsToClear.map(\.id))
+                do {
+                    try await cloudKit.deleteShoppingItemsBatch(ids: idsToDelete, householdId: householdId)
+                } catch {
+                    self.error = error
+                    for item in itemsToClear {
+                        do {
+                            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                        } catch {
+                            self.error = error
+                        }
+                    }
+                }
+            } else {
+                for item in itemsToClear {
+                    do {
+                        try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                    } catch {
+                        self.error = error
+                    }
+                }
             }
         }
 

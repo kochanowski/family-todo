@@ -6,6 +6,7 @@ import SwiftUI
 extension Notification.Name {
     static let memberProfileDidChange = Notification.Name("HousePulse.memberProfileDidChange")
     static let taskBoardDataDidChange = Notification.Name("HousePulse.taskBoardDataDidChange")
+    static let shoppingListDataDidChange = Notification.Name("HousePulse.shoppingListDataDidChange")
 }
 
 struct StoreContextSaveError: LocalizedError {
@@ -227,12 +228,17 @@ final class TaskStore: ObservableObject {
     }
 
     private func syncToCache(_ cloudTasks: [Task]) {
+        guard let householdId else { return }
+
+        let cacheDescriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedTasks = (try? modelContext.fetch(cacheDescriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedTasks.map { ($0.id, $0) })
+
         // Update local cache with cloud data
         for task in cloudTasks {
-            let descriptor = FetchDescriptor<CachedTask>(
-                predicate: #Predicate { $0.id == task.id }
-            )
-            if let existing = try? modelContext.fetch(descriptor).first {
+            if let existing = cachedByID[task.id] {
                 if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "pendingDelete" {
                     continue
                 }
@@ -588,12 +594,21 @@ final class TaskStore: ObservableObject {
         saveContextOrSetError(operation: "persist reordered tasks")
 
         guard isCloudSyncEnabled else { return }
-        for updatedTask in updatedByID.values.sorted(by: { $0.order < $1.order }) {
-            do {
-                _ = try await cloudKit.saveTask(updatedTask)
+        let orderedUpdates = updatedByID.values.sorted(by: { $0.order < $1.order })
+        do {
+            try await cloudKit.saveTasksBatch(orderedUpdates)
+            for updatedTask in orderedUpdates {
                 markCachedTaskSynced(id: updatedTask.id)
-            } catch {
-                self.error = error
+            }
+        } catch {
+            self.error = error
+            for updatedTask in orderedUpdates {
+                do {
+                    _ = try await cloudKit.saveTask(updatedTask)
+                    markCachedTaskSynced(id: updatedTask.id)
+                } catch {
+                    self.error = error
+                }
             }
         }
     }
@@ -660,13 +675,34 @@ final class TaskStore: ObservableObject {
         markCachedTasksPendingDelete(tasksToDelete)
 
         var successfullyDeletedIDs = Set<UUID>()
-        for task in tasksToDelete {
+        if let householdId {
             do {
-                try await cloudKit.deleteTask(id: task.id, householdId: task.householdId)
-                successfullyDeletedIDs.insert(task.id)
-                await notificationService.removeTaskReminder(for: task)
+                try await cloudKit.deleteTasksBatch(ids: taskIDs, householdId: householdId)
+                successfullyDeletedIDs = taskIDs
+                for task in tasksToDelete {
+                    await notificationService.removeTaskReminder(for: task)
+                }
             } catch {
                 self.error = error
+                for task in tasksToDelete {
+                    do {
+                        try await cloudKit.deleteTask(id: task.id, householdId: task.householdId)
+                        successfullyDeletedIDs.insert(task.id)
+                        await notificationService.removeTaskReminder(for: task)
+                    } catch {
+                        self.error = error
+                    }
+                }
+            }
+        } else {
+            for task in tasksToDelete {
+                do {
+                    try await cloudKit.deleteTask(id: task.id, householdId: task.householdId)
+                    successfullyDeletedIDs.insert(task.id)
+                    await notificationService.removeTaskReminder(for: task)
+                } catch {
+                    self.error = error
+                }
             }
         }
 

@@ -212,6 +212,13 @@ private struct ShoppingListContent: View {
             isKeyboardVisible = true
         }
         .onReceive(
+            NotificationCenter.default.publisher(for: .shoppingListDataDidChange)
+        ) { _ in
+            _ = _Concurrency.Task {
+                await store.loadItems()
+            }
+        }
+        .onReceive(
             NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
         ) { _ in
             isKeyboardVisible = false

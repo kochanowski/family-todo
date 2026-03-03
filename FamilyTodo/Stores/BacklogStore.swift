@@ -167,14 +167,23 @@ final class BacklogStore: ObservableObject {
         cloudCategoryIDs: Set<UUID>,
         cloudItemIDs: Set<UUID>
     ) {
-        guard let context = modelContext else { return }
+        guard let context = modelContext, let householdId else { return }
+
+        let categoryCacheDescriptor = FetchDescriptor<CachedBacklogCategory>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let itemCacheDescriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+
+        let cachedCategories = (try? context.fetch(categoryCacheDescriptor)) ?? []
+        let cachedItems = (try? context.fetch(itemCacheDescriptor)) ?? []
+        let cachedCategoryByID = Dictionary(uniqueKeysWithValues: cachedCategories.map { ($0.id, $0) })
+        let cachedItemByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
 
         // Sync Categories
         for category in categories {
-            let descriptor = FetchDescriptor<CachedBacklogCategory>(
-                predicate: #Predicate { $0.id == category.id }
-            )
-            if let existing = try? context.fetch(descriptor).first {
+            if let existing = cachedCategoryByID[category.id] {
                 if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload {
                     continue
                 }
@@ -192,10 +201,7 @@ final class BacklogStore: ObservableObject {
 
         // Sync Items
         for item in items {
-            let descriptor = FetchDescriptor<CachedBacklogItem>(
-                predicate: #Predicate { $0.id == item.id }
-            )
-            if let existing = try? context.fetch(descriptor).first {
+            if let existing = cachedItemByID[item.id] {
                 if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
                     existing.syncStatusRaw == BacklogSyncStatus.pendingDelete
                 {
@@ -507,12 +513,20 @@ final class BacklogStore: ObservableObject {
         }
 
         guard isCloudSyncEnabled else { return }
-        for category in categories {
-            do {
-                _ = try await cloudKit.saveBacklogCategory(category)
+        do {
+            try await cloudKit.saveBacklogCategoriesBatch(categories)
+            for category in categories {
                 markCachedCategoryAwaitingCloudEcho(id: category.id)
-            } catch {
-                self.error = error
+            }
+        } catch {
+            self.error = error
+            for category in categories {
+                do {
+                    _ = try await cloudKit.saveBacklogCategory(category)
+                    markCachedCategoryAwaitingCloudEcho(id: category.id)
+                } catch {
+                    self.error = error
+                }
             }
         }
     }

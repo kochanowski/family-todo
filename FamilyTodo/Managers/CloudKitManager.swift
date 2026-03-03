@@ -46,12 +46,21 @@ actor CloudKitManager {
     private var isReady = false
     private var householdScope: HouseholdDatabaseScope = .participantShared
     private var sharedZoneContext = SharedZoneContext()
+    private var migratedMemberColorHouseholds: Set<UUID>
+    private var recentInviteRedeemAttempts: [Date] = []
 
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
+    private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
+    private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
-    private static let inviteCodeLength = 6
-    private static let inviteCodeMaxAttempts = 12
+    private static let inviteCodeLength = 8
+    private static let inviteCodeMaxAttempts = 24
+    private static let inviteCodeMaxUses = 100
+    private static let inviteCodeMaxFailedAttempts = 8
+    private static let inviteCodeLockWindow: TimeInterval = 10 * 60
+    private static let inviteCodeAttemptWindow: TimeInterval = 5 * 60
+    private static let inviteCodeAttemptLimit = 12
 
     static func sanitizeShareTitle(_ rawValue: String?) -> String {
         guard let rawValue else {
@@ -121,6 +130,7 @@ actor CloudKitManager {
     init() {
         // Container is lazily initialized on first use via ensureReady()
         sharedZoneContext.zoneByHouseholdId = Self.loadStoredZoneByHouseholdId()
+        migratedMemberColorHouseholds = Self.loadMigratedMemberColorHouseholds()
     }
 
     // MARK: - Readiness
@@ -238,6 +248,18 @@ actor CloudKitManager {
         return output
     }
 
+    private func persistMigratedMemberColorHouseholds() {
+        let raw = migratedMemberColorHouseholds.map(\.uuidString)
+        UserDefaults.standard.set(raw, forKey: Self.memberColorMigrationDefaultsKey)
+    }
+
+    private static func loadMigratedMemberColorHouseholds() -> Set<UUID> {
+        guard let raw = UserDefaults.standard.array(forKey: memberColorMigrationDefaultsKey) as? [String] else {
+            return []
+        }
+        return Set(raw.compactMap(UUID.init(uuidString:)))
+    }
+
     private static func encodedZoneID(_ zoneID: CKRecordZone.ID) -> String {
         "\(zoneID.zoneName)|\(zoneID.ownerName)"
     }
@@ -303,8 +325,8 @@ actor CloudKitManager {
         }
     }
 
-    nonisolated static func generateInviteCode(length: Int = 6) -> String {
-        let resolvedLength = max(5, length)
+    nonisolated static func generateInviteCode(length: Int = inviteCodeLength) -> String {
+        let resolvedLength = max(inviteCodeLength, length)
         var generator = SystemRandomNumberGenerator()
         return String((0..<resolvedLength).map { _ in
             inviteCodeAlphabet.randomElement(using: &generator) ?? "A"
@@ -528,6 +550,73 @@ actor CloudKitManager {
         return ordered
     }
 
+    private func queryRecordsPage(
+        query: CKQuery?,
+        cursor: CKQueryOperation.Cursor?,
+        database: CKDatabase,
+        zoneID: CKRecordZone.ID?,
+        resultsLimit: Int
+    ) async throws -> ([CKRecord], CKQueryOperation.Cursor?) {
+        try await withCheckedThrowingContinuation { continuation in
+            let operation: CKQueryOperation
+            if let cursor {
+                operation = CKQueryOperation(cursor: cursor)
+            } else if let query {
+                operation = CKQueryOperation(query: query)
+                operation.zoneID = zoneID
+            } else {
+                continuation.resume(throwing: CloudKitManagerError.invalidRecord)
+                return
+            }
+
+            operation.resultsLimit = max(1, resultsLimit)
+            operation.qualityOfService = .userInitiated
+
+            var pageRecords: [CKRecord] = []
+            operation.recordMatchedBlock = { _, result in
+                guard case let .success(record) = result else { return }
+                pageRecords.append(record)
+            }
+
+            operation.queryResultBlock = { result in
+                switch result {
+                case let .success(nextCursor):
+                    continuation.resume(returning: (pageRecords, nextCursor))
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            database.add(operation)
+        }
+    }
+
+    private func queryRecordsPaginated(
+        _ query: CKQuery,
+        database: CKDatabase,
+        zoneID: CKRecordZone.ID? = nil,
+        resultsLimit: Int = Self.defaultQueryPageSize
+    ) async throws -> [CKRecord] {
+        var allRecords: [CKRecord] = []
+        var cursor: CKQueryOperation.Cursor?
+        var isFirstPage = true
+
+        while isFirstPage || cursor != nil {
+            let (pageRecords, nextCursor) = try await queryRecordsPage(
+                query: isFirstPage ? query : nil,
+                cursor: cursor,
+                database: database,
+                zoneID: zoneID,
+                resultsLimit: resultsLimit
+            )
+            allRecords.append(contentsOf: pageRecords)
+            cursor = nextCursor
+            isFirstPage = false
+        }
+
+        return allRecords
+    }
+
     private func queryRecords(
         _ query: CKQuery,
         householdId: UUID? = nil
@@ -537,11 +626,7 @@ actor CloudKitManager {
         switch householdScope {
         case .ownerPrivate:
             print("CloudKitScope: query ownerPrivate \(query.recordType)")
-            let (results, _) = try await db.records(matching: query)
-            let records = results.compactMap { _, result -> CKRecord? in
-                guard case let .success(record) = result else { return nil }
-                return record
-            }
+            let records = try await queryRecordsPaginated(query, database: db)
             records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId) }
             return records
 
@@ -560,9 +645,12 @@ actor CloudKitManager {
             for zoneID in initialZoneIDs {
                 print("CloudKitScope: query participantShared \(query.recordType) in zone \(zoneID.zoneName)")
                 do {
-                    let (results, _) = try await db.records(matching: query, inZoneWith: zoneID)
-                    for (_, result) in results {
-                        guard case let .success(record) = result else { continue }
+                    let zoneRecords = try await queryRecordsPaginated(
+                        query,
+                        database: db,
+                        zoneID: zoneID
+                    )
+                    for record in zoneRecords {
                         aggregatedByRecordName[record.recordID.recordName] = record
                     }
                 } catch {
@@ -592,9 +680,12 @@ actor CloudKitManager {
                             "CloudKitScope: query participantShared \(query.recordType) fallback zone \(zoneID.zoneName)"
                         )
                         do {
-                            let (results, _) = try await db.records(matching: query, inZoneWith: zoneID)
-                            for (_, result) in results {
-                                guard case let .success(record) = result else { continue }
+                            let zoneRecords = try await queryRecordsPaginated(
+                                query,
+                                database: db,
+                                zoneID: zoneID
+                            )
+                            for record in zoneRecords {
                                 fallbackByRecordName[record.recordID.recordName] = record
                             }
                         } catch {
@@ -660,6 +751,9 @@ actor CloudKitManager {
                 print("CloudKitScope: delete \(recordName) in \(scopeName) zone \(zoneID.zoneName)")
                 let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
                 _ = try await db.deleteRecord(withID: recordID)
+                _Concurrency.Task { @MainActor in
+                    CloudKitSubscriptionManager.shared.registerLocalMutation(recordName: recordName)
+                }
                 return
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 continue
@@ -763,7 +857,13 @@ actor CloudKitManager {
             operation.modifyRecordsResultBlock = { result in
                 switch result {
                 case .success:
-                    continuation.resume(returning: savedRecord ?? record)
+                    let resolvedRecord = savedRecord ?? record
+                    _Concurrency.Task { @MainActor in
+                        CloudKitSubscriptionManager.shared.registerLocalMutation(
+                            recordName: resolvedRecord.recordID.recordName
+                        )
+                    }
+                    continuation.resume(returning: resolvedRecord)
                 case let .failure(error):
                     continuation.resume(throwing: error)
                 }
@@ -771,6 +871,213 @@ actor CloudKitManager {
 
             database.add(operation)
         }
+    }
+
+    private func modifyRecordsBatch(
+        recordsToSave: [CKRecord],
+        recordIDsToDelete: [CKRecord.ID],
+        database: CKDatabase
+    ) async throws -> (saved: [CKRecord], deleted: [CKRecord.ID]) {
+        try await withCheckedThrowingContinuation { continuation in
+            let operation = CKModifyRecordsOperation(
+                recordsToSave: recordsToSave.isEmpty ? nil : recordsToSave,
+                recordIDsToDelete: recordIDsToDelete.isEmpty ? nil : recordIDsToDelete
+            )
+            operation.savePolicy = .changedKeys
+            operation.isAtomic = false
+            operation.qualityOfService = .userInitiated
+
+            var saved: [CKRecord] = []
+            var deleted: [CKRecord.ID] = []
+            var firstFailure: Error?
+
+            operation.perRecordSaveBlock = { _, result in
+                switch result {
+                case let .success(record):
+                    saved.append(record)
+                case let .failure(error):
+                    if firstFailure == nil {
+                        firstFailure = error
+                    }
+                }
+            }
+
+            operation.perRecordDeleteBlock = { recordID, result in
+                switch result {
+                case .success:
+                    deleted.append(recordID)
+                case let .failure(error):
+                    if firstFailure == nil {
+                        firstFailure = error
+                    }
+                }
+            }
+
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    if let firstFailure {
+                        continuation.resume(throwing: firstFailure)
+                    } else {
+                        continuation.resume(returning: (saved, deleted))
+                    }
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            database.add(operation)
+        }
+    }
+
+    private func saveRecordsBatchWithZoneRecovery(
+        _ records: [CKRecord],
+        householdId: UUID?
+    ) async throws -> [CKRecord] {
+        guard !records.isEmpty else { return [] }
+        let db = await activeHouseholdDatabase
+
+        func scopedRecords(from sourceRecords: [CKRecord]) async throws -> [CKRecord] {
+            var output: [CKRecord] = []
+            output.reserveCapacity(sourceRecords.count)
+            for record in sourceRecords {
+                output.append(try await recordForSave(record, householdId: householdId))
+            }
+            return output
+        }
+
+        let initialScopedRecords = try await scopedRecords(from: records)
+
+        do {
+            let outcome = try await modifyRecordsBatch(
+                recordsToSave: initialScopedRecords,
+                recordIDsToDelete: [],
+                database: db
+            )
+            for record in outcome.saved {
+                rememberRecordZone(record, explicitHouseholdId: householdId)
+                _Concurrency.Task { @MainActor in
+                    CloudKitSubscriptionManager.shared.registerLocalMutation(
+                        recordName: record.recordID.recordName
+                    )
+                }
+            }
+            return outcome.saved
+        } catch {
+            guard isRetryableZoneResolutionError(error) else {
+                throw error
+            }
+
+            clearCachedZone(for: householdId)
+            if let householdId {
+                _ = try await resolveHouseholdZone(for: householdId)
+            }
+
+            let retryScopedRecords = try await scopedRecords(from: records)
+
+            let outcome = try await modifyRecordsBatch(
+                recordsToSave: retryScopedRecords,
+                recordIDsToDelete: [],
+                database: db
+            )
+            for record in outcome.saved {
+                rememberRecordZone(record, explicitHouseholdId: householdId)
+                _Concurrency.Task { @MainActor in
+                    CloudKitSubscriptionManager.shared.registerLocalMutation(
+                        recordName: record.recordID.recordName
+                    )
+                }
+            }
+            return outcome.saved
+        }
+    }
+
+    private func batchDeleteRecordIDs(
+        recordNames: [String],
+        householdId: UUID?
+    ) async throws {
+        guard !recordNames.isEmpty else { return }
+        let db = await activeHouseholdDatabase
+
+        func resolvedDeleteIDs() async throws -> [CKRecord.ID] {
+            var resolvedZoneID = resolveCachedZone(for: householdId)
+            if resolvedZoneID == nil, let householdId {
+                resolvedZoneID = try await resolveHouseholdZone(for: householdId)
+            }
+            if let resolvedZoneID {
+                return recordNames.map { CKRecord.ID(recordName: $0, zoneID: resolvedZoneID) }
+            }
+            return recordNames.map { CKRecord.ID(recordName: $0) }
+        }
+
+        do {
+            let deleteIDs = try await resolvedDeleteIDs()
+            let outcome = try await modifyRecordsBatch(
+                recordsToSave: [],
+                recordIDsToDelete: deleteIDs,
+                database: db
+            )
+            for recordID in outcome.deleted {
+                _Concurrency.Task { @MainActor in
+                    CloudKitSubscriptionManager.shared.registerLocalMutation(
+                        recordName: recordID.recordName
+                    )
+                }
+            }
+        } catch {
+            guard isRetryableZoneResolutionError(error) else {
+                throw error
+            }
+
+            clearCachedZone(for: householdId)
+            if let householdId {
+                _ = try await resolveHouseholdZone(for: householdId)
+            }
+            let retryDeleteIDs = try await resolvedDeleteIDs()
+            let outcome = try await modifyRecordsBatch(
+                recordsToSave: [],
+                recordIDsToDelete: retryDeleteIDs,
+                database: db
+            )
+            for recordID in outcome.deleted {
+                _Concurrency.Task { @MainActor in
+                    CloudKitSubscriptionManager.shared.registerLocalMutation(
+                        recordName: recordID.recordName
+                    )
+                }
+            }
+        }
+    }
+
+    func saveTasksBatch(_ tasks: [Task]) async throws {
+        guard !tasks.isEmpty else { return }
+        let householdId = tasks.first?.householdId
+        let records = tasks.map { taskRecord(from: $0) }
+        _ = try await saveRecordsBatchWithZoneRecovery(records, householdId: householdId)
+    }
+
+    func saveShoppingItemsBatch(_ items: [ShoppingItem]) async throws {
+        guard !items.isEmpty else { return }
+        let householdId = items.first?.householdId
+        let records = items.map { shoppingItemRecord(from: $0) }
+        _ = try await saveRecordsBatchWithZoneRecovery(records, householdId: householdId)
+    }
+
+    func saveBacklogCategoriesBatch(_ categories: [BacklogCategory]) async throws {
+        guard !categories.isEmpty else { return }
+        let householdId = categories.first?.householdId
+        let records = categories.map { backlogCategoryRecord(from: $0) }
+        _ = try await saveRecordsBatchWithZoneRecovery(records, householdId: householdId)
+    }
+
+    func deleteTasksBatch(ids: Set<UUID>, householdId: UUID) async throws {
+        let recordNames = ids.map(\.uuidString)
+        try await batchDeleteRecordIDs(recordNames: recordNames, householdId: householdId)
+    }
+
+    func deleteShoppingItemsBatch(ids: Set<UUID>, householdId: UUID) async throws {
+        let recordNames = ids.map(\.uuidString)
+        try await batchDeleteRecordIDs(recordNames: recordNames, householdId: householdId)
     }
 
     private func resolvedPaletteColor(
@@ -788,27 +1095,49 @@ actor CloudKitManager {
         return (normalized, false)
     }
 
-    private func migrateColorIfNeeded(
-        for record: CKRecord,
-        stableId: UUID,
-        explicitHouseholdId: UUID?,
-        operation: String,
-        database: CKDatabase
-    ) async -> String {
-        let currentColor = record["colorHex"] as? String
-        let colorState = resolvedPaletteColor(rawColorHex: currentColor, stableId: stableId)
-        guard colorState.requiresMigration else {
-            return colorState.hex
-        }
+    private func markMemberColorMigrationCompleted(householdId: UUID) {
+        migratedMemberColorHouseholds.insert(householdId)
+        persistMigratedMemberColorHouseholds()
+    }
 
-        record["colorHex"] = colorState.hex as CKRecordValue
+    func migrateMemberColorsIfNeeded(householdId: UUID) async {
+        guard !migratedMemberColorHouseholds.contains(householdId) else { return }
+
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "Member", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
+
         do {
-            let saved = try await saveRecordWithChangedKeys(record, database: database)
-            rememberRecordZone(saved, explicitHouseholdId: explicitHouseholdId)
+            let records = try await queryRecords(query, householdId: householdId)
+            var recordsToSave: [CKRecord] = []
+            recordsToSave.reserveCapacity(records.count)
+
+            for record in records {
+                let stableId = UUID(uuidString: record.recordID.recordName) ??
+                    UUID(uuidString: record["id"] as? String ?? "")
+                guard let stableId else { continue }
+
+                let colorState = resolvedPaletteColor(
+                    rawColorHex: record["colorHex"] as? String,
+                    stableId: stableId
+                )
+                guard colorState.requiresMigration else { continue }
+
+                record["colorHex"] = colorState.hex as CKRecordValue
+                recordsToSave.append(record)
+            }
+
+            if !recordsToSave.isEmpty {
+                _ = try await saveRecordsBatchWithZoneRecovery(recordsToSave, householdId: householdId)
+            }
+
+            markMemberColorMigrationCompleted(householdId: householdId)
         } catch {
-            print("CloudKitScope: \(operation) color migration skipped: \(error.localizedDescription)")
+            print("CloudKitScope: member color migration skipped: \(error.localizedDescription)")
         }
-        return colorState.hex
     }
 
     enum CloudKitManagerError: LocalizedError {
@@ -818,6 +1147,9 @@ actor CloudKitManager {
         case inviteCodeNotFound
         case inviteCodeExpired
         case inviteCodeRevoked
+        case inviteCodeLocked
+        case inviteCodeRateLimited
+        case inviteCodeUsageLimitReached
         case inviteCodeUnavailable
         case networkUnavailable
         case notAuthenticated
@@ -839,6 +1171,12 @@ actor CloudKitManager {
                 "This invite code has expired."
             case .inviteCodeRevoked:
                 "This invite code is no longer active."
+            case .inviteCodeLocked:
+                "This invite code is temporarily locked. Try again in a few minutes."
+            case .inviteCodeRateLimited:
+                "Too many invite attempts. Please wait and try again."
+            case .inviteCodeUsageLimitReached:
+                "This invite code reached its usage limit."
             case .inviteCodeUnavailable:
                 "Could not generate a unique invite code. Try again."
             case .networkUnavailable:
@@ -1089,28 +1427,8 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Member", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
 
-        let db = await activeHouseholdDatabase
         let records = try await queryRecords(query, householdId: householdId)
-        var migratedRecords: [CKRecord] = []
-        migratedRecords.reserveCapacity(records.count)
-
-        for record in records {
-            let stableId = UUID(uuidString: record.recordID.recordName) ??
-                UUID(uuidString: record["id"] as? String ?? "")
-            if let stableId {
-                let migratedColor = await migrateColorIfNeeded(
-                    for: record,
-                    stableId: stableId,
-                    explicitHouseholdId: householdId,
-                    operation: "member.fetch",
-                    database: db
-                )
-                record["colorHex"] = migratedColor as CKRecordValue
-            }
-            migratedRecords.append(record)
-        }
-
-        return try migratedRecords.map(member(from:))
+        return try records.map(member(from:))
     }
 
     // MARK: - Area
@@ -1691,6 +2009,96 @@ actor CloudKitManager {
         }
     }
 
+    private func enforceInviteRedeemAttemptBudget(at now: Date) throws {
+        recentInviteRedeemAttempts.removeAll {
+            now.timeIntervalSince($0) > Self.inviteCodeAttemptWindow
+        }
+        guard recentInviteRedeemAttempts.count < Self.inviteCodeAttemptLimit else {
+            throw CloudKitManagerError.inviteCodeRateLimited
+        }
+        recentInviteRedeemAttempts.append(now)
+    }
+
+    private func clearInviteRedeemAttemptBudget() {
+        recentInviteRedeemAttempts.removeAll()
+    }
+
+    private func isInviteTokenLocked(_ token: InviteToken, at now: Date) -> Bool {
+        guard token.failedAttempts >= Self.inviteCodeMaxFailedAttempts,
+              let lastAttemptAt = token.lastAttemptAt
+        else {
+            return false
+        }
+        return now.timeIntervalSince(lastAttemptAt) < Self.inviteCodeLockWindow
+    }
+
+    private func mutateInviteTokenRecord(
+        code: String,
+        database: CKDatabase,
+        maxRetries: Int = 3,
+        mutate: (CKRecord) -> Void
+    ) async throws -> InviteToken? {
+        var attempts = 0
+        while attempts < maxRetries {
+            guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: database) else {
+                return nil
+            }
+
+            mutate(record)
+            do {
+                let saved = try await saveRecordWithChangedKeys(record, database: database)
+                return try inviteToken(from: saved)
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                attempts += 1
+                continue
+            }
+        }
+
+        throw CloudKitManagerError.serverRecordChanged
+    }
+
+    private func registerInviteRedeemFailure(
+        code: String,
+        at now: Date,
+        database: CKDatabase
+    ) async {
+        do {
+            _ = try await mutateInviteTokenRecord(code: code, database: database) { record in
+                let currentFailedAttempts =
+                    record["failedAttempts"] as? Int64
+                        ?? Int64(record["failedAttempts"] as? Int ?? 0)
+                record["failedAttempts"] = Int64(currentFailedAttempts + 1) as CKRecordValue
+                record["lastAttemptAt"] = now as CKRecordValue
+            }
+        } catch {
+            recordCloudKitFailure(error, operation: "inviteCode.redeem.failureCounter")
+        }
+    }
+
+    private func registerInviteRedeemSuccess(
+        code: String,
+        at now: Date,
+        database: CKDatabase
+    ) async throws {
+        _ = try await mutateInviteTokenRecord(code: code, database: database) { record in
+            let currentUses = record["usesCount"] as? Int64 ?? Int64(record["usesCount"] as? Int ?? 0)
+            record["usesCount"] = Int64(currentUses + 1) as CKRecordValue
+            record["failedAttempts"] = Int64(0) as CKRecordValue
+            record["lastAttemptAt"] = now as CKRecordValue
+            record["lastRedeemedAt"] = now as CKRecordValue
+        }
+    }
+
+    private func shouldRegisterInviteFailureCounter(for error: Error) -> Bool {
+        guard let managerError = error as? CloudKitManagerError else { return true }
+        switch managerError {
+        case .inviteCodeInvalid, .inviteCodeNotFound, .inviteCodeRateLimited, .inviteCodeLocked:
+            return false
+        default:
+            return true
+        }
+    }
+
     func createInviteCode(for household: Household) async throws -> InviteToken {
         try await checkAvailability()
         setHouseholdScope(.ownerPrivate)
@@ -1714,11 +2122,10 @@ actor CloudKitManager {
             )
             let existingQuery = CKQuery(recordType: "InviteToken", predicate: existingPredicate)
             existingQuery.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-            let (existingResults, _) = try await db.records(matching: existingQuery)
-            for (_, result) in existingResults {
-                guard case let .success(record) = result else { continue }
+            let existingRecords = try await queryRecordsPaginated(existingQuery, database: db)
+            for record in existingRecords {
                 let token = try inviteToken(from: record)
-                if token.isActive(at: now) {
+                if token.isActive(at: now), token.usesCount < Self.inviteCodeMaxUses {
                     clearCloudKitFailure()
                     return token
                 }
@@ -1740,6 +2147,8 @@ actor CloudKitManager {
                     expiresAt: now.addingTimeInterval(InviteToken.ttl),
                     isRevoked: false,
                     usesCount: 0,
+                    failedAttempts: 0,
+                    lastAttemptAt: nil,
                     lastRedeemedAt: nil
                 )
 
@@ -1787,16 +2196,35 @@ actor CloudKitManager {
     }
 
     func redeemInviteCode(_ rawCode: String) async throws -> Household {
-        var stage = "inviteCode.redeem.fetchToken"
+        let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(rawCode)
+        let now = Date()
+        var stage = "inviteCode.redeem.attemptBudget"
         do {
             try await checkAvailability()
-            let token = try await fetchInviteToken(code: rawCode)
-            let now = Date()
+            try enforceInviteRedeemAttemptBudget(at: now)
+
+            guard let code = normalizedCode else {
+                throw CloudKitManagerError.inviteCodeInvalid
+            }
+
+            stage = "inviteCode.redeem.fetchToken"
+            let db = await publicDatabase
+            guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
+                throw CloudKitManagerError.inviteCodeNotFound
+            }
+            let token = try inviteToken(from: record)
+
             if token.isRevoked {
                 throw CloudKitManagerError.inviteCodeRevoked
             }
             if token.isExpired(at: now) {
                 throw CloudKitManagerError.inviteCodeExpired
+            }
+            if token.usesCount >= Self.inviteCodeMaxUses {
+                throw CloudKitManagerError.inviteCodeUsageLimitReached
+            }
+            if isInviteTokenLocked(token, at: now) {
+                throw CloudKitManagerError.inviteCodeLocked
             }
 
             stage = "inviteCode.redeem.metadata"
@@ -1811,20 +2239,18 @@ actor CloudKitManager {
             let household = try await acceptShare(metadata: metadata)
 
             stage = "inviteCode.redeem.usageUpdate"
-            let db = await publicDatabase
-            if let record = try await fetchInviteTokenRecordIfExists(code: token.code, database: db) {
-                record["usesCount"] = Int64(token.usesCount + 1) as CKRecordValue
-                record["lastRedeemedAt"] = now as CKRecordValue
-                do {
-                    _ = try await saveRecordWithChangedKeys(record, database: db)
-                } catch {
-                    recordCloudKitFailure(error, operation: stage)
-                }
-            }
+            try await registerInviteRedeemSuccess(code: token.code, at: now, database: db)
 
+            clearInviteRedeemAttemptBudget()
             clearCloudKitFailure()
             return household
         } catch {
+            if let normalizedCode,
+               shouldRegisterInviteFailureCounter(for: error)
+            {
+                let db = await publicDatabase
+                await registerInviteRedeemFailure(code: normalizedCode, at: now, database: db)
+            }
             recordCloudKitFailure(error, operation: stage)
             throw error
         }

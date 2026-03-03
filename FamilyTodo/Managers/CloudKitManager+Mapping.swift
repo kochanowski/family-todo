@@ -488,6 +488,10 @@ extension CloudKitManager {
         record["expiresAt"] = token.expiresAt as CKRecordValue
         record["isRevoked"] = (token.isRevoked ? 1 : 0) as CKRecordValue
         record["usesCount"] = Int64(token.usesCount) as CKRecordValue
+        record["failedAttempts"] = Int64(token.failedAttempts) as CKRecordValue
+        if let lastAttemptAt = token.lastAttemptAt {
+            record["lastAttemptAt"] = lastAttemptAt as CKRecordValue
+        }
         if let lastRedeemedAt = token.lastRedeemedAt {
             record["lastRedeemedAt"] = lastRedeemedAt as CKRecordValue
         }
@@ -512,6 +516,9 @@ extension CloudKitManager {
         let usesCountRaw =
             record["usesCount"] as? Int64
                 ?? Int64(record["usesCount"] as? Int ?? 0)
+        let failedAttemptsRaw =
+            record["failedAttempts"] as? Int64
+                ?? Int64(record["failedAttempts"] as? Int ?? 0)
 
         return InviteToken(
             id: record.recordID.recordName,
@@ -522,6 +529,8 @@ extension CloudKitManager {
             expiresAt: expiresAt,
             isRevoked: isRevokedRaw == 1,
             usesCount: max(Int(usesCountRaw), 0),
+            failedAttempts: max(Int(failedAttemptsRaw), 0),
+            lastAttemptAt: record["lastAttemptAt"] as? Date,
             lastRedeemedAt: record["lastRedeemedAt"] as? Date
         )
     }

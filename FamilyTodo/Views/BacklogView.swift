@@ -177,6 +177,11 @@ private struct BacklogContent: View {
             await store.loadData()
             await memberStore.loadMembers()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await store.loadData()
+            }
+        }
         .sheet(isPresented: $isAddingCategory) {
             CategoryEditorSheet(
                 title: "New Category",

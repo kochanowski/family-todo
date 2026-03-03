@@ -93,6 +93,7 @@ class HouseholdStore: ObservableObject {
             if let current = currentHousehold {
                 await setCloudScope(for: current, userId: userId)
                 let fresh = try await cloudKit.fetchHousehold(id: current.id)
+                await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
                 updateCache(with: fresh)
                 currentHousehold = fresh
             } else {
@@ -114,6 +115,7 @@ class HouseholdStore: ObservableObject {
                     print("DEBUG: Found member membership for household: \(member.householdId)")
                     let fresh = try await cloudKit.fetchHousehold(id: member.householdId)
                     await setCloudScope(for: fresh, userId: userId)
+                    await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
                     updateCache(with: fresh)
                     currentHousehold = fresh
                 } else {
@@ -174,6 +176,7 @@ class HouseholdStore: ObservableObject {
                 colorHex: MemberColorToken.randomHex()
             )
             _ = try await cloudKit.saveMember(owner)
+            await cloudKit.migrateMemberColorsIfNeeded(householdId: newHousehold.id)
         }
 
         // 2. Seed default data in local-only mode
@@ -307,6 +310,7 @@ class HouseholdStore: ObservableObject {
             household = try await cloudKit.acceptShare(inviteCode: normalizedInvite.inviteCode)
         }
         await cloudKit.setHouseholdScope(.participantShared)
+        await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
 
         try await upsertMembership(
             householdId: household.id,
@@ -335,6 +339,7 @@ class HouseholdStore: ObservableObject {
 
         let household = try await cloudKit.acceptShare(metadata: metadata)
         await cloudKit.setHouseholdScope(.participantShared)
+        await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
 
         try await upsertMembership(
             householdId: household.id,

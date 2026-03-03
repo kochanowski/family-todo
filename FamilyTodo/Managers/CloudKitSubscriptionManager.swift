@@ -23,10 +23,11 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private let cloudKit = CloudKitManager.shared
     private var subscriptionIds: [String] = []
     private var aggregationTimer: Timer?
-    private var pendingNotifications: [(recordType: String, timestamp: Date)] = []
-    private var currentUserId: String?
+    private var recentLocalMutationByRecordName: [String: Date] = [:]
+    private var lastLocalMutationAt: Date?
 
     private let aggregationWindow: TimeInterval = 60 // 60 seconds
+    private let selfNoiseWindow: TimeInterval = 8
 
     // MARK: - Initialization
 
@@ -34,9 +35,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Setup
 
-    func configure(userId: String, householdId: UUID) {
-        currentUserId = userId
-
+    func configure(userId _: String, householdId: UUID) {
         _Concurrency.Task {
             await setupSubscriptions(householdId: householdId)
             await registerForPushNotifications()
@@ -118,27 +117,76 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
+    func registerLocalMutation(recordName: String?) {
+        let now = Date()
+        lastLocalMutationAt = now
+        if let recordName {
+            recentLocalMutationByRecordName[recordName] = now
+        }
+        pruneLocalMutationNoiseWindow(relativeTo: now)
+    }
+
+    private func pruneLocalMutationNoiseWindow(relativeTo now: Date) {
+        recentLocalMutationByRecordName = recentLocalMutationByRecordName.filter { _, timestamp in
+            now.timeIntervalSince(timestamp) <= selfNoiseWindow
+        }
+        if let lastLocalMutationAt, now.timeIntervalSince(lastLocalMutationAt) > selfNoiseWindow {
+            self.lastLocalMutationAt = nil
+        }
+    }
+
+    private func isLikelySelfNoise(recordName: String?) -> Bool {
+        let now = Date()
+        pruneLocalMutationNoiseWindow(relativeTo: now)
+
+        if let recordName,
+           let timestamp = recentLocalMutationByRecordName[recordName],
+           now.timeIntervalSince(timestamp) <= selfNoiseWindow
+        {
+            return true
+        }
+
+        if let lastLocalMutationAt,
+           now.timeIntervalSince(lastLocalMutationAt) <= selfNoiseWindow
+        {
+            return true
+        }
+        return false
+    }
+
+    private func triggerRefresh(for recordType: String?) {
+        switch recordType {
+        case "ShoppingItem":
+            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
+        case "Task", "BacklogItem", "BacklogCategory":
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        default:
+            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        }
+    }
+
     private func handleDatabaseNotification(_: CKDatabaseNotification) {
-        // Shared database changed.
-        // For WOW polish, we'll assume it's relevant and show a generic banner.
+        triggerRefresh(for: nil)
+        guard !isLikelySelfNoise(recordName: nil) else { return }
+
         pendingShoppingChanges.append("Shared Update")
         scheduleAggregatedNotification()
         showInAppBanner(for: "Shared Update")
     }
 
     private func handleQueryNotification(_ notification: CKQueryNotification) {
-        let recordType = notification.recordFields?["recordType"] as? String ?? "Unknown"
-        let creatorId = notification.recordFields?["creatorUserId"] as? String
-
-        // Self-notify OFF: Don't notify if we made the change
-        if creatorId == currentUserId {
-            return
-        }
+        let recordType = notification.recordType ?? "Unknown"
+        let recordName = notification.recordID?.recordName
+        triggerRefresh(for: recordType)
+        guard !isLikelySelfNoise(recordName: recordName) else { return }
 
         // Add to pending notifications for aggregation
         if recordType == "ShoppingItem" {
             pendingShoppingChanges.append(recordType)
-        } else if recordType == "Task" {
+        } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" {
+            pendingTaskChanges.append(recordType)
+        } else {
             pendingTaskChanges.append(recordType)
         }
 

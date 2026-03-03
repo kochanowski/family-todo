@@ -396,7 +396,7 @@ struct HouseholdJoinSheet: View {
                 Text("Enter Invite Code")
                     .font(.system(size: 22, weight: .bold))
 
-                TextField("A7B9XQ", text: $inviteCodeToken)
+                TextField("A7B9XQ2M", text: $inviteCodeToken)
                     .font(.system(size: 24, weight: .semibold, design: .monospaced))
                     .multilineTextAlignment(.center)
                     .textInputAutocapitalization(.characters)
@@ -411,7 +411,7 @@ struct HouseholdJoinSheet: View {
                         inviteCodeToken = normalizedInviteCodeInput(newValue)
                     }
 
-                Text("5-6 uppercase letters and numbers")
+                Text("Use the 8-character invite code (A-Z, 0-9)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -539,7 +539,7 @@ struct HouseholdJoinSheet: View {
         let uppercased = raw.uppercased()
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         let filtered = String(uppercased.unicodeScalars.filter { allowed.contains($0) })
-        return String(filtered.prefix(6))
+        return String(filtered.prefix(8))
     }
 }
 

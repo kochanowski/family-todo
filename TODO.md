@@ -46,32 +46,32 @@ Description: Ensure cache loads filter tombstones consistently (`pendingDelete`)
 Acceptance Criteria: Deleted items do not reappear from cache during offline or cold start.
 Regression Risk: Missing records due to over-filtering; verify restore and recent-item behaviors.
 
-- [ ] **P1.5 Remove N+1 Cache Sync Queries** ([Details](TODO_DETAILS.md#p15))
+- [x] **P1.5 Remove N+1 Cache Sync Queries** ([Details](TODO_DETAILS.md#p15))
 Description: Refactor `syncToCache` to single/batched fetch + in-memory merge (Task/Shopping/Backlog).
 Acceptance Criteria: Sync path no longer runs per-record fetch loops.
 Regression Risk: Partial cache updates; verify large sync snapshots apply correctly.
 
-- [ ] **P1.6 Add CloudKit Query Pagination** ([Details](TODO_DETAILS.md#p16))
+- [x] **P1.6 Add CloudKit Query Pagination** ([Details](TODO_DETAILS.md#p16))
 Description: Add paginated query helpers (`resultsLimit` + cursor loop) and apply to key fetch paths.
 Acceptance Criteria: Full dataset is returned beyond single-page limits for Tasks/Shopping/Backlog/Members and invite lookup queries.
 Regression Risk: Missing pages or duplicates; test with seeded large datasets.
 
-- [ ] **P1.7 Move Member Color Migration Off Hot Path** ([Details](TODO_DETAILS.md#p17))
+- [x] **P1.7 Move Member Color Migration Off Hot Path** ([Details](TODO_DETAILS.md#p17))
 Description: Remove write-side migration from every `fetchMembers()` and run one-time migration bootstrap.
 Acceptance Criteria: Member fetch no longer performs migration writes on normal path.
 Regression Risk: Color defaults/regression in old records; test existing households on upgrade.
 
-- [ ] **P1.8 Harden Invite Security** ([Details](TODO_DETAILS.md#p18))
+- [x] **P1.8 Harden Invite Security** ([Details](TODO_DETAILS.md#p18))
 Description: Increase invite code entropy (length 8), enforce usage/attempt controls, update role constraints for InviteToken.
 Acceptance Criteria: Invite create/redeem/revoke still works; security exposure reduced.
 Regression Risk: Invite flow breakage; test link/QR/code redemption on two accounts.
 
-- [ ] **P1.9 Complete Push E2E Bridge** ([Details](TODO_DETAILS.md#p19))
+- [x] **P1.9 Complete Push E2E Bridge** ([Details](TODO_DETAILS.md#p19))
 Description: Add `didReceiveRemoteNotification` forwarding in AppDelegateBridge and close CloudKitSubscriptionManager handling loop.
 Acceptance Criteria: Remote notifications trigger app refresh/banner pipeline.
 Regression Risk: Notification spam or self-notify regressions; test foreground/background behavior.
 
-- [ ] **P1.10 Targeted Bulk CloudKit Operations** ([Details](TODO_DETAILS.md#p110))
+- [x] **P1.10 Targeted Bulk CloudKit Operations** ([Details](TODO_DETAILS.md#p110))
 Description: Add batched `CKModifyRecordsOperation` for high-volume write paths (seeding/reorder/bulk updates).
 Acceptance Criteria: Bulk operations use fewer round trips and maintain correctness.
 Regression Risk: Partial-save edge cases; test failure handling and rollback expectations.
