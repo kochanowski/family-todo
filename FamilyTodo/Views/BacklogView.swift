@@ -42,17 +42,21 @@ private struct BacklogContent: View {
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
+    @State private var newCategoryColorHex = MemberColorToken.randomHex()
     @State private var activeBanner: PromotionBanner?
     @State private var pendingPromotionItem: BacklogItem?
     @State private var selectedAssigneeIdForPromotion: UUID?
     @State private var pendingAssignmentItem: BacklogItem?
     @State private var selectedAssigneeIdForAssignment: UUID?
+    @State private var editingCategory: BacklogCategory?
     @State private var editingItem: BacklogItem?
     @State private var activeComposerCategoryId: UUID?
     @State private var composerText = ""
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
+    @State private var hiddenPendingPromotionIds: Set<UUID> = []
+    @State private var processingPromotionItemIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -98,8 +102,9 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
-                                    assigneeNameFor: { assigneeId in
-                                        assigneeName(for: assigneeId)
+                                    isPromotingItem: { processingPromotionItemIds.contains($0) },
+                                    assigneeFor: { assigneeId in
+                                        assignee(for: assigneeId)
                                     },
                                     isAddingItem: activeComposerCategoryId == category.id,
                                     newItemText: Binding(
@@ -126,17 +131,19 @@ private struct BacklogContent: View {
                                         editingItem = item
                                     },
                                     onAssignItem: { item in
+                                        guard !activeMembers.isEmpty else {
+                                            showBanner(.failed("No members available to assign."))
+                                            return
+                                        }
                                         pendingAssignmentItem = item
                                         selectedAssigneeIdForAssignment =
-                                            item.assigneeId ?? currentMember?.id
+                                            item.assigneeId ?? currentMember?.id ?? activeMembers.first?.id
                                     },
                                     onPromoteItem: { item in
                                         promoteItem(item)
                                     },
-                                    onRenameCategory: { newTitle in
-                                        _ = _Concurrency.Task {
-                                            await store.renameCategory(category, newTitle: newTitle)
-                                        }
+                                    onEditCategory: {
+                                        editingCategory = category
                                     },
                                     onDeleteCategory: {
                                         _ = _Concurrency.Task {
@@ -171,18 +178,38 @@ private struct BacklogContent: View {
             await memberStore.loadMembers()
         }
         .sheet(isPresented: $isAddingCategory) {
-            AppPromptSheet(
+            CategoryEditorSheet(
                 title: "New Category",
-                placeholder: "Category Name",
-                text: $newCategoryName,
+                initialName: newCategoryName,
+                initialColorHex: newCategoryColorHex,
                 primaryTitle: "Create",
                 onCancel: {
                     newCategoryName = ""
+                    newCategoryColorHex = MemberColorToken.randomHex()
                 },
-                onSubmit: { name in
+                onSubmit: { name, colorHex in
                     newCategoryName = ""
+                    newCategoryColorHex = MemberColorToken.randomHex()
                     HapticManager.lightTap()
-                    _ = _Concurrency.Task { await store.addCategory(name) }
+                    _ = _Concurrency.Task { await store.addCategory(name, colorHex: colorHex) }
+                }
+            )
+        }
+        .sheet(item: $editingCategory) { category in
+            CategoryEditorSheet(
+                title: "Edit Category",
+                initialName: category.title,
+                initialColorHex: category.colorHex,
+                primaryTitle: "Save",
+                onCancel: {},
+                onSubmit: { newName, newColorHex in
+                    _ = _Concurrency.Task {
+                        await store.updateCategory(
+                            category,
+                            newTitle: newName,
+                            newColorHex: newColorHex
+                        )
+                    }
                 }
             )
         }
@@ -191,8 +218,7 @@ private struct BacklogContent: View {
                 get: { pendingPromotionItem != nil },
                 set: { isPresented in
                     if !isPresented {
-                        pendingPromotionItem = nil
-                        selectedAssigneeIdForPromotion = nil
+                        cancelPendingPromotion()
                     }
                 }
             )
@@ -202,11 +228,10 @@ private struct BacklogContent: View {
                     title: "Assign before start",
                     actionTitle: "Promote",
                     members: activeMembers,
-                    allowUnassigned: false,
+                    autoConfirmOnSelection: false,
                     selectedAssigneeId: $selectedAssigneeIdForPromotion,
                     onCancel: {
-                        self.pendingPromotionItem = nil
-                        selectedAssigneeIdForPromotion = nil
+                        cancelPendingPromotion()
                     },
                     onConfirm: {
                         guard let assigneeId = selectedAssigneeIdForPromotion else { return }
@@ -233,7 +258,7 @@ private struct BacklogContent: View {
                 title: "Assign owner",
                 actionTitle: "Save",
                 members: activeMembers,
-                allowUnassigned: true,
+                autoConfirmOnSelection: true,
                 selectedAssigneeId: $selectedAssigneeIdForAssignment,
                 onCancel: {
                     pendingAssignmentItem = nil
@@ -241,7 +266,7 @@ private struct BacklogContent: View {
                 },
                 onConfirm: {
                     guard let item = pendingAssignmentItem else { return }
-                    let selectedAssignee = selectedAssigneeIdForAssignment
+                    guard let selectedAssignee = selectedAssigneeIdForAssignment else { return }
                     pendingAssignmentItem = nil
                     selectedAssigneeIdForAssignment = nil
                     _ = _Concurrency.Task {
@@ -303,9 +328,9 @@ private struct BacklogContent: View {
         return activeMembers.first { $0.userId == userId }
     }
 
-    private func assigneeName(for assigneeId: UUID?) -> String? {
+    private func assignee(for assigneeId: UUID?) -> Member? {
         guard let assigneeId else { return nil }
-        return activeMembers.first(where: { $0.id == assigneeId })?.displayName
+        return activeMembers.first(where: { $0.id == assigneeId })
     }
 
     private var header: some View {
@@ -317,6 +342,7 @@ private struct BacklogContent: View {
             Spacer()
 
             Button {
+                newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
             } label: {
                 Image(systemName: "folder.badge.plus")
@@ -334,6 +360,7 @@ private struct BacklogContent: View {
             Text("Create a category to start organizing your ideas.")
         } actions: {
             Button("Create Category") {
+                newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
             }
             .buttonStyle(.borderedProminent)
@@ -343,10 +370,13 @@ private struct BacklogContent: View {
     }
 
     private func promoteItem(_ item: BacklogItem) {
+        guard processingPromotionItemIds.insert(item.id).inserted else { return }
+
         if activeMembers.isEmpty {
             if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
                 completePromotion(of: item, assigneeId: assigneeId)
             } else {
+                processingPromotionItemIds.remove(item.id)
                 showBanner(.assigneeRequired)
             }
             return
@@ -367,10 +397,36 @@ private struct BacklogContent: View {
     }
 
     private func completePromotion(of item: BacklogItem, assigneeId: UUID) {
+        if !processingPromotionItemIds.contains(item.id) {
+            processingPromotionItemIds.insert(item.id)
+        }
+        withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+            hiddenPendingPromotionIds.insert(item.id)
+        }
+
         _ = _Concurrency.Task {
             let result = await store.promoteItemToTask(item, assigneeId: assigneeId)
-            handlePromotionResult(result)
+            await MainActor.run {
+                processingPromotionItemIds.remove(item.id)
+                switch result {
+                case .success:
+                    hiddenPendingPromotionIds.remove(item.id)
+                case .assigneeRequired, .wipLimitReached, .failed:
+                    withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+                        hiddenPendingPromotionIds.remove(item.id)
+                    }
+                }
+                handlePromotionResult(result)
+            }
         }
+    }
+
+    private func cancelPendingPromotion() {
+        if let item = pendingPromotionItem {
+            processingPromotionItemIds.remove(item.id)
+        }
+        pendingPromotionItem = nil
+        selectedAssigneeIdForPromotion = nil
     }
 
     private func handlePromotionResult(_ result: BacklogStore.PromotionResult) {
@@ -457,7 +513,10 @@ private struct BacklogContent: View {
 
     private func visibleItems(for categoryId: UUID) -> [BacklogItem] {
         store.items(for: categoryId)
-            .filter { !hiddenPendingDeleteIds.contains($0.id) }
+            .filter {
+                !hiddenPendingDeleteIds.contains($0.id) &&
+                    !hiddenPendingPromotionIds.contains($0.id)
+            }
     }
 
     private func queueDeleteItem(_ item: BacklogItem) {
@@ -533,82 +592,13 @@ private struct BacklogStatusBanner: View {
     }
 }
 
-private struct BacklogAssigneePickerSheet: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-    let title: String
-    let actionTitle: String
-    let members: [Member]
-    let allowUnassigned: Bool
-    @Binding var selectedAssigneeId: UUID?
-    let onCancel: () -> Void
-    let onConfirm: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if allowUnassigned {
-                    Button {
-                        selectedAssigneeId = nil
-                    } label: {
-                        HStack {
-                            Text("Unassigned")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if selectedAssigneeId == nil {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                ForEach(members) { member in
-                    Button {
-                        selectedAssigneeId = member.id
-                    } label: {
-                        HStack {
-                            Text(member.displayName)
-                                .font(themeStore.font(for: .inlineTitle))
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if selectedAssigneeId == member.id {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        onCancel()
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(actionTitle) {
-                        onConfirm()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .disabled(!allowUnassigned && selectedAssigneeId == nil)
-                }
-            }
-        }
-        .presentationDetents([.height(320)])
-        .presentationBackground(.ultraThinMaterial)
-    }
-}
-
 // MARK: - Category Card
 
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
-    let assigneeNameFor: (UUID?) -> String?
+    let isPromotingItem: (UUID) -> Bool
+    let assigneeFor: (UUID?) -> Member?
     let isAddingItem: Bool
     @Binding var newItemText: String
     let focusedComposerCategoryId: FocusState<UUID?>.Binding
@@ -619,30 +609,33 @@ struct CategoryCard: View {
     let onEditItem: (BacklogItem) -> Void
     let onAssignItem: (BacklogItem) -> Void
     let onPromoteItem: (BacklogItem) -> Void
-    let onRenameCategory: (String) -> Void
+    let onEditCategory: () -> Void
     let onDeleteCategory: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var showDeleteConfirmation = false
-    @State private var showRenameAlert = false
-    @State private var renameCategoryText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(category.title.uppercased())
-                    .font(themeStore.font(for: .sectionHeader))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(category.color)
+                        .frame(width: 10, height: 10)
+
+                    Text(category.title.uppercased())
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                }
 
                 Spacer()
 
                 Menu {
                     Button {
-                        renameCategoryText = category.title
-                        showRenameAlert = true
+                        onEditCategory()
                     } label: {
-                        Label("Rename Category", systemImage: "pencil")
+                        Label("Edit Category", systemImage: "pencil")
                     }
 
                     Button(role: .destructive) {
@@ -670,10 +663,12 @@ struct CategoryCard: View {
             VStack(spacing: 6) {
                 ForEach(items) { item in
                     let canPromote = item.assigneeId != nil
+                    let isPromoting = isPromotingItem(item.id)
                     BacklogItemRow(
                         item: item,
-                        assigneeName: assigneeNameFor(item.assigneeId),
+                        assignee: assigneeFor(item.assigneeId),
                         canPromote: canPromote,
+                        isPromotionDisabled: isPromoting,
                         onTap: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
                         onPromote: { onPromoteItem(item) },
@@ -687,6 +682,7 @@ struct CategoryCard: View {
                                 Label("Promote", systemImage: "arrow.up.circle")
                             }
                             .tint(.blue)
+                            .disabled(isPromoting)
                         }
                     }
                     .swipeActions(edge: .trailing) {
@@ -781,17 +777,6 @@ struct CategoryCard: View {
                 }
             )
         }
-        .sheet(isPresented: $showRenameAlert) {
-            AppPromptSheet(
-                title: "Rename Category",
-                placeholder: "Category Name",
-                text: $renameCategoryText,
-                primaryTitle: "Save",
-                onSubmit: { newTitle in
-                    onRenameCategory(newTitle)
-                }
-            )
-        }
     }
 
     private var cardBackground: Color {
@@ -850,8 +835,9 @@ struct BacklogItemRow: View {
     @EnvironmentObject private var themeStore: ThemeStore
 
     let item: BacklogItem
-    let assigneeName: String?
+    let assignee: Member?
     let canPromote: Bool
+    let isPromotionDisabled: Bool
     let onTap: () -> Void
     let onAssign: () -> Void
     let onPromote: () -> Void
@@ -866,17 +852,11 @@ struct BacklogItemRow: View {
                     .foregroundStyle(themeStore.contentPrimaryColor)
                     .strikethrough(false)
 
-                if let assigneeName {
-                    Text(assigneeName)
-                        .font(themeStore.font(for: .chip))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule().fill(
-                                Color.secondary.opacity(colorScheme == .dark ? 0.2 : 0.12)
-                            )
-                        )
+                if let assignee {
+                    MemberBadgeView(
+                        name: assignee.displayName,
+                        colorHex: assignee.colorHex
+                    )
                 }
             }
 
@@ -899,6 +879,8 @@ struct BacklogItemRow: View {
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isPromotionDisabled)
+                    .opacity(isPromotionDisabled ? 0.45 : 1)
                     .transition(.opacity.combined(with: .scale))
                 }
 
@@ -922,106 +904,6 @@ struct BacklogItemRow: View {
             onTap()
         }
         .animation(.easeInOut(duration: 0.2), value: canPromote)
-    }
-}
-
-private struct BacklogItemEditSheet: View {
-    let item: BacklogItem
-    let members: [Member]
-    let onSave: (String, String?, UUID?) -> Void
-    let onDelete: () -> Void
-
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var title: String
-    @State private var notes: String
-    @State private var assigneeId: UUID?
-    @State private var showDeleteConfirmation = false
-
-    init(
-        item: BacklogItem,
-        members: [Member],
-        onSave: @escaping (String, String?, UUID?) -> Void,
-        onDelete: @escaping () -> Void
-    ) {
-        self.item = item
-        self.members = members
-        self.onSave = onSave
-        self.onDelete = onDelete
-        _title = State(initialValue: item.title)
-        _notes = State(initialValue: item.notes ?? "")
-        _assigneeId = State(initialValue: item.assigneeId)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Item") {
-                    TextField("Title", text: $title)
-                        .font(themeStore.font(for: .listRowTitle))
-                }
-
-                Section("Assignee") {
-                    Picker("Who", selection: $assigneeId) {
-                        Text("Unassigned").tag(UUID?.none)
-                        ForEach(members) { member in
-                            Text(member.displayName).tag(Optional(member.id))
-                        }
-                    }
-                }
-
-                Section("Notes") {
-                    TextEditor(text: $notes)
-                        .font(themeStore.font(for: .listRowTitle))
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 120)
-                }
-
-                Section {
-                    Button("Delete Item", role: .destructive) {
-                        showDeleteConfirmation = true
-                    }
-                }
-            }
-            .navigationTitle("Idea Item")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
-                        commit()
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .sheet(isPresented: $showDeleteConfirmation) {
-                AppConfirmationSheet(
-                    title: "Delete this item?",
-                    message: "This action cannot be undone.",
-                    primaryTitle: "Delete",
-                    primaryStyle: .destructive,
-                    onPrimary: {
-                        onDelete()
-                        dismiss()
-                    }
-                )
-            }
-        }
-    }
-
-    private func commit() {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
-
-        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        onSave(trimmedTitle, trimmedNotes.isEmpty ? nil : trimmedNotes, assigneeId)
-        dismiss()
     }
 }
 

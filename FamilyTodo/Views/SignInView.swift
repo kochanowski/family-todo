@@ -235,6 +235,18 @@ struct SignInView: View {
 
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
         if userSession.needsDisplayNamePrompt {
+            if let userId = userSession.userId,
+               let restoredDisplayName = await householdStore.resolveMembershipDisplayName(userId: userId)
+            {
+                userSession.applyProfileUpdate(displayName: restoredDisplayName)
+                onboardingState.completeAuth(
+                    syncMethod: .iCloud,
+                    isGuest: false,
+                    hasHousehold: hasHousehold
+                )
+                return
+            }
+
             pendingPostAuthHasHousehold = hasHousehold
             pendingDisplayName = userSession.displayName ?? ""
             showDisplayNamePrompt = true
@@ -247,7 +259,7 @@ struct SignInView: View {
     private func completeDisplayNamePrompt(with value: String) {
         do {
             let validatedDisplayName = try DisplayNameValidator.validate(value)
-            userSession.confirmDisplayName(validatedDisplayName)
+            userSession.applyProfileUpdate(displayName: validatedDisplayName)
             onboardingState.completeAuth(
                 syncMethod: .iCloud,
                 isGuest: false,

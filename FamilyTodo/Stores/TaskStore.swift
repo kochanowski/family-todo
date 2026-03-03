@@ -3,6 +3,11 @@ import Foundation
 import SwiftData
 import SwiftUI
 
+extension Notification.Name {
+    static let memberProfileDidChange = Notification.Name("HousePulse.memberProfileDidChange")
+    static let taskBoardDataDidChange = Notification.Name("HousePulse.taskBoardDataDidChange")
+}
+
 /// Main store for task management with offline-first architecture.
 /// Follows ADR-002: optimistic UI updates with background sync.
 @MainActor
@@ -10,6 +15,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var tasks: [Task] = []
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
+    @Published private(set) var pendingTaskMutations: Set<UUID> = []
 
     private lazy var cloudKit = CloudKitManager.shared
     private lazy var notificationService = NotificationService.shared
@@ -37,6 +43,11 @@ final class TaskStore: ObservableObject {
         return min(max(stored, 1), 7)
     }
 
+    struct PendingSyncSnapshot {
+        var pendingUploadByID: [UUID: Task]
+        var pendingDeleteIDs: Set<UUID>
+    }
+
     /// Backward-compatible alias used in older call sites/tests.
     static var wipLimit: Int {
         recommendedWipLimit
@@ -56,17 +67,17 @@ final class TaskStore: ObservableObject {
 
     var backlogTasks: [Task] {
         tasks.filter { $0.status == .backlog }
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+            .sorted(by: Self.activeTaskSort)
     }
 
     var nextTasks: [Task] {
         tasks.filter { $0.status == .next }
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+            .sorted(by: Self.activeTaskSort)
     }
 
     var doneTasks: [Task] {
         tasks.filter { $0.status == .done }
-            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+            .sorted(by: Self.completedTaskSort)
     }
 
     /// Recently completed tasks shown on Tasks tab (last 24h).
@@ -117,7 +128,8 @@ final class TaskStore: ObservableObject {
         error = nil
 
         // First, load from local cache
-        loadFromCache()
+        let cachedTasks = loadFromCache()
+        let pendingSnapshot = pendingSyncSnapshot(from: cachedTasks)
 
         if !isCloudSyncEnabled {
             isLoading = false
@@ -129,7 +141,7 @@ final class TaskStore: ObservableObject {
             // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
             let cloudTasks = try await cloudKit.fetchTasks(householdId: householdId)
-            tasks = cloudTasks
+            tasks = mergeCloudSnapshot(cloudTasks, with: pendingSnapshot)
             syncToCache(cloudTasks)
         } catch {
             // If CloudKit fails, we already have cached data
@@ -139,15 +151,17 @@ final class TaskStore: ObservableObject {
         isLoading = false
     }
 
-    private func loadFromCache() {
-        guard let householdId else { return }
+    private func loadFromCache() -> [CachedTask] {
+        guard let householdId else { return [] }
 
         let descriptor = FetchDescriptor<CachedTask>(
             predicate: #Predicate { $0.householdId == householdId }
         )
-        if let cached = try? modelContext.fetch(descriptor) {
-            tasks = cached.map { $0.toTask() }
-        }
+        guard let cached = try? modelContext.fetch(descriptor) else { return [] }
+        tasks = cached
+            .filter { $0.syncStatusRaw != "pendingDelete" }
+            .map { $0.toTask() }
+        return cached
     }
 
     private func syncToCache(_ cloudTasks: [Task]) {
@@ -157,6 +171,9 @@ final class TaskStore: ObservableObject {
                 predicate: #Predicate { $0.id == task.id }
             )
             if let existing = try? modelContext.fetch(descriptor).first {
+                if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "pendingDelete" {
+                    continue
+                }
                 existing.update(from: task)
             } else {
                 let cached = CachedTask(from: task)
@@ -180,7 +197,8 @@ final class TaskStore: ObservableObject {
         dueDate: Date? = nil,
         notes: String? = nil,
         taskType: Task.TaskType = .oneOff,
-        recurringChoreId: UUID? = nil
+        recurringChoreId: UUID? = nil,
+        order: Int? = nil
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
@@ -201,6 +219,13 @@ final class TaskStore: ObservableObject {
             []
         }
 
+        let resolvedOrder: Int
+        if status == .next {
+            resolvedOrder = order ?? (nextTaskOrderBaseline() + 1)
+        } else {
+            resolvedOrder = order ?? 0
+        }
+
         let task = Task(
             id: taskId,
             householdId: householdId,
@@ -213,7 +238,8 @@ final class TaskStore: ObservableObject {
             dueDate: dueDate,
             taskType: taskType,
             recurringChoreId: recurringChoreId,
-            notes: notes
+            notes: notes,
+            order: resolvedOrder
         )
 
         // Optimistic UI update
@@ -258,6 +284,8 @@ final class TaskStore: ObservableObject {
     func updateTask(_ task: Task) async -> NextTransitionValidation {
         var updatedTask = task
         updatedTask.updatedAt = Date()
+        beginMutation(updatedTask.id)
+        defer { endMutation(updatedTask.id) }
 
         // Validate transition constraints if moving to Next.
         let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
@@ -285,6 +313,12 @@ final class TaskStore: ObservableObject {
             cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             try? modelContext.save()
+        } else {
+            let cached = CachedTask(from: updatedTask)
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+            modelContext.insert(cached)
+            try? modelContext.save()
         }
 
         if !isCloudSyncEnabled {
@@ -298,6 +332,7 @@ final class TaskStore: ObservableObject {
         // Sync to CloudKit
         do {
             _ = try await cloudKit.saveTask(updatedTask)
+            markCachedTaskSynced(id: updatedTask.id)
 
             // Update notification (remove old, schedule new if due date changed)
             if updatedTask.dueDate != nil, !notificationService.isAuthorized {
@@ -322,37 +357,144 @@ final class TaskStore: ObservableObject {
             updatedTask.completedAt = nil
         }
 
+        if status == .next, task.status != .next {
+            updatedTask.order = nextTaskOrderBaseline() + 1
+        }
+
         return await updateTask(updatedTask)
     }
 
     func deleteTask(_ task: Task) async {
+        beginMutation(task.id)
+        defer { endMutation(task.id) }
+
         // Optimistic UI update
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             tasks.removeAll { $0.id == task.id }
         }
 
-        // Remove from cache
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == task.id }
-        )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            modelContext.delete(cached)
-            try? modelContext.save()
-        }
-
         if !isCloudSyncEnabled {
+            removeCachedTask(id: task.id)
             await notificationService.removeTaskReminder(for: task)
             return
         }
 
+        markCachedTaskPendingDelete(task)
+
         // Delete from CloudKit
         do {
             try await cloudKit.deleteTask(id: task.id, householdId: task.householdId)
+            removeCachedTask(id: task.id)
 
             // Remove any scheduled notification
             await notificationService.removeTaskReminder(for: task)
         } catch {
             self.error = error
+        }
+    }
+
+    func removeTaskLocally(_ task: Task) {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            tasks.removeAll { $0.id == task.id }
+        }
+        markCachedTaskPendingDelete(task)
+    }
+
+    func restoreTaskLocally(_ task: Task) {
+        guard tasks.contains(where: { $0.id == task.id }) == false else { return }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            tasks.append(task)
+        }
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == task.id }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            cached.update(from: task)
+            cached.syncStatusRaw = "pendingUpload"
+            cached.lastSyncedAt = nil
+        } else {
+            let cached = CachedTask(from: task)
+            cached.syncStatusRaw = "pendingUpload"
+            cached.lastSyncedAt = nil
+            modelContext.insert(cached)
+        }
+        try? modelContext.save()
+    }
+
+    func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
+        try await cloudKit.deleteTask(id: id, householdId: householdId)
+        removeCachedTask(id: id)
+    }
+
+    func reorderActiveTasks(
+        from source: IndexSet,
+        to destination: Int,
+        visibleTaskIDs: [UUID]
+    ) async {
+        let visibleActiveTasks = visibleTaskIDs.compactMap { id in
+            tasks.first(where: { $0.id == id && $0.status == .next })
+        }
+        guard !visibleActiveTasks.isEmpty else { return }
+
+        var reorderedVisibleTasks = visibleActiveTasks
+        reorderedVisibleTasks.move(fromOffsets: source, toOffset: destination)
+
+        let hiddenActiveTasks = tasks
+            .filter { $0.status == .next && !visibleTaskIDs.contains($0.id) }
+            .sorted(by: Self.activeTaskSort)
+
+        let finalActiveOrder = reorderedVisibleTasks + hiddenActiveTasks
+        let updatedAt = Date()
+        var updatedByID: [UUID: Task] = [:]
+
+        for (index, task) in finalActiveOrder.enumerated() {
+            if task.order != index {
+                var updatedTask = task
+                updatedTask.order = index
+                updatedTask.updatedAt = updatedAt
+                updatedByID[updatedTask.id] = updatedTask
+            }
+        }
+
+        guard !updatedByID.isEmpty else { return }
+
+        let updatedIDs = Array(updatedByID.keys)
+        updatedIDs.forEach(beginMutation)
+        defer { updatedIDs.forEach(endMutation) }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            for index in tasks.indices {
+                if let updatedTask = updatedByID[tasks[index].id] {
+                    tasks[index] = updatedTask
+                }
+            }
+        }
+
+        for updatedTask in updatedByID.values {
+            let descriptor = FetchDescriptor<CachedTask>(
+                predicate: #Predicate { $0.id == updatedTask.id }
+            )
+            if let cached = try? modelContext.fetch(descriptor).first {
+                cached.update(from: updatedTask)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+            } else {
+                let cached = CachedTask(from: updatedTask)
+                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+                modelContext.insert(cached)
+            }
+        }
+        try? modelContext.save()
+
+        guard isCloudSyncEnabled else { return }
+        for updatedTask in updatedByID.values.sorted(by: { $0.order < $1.order }) {
+            do {
+                _ = try await cloudKit.saveTask(updatedTask)
+                markCachedTaskSynced(id: updatedTask.id)
+            } catch {
+                self.error = error
+            }
         }
     }
 
@@ -402,6 +544,103 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    private func beginMutation(_ id: UUID) {
+        pendingTaskMutations.insert(id)
+    }
+
+    private func endMutation(_ id: UUID) {
+        pendingTaskMutations.remove(id)
+    }
+
+    private func markCachedTaskSynced(id: UUID) {
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            cached.syncStatusRaw = "synced"
+            cached.lastSyncedAt = Date()
+            try? modelContext.save()
+        }
+    }
+
+    private func markCachedTaskPendingDelete(_ task: Task) {
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == task.id }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            cached.syncStatusRaw = "pendingDelete"
+            cached.lastSyncedAt = nil
+            try? modelContext.save()
+            return
+        }
+
+        let cached = CachedTask(from: task)
+        cached.syncStatusRaw = "pendingDelete"
+        cached.lastSyncedAt = nil
+        modelContext.insert(cached)
+        try? modelContext.save()
+    }
+
+    private func removeCachedTask(id: UUID) {
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            modelContext.delete(cached)
+            try? modelContext.save()
+        }
+    }
+
+    func pendingSyncSnapshot(from cachedTasks: [CachedTask]) -> PendingSyncSnapshot {
+        var pendingUploadByID: [UUID: Task] = [:]
+        var pendingDeleteIDs = Set<UUID>()
+
+        for cached in cachedTasks {
+            switch cached.syncStatusRaw {
+            case "pendingUpload":
+                pendingUploadByID[cached.id] = cached.toTask()
+            case "pendingDelete":
+                pendingDeleteIDs.insert(cached.id)
+            default:
+                continue
+            }
+        }
+
+        return PendingSyncSnapshot(
+            pendingUploadByID: pendingUploadByID,
+            pendingDeleteIDs: pendingDeleteIDs
+        )
+    }
+
+    func mergeCloudSnapshot(
+        _ cloudTasks: [Task],
+        with pendingSnapshot: PendingSyncSnapshot
+    ) -> [Task] {
+        var mergedByID = Dictionary(uniqueKeysWithValues: cloudTasks.map { ($0.id, $0) })
+        let localByID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+
+        for (id, pendingTask) in pendingSnapshot.pendingUploadByID {
+            mergedByID[id] = pendingTask
+        }
+
+        for id in pendingSnapshot.pendingDeleteIDs {
+            mergedByID.removeValue(forKey: id)
+        }
+
+        for id in pendingTaskMutations {
+            if let local = localByID[id] {
+                mergedByID[id] = local
+            }
+        }
+
+        return mergedByID.values.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
     @discardableResult
     func createTaskFromBacklogItem(
         title: String,
@@ -424,6 +663,40 @@ final class TaskStore: ObservableObject {
             taskType: taskType,
             recurringChoreId: recurringChoreId
         )
+    }
+
+    private func nextTaskOrderBaseline() -> Int {
+        tasks
+            .filter { $0.status == .next }
+            .map(\.order)
+            .max() ?? -1
+    }
+
+    private static func activeTaskSort(_ lhs: Task, _ rhs: Task) -> Bool {
+        if lhs.status == .next, rhs.status == .next, lhs.order != rhs.order {
+            return lhs.order < rhs.order
+        }
+        let lhsDue = lhs.dueDate ?? .distantFuture
+        let rhsDue = rhs.dueDate ?? .distantFuture
+        if lhsDue != rhsDue {
+            return lhsDue < rhsDue
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt < rhs.createdAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func completedTaskSort(_ lhs: Task, _ rhs: Task) -> Bool {
+        let lhsCompleted = lhs.completedAt ?? .distantPast
+        let rhsCompleted = rhs.completedAt ?? .distantPast
+        if lhsCompleted != rhsCompleted {
+            return lhsCompleted > rhsCompleted
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 }
 

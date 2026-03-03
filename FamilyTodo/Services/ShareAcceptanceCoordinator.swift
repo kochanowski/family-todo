@@ -158,7 +158,7 @@ final class ShareAcceptanceCoordinator: ObservableObject {
         do {
             householdStore.setSyncMode(.cloud)
             try await householdStore.joinHousehold(
-                inviteCode: inviteCode,
+                withInviteInput: inviteCode,
                 userId: userId,
                 displayName: displayName
             )

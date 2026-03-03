@@ -8,6 +8,7 @@ final class CachedBacklogCategory {
     @Attribute(.unique) var id: UUID
     var householdId: UUID
     var title: String
+    var colorHex: String
     var sortOrder: Int
     var createdAt: Date
     var updatedAt: Date
@@ -22,6 +23,7 @@ final class CachedBacklogCategory {
         id = category.id
         householdId = category.householdId
         title = category.title
+        colorHex = category.colorHex
         sortOrder = category.sortOrder
         createdAt = category.createdAt
         updatedAt = category.updatedAt
@@ -32,6 +34,7 @@ final class CachedBacklogCategory {
     func update(from category: BacklogCategory) {
         householdId = category.householdId
         title = category.title
+        colorHex = category.colorHex
         sortOrder = category.sortOrder
         createdAt = category.createdAt
         updatedAt = category.updatedAt
@@ -44,6 +47,7 @@ final class CachedBacklogCategory {
             id: id,
             householdId: householdId,
             title: title,
+            colorHex: colorHex,
             sortOrder: sortOrder,
             createdAt: createdAt,
             updatedAt: updatedAt

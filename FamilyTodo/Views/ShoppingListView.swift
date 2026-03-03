@@ -1,7 +1,6 @@
 import SwiftData
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
@@ -58,7 +57,6 @@ private struct ShoppingListContent: View {
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
     @State private var isKeyboardVisible = false
-    @State private var draggedItem: ShoppingItem?
     @State private var didPerformInitialLoad = false
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -95,72 +93,70 @@ private struct ShoppingListContent: View {
 
                     // Items list with rapid entry
                     ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(store.toBuyItems) { item in
-                                    Group {
-                                        if itemBeingRemoved != item.id {
-                                            if editingItemId == item.id {
-                                                ShoppingItemInlineEditRow(
-                                                    text: $editingItemText,
-                                                    isBought: item.isBought,
-                                                    onToggle: {
-                                                        cancelEditingItem()
-                                                        toggleItem(item)
-                                                    },
-                                                    onSubmit: { commitEditingItem(item) },
-                                                    onCancel: cancelEditingItem
-                                                )
-                                                .accessibilityIdentifier(
-                                                    "shoppingItemEdit_\(item.title)"
-                                                )
-                                            } else {
-                                                ShoppingItemRow(
-                                                    item: item,
-                                                    onToggle: { toggleItem(item) },
-                                                    onEdit: { startEditingItem(item) }
-                                                )
-                                                .accessibilityIdentifier(
-                                                    "shoppingItem_\(item.title)"
-                                                )
-                                            }
+                        List {
+                            ForEach(store.toBuyItems) { item in
+                                Group {
+                                    if itemBeingRemoved != item.id {
+                                        if editingItemId == item.id {
+                                            ShoppingItemInlineEditRow(
+                                                text: $editingItemText,
+                                                isBought: item.isBought,
+                                                onToggle: {
+                                                    cancelEditingItem()
+                                                    toggleItem(item)
+                                                },
+                                                onSubmit: { commitEditingItem(item) },
+                                                onCancel: cancelEditingItem
+                                            )
+                                            .accessibilityIdentifier(
+                                                "shoppingItemEdit_\(item.title)"
+                                            )
+                                        } else {
+                                            ShoppingItemRow(
+                                                item: item,
+                                                onToggle: { toggleItem(item) },
+                                                onEdit: { startEditingItem(item) }
+                                            )
+                                            .accessibilityIdentifier(
+                                                "shoppingItem_\(item.title)"
+                                            )
                                         }
                                     }
-                                    .onDrag {
-                                        draggedItem = item
-                                        return NSItemProvider(
-                                            object: item.id.uuidString as NSString
-                                        )
-                                    }
-                                    .onDrop(
-                                        of: [UTType.text],
-                                        delegate: ShoppingItemReorderDropDelegate(
-                                            item: item,
-                                            items: store.toBuyItems,
-                                            draggedItem: $draggedItem,
-                                            onMove: { from, to in
-                                                store.moveToBuyItems(
-                                                    from: from, to: to, persist: false
-                                                )
-                                            },
-                                            onDrop: {
-                                                _ = _Concurrency.Task {
-                                                    await store.persistCurrentToBuyOrder()
-                                                }
-                                            }
+                                }
+                                .listRowInsets(
+                                    EdgeInsets(
+                                        top: 0,
+                                        leading: 16,
+                                        bottom: 0,
+                                        trailing: 16
+                                    )
+                                )
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+                            .onMove(perform: moveToBuyItems)
+
+                            // Rapid entry row (stable at bottom, no insert animation)
+                            if isRapidEntryActive {
+                                rapidEntryRow
+                                    .id("rapidEntry")
+                                    .listRowInsets(
+                                        EdgeInsets(
+                                            top: 0,
+                                            leading: 16,
+                                            bottom: 0,
+                                            trailing: 16
                                         )
                                     )
-                                }
-
-                                // Rapid entry row (stable at bottom, no insert animation)
-                                if isRapidEntryActive {
-                                    rapidEntryRow
-                                        .id("rapidEntry")
-                                }
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
                             }
-                            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                            .padding(.bottom, listBottomInset)
                         }
+                        .environment(\.defaultMinListRowHeight, 10)
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .padding(.bottom, listBottomInset)
                         .scrollDismissesKeyboard(.interactively)
                         .refreshable {
                             store.setSyncMode(userSession.syncMode)
@@ -234,8 +230,8 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
                 Text("Shopping")
                     .font(themeStore.font(for: .screenHeader))
                     .foregroundStyle(themeStore.contentPrimaryColor)
@@ -248,7 +244,7 @@ private struct ShoppingListContent: View {
 
             Spacer(minLength: 12)
 
-            HStack(spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
                 // Clear To Buy button
                 if !store.toBuyItems.isEmpty {
                     Button {
@@ -286,7 +282,6 @@ private struct ShoppingListContent: View {
                     )
                 }
             }
-            .padding(.top, 2)
         }
     }
 
@@ -343,7 +338,7 @@ private struct ShoppingListContent: View {
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
         .background(cardBackground.opacity(0.01)) // Tap target
     }
 
@@ -453,6 +448,11 @@ private struct ShoppingListContent: View {
 
     // MARK: - Data Actions
 
+    private func moveToBuyItems(from source: IndexSet, to destination: Int) {
+        store.moveToBuyItems(from: source, to: destination, persist: true)
+        HapticManager.lightTap()
+    }
+
     private func toggleItem(_ item: ShoppingItem) {
         HapticManager.lightTap()
         let shouldCelebrateCompletion = store.toBuyItems.count == 1 && !item.isBought
@@ -549,6 +549,7 @@ struct ShoppingItemRow: View {
             Color.clear
                 .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
         .contentShape(Rectangle())
         .padding(.vertical, ShoppingRowLayout.verticalPadding)
         .accessibilityIdentifier("shoppingItemRow_\(item.title)")
@@ -557,7 +558,8 @@ struct ShoppingItemRow: View {
 
 private enum ShoppingRowLayout {
     static let spacing: CGFloat = 10
-    static let verticalPadding: CGFloat = 6
+    static let verticalPadding: CGFloat = 0
+    static let minRowHeight: CGFloat = 30
     static let trailingSlotWidth: CGFloat = 24
 }
 
@@ -604,6 +606,7 @@ private struct ShoppingItemInlineEditRow: View {
             .buttonStyle(.plain)
             .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
         .contentShape(Rectangle())
         .padding(.vertical, ShoppingRowLayout.verticalPadding)
         .onAppear {
@@ -776,77 +779,55 @@ struct RestockSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.recentItems.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "cart")
-                            .font(.system(size: 40, weight: .regular))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
+            VStack(spacing: 0) {
+                restockHeader
 
-                        Text("No Recent Purchases")
-                            .font(themeStore.font(for: .sectionHeader))
-                            .foregroundStyle(themeStore.contentPrimaryColor)
+                Group {
+                    if store.recentItems.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "cart")
+                                .font(.system(size: 40, weight: .regular))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
 
-                        Text("Items marked as bought appear here for one-tap restore.")
-                            .font(themeStore.font(for: .bodySmall))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
-                } else {
-                    List {
-                        ForEach(store.recentItems) { item in
-                            RestockItemRow(
-                                item: item,
-                                onRestore: { onRestore(item) },
-                                onDelete: { onDeleteItem(item) }
-                            )
-                            .listRowInsets(
-                                EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
-                            )
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            Text("No Recent Purchases")
+                                .font(themeStore.font(for: .sectionHeader))
+                                .foregroundStyle(themeStore.contentPrimaryColor)
+
+                            Text("Items marked as bought appear here for one-tap restore.")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
+                    } else {
+                        List {
+                            ForEach(store.recentItems) { item in
+                                RestockItemRow(
+                                    item: item,
+                                    onRestore: { onRestore(item) },
+                                    onDelete: { onDeleteItem(item) }
+                                )
+                                .listRowInsets(
+                                    EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
+                                )
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .background(themeStore.canvasColor)
+                        .environment(\.font, themeStore.font(for: .listRowTitle))
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(themeStore.canvasColor)
-                    .environment(\.font, themeStore.font(for: .listRowTitle))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .background(
                 themeStore.canvasColor.ignoresSafeArea()
             )
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Recently Purchased")
-                        .font(themeStore.font(for: .inlineTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    if !store.recentItems.isEmpty {
-                        Button(role: .destructive) {
-                            showClearAllConfirmation = true
-                        } label: {
-                            Text("Clear All")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .foregroundStyle(.red)
-                        }
-                        .tint(.red)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .fontWeight(.bold)
-                    .tint(themeStore.accentTabColor)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showClearAllConfirmation) {
                 AppConfirmationSheet(
                     title: "Clear all recently purchased?",
@@ -860,6 +841,40 @@ struct RestockSheet: View {
         .background(themeStore.canvasColor.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationBackground(themeStore.canvasColor)
+    }
+
+    private var restockHeader: some View {
+        ZStack {
+            Text("Recently Purchased")
+                .font(themeStore.font(for: .inlineTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+
+            HStack {
+                if !store.recentItems.isEmpty {
+                    Button(role: .destructive) {
+                        showClearAllConfirmation = true
+                    } label: {
+                        Text("Clear All")
+                            .font(themeStore.font(for: .listRowTitle))
+                            .foregroundStyle(.red)
+                    }
+                    .tint(.red)
+                }
+
+                Spacer()
+
+                Button("Done") {
+                    dismiss()
+                }
+                .font(themeStore.font(for: .buttonLabel))
+                .fontWeight(.semibold)
+                .tint(themeStore.accentTabColor)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
+        .padding(.bottom, 16)
     }
 }
 
@@ -892,41 +907,6 @@ private struct RestockItemRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-    }
-}
-
-private struct ShoppingItemReorderDropDelegate: DropDelegate {
-    let item: ShoppingItem
-    let items: [ShoppingItem]
-    @Binding var draggedItem: ShoppingItem?
-    let onMove: (IndexSet, Int) -> Void
-    let onDrop: () -> Void
-
-    func dropEntered(info _: DropInfo) {
-        guard
-            let draggedItem,
-            draggedItem.id != item.id,
-            let fromIndex = items.firstIndex(where: { $0.id == draggedItem.id }),
-            let toIndex = items.firstIndex(where: { $0.id == item.id })
-        else {
-            return
-        }
-
-        onMove(
-            IndexSet(integer: fromIndex),
-            toIndex > fromIndex ? toIndex + 1 : toIndex
-        )
-    }
-
-    func dropUpdated(info _: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info _: DropInfo) -> Bool {
-        draggedItem = nil
-        onDrop()
-        HapticManager.lightTap()
-        return true
     }
 }
 

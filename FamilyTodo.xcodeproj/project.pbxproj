@@ -28,6 +28,7 @@
 		0361DF1A50DB4C8E84281CF1 /* CachedBacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B943208162D40CC83A90412 /* CachedBacklogCategory.swift */; };
 		92DC27B1D58F47828A1672F0 /* CachedBacklogItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1590E14261EB4996992A7F56 /* CachedBacklogItem.swift */; };
 		CA4CB8EAC00047E6B4BEDF34 /* BacklogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CD19CBC26F4EA28F7461BB /* BacklogStore.swift */; };
+		F1A2B3C4D5E6F708192A3B4D /* InviteToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F708192A3B4E /* InviteToken.swift */; };
 		A1B2C3D4E5F60718293A4B7A /* FamilyTodoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B71 /* FamilyTodoApp.swift */; };
 		A1B2C3D4E5F60718293A4B7B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B72 /* ContentView.swift */; };
 		A1B2C3D4E5F60718293A4B7C /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */; };
@@ -45,6 +46,7 @@
 			F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000001 /* InviteInputNormalizerTests.swift */; };
 			F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000002 /* OnboardingStateTests.swift */; };
 			F0B200000000000000000003 /* SwiftDataContainerFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000003 /* SwiftDataContainerFactoryTests.swift */; };
+		F2A3B4C5D6E7F8091A2B3C4D /* InviteCodeFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A3B4C5D6E7F8091A2B3C4E /* InviteCodeFlowTests.swift */; };
 		A1B2C3D4E5F60718293A4B80 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B79 /* XCTest.framework */; };
 		A1B2C3D4E5F60718293A4B91 /* Member.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B96 /* Member.swift */; };
 		A1B2C3D4E5F60718293A4B93 /* Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B98 /* Task.swift */; };
@@ -68,7 +70,8 @@
 		F0B100000000000000000003 /* AppDelegateBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000003 /* AppDelegateBridge.swift */; };
 		310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5698A6FED3C457788B6A60C /* CachedMember.swift */; };
 		DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */; };
-		004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */; };
+		C9E8A1B2C3D4E5F607182930 /* MemberBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */; };
+		HSSET000000000000000001 /* HouseholdSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSSET000000000000000002 /* HouseholdSettingsView.swift */; };
 		UITEST00000000000000003 /* FamilyTodoUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST00000000000000002 /* FamilyTodoUITests.swift */; };
 		NEWFILE0000000000000001 /* ShoppingListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000011 /* ShoppingListView.swift */; };
 		NEWFILE0000000000000002 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000012 /* TasksView.swift */; };
@@ -132,6 +135,7 @@
 		8B943208162D40CC83A90412 /* CachedBacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedBacklogCategory.swift; sourceTree = "<group>"; };
 		1590E14261EB4996992A7F56 /* CachedBacklogItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedBacklogItem.swift; sourceTree = "<group>"; };
 		59CD19CBC26F4EA28F7461BB /* BacklogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStore.swift; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F708192A3B4E /* InviteToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteToken.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B71 /* FamilyTodoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoApp.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B72 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B73 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -147,6 +151,7 @@
 			F0A200000000000000000001 /* InviteInputNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizerTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000002 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000003 /* SwiftDataContainerFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataContainerFactoryTests.swift; sourceTree = "<group>"; };
+		F2A3B4C5D6E7F8091A2B3C4E /* InviteCodeFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteCodeFlowTests.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B75 /* HousePulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = HousePulse.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B76 /* FamilyTodoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A4B77 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -174,7 +179,8 @@
 		CELEB3000000000000000001 /* CelebrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationManager.swift; sourceTree = "<group>"; };
 		D5698A6FED3C457788B6A60C /* CachedMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedMember.swift; sourceTree = "<group>"; };
 		1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedShoppingItem.swift; sourceTree = "<group>"; };
-		AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
+		C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberBadgeView.swift; sourceTree = "<group>"; };
+		HSSET000000000000000002 /* HouseholdSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSettingsView.swift; sourceTree = "<group>"; };
 		UITEST00000000000000002 /* FamilyTodoUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyTodoUITests.swift; sourceTree = "<group>"; };
 		UITEST0000000000000000D /* FamilyTodoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FamilyTodoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		NEWFILE0000000000000011 /* ShoppingListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListView.swift; sourceTree = "<group>"; };
@@ -283,6 +289,7 @@
 				A1B2C3D4E5F60718293A4B96 /* Member.swift */,
 				A1B2C3D4E5F60718293A4B98 /* Task.swift */,
 				B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */,
+				F1A2B3C4D5E6F708192A3B4E /* InviteToken.swift */,
 				NEWFILE0000000000000017 /* BacklogCategory.swift */,
 				NEWFILE0000000000000018 /* LegacyStubs.swift */,
 			);
@@ -318,6 +325,7 @@
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 					F0A200000000000000000001 /* InviteInputNormalizerTests.swift */,
+				F2A3B4C5D6E7F8091A2B3C4E /* InviteCodeFlowTests.swift */,
 					F0A200000000000000000002 /* OnboardingStateTests.swift */,
 					F0A200000000000000000003 /* SwiftDataContainerFactoryTests.swift */,
 				);
@@ -394,9 +402,9 @@
 				NEWFILE0000000000000012 /* TasksView.swift */,
 				NEWFILE0000000000000013 /* BacklogView.swift */,
 				NEWFILE0000000000000014 /* MoreView.swift */,
+				HSSET000000000000000002 /* HouseholdSettingsView.swift */,
 				SETTVIEW000000000000002 /* SettingsView.swift */,
 				NEWGROUP000000000000001 /* Components */,
-				AA68357992D44EA3A90B97F1 /* MemberManagementView.swift */,
 				EC65D304A5384580AD9E9724 /* OnboardingView.swift */,
 				D4E5F60718293A4B5C6D7E8F /* ThemeStore.swift */,
 				C3D1A7F2E84B45DFA676530A /* SignInView.swift */,
@@ -420,6 +428,7 @@
 					CELEB4000000000000000001 /* CelebrationOverlay.swift */,
 					F0A100000000000000000004 /* InviteQRCodeView.swift */,
 					F0A100000000000000000005 /* QRCodeScannerView.swift */,
+					C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
 			);
@@ -581,9 +590,9 @@
 				0361DF1A50DB4C8E84281CF1 /* CachedBacklogCategory.swift in Sources */,
 				92DC27B1D58F47828A1672F0 /* CachedBacklogItem.swift in Sources */,
 				CA4CB8EAC00047E6B4BEDF34 /* BacklogStore.swift in Sources */,
+				F1A2B3C4D5E6F708192A3B4D /* InviteToken.swift in Sources */,
 				310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */,
 				DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */,
-				004D8BB392F84AE2855B6888 /* MemberManagementView.swift in Sources */,
 				58C7B005C39841BDAB231817 /* NotificationService.swift in Sources */,
 				CELEB1000000000000000001 /* CelebrationManager.swift in Sources */,
 				F0B100000000000000000002 /* ShareAcceptanceCoordinator.swift in Sources */,
@@ -610,6 +619,7 @@
 				NEWFILE0000000000000002 /* TasksView.swift in Sources */,
 				NEWFILE0000000000000003 /* BacklogView.swift in Sources */,
 				NEWFILE0000000000000004 /* MoreView.swift in Sources */,
+				HSSET000000000000000001 /* HouseholdSettingsView.swift in Sources */,
 					SETTVIEW000000000000001 /* SettingsView.swift in Sources */,
 					B1C2D3E4F5A60718293B4C51 /* AppModalActionRow.swift in Sources */,
 					B1C2D3E4F5A60718293B4C53 /* AppConfirmationSheet.swift in Sources */,
@@ -617,7 +627,8 @@
 					CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */,
 					SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
 					D1C0D1A1A1A1A1A1A1A1A1A3 /* CloudKitDiagnosticsBanner.swift in Sources */,
-				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
+					C9E8A1B2C3D4E5F607182930 /* MemberBadgeView.swift in Sources */,
+					NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
 				CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */,
 				F0B100000000000000000004 /* InviteQRCodeView.swift in Sources */,
@@ -639,6 +650,7 @@
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 					F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */,
+				F2A3B4C5D6E7F8091A2B3C4D /* InviteCodeFlowTests.swift in Sources */,
 					F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */,
 					F0B200000000000000000003 /* SwiftDataContainerFactoryTests.swift in Sources */,
 				);

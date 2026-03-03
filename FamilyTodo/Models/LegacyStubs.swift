@@ -542,6 +542,11 @@ final class ChoreScheduler {
                 continue
             }
             if nextDate <= now {
+                if Self.hasGeneratedTask(for: chore, dueDate: nextDate, tasks: taskStore.tasks) {
+                    await recurringStore.markGenerated(chore, at: now)
+                    continue
+                }
+
                 await taskStore.createTask(
                     title: chore.title,
                     status: .backlog,
@@ -556,6 +561,14 @@ final class ChoreScheduler {
                 )
                 await recurringStore.markGenerated(chore, at: now)
             }
+        }
+    }
+
+    private static func hasGeneratedTask(for chore: RecurringChore, dueDate: Date, tasks: [Task]) -> Bool {
+        let calendar = Calendar.current
+        return tasks.contains { task in
+            task.recurringChoreId == chore.id &&
+                task.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
         }
     }
 

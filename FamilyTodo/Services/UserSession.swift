@@ -231,6 +231,38 @@ final class UserSession: ObservableObject {
         hasConfirmedDisplayName = true
     }
 
+    /// Applies a profile name update to the live session immediately.
+    /// This keeps all observing views in sync right after successful CloudKit writes.
+    func applyProfileUpdate(displayName: String) {
+        guard let trimmed = try? DisplayNameValidator.validate(displayName) else { return }
+
+        if isGuest {
+            guestDisplayName = trimmed
+            userDefaults.set(trimmed, forKey: StorageKeys.guestDisplayName)
+            hasConfirmedDisplayName = true
+            return
+        }
+
+        guard let userId = currentUserID else { return }
+        var values = userDefaults.dictionary(forKey: StorageKeys.preferredDisplayNameByUserId)
+            as? [String: String] ?? [:]
+        values[userId] = trimmed
+        userDefaults.set(values, forKey: StorageKeys.preferredDisplayNameByUserId)
+        preferredDisplayName = trimmed
+        hasConfirmedDisplayName = true
+
+        if let existingUser = user {
+            user = AuthenticationService.AuthenticatedUser(
+                id: existingUser.id,
+                appleUserID: existingUser.appleUserID,
+                email: existingUser.email,
+                displayName: trimmed,
+                givenName: existingUser.givenName,
+                familyName: existingUser.familyName
+            )
+        }
+    }
+
     /// Ends the guest session and returns to signed-out state
     func endGuestSession() {
         clearGuestSessionDefaults()

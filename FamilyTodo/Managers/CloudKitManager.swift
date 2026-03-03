@@ -49,6 +49,32 @@ actor CloudKitManager {
 
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
+    private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+    private static let inviteCodeLength = 6
+    private static let inviteCodeMaxAttempts = 12
+
+    static func sanitizeShareTitle(_ rawValue: String?) -> String {
+        guard let rawValue else {
+            return "Household"
+        }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "Household"
+        }
+
+        let suffixes = ["(owner)", "(właściciel)"]
+        for suffix in suffixes {
+            if trimmed.range(
+                of: suffix,
+                options: [.caseInsensitive, .anchored, .backwards]
+            ) != nil {
+                let endIndex = trimmed.index(trimmed.endIndex, offsetBy: -suffix.count)
+                let cleaned = trimmed[..<endIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                return cleaned.isEmpty ? "Household" : String(cleaned)
+            }
+        }
+        return trimmed
+    }
 
     /// Gets the shared container, must call ensureReady() first
     private var container: CKContainer {
@@ -72,6 +98,12 @@ actor CloudKitManager {
     private var sharedDatabase: CKDatabase {
         get async {
             await container.sharedCloudDatabase
+        }
+    }
+
+    private var publicDatabase: CKDatabase {
+        get async {
+            await container.publicCloudDatabase
         }
     }
 
@@ -271,6 +303,14 @@ actor CloudKitManager {
         }
     }
 
+    nonisolated static func generateInviteCode(length: Int = 6) -> String {
+        let resolvedLength = max(5, length)
+        var generator = SystemRandomNumberGenerator()
+        return String((0..<resolvedLength).map { _ in
+            inviteCodeAlphabet.randomElement(using: &generator) ?? "A"
+        })
+    }
+
     private func ownerZoneID(for householdId: UUID) -> CKRecordZone.ID {
         CKRecordZone.ID(
             zoneName: "\(Self.ownerHouseholdZonePrefix)\(householdId.uuidString)",
@@ -341,7 +381,10 @@ actor CloudKitManager {
                 }
 
                 do {
-                    authoritativeRecord = try await db.save(migratedRecord)
+                    authoritativeRecord = try await saveRecordWithChangedKeys(
+                        migratedRecord,
+                        database: db
+                    )
                 } catch let ckError as CKError where ckError.code == .serverRecordChanged {
                     authoritativeRecord = try await db.record(for: ownerRecordID)
                 }
@@ -668,7 +711,7 @@ actor CloudKitManager {
             print(
                 "CloudKitScope: save \(record.recordType) in \(scopeName) zone \(scopedRecord.recordID.zoneID.zoneName)"
             )
-            let saved = try await db.save(scopedRecord)
+            let saved = try await saveRecordWithChangedKeys(scopedRecord, database: db)
             rememberRecordZone(saved, explicitHouseholdId: householdId)
             return saved
         } catch {
@@ -691,7 +734,7 @@ actor CloudKitManager {
                 "CloudKitScope: retry save \(record.recordType) in \(scopeName) zone \(retryRecord.recordID.zoneID.zoneName)"
             )
             do {
-                let saved = try await db.save(retryRecord)
+                let saved = try await saveRecordWithChangedKeys(retryRecord, database: db)
                 rememberRecordZone(saved, explicitHouseholdId: householdId)
                 return saved
             } catch {
@@ -730,9 +773,52 @@ actor CloudKitManager {
         }
     }
 
+    private func resolvedPaletteColor(
+        rawColorHex: String?,
+        stableId: UUID
+    ) -> (hex: String, requiresMigration: Bool) {
+        guard let normalized = MemberColorToken.normalize(hex: rawColorHex),
+              MemberColorToken.isAllowed(hex: normalized)
+        else {
+            return (MemberColorToken.migratedHex(for: stableId), true)
+        }
+        if rawColorHex != normalized {
+            return (normalized, true)
+        }
+        return (normalized, false)
+    }
+
+    private func migrateColorIfNeeded(
+        for record: CKRecord,
+        stableId: UUID,
+        explicitHouseholdId: UUID?,
+        operation: String,
+        database: CKDatabase
+    ) async -> String {
+        let currentColor = record["colorHex"] as? String
+        let colorState = resolvedPaletteColor(rawColorHex: currentColor, stableId: stableId)
+        guard colorState.requiresMigration else {
+            return colorState.hex
+        }
+
+        record["colorHex"] = colorState.hex as CKRecordValue
+        do {
+            let saved = try await saveRecordWithChangedKeys(record, database: database)
+            rememberRecordZone(saved, explicitHouseholdId: explicitHouseholdId)
+        } catch {
+            print("CloudKitScope: \(operation) color migration skipped: \(error.localizedDescription)")
+        }
+        return colorState.hex
+    }
+
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord
         case shareNotCreated
+        case inviteCodeInvalid
+        case inviteCodeNotFound
+        case inviteCodeExpired
+        case inviteCodeRevoked
+        case inviteCodeUnavailable
         case networkUnavailable
         case notAuthenticated
         case quotaExceeded
@@ -745,6 +831,16 @@ actor CloudKitManager {
                 "Invalid record data"
             case .shareNotCreated:
                 "Failed to create share"
+            case .inviteCodeInvalid:
+                "The invite code is invalid."
+            case .inviteCodeNotFound:
+                "Invite code was not found."
+            case .inviteCodeExpired:
+                "This invite code has expired."
+            case .inviteCodeRevoked:
+                "This invite code is no longer active."
+            case .inviteCodeUnavailable:
+                "Could not generate a unique invite code. Try again."
             case .networkUnavailable:
                 "No internet connection. Changes will sync when online."
             case .notAuthenticated:
@@ -769,6 +865,42 @@ actor CloudKitManager {
         let saved = try await saveRecordWithZoneRecovery(record, householdId: household.id)
         clearCloudKitFailure()
         return saved
+    }
+
+    func updateHouseholdMetadata(
+        householdId: UUID,
+        newName: String,
+        newIconSymbol: String
+    ) async throws -> CKRecord {
+        let db = await activeHouseholdDatabase
+        var retryCount = 0
+
+        while true {
+            let existingRecord = try await fetchRecord(id: householdId, householdId: householdId)
+            existingRecord["name"] = newName as CKRecordValue
+            existingRecord["iconSymbol"] = newIconSymbol as CKRecordValue
+            existingRecord["updatedAt"] = Date() as CKRecordValue
+
+            do {
+                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
+                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                clearCloudKitFailure()
+                return saved
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
+                retryCount += 1
+                continue
+            } catch {
+                guard retryCount == 0, isRetryableZoneResolutionError(error) else {
+                    recordCloudKitFailure(error, operation: "updateHouseholdMetadata")
+                    throw error
+                }
+
+                retryCount += 1
+                sharedZoneContext.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+                clearCachedZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId)
+            }
+        }
     }
 
     func fetchHousehold(id: UUID) async throws -> Household {
@@ -865,6 +997,22 @@ actor CloudKitManager {
         }
     }
 
+    func updateMemberProfile(
+        memberId: UUID,
+        householdId: UUID,
+        newDisplayName: String,
+        newColorHex: String
+    ) async throws -> CKRecord {
+        try await updateMemberRecord(
+            memberId: memberId,
+            householdId: householdId,
+            operationName: "profile"
+        ) { record in
+            record["displayName"] = newDisplayName as CKRecordValue
+            record["colorHex"] = newColorHex as CKRecordValue
+        }
+    }
+
     func updateMemberRole(
         memberId: UUID,
         householdId: UUID,
@@ -876,6 +1024,26 @@ actor CloudKitManager {
             operationName: "role"
         ) { record in
             record["role"] = newRole.rawValue as CKRecordValue
+        }
+    }
+
+    func updateMemberState(
+        memberId: UUID,
+        householdId: UUID,
+        newDisplayName: String,
+        newRole: Member.MemberRole,
+        isActive: Bool,
+        colorHex: String
+    ) async throws -> CKRecord {
+        try await updateMemberRecord(
+            memberId: memberId,
+            householdId: householdId,
+            operationName: "state"
+        ) { record in
+            record["displayName"] = newDisplayName as CKRecordValue
+            record["role"] = newRole.rawValue as CKRecordValue
+            record["isActive"] = (isActive ? 1 : 0) as CKRecordValue
+            record["colorHex"] = colorHex as CKRecordValue
         }
     }
 
@@ -921,8 +1089,28 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Member", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
 
+        let db = await activeHouseholdDatabase
         let records = try await queryRecords(query, householdId: householdId)
-        return try records.map(member(from:))
+        var migratedRecords: [CKRecord] = []
+        migratedRecords.reserveCapacity(records.count)
+
+        for record in records {
+            let stableId = UUID(uuidString: record.recordID.recordName) ??
+                UUID(uuidString: record["id"] as? String ?? "")
+            if let stableId {
+                let migratedColor = await migrateColorIfNeeded(
+                    for: record,
+                    stableId: stableId,
+                    explicitHouseholdId: householdId,
+                    operation: "member.fetch",
+                    database: db
+                )
+                record["colorHex"] = migratedColor as CKRecordValue
+            }
+            migratedRecords.append(record)
+        }
+
+        return try migratedRecords.map(member(from:))
     }
 
     // MARK: - Area
@@ -1096,6 +1284,49 @@ actor CloudKitManager {
         return try await saveRecordWithZoneRecovery(record, householdId: category.householdId)
     }
 
+    func updateBacklogCategoryMetadata(
+        categoryId: UUID,
+        householdId: UUID,
+        newTitle: String,
+        newColorHex: String
+    ) async throws -> CKRecord {
+        let db = await activeHouseholdDatabase
+        var didRetryAfterConflict = false
+
+        while true {
+            do {
+                let existingRecord = try await fetchRecord(id: categoryId, householdId: householdId)
+                existingRecord["title"] = newTitle as CKRecordValue
+                existingRecord["colorHex"] = newColorHex as CKRecordValue
+                existingRecord["updatedAt"] = Date() as CKRecordValue
+
+                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
+                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                return saved
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                if didRetryAfterConflict {
+                    recordCloudKitFailure(ckError, operation: "updateBacklogCategoryMetadata")
+                    throw ckError
+                }
+                didRetryAfterConflict = true
+                _ = try await resolveHouseholdZone(for: householdId)
+            } catch CloudKitManagerError.serverRecordChanged {
+                if didRetryAfterConflict {
+                    recordCloudKitFailure(
+                        CloudKitManagerError.serverRecordChanged,
+                        operation: "updateBacklogCategoryMetadata"
+                    )
+                    throw CloudKitManagerError.serverRecordChanged
+                }
+                didRetryAfterConflict = true
+                _ = try await resolveHouseholdZone(for: householdId)
+            } catch {
+                recordCloudKitFailure(error, operation: "updateBacklogCategoryMetadata")
+                throw error
+            }
+        }
+    }
+
     func fetchBacklogCategory(id: UUID) async throws -> BacklogCategory {
         let record = try await fetchRecord(id: id)
         return try backlogCategory(from: record)
@@ -1217,15 +1448,27 @@ actor CloudKitManager {
         return try await fetchShareRecord(withID: shareReference.recordID, database: database)
     }
 
-    private func ensureReadWriteSharePermission(
+    private func ensureShareMetadata(
         _ share: CKShare,
+        householdName: String,
         database: CKDatabase
     ) async throws -> CKShare {
-        guard share.publicPermission != .readWrite else {
+        let sanitizedTitle = Self.sanitizeShareTitle(householdName)
+        let existingTitle = (share[CKShare.SystemFieldKey.title] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldUpdateTitle = existingTitle != sanitizedTitle
+        let shouldUpdatePermission = share.publicPermission != .readWrite
+
+        guard shouldUpdateTitle || shouldUpdatePermission else {
             return share
         }
 
-        share.publicPermission = .readWrite
+        if shouldUpdatePermission {
+            share.publicPermission = .readWrite
+        }
+        if shouldUpdateTitle {
+            share[CKShare.SystemFieldKey.title] = sanitizedTitle as CKRecordValue
+        }
         let saved = try await saveRecordWithChangedKeys(share, database: database)
         guard let savedShare = saved as? CKShare else {
             throw CloudKitManagerError.invalidRecord
@@ -1260,7 +1503,7 @@ actor CloudKitManager {
         database: CKDatabase
     ) async throws -> CKShare? {
         let share = CKShare(rootRecord: householdRecord)
-        share[CKShare.SystemFieldKey.title] = householdName as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = Self.sanitizeShareTitle(householdName) as CKRecordValue
         share.publicPermission = .readWrite
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -1335,7 +1578,11 @@ actor CloudKitManager {
                let existingShare = try await fetchShareRecord(withID: shareReference.recordID, database: db)
             {
                 stage = .modifyRecords
-                let normalizedShare = try await ensureReadWriteSharePermission(existingShare, database: db)
+                let normalizedShare = try await ensureShareMetadata(
+                    existingShare,
+                    householdName: household.name,
+                    database: db
+                )
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -1365,7 +1612,11 @@ actor CloudKitManager {
             }
 
             if let createdShare {
-                let normalizedShare = try await ensureReadWriteSharePermission(createdShare, database: db)
+                let normalizedShare = try await ensureShareMetadata(
+                    createdShare,
+                    householdName: household.name,
+                    database: db
+                )
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -1375,7 +1626,11 @@ actor CloudKitManager {
                 rootRecordID: householdRecord.recordID,
                 database: db
             ) {
-                let normalizedShare = try await ensureReadWriteSharePermission(fallbackShare, database: db)
+                let normalizedShare = try await ensureShareMetadata(
+                    fallbackShare,
+                    householdName: household.name,
+                    database: db
+                )
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -1403,7 +1658,12 @@ actor CloudKitManager {
             guard let share = try await fetchShareRecord(withID: shareReference.recordID, database: db) else {
                 return nil
             }
-            return try await ensureReadWriteSharePermission(share, database: db)
+            let householdName = (record["name"] as? String) ?? "Household"
+            return try await ensureShareMetadata(
+                share,
+                householdName: householdName,
+                database: db
+            )
         case .participantShared:
             let record = try await fetchHouseholdRecord(id: householdId)
             guard let shareReference = record.share else { return nil }
@@ -1415,6 +1675,175 @@ actor CloudKitManager {
     /// Get share URL for inviting members
     func getShareURL(for householdId: UUID) async throws -> URL? {
         try await fetchShare(for: householdId)?.url
+    }
+
+    // MARK: - Invite Code (Public DB Fallback)
+
+    private func fetchInviteTokenRecordIfExists(
+        code: String,
+        database: CKDatabase
+    ) async throws -> CKRecord? {
+        let recordID = CKRecord.ID(recordName: code)
+        do {
+            return try await database.record(for: recordID)
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            return nil
+        }
+    }
+
+    func createInviteCode(for household: Household) async throws -> InviteToken {
+        try await checkAvailability()
+        setHouseholdScope(.ownerPrivate)
+
+        var stage = "inviteCode.create.ensureShare"
+        do {
+            let share = try await createShare(for: household)
+            guard let shareURL = share.url else {
+                let error = CloudKitManagerError.shareNotCreated
+                recordCloudKitFailure(error, operation: stage)
+                throw error
+            }
+
+            stage = "inviteCode.create.lookupExisting"
+            let db = await publicDatabase
+            let now = Date()
+            let existingPredicate = NSPredicate(
+                format: "householdId == %@ AND isRevoked == %@",
+                household.id.uuidString,
+                NSNumber(value: Int64(0))
+            )
+            let existingQuery = CKQuery(recordType: "InviteToken", predicate: existingPredicate)
+            existingQuery.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            let (existingResults, _) = try await db.records(matching: existingQuery)
+            for (_, result) in existingResults {
+                guard case let .success(record) = result else { continue }
+                let token = try inviteToken(from: record)
+                if token.isActive(at: now) {
+                    clearCloudKitFailure()
+                    return token
+                }
+            }
+
+            stage = "inviteCode.create.save"
+            for _ in 0..<Self.inviteCodeMaxAttempts {
+                let code = Self.generateInviteCode(length: Self.inviteCodeLength)
+                if try await fetchInviteTokenRecordIfExists(code: code, database: db) != nil {
+                    continue
+                }
+
+                let token = InviteToken(
+                    id: code,
+                    code: code,
+                    householdId: household.id,
+                    shareURL: shareURL.absoluteString,
+                    createdAt: now,
+                    expiresAt: now.addingTimeInterval(InviteToken.ttl),
+                    isRevoked: false,
+                    usesCount: 0,
+                    lastRedeemedAt: nil
+                )
+
+                do {
+                    _ = try await saveRecordWithChangedKeys(
+                        inviteTokenRecord(from: token),
+                        database: db
+                    )
+                    clearCloudKitFailure()
+                    return token
+                } catch let ckError as CKError where ckError.code == .serverRecordChanged {
+                    continue
+                } catch {
+                    recordCloudKitFailure(error, operation: stage)
+                    throw error
+                }
+            }
+
+            let error = CloudKitManagerError.inviteCodeUnavailable
+            recordCloudKitFailure(error, operation: "inviteCode.create.exhausted")
+            throw error
+        } catch {
+            if let managerError = error as? CloudKitManagerError,
+               case .inviteCodeUnavailable = managerError
+            {
+                throw error
+            }
+            recordCloudKitFailure(error, operation: stage)
+            throw error
+        }
+    }
+
+    func fetchInviteToken(code rawCode: String) async throws -> InviteToken {
+        try await checkAvailability()
+        guard let code = InviteInputNormalizer.normalizeInviteCodeToken(rawCode) else {
+            throw CloudKitManagerError.inviteCodeInvalid
+        }
+
+        let db = await publicDatabase
+        guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
+            throw CloudKitManagerError.inviteCodeNotFound
+        }
+
+        return try inviteToken(from: record)
+    }
+
+    func redeemInviteCode(_ rawCode: String) async throws -> Household {
+        var stage = "inviteCode.redeem.fetchToken"
+        do {
+            try await checkAvailability()
+            let token = try await fetchInviteToken(code: rawCode)
+            let now = Date()
+            if token.isRevoked {
+                throw CloudKitManagerError.inviteCodeRevoked
+            }
+            if token.isExpired(at: now) {
+                throw CloudKitManagerError.inviteCodeExpired
+            }
+
+            stage = "inviteCode.redeem.metadata"
+            guard let shareURL = URL(string: token.shareURL) else {
+                throw CloudKitManagerError.inviteCodeInvalid
+            }
+
+            let ckContainer = await container
+            let metadata = try await ckContainer.shareMetadata(for: shareURL)
+
+            stage = "inviteCode.redeem.acceptShare"
+            let household = try await acceptShare(metadata: metadata)
+
+            stage = "inviteCode.redeem.usageUpdate"
+            let db = await publicDatabase
+            if let record = try await fetchInviteTokenRecordIfExists(code: token.code, database: db) {
+                record["usesCount"] = Int64(token.usesCount + 1) as CKRecordValue
+                record["lastRedeemedAt"] = now as CKRecordValue
+                do {
+                    _ = try await saveRecordWithChangedKeys(record, database: db)
+                } catch {
+                    recordCloudKitFailure(error, operation: stage)
+                }
+            }
+
+            clearCloudKitFailure()
+            return household
+        } catch {
+            recordCloudKitFailure(error, operation: stage)
+            throw error
+        }
+    }
+
+    func revokeInviteCode(_ rawCode: String) async throws {
+        try await checkAvailability()
+        guard let code = InviteInputNormalizer.normalizeInviteCodeToken(rawCode) else {
+            throw CloudKitManagerError.inviteCodeInvalid
+        }
+
+        let db = await publicDatabase
+        guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
+            throw CloudKitManagerError.inviteCodeNotFound
+        }
+
+        record["isRevoked"] = Int64(1) as CKRecordValue
+        _ = try await saveRecordWithChangedKeys(record, database: db)
+        clearCloudKitFailure()
     }
 
     /// Accept a CloudKit share invitation and return shared household.

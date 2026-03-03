@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct AppPromptSheet: View {
@@ -97,6 +98,266 @@ struct AppPromptSheet: View {
     private func submitAndDismiss() {
         guard !trimmedValue.isEmpty else { return }
         onSubmit(trimmedValue)
+        dismiss()
+    }
+}
+
+struct CategoryEditorSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    let primaryTitle: String
+    let onCancel: () -> Void
+    let onSubmit: (String, String) -> Void
+
+    @State private var name: String
+    @State private var selectedColorHex: String
+
+    init(
+        title: String,
+        initialName: String,
+        initialColorHex: String,
+        primaryTitle: String,
+        onCancel: @escaping () -> Void,
+        onSubmit: @escaping (String, String) -> Void
+    ) {
+        self.title = title
+        self.primaryTitle = primaryTitle
+        self.onCancel = onCancel
+        self.onSubmit = onSubmit
+        _name = State(initialValue: initialName)
+        _selectedColorHex = State(
+            initialValue: MemberColorToken.normalize(hex: initialColorHex) ?? MemberColorToken.fallbackHex
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Category Name") {
+                    TextField("Category Name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(true)
+                }
+
+                Section("Category Color") {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
+                        spacing: 12
+                    ) {
+                        ForEach(MemberColorToken.allCases, id: \.self) { token in
+                            let hex = token.hex
+                            Button {
+                                selectedColorHex = hex
+                            } label: {
+                                Circle()
+                                    .fill(Color(hex: hex))
+                                    .frame(width: 34, height: 34)
+                                    .overlay {
+                                        if selectedColorHex == hex {
+                                            Circle()
+                                                .stroke(Color.primary, lineWidth: 2)
+                                                .padding(1)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(primaryTitle) {
+                        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedName.isEmpty else { return }
+                        onSubmit(trimmedName, selectedColorHex)
+                        dismiss()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+struct BacklogAssigneePickerSheet: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    let title: String
+    let actionTitle: String
+    let members: [Member]
+    let autoConfirmOnSelection: Bool
+    @Binding var selectedAssigneeId: UUID?
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if members.isEmpty {
+                    Text("No members available.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(members) { member in
+                    Button {
+                        selectedAssigneeId = member.id
+                        if autoConfirmOnSelection {
+                            onConfirm()
+                        }
+                    } label: {
+                        HStack {
+                            Text(member.displayName)
+                                .font(themeStore.font(for: .inlineTitle))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if !autoConfirmOnSelection, selectedAssigneeId == member.id {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if !autoConfirmOnSelection {
+                        Button(actionTitle) {
+                            onConfirm()
+                        }
+                        .font(themeStore.font(for: .buttonLabel))
+                        .disabled(selectedAssigneeId == nil)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.height(320)])
+        .presentationBackground(.ultraThinMaterial)
+    }
+}
+
+struct BacklogItemEditSheet: View {
+    let item: BacklogItem
+    let members: [Member]
+    let onSave: (String, String?, UUID?) -> Void
+    let onDelete: () -> Void
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var title: String
+    @State private var notes: String
+    @State private var assigneeId: UUID?
+    @State private var showDeleteConfirmation = false
+
+    init(
+        item: BacklogItem,
+        members: [Member],
+        onSave: @escaping (String, String?, UUID?) -> Void,
+        onDelete: @escaping () -> Void
+    ) {
+        self.item = item
+        self.members = members
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _title = State(initialValue: item.title)
+        _notes = State(initialValue: item.notes ?? "")
+        _assigneeId = State(initialValue: item.assigneeId ?? members.first?.id)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Item") {
+                    TextField("Title", text: $title)
+                        .font(themeStore.font(for: .listRowTitle))
+                }
+
+                Section("Assignee") {
+                    if members.isEmpty {
+                        Text("No members available.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("Who", selection: $assigneeId) {
+                            ForEach(members) { member in
+                                Text(member.displayName).tag(Optional(member.id))
+                            }
+                        }
+                    }
+                }
+
+                Section("Notes") {
+                    TextEditor(text: $notes)
+                        .font(themeStore.font(for: .listRowTitle))
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 120)
+                }
+
+                Section {
+                    Button("Delete Item", role: .destructive) {
+                        showDeleteConfirmation = true
+                    }
+                }
+            }
+            .navigationTitle("Idea Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        commit()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .sheet(isPresented: $showDeleteConfirmation) {
+                AppConfirmationSheet(
+                    title: "Delete this item?",
+                    message: "This action cannot be undone.",
+                    primaryTitle: "Delete",
+                    primaryStyle: .destructive,
+                    onPrimary: {
+                        onDelete()
+                        dismiss()
+                    }
+                )
+            }
+        }
+    }
+
+    private func commit() {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        onSave(trimmedTitle, trimmedNotes.isEmpty ? nil : trimmedNotes, assigneeId)
         dismiss()
     }
 }

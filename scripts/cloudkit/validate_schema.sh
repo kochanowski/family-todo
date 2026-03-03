@@ -32,6 +32,11 @@ if [[ "$(jq -r '(.recordTypes | type) // ""' "$SCHEMA_FILE")" != "array" ]]; the
   exit 1
 fi
 
+if [[ "$(jq -r '(.securityRoles | type) // ""' "$SCHEMA_FILE")" != "array" ]]; then
+  echo "CloudKitSchema: securityRoles must be an array." >&2
+  exit 1
+fi
+
 allowed_types='["String","Int64","Date","Reference","ReferenceList"]'
 invalid_types="$(jq -r --argjson allowed "$allowed_types" '
   .recordTypes[]
@@ -69,14 +74,15 @@ if [[ -n "$duplicate_fields" ]]; then
 fi
 
 required_map='{
-  "Household": ["id", "name", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
-  "Member": ["id", "householdId", "userId", "displayName", "role", "joinedAt", "isActive"],
+  "Household": ["id", "name", "colorHex", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
+  "Member": ["id", "householdId", "userId", "displayName", "colorHex", "role", "joinedAt", "isActive"],
   "Area": ["id", "householdId", "name", "icon", "sortOrder", "createdAt"],
-  "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "createdAt", "updatedAt"],
+  "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
   "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
   "ShoppingItem": ["id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
-  "BacklogCategory": ["id", "householdId", "title", "sortOrder", "createdAt", "updatedAt"],
-  "BacklogItem": ["id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"]
+  "BacklogCategory": ["id", "householdId", "title", "colorHex", "sortOrder", "createdAt", "updatedAt"],
+  "BacklogItem": ["id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"],
+  "InviteToken": ["code", "householdId", "shareURL", "createdAt", "expiresAt", "isRevoked", "usesCount", "lastRedeemedAt"]
 }'
 
 required_indexes='{
@@ -87,7 +93,25 @@ required_indexes='{
   "RecurringChore": { "query": ["householdId"], "sort": ["title"] },
   "ShoppingItem": { "query": ["householdId"], "sort": ["sortOrder"] },
   "BacklogCategory": { "query": ["householdId"], "sort": ["sortOrder"] },
-  "BacklogItem": { "query": ["householdId", "categoryId"], "sort": ["createdAt"] }
+  "BacklogItem": { "query": ["householdId", "categoryId"], "sort": ["createdAt"] },
+  "InviteToken": { "query": ["code", "householdId", "isRevoked", "expiresAt"], "sort": ["createdAt"] }
+}'
+
+required_role_permissions='{
+  "_world": {
+    "Users": ["read"],
+    "cloudkit.share": ["read"],
+    "InviteToken": ["read"]
+  },
+  "_icloud": {
+    "cloudkit.share": ["read"],
+    "InviteToken": ["create", "read"]
+  },
+  "_creator": {
+    "Users": ["write"],
+    "cloudkit.share": ["write"],
+    "InviteToken": ["read", "write"]
+  }
 }'
 
 errors=()
@@ -136,6 +160,37 @@ while IFS= read -r record_type; do
   done
 
 done < <(jq -r --argjson m "$required_map" '$m | keys[]' < /dev/null)
+
+while IFS= read -r role_name; do
+  [[ -z "$role_name" ]] && continue
+
+  role_exists="$(jq -r --arg role "$role_name" 'any(.securityRoles[]; .name == $role)' "$SCHEMA_FILE")"
+  if [[ "$role_exists" != "true" ]]; then
+    errors+=("missing security role: $role_name")
+    continue
+  fi
+
+  while IFS= read -r record_type; do
+    [[ -z "$record_type" ]] && continue
+
+    while IFS= read -r permission_name; do
+      [[ -z "$permission_name" ]] && continue
+
+      has_permission="$(jq -r --arg role "$role_name" --arg rt "$record_type" --arg perm "$permission_name" '
+        any(
+          .securityRoles[]
+          | select(.name == $role)
+          | .recordTypePermissions[];
+          .recordType == $rt and (.[ $perm ] == true)
+        )
+      ' "$SCHEMA_FILE")"
+
+      if [[ "$has_permission" != "true" ]]; then
+        errors+=("missing security permission: role=$role_name recordType=$record_type permission=$permission_name")
+      fi
+    done < <(jq -r --arg role "$role_name" --arg rt "$record_type" --argjson m "$required_role_permissions" '$m[$role][$rt][]' < /dev/null)
+  done < <(jq -r --arg role "$role_name" --argjson m "$required_role_permissions" '$m[$role] | keys[]' < /dev/null)
+done < <(jq -r --argjson m "$required_role_permissions" '$m | keys[]' < /dev/null)
 
 if (( ${#errors[@]} > 0 )); then
   echo "CloudKitSchema: validation failed with ${#errors[@]} issue(s):" >&2

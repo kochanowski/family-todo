@@ -80,6 +80,109 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(store.doneTasks.isEmpty)
     }
 
+    func testNextTasksUsesStableSortForSameDueDate() async throws {
+        let dueDate = Date(timeIntervalSince1970: 1_735_000_000)
+        let olderCreatedAt = Date(timeIntervalSince1970: 1_734_900_000)
+        let newerCreatedAt = Date(timeIntervalSince1970: 1_734_950_000)
+
+        let taskA = Task(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1") ?? UUID(),
+            householdId: householdId,
+            title: "A",
+            status: .next,
+            assigneeId: assigneeId,
+            dueDate: dueDate,
+            taskType: .oneOff,
+            createdAt: newerCreatedAt
+        )
+        let taskB = Task(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000A2") ?? UUID(),
+            householdId: householdId,
+            title: "B",
+            status: .next,
+            assigneeId: assigneeId,
+            dueDate: dueDate,
+            taskType: .oneOff,
+            createdAt: olderCreatedAt
+        )
+        let taskC = Task(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000A0") ?? UUID(),
+            householdId: householdId,
+            title: "C",
+            status: .next,
+            assigneeId: assigneeId,
+            dueDate: dueDate,
+            taskType: .oneOff,
+            createdAt: newerCreatedAt
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: taskA))
+        modelContainer.mainContext.insert(CachedTask(from: taskB))
+        modelContainer.mainContext.insert(CachedTask(from: taskC))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        XCTAssertEqual(store.nextTasks.map(\.title), ["B", "C", "A"])
+    }
+
+    func testMergeCloudSnapshot_PrefersPendingUploadVersion() async {
+        let localTask = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Local Task",
+            status: .done,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+        let cloudVersion = Task(
+            id: localTask.id,
+            householdId: householdId,
+            title: "Cloud Task",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        let cached = CachedTask(from: localTask)
+        cached.syncStatusRaw = "pendingUpload"
+        modelContainer.mainContext.insert(cached)
+        try? modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let pendingSnapshot = store.pendingSyncSnapshot(from: [cached])
+        let merged = store.mergeCloudSnapshot([cloudVersion], with: pendingSnapshot)
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged.first?.id, localTask.id)
+        XCTAssertEqual(merged.first?.status, .done)
+        XCTAssertEqual(merged.first?.title, "Local Task")
+    }
+
+    func testLoadFromCache_HidesPendingDeleteTasks() async {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "To Delete",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        let cached = CachedTask(from: task)
+        cached.syncStatusRaw = "pendingDelete"
+        modelContainer.mainContext.insert(cached)
+        try? modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        XCTAssertTrue(store.tasks.isEmpty)
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {

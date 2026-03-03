@@ -113,32 +113,71 @@ struct HouseholdHeroCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @Query(sort: \CachedMember.joinedAt) private var cachedMembers: [CachedMember]
 
     var body: some View {
-        VStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: householdStore.currentHousehold?.iconSymbol ?? "house.fill")
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(themeStore.accentTabColor)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(householdColor)
+                .frame(width: 34, height: 34)
 
-            Text(householdStore.currentHousehold?.name ?? "No Household")
-                .font(themeStore.font(for: .profileName))
-                .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(householdStore.currentHousehold?.name ?? "Domownicy")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .lineLimit(1)
 
-            Text(userSession.displayName ?? "User")
-                .font(themeStore.font(for: .bodySmall))
-                .foregroundStyle(themeStore.contentSecondaryColor)
+                Text(membersLine)
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 14)
         .padding(.horizontal, 16)
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
         }
+        .contentShape(Rectangle())
     }
 
     private var cardBackground: Color {
         themeStore.surfaceColor
+    }
+
+    private var householdColor: Color {
+        themeStore.accentTabColor
+    }
+
+    private var membersLine: String {
+        guard let householdId = householdStore.currentHousehold?.id else {
+            return userSession.displayName ?? "Tap to configure household"
+        }
+
+        let names = cachedMembers
+            .filter { $0.householdId == householdId && $0.isActive }
+            .map(\.displayName)
+            .sorted {
+                $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+            }
+
+        guard !names.isEmpty else {
+            return userSession.displayName ?? "No members yet"
+        }
+
+        let previewNames = names.prefix(3)
+        let preview = previewNames.joined(separator: ", ")
+        let remaining = names.count - previewNames.count
+        return remaining > 0 ? "\(preview) +\(remaining)" : preview
     }
 }
 
@@ -214,211 +253,13 @@ struct MoreRow: View {
 
 // MARK: - Sub-screens
 
-struct ProfileView: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-    @EnvironmentObject private var householdStore: HouseholdStore
-    @EnvironmentObject private var userSession: UserSession
-    @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
-    @State private var inlineHouseholdName = ""
-    @State private var renameTask: _Concurrency.Task<Void, Never>?
-    @State private var isRenamingHousehold = false
-    @State private var showLeaveConfirmation = false
-    @State private var showDeleteConfirmation = false
-    @State private var actionErrorMessage: String?
-
-    var body: some View {
-        List {
-            if cloudKitDiagnostics.lastCloudKitError != nil {
-                Section {
-                    CloudKitDiagnosticsBanner()
-                        .environmentObject(cloudKitDiagnostics)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                        .listRowBackground(Color.clear)
-                }
-            }
-
-            Section("Household") {
-                if let household = householdStore.currentHousehold {
-                    VStack(alignment: .leading, spacing: 8) {
-                        TextField("Household name", text: $inlineHouseholdName)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled(true)
-                            .font(themeStore.font(for: .inlineTitle))
-                            .onAppear {
-                                if inlineHouseholdName.isEmpty {
-                                    inlineHouseholdName = household.name
-                                }
-                            }
-                            .onChange(of: household.name) { _, newValue in
-                                if inlineHouseholdName != newValue {
-                                    inlineHouseholdName = newValue
-                                }
-                            }
-                            .onChange(of: inlineHouseholdName) { _, newValue in
-                                scheduleInlineHouseholdRename(newValue)
-                            }
-
-                        if isRenamingHousehold {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Saving...")
-                                    .font(themeStore.font(for: .bodySmall))
-                                    .foregroundStyle(themeStore.contentSecondaryColor)
-                            }
-                        }
-                    }
-                } else {
-                    Text("No Household Selected")
-                }
-            }
-
-            Section("Members") {
-                if let household = householdStore.currentHousehold {
-                    NavigationLink {
-                        MemberManagementView(householdId: household.id)
-                    } label: {
-                        Text("Manage Members")
-                    }
-                } else {
-                    Text("Select a household first")
-                }
-            }
-
-            Section("Household Actions") {
-                Button("Leave Household", role: .destructive) {
-                    showLeaveConfirmation = true
-                }
-                .disabled(householdStore.currentHousehold == nil || userSession.userId == nil)
-
-                if householdStore.currentHousehold?.ownerId == userSession.userId {
-                    Button("Delete Household", role: .destructive) {
-                        showDeleteConfirmation = true
-                    }
-                }
-            }
-        }
-        .environment(\.font, themeStore.font(for: .inlineTitle))
-        .navigationTitle("Profile")
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showLeaveConfirmation) {
-            AppConfirmationSheet(
-                title: "Leave household?",
-                message: "You will lose access until invited again.",
-                primaryTitle: "Leave",
-                primaryStyle: .destructive,
-                onPrimary: leaveHousehold
-            )
-        }
-        .sheet(isPresented: $showDeleteConfirmation) {
-            AppConfirmationSheet(
-                title: "Delete household permanently?",
-                message: "This action removes members and shared data.",
-                primaryTitle: "Delete",
-                primaryStyle: .destructive,
-                onPrimary: deleteHousehold
-            )
-        }
-        .alert("Action failed", isPresented: Binding(
-            get: { actionErrorMessage != nil },
-            set: { if !$0 { actionErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(actionErrorMessage ?? "Unknown error")
-        }
-        .onDisappear {
-            renameTask?.cancel()
-            renameTask = nil
-        }
-    }
-
-    private func scheduleInlineHouseholdRename(_ name: String) {
-        renameTask?.cancel()
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let currentHousehold = householdStore.currentHousehold else { return }
-        guard !trimmed.isEmpty, trimmed != currentHousehold.name else { return }
-
-        isRenamingHousehold = true
-        renameTask = _Concurrency.Task {
-            try? await _Concurrency.Task.sleep(nanoseconds: 450_000_000)
-            guard !_Concurrency.Task.isCancelled else {
-                isRenamingHousehold = false
-                return
-            }
-            do {
-                try await householdStore.renameCurrentHousehold(trimmed)
-                isRenamingHousehold = false
-            } catch {
-                isRenamingHousehold = false
-                actionErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func leaveHousehold() {
-        guard let userId = userSession.userId else {
-            actionErrorMessage = "Session expired. Sign in again to manage household."
-            return
-        }
-        _ = _Concurrency.Task {
-            do {
-                try await householdStore.leaveCurrentHousehold(userId: userId)
-                userSession.clearCurrentHousehold()
-            } catch {
-                actionErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func deleteHousehold() {
-        guard let userId = userSession.userId else {
-            actionErrorMessage = "Session expired. Sign in again to manage household."
-            return
-        }
-        _ = _Concurrency.Task {
-            do {
-                try await householdStore.deleteCurrentHousehold(requestedBy: userId)
-                userSession.clearCurrentHousehold()
-            } catch {
-                actionErrorMessage = error.localizedDescription
-            }
-        }
-    }
-}
-
-struct MemberRow: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-    let name: String
-    let initials: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(color)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    Text(initials)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-
-            Text(name)
-                .font(themeStore.font(for: .inlineTitle))
-
-            Spacer()
-        }
-    }
-}
-
 struct CategoriesManagementView: View {
     @StateObject private var store: BacklogStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
-    @State private var newCategoryName = ""
-    @State private var renamingCategory: BacklogCategory?
-    @State private var renamingTitle = ""
+    @State private var selectedCategory: BacklogCategory?
+    @State private var isAddingCategory = false
+    @State private var newCategoryColorHex = MemberColorToken.randomHex()
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
@@ -427,10 +268,19 @@ struct CategoriesManagementView: View {
     var body: some View {
         List {
             ForEach(store.categories) { category in
-                HStack {
-                    Text(category.title)
-                    Spacer()
+                Button {
+                    selectedCategory = category
+                } label: {
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(category.color)
+                            .frame(width: 10, height: 10)
+                        Text(category.title)
+                        Spacer()
+                    }
                 }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         _ = _Concurrency.Task {
@@ -439,14 +289,6 @@ struct CategoriesManagementView: View {
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
-
-                    Button {
-                        renamingCategory = category
-                        renamingTitle = category.title
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    .tint(.orange)
                 }
             }
             .onMove { source, destination in
@@ -459,19 +301,11 @@ struct CategoriesManagementView: View {
             }
 
             Section {
-                HStack {
-                    TextField("New category", text: $newCategoryName)
-                        .onSubmit {
-                            addCategory()
-                        }
-
-                    Button {
-                        addCategory()
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(.blue)
-                    }
-                    .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button {
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                    isAddingCategory = true
+                } label: {
+                    Label("(+) New category", systemImage: "plus.circle")
                 }
             }
         }
@@ -487,33 +321,41 @@ struct CategoriesManagementView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
-        .sheet(isPresented: Binding(
-            get: { renamingCategory != nil },
-            set: { if !$0 { renamingCategory = nil } }
-        )) {
-            AppPromptSheet(
-                title: "Rename Category",
-                placeholder: "Category name",
-                text: $renamingTitle,
+        .sheet(item: $selectedCategory) { category in
+            CategoryEditorSheet(
+                title: "Edit Category",
+                initialName: category.title,
+                initialColorHex: category.colorHex,
                 primaryTitle: "Save",
-                onSubmit: { newTitle in
-                    guard let category = renamingCategory else { return }
+                onCancel: {},
+                onSubmit: { name, colorHex in
                     _ = _Concurrency.Task {
-                        await store.renameCategory(category, newTitle: newTitle)
+                        await store.updateCategory(
+                            category,
+                            newTitle: name,
+                            newColorHex: colorHex
+                        )
                     }
-                    renamingCategory = nil
                 }
             )
         }
-    }
-
-    private func addCategory() {
-        let trimmed = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        _ = _Concurrency.Task {
-            await store.addCategory(trimmed)
+        .sheet(isPresented: $isAddingCategory) {
+            CategoryEditorSheet(
+                title: "New Category",
+                initialName: "",
+                initialColorHex: newCategoryColorHex,
+                primaryTitle: "Create",
+                onCancel: {
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                },
+                onSubmit: { name, colorHex in
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                    _ = _Concurrency.Task {
+                        await store.addCategory(name, colorHex: colorHex)
+                    }
+                }
+            )
         }
-        newCategoryName = ""
     }
 }
 

@@ -9,6 +9,7 @@ final class CachedMember {
     var householdId: UUID
     var userId: String
     var displayName: String
+    var colorHex: String = MemberColorToken.fallbackHex
     var roleRaw: String
     var joinedAt: Date
     var isActive: Bool
@@ -24,6 +25,7 @@ final class CachedMember {
         householdId = member.householdId
         userId = member.userId
         displayName = member.displayName
+        colorHex = member.colorHex
         roleRaw = member.role.rawValue
         joinedAt = member.joinedAt
         isActive = member.isActive
@@ -35,6 +37,7 @@ final class CachedMember {
         householdId = member.householdId
         userId = member.userId
         displayName = member.displayName
+        colorHex = member.colorHex
         roleRaw = member.role.rawValue
         joinedAt = member.joinedAt
         isActive = member.isActive
@@ -50,7 +53,8 @@ final class CachedMember {
             displayName: displayName,
             role: Member.MemberRole(rawValue: roleRaw) ?? .member,
             joinedAt: joinedAt,
-            isActive: isActive
+            isActive: isActive,
+            colorHex: colorHex
         )
     }
 }

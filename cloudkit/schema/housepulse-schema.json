@@ -7,6 +7,7 @@
       "fields": [
         { "name": "id", "type": "String", "queryable": true, "sortable": false },
         { "name": "name", "type": "String", "queryable": false, "sortable": false },
+        { "name": "colorHex", "type": "String", "queryable": false, "sortable": false },
         { "name": "icon", "type": "String", "queryable": false, "sortable": false },
         { "name": "iconSymbol", "type": "String", "queryable": false, "sortable": false },
         { "name": "ownerId", "type": "String", "queryable": false, "sortable": false },
@@ -25,6 +26,7 @@
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "userId", "type": "String", "queryable": true, "sortable": false },
         { "name": "displayName", "type": "String", "queryable": false, "sortable": false },
+        { "name": "colorHex", "type": "String", "queryable": false, "sortable": false },
         { "name": "role", "type": "String", "queryable": false, "sortable": false },
         { "name": "joinedAt", "type": "Date", "queryable": false, "sortable": true },
         { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false }
@@ -66,6 +68,7 @@
         { "name": "taskType", "type": "String", "queryable": false, "sortable": false },
         { "name": "recurringChoreId", "type": "Reference", "queryable": false, "sortable": false },
         { "name": "notes", "type": "String", "queryable": false, "sortable": false },
+        { "name": "order", "type": "Int64", "queryable": false, "sortable": false },
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": true }
       ],
@@ -126,6 +129,7 @@
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "title", "type": "String", "queryable": false, "sortable": false },
+        { "name": "colorHex", "type": "String", "queryable": false, "sortable": false },
         { "name": "sortOrder", "type": "Int64", "queryable": false, "sortable": true },
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
@@ -151,6 +155,48 @@
         "query": ["householdId", "categoryId"],
         "sort": ["createdAt"]
       }
+    },
+    {
+      "name": "InviteToken",
+      "fields": [
+        { "name": "code", "type": "String", "queryable": true, "sortable": false },
+        { "name": "householdId", "type": "String", "queryable": true, "sortable": false },
+        { "name": "shareURL", "type": "String", "queryable": false, "sortable": false },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": true },
+        { "name": "expiresAt", "type": "Date", "queryable": true, "sortable": false },
+        { "name": "isRevoked", "type": "Int64", "queryable": true, "sortable": false },
+        { "name": "usesCount", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "lastRedeemedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["code", "householdId", "isRevoked", "expiresAt"],
+        "sort": ["createdAt"]
+      }
+    }
+  ],
+  "securityRoles": [
+    {
+      "name": "_world",
+      "recordTypePermissions": [
+        { "recordType": "Users", "read": true },
+        { "recordType": "cloudkit.share", "read": true },
+        { "recordType": "InviteToken", "read": true }
+      ]
+    },
+    {
+      "name": "_icloud",
+      "recordTypePermissions": [
+        { "recordType": "cloudkit.share", "read": true },
+        { "recordType": "InviteToken", "create": true, "read": true }
+      ]
+    },
+    {
+      "name": "_creator",
+      "recordTypePermissions": [
+        { "recordType": "Users", "write": true },
+        { "recordType": "cloudkit.share", "write": true },
+        { "recordType": "InviteToken", "read": true, "write": true }
+      ]
     }
   ]
 }

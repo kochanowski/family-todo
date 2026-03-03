@@ -26,4 +26,33 @@ struct Household: Identifiable, Codable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case iconSymbol
+        case ownerId
+        case createdAt
+        case updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol) ?? "house.fill"
+        ownerId = try container.decode(String.self, forKey: .ownerId)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(iconSymbol, forKey: .iconSymbol)
+        try container.encode(ownerId, forKey: .ownerId)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
 }

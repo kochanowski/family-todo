@@ -19,8 +19,9 @@ struct ShoppingCountBadge: View {
             .font(themeStore.font(for: .chip))
             .foregroundStyle(themeStore.foregroundOnAccent(for: themeStore.accentTabColor, colorScheme: colorScheme))
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .frame(minWidth: 22, minHeight: 22, alignment: .center)
             .background(Capsule().fill(themeStore.accentTabColor))
+            .fixedSize(horizontal: true, vertical: true)
     }
 
     private var retroCoin: some View {

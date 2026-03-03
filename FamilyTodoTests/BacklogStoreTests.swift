@@ -76,4 +76,34 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(cachedTasks.first?.assigneeId, assigneeId)
         XCTAssertEqual(cachedTasks.first?.statusRaw, Task.TaskStatus.next.rawValue)
     }
+
+    func testUpdateItemUpsertsCacheWhenCachedRowMissing() async throws {
+        let categoryId = UUID()
+        let assigneeId = UUID()
+        await store.addItem(to: categoryId, title: "Assign me")
+
+        guard let createdItem = store.items(for: categoryId).first else {
+            XCTFail("Expected backlog item")
+            return
+        }
+
+        let cachedDescriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == createdItem.id }
+        )
+        if let cachedItem = try modelContainer.mainContext.fetch(cachedDescriptor).first {
+            modelContainer.mainContext.delete(cachedItem)
+            try modelContainer.mainContext.save()
+        }
+
+        await store.updateItem(
+            createdItem,
+            title: createdItem.title,
+            notes: createdItem.notes,
+            assigneeId: assigneeId
+        )
+
+        let reloadedCached = try modelContainer.mainContext.fetch(cachedDescriptor).first
+        XCTAssertNotNil(reloadedCached)
+        XCTAssertEqual(reloadedCached?.assigneeId, assigneeId)
+    }
 }

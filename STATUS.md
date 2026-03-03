@@ -1,50 +1,40 @@
 # STATUS
 
-Last updated: 2026-02-26
+Last updated: 2026-02-27
 
-## Implemented (current redesign branch)
+## Current state
 
-### Core shell and session flow
-- 4-tab app shell: Shopping, Tasks, Backlog/Ideas, More
-- Onboarding flow now transitions to `mainApp` after sync choice
-- Cloud-first with Guest fallback:
-  - iCloud path shows Sign in with Apple
-  - Guest path starts local-only session
-- Household setup gate enforced after session activation:
-  - active session + no household => `CreateHouseholdView`
-  - cloud session auto-bootstraps existing household membership before showing gate
+### App flow and UX
+- Native 4-tab shell działa stabilnie: Shopping, Tasks, Ideas, More.
+- Onboarding/Auth/Household routing jest spięty pod launch state.
+- Guest fallback działa równolegle do cloud-first (Sign in with Apple).
 
-### CloudKit / Sharing
-- CloudKitManager has explicit household DB scope (`ownerPrivate` / `participantShared`)
-- Household join supports:
-  - invite link paste
-  - deep-link acceptance (`userDidAcceptCloudKitShareWith` via app delegate bridge)
-  - pending invite processing after login (`ShareAcceptanceCoordinator`)
-- Household membership join path now uses member upsert (prevents duplicate member records)
+### CloudKit / sharing
+- Invite flow jest domknięty: link + QR + paste + deferred deep link.
+- `createShare`/`acceptShare` mają stage-level diagnostics.
+- Scope handling (owner/participant) i zone context zostały utwardzone.
 
-### Invite UX
-- Owner can invite via existing `UICloudSharingController`
-- Owner can also show invite QR (`InviteQRCodeView`)
-- Join sheet accepts full iCloud share link, supports clipboard paste, and QR scanning
-- Invite normalization utility added (`InviteInputNormalizer`)
+### Regression recovery (this session)
+- Naprawiono ścieżkę schema gate pod systemowy typ `cloudkit.share`.
+- CI skrypty schema są odporne na managed record types.
+- Pipeline zakończony green: schema gate + deploy TestFlight.
 
-### Project configuration
-- Added app entitlements (`FamilyTodo/HousePulse.entitlements`) for:
-  - CloudKit
-  - CloudKit sharing
-  - Sign in with Apple
-- App target defaults to `HPCloudKitEnabled = YES`
-- Added camera usage description + remote notification background mode
-- Added CloudKit schema CI workflow (`.github/workflows/cloudkit-schema.yml`):
-  - reusable + manual dispatch
-  - schema contract validation from `cloudkit/schema/housepulse-schema.json`
-  - Development apply + Production schema verification (record type coverage)
-  - `ios-ci.yml` blocks TestFlight deploy until schema gate succeeds
+## Completed in the latest series
+- Hardened CKShare create/accept flow.
+- Dodany i dopracowany diagnostyczny flow błędów CloudKit.
+- CloudKit schema gate:
+- Development apply + Production verify,
+- jawny check `cloudkit.share`,
+- czytelne logi przy brakach Dev/Prod.
+- Branch policy CI/TestFlight rozszerzona o branch testowy.
 
-## Tests added
-- `InviteInputNormalizerTests`
-- `OnboardingStateTests`
+## Known operational constraint
+- Bez Xcode pierwszy bootstrap `cloudkit.share` wymaga ręcznej akcji w CloudKit Console:
+- Development -> Private DB -> Act As -> custom zone -> save `Household` -> Share Record,
+- następnie Stop Acting As i Deploy Schema Changes Dev -> Prod.
+- Po tym bootstrapie dalsza walidacja i blokada release są pilnowane przez GHA.
 
-## Known constraints / follow-up
-- CloudKit sharing behavior still requires on-device validation with two Apple IDs.
-- Full XCTest/UI test lanes in PR CI remain disabled by policy; use nightly/manual runs.
+## Current CI policy snapshot
+- PR/push lane: build + SwiftLint.
+- Release/testing lane: build + SwiftLint + CloudKit schema gate + TestFlight deploy.
+- Przy failu schema gate deploy do TestFlight jest blokowany.

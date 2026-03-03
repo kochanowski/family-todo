@@ -11,7 +11,7 @@ class MemberStore: ObservableObject {
 
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
-    private let householdId: UUID?
+    private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
@@ -21,6 +21,10 @@ class MemberStore: ObservableObject {
 
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+    }
+
+    func setHousehold(_ id: UUID?) {
+        householdId = id
     }
 
     func setSyncMode(_ mode: SyncMode) {
@@ -55,6 +59,11 @@ class MemberStore: ObservableObject {
             print("Error loading members: \(error)")
             self.error = error
         }
+    }
+
+    func activeMember(for userId: String?) -> Member? {
+        guard let userId else { return nil }
+        return members.first(where: { $0.userId == userId && $0.isActive })
     }
 
     // MARK: - Operations
@@ -104,6 +113,67 @@ class MemberStore: ObservableObject {
         }
     }
 
+    func updateCurrentUserProfile(
+        displayName: String,
+        colorHex: String,
+        currentUserId: String?
+    ) async throws {
+        let trimmedName = try DisplayNameValidator.validate(displayName)
+        guard let normalizedColorHex = MemberColorToken.normalize(hex: colorHex),
+              MemberColorToken.isAllowed(hex: normalizedColorHex)
+        else {
+            throw MemberStoreError.invalidColorSelection
+        }
+
+        guard let userId = currentUserId,
+              let memberId = members.first(where: { $0.userId == userId && $0.isActive })?.id
+        else {
+            throw MemberStoreError.profileMemberNotFound
+        }
+
+        let normalizedKey = DisplayNameValidator.normalizedKey(trimmedName)
+        if members.contains(where: {
+            $0.id != memberId &&
+                $0.isActive &&
+                DisplayNameValidator.normalizedKey($0.displayName) == normalizedKey
+        }) {
+            throw HouseholdError.displayNameAlreadyTaken
+        }
+
+        guard let index = members.firstIndex(where: { $0.id == memberId }) else { return }
+        var member = members[index]
+        if member.displayName == trimmedName, member.colorHex == normalizedColorHex {
+            return
+        }
+
+        let oldName = member.displayName
+        let oldColorHex = member.colorHex
+        member.displayName = trimmedName
+        member.colorHex = normalizedColorHex
+        members[index] = member
+        updateCachedMember(member)
+
+        if syncMode == .cloud {
+            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
+            do {
+                _ = try await cloudKit.updateMemberProfile(
+                    memberId: member.id,
+                    householdId: member.householdId,
+                    newDisplayName: trimmedName,
+                    newColorHex: normalizedColorHex
+                )
+            } catch {
+                member.displayName = oldName
+                member.colorHex = oldColorHex
+                members[index] = member
+                updateCachedMember(member)
+                throw error
+            }
+        }
+
+        NotificationCenter.default.post(name: .memberProfileDidChange, object: nil)
+    }
+
     func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {
         try assertOwnerPermissions(currentUserId: currentUserId)
         guard let index = members.firstIndex(where: { $0.id == id }) else { return }
@@ -126,7 +196,8 @@ class MemberStore: ObservableObject {
             displayName: member.displayName,
             role: newRole,
             joinedAt: member.joinedAt,
-            isActive: member.isActive
+            isActive: member.isActive,
+            colorHex: member.colorHex
         )
 
         members[index] = updatedMember
@@ -188,7 +259,30 @@ class MemberStore: ObservableObject {
         )
 
         do {
-            return try context.fetch(descriptor).map { $0.toMember() }
+            let cachedMembers = try context.fetch(descriptor)
+            var didMigrate = false
+            let resolvedMembers = cachedMembers.map { cached -> Member in
+                let resolvedColor: String
+                if let normalized = MemberColorToken.normalize(hex: cached.colorHex),
+                   MemberColorToken.isAllowed(hex: normalized)
+                {
+                    resolvedColor = normalized
+                } else {
+                    resolvedColor = MemberColorToken.migratedHex(for: cached.id)
+                }
+
+                if cached.colorHex != resolvedColor {
+                    cached.colorHex = resolvedColor
+                    didMigrate = true
+                }
+                return cached.toMember()
+            }
+
+            if didMigrate {
+                try? context.save()
+            }
+
+            return resolvedMembers
         } catch {
             print("Cache fetch error: \(error)")
             return []
@@ -296,6 +390,8 @@ enum MemberStoreError: LocalizedError, Equatable {
     case transferOwnershipRequired
     case cannotRemoveSelf
     case lastOwnerRequired
+    case invalidColorSelection
+    case profileMemberNotFound
 
     var errorDescription: String? {
         switch self {
@@ -307,6 +403,10 @@ enum MemberStoreError: LocalizedError, Equatable {
             "You cannot remove yourself from members management."
         case .lastOwnerRequired:
             "The household must keep at least one owner."
+        case .invalidColorSelection:
+            "Choose one of the available profile colors."
+        case .profileMemberNotFound:
+            "Couldn't find your member profile in this household."
         }
     }
 }

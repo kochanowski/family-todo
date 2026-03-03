@@ -17,6 +17,7 @@ class HouseholdStore: ObservableObject {
     @Published var isLoading = false
     @Published var error: Error?
     @Published var share: CKShare?
+    @Published var activeInviteCode: String?
 
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
@@ -151,7 +152,8 @@ class HouseholdStore: ObservableObject {
                 householdId: newHousehold.id,
                 userId: userId,
                 displayName: validatedDisplayName,
-                role: .owner
+                role: .owner,
+                colorHex: MemberColorToken.randomHex()
             )
             _ = try await cloudKit.saveMember(owner)
         }
@@ -231,9 +233,42 @@ class HouseholdStore: ObservableObject {
         throw CloudKitManager.CloudKitManagerError.shareNotCreated
     }
 
+    func fetchOrCreateInviteCode() async throws -> String {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+        guard syncMode == .cloud else {
+            throw HouseholdError.cloudSyncRequired
+        }
+
+        if let activeInviteCode {
+            do {
+                let token = try await cloudKit.fetchInviteToken(code: activeInviteCode)
+                if token.householdId == household.id, token.isActive() {
+                    self.activeInviteCode = token.code
+                    return token.code
+                }
+            } catch {
+                // Token may no longer exist or be inactive - fall through and recreate.
+            }
+        }
+
+        let token = try await cloudKit.createInviteCode(for: household)
+        activeInviteCode = token.code
+        return token.code
+    }
+
     // MARK: - Join Household
 
     func joinHousehold(inviteCode: String, userId: String, displayName: String) async throws {
+        try await joinHousehold(
+            withInviteInput: inviteCode,
+            userId: userId,
+            displayName: displayName
+        )
+    }
+
+    func joinHousehold(withInviteInput input: String, userId: String, displayName: String) async throws {
         isLoading = true
         defer { isLoading = false }
 
@@ -244,10 +279,15 @@ class HouseholdStore: ObservableObject {
         let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
-        await cloudKit.setHouseholdScope(.participantShared)
-
-        // Accept the share using the invite code (CloudKit share URL)
-        let household = try await cloudKit.acceptShare(inviteCode: inviteCode)
+        let normalizedInvite = try InviteInputNormalizer.normalizeInput(input)
+        let isInviteCodeFlow = InviteInputNormalizer.normalizeInviteCodeToken(normalizedInvite.inviteCode) != nil
+        let household: Household
+        if isInviteCodeFlow {
+            household = try await cloudKit.redeemInviteCode(normalizedInvite.inviteCode)
+        } else {
+            await cloudKit.setHouseholdScope(.participantShared)
+            household = try await cloudKit.acceptShare(inviteCode: normalizedInvite.inviteCode)
+        }
         await cloudKit.setHouseholdScope(.participantShared)
 
         try await upsertMembership(
@@ -292,6 +332,20 @@ class HouseholdStore: ObservableObject {
     // MARK: - Household Management
 
     func renameCurrentHousehold(_ name: String) async throws {
+        guard let currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+        try await updateCurrentHousehold(
+            name: name,
+            userId: currentHousehold.ownerId
+        )
+    }
+
+    func updateCurrentHousehold(
+        name: String,
+        userId: String,
+        iconSymbol: String? = nil
+    ) async throws {
         guard var household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
@@ -301,16 +355,55 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.invalidInviteCode
         }
 
+        let resolvedIconSymbol = iconSymbol ?? household.iconSymbol
+        guard trimmedName != household.name || resolvedIconSymbol != household.iconSymbol else {
+            return
+        }
+
         household.name = trimmedName
+        household.iconSymbol = resolvedIconSymbol
         household.updatedAt = Date()
 
         if syncMode == .cloud {
-            await cloudKit.setHouseholdScope(.ownerPrivate)
-            _ = try await cloudKit.saveHousehold(household)
+            await setCloudScope(for: household, userId: userId)
+            let members = try await cloudKit.fetchMembers(householdId: household.id)
+            guard members.contains(where: { $0.userId == userId && $0.isActive }) else {
+                throw HouseholdError.notAuthorized
+            }
+            _ = try await cloudKit.updateHouseholdMetadata(
+                householdId: household.id,
+                newName: household.name,
+                newIconSymbol: resolvedIconSymbol
+            )
         }
 
         updateCache(with: household)
         currentHousehold = household
+    }
+
+    func resolveMembershipDisplayName(userId: String) async -> String? {
+        guard syncMode == .cloud else { return nil }
+
+        if let household = currentHousehold {
+            await setCloudScope(for: household, userId: userId)
+            if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: household.id),
+               member.isActive
+            {
+                return member.displayName
+            }
+        }
+
+        await cloudKit.setHouseholdScope(.participantShared)
+        if let member = try? await cloudKit.fetchMemberByUserId(userId), member.isActive {
+            return member.displayName
+        }
+
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        if let member = try? await cloudKit.fetchMemberByUserId(userId), member.isActive {
+            return member.displayName
+        }
+
+        return nil
     }
 
     func leaveCurrentHousehold(userId: String) async throws {
@@ -339,16 +432,14 @@ class HouseholdStore: ObservableObject {
                 break
             }
 
-            let updatedMember = Member(
-                id: member.id,
+            _ = try await cloudKit.updateMemberState(
+                memberId: member.id,
                 householdId: member.householdId,
-                userId: member.userId,
-                displayName: member.displayName,
-                role: member.role,
-                joinedAt: member.joinedAt,
-                isActive: false
+                newDisplayName: member.displayName,
+                newRole: member.role,
+                isActive: false,
+                colorHex: member.colorHex
             )
-            _ = try await cloudKit.saveMember(updatedMember)
         }
 
         clearCurrentHousehold()
@@ -443,16 +534,14 @@ class HouseholdStore: ObservableObject {
 
             guard shouldUpdate else { return }
 
-            let updated = Member(
-                id: existing.id,
+            _ = try await cloudKit.updateMemberState(
+                memberId: existing.id,
                 householdId: existing.householdId,
-                userId: existing.userId,
-                displayName: displayName,
-                role: resolvedRole,
-                joinedAt: existing.joinedAt,
-                isActive: true
+                newDisplayName: displayName,
+                newRole: resolvedRole,
+                isActive: true,
+                colorHex: existing.colorHex
             )
-            _ = try await cloudKit.saveMember(updated)
             return
         }
 
@@ -460,7 +549,8 @@ class HouseholdStore: ObservableObject {
             householdId: householdId,
             userId: userId,
             displayName: displayName,
-            role: role
+            role: role,
+            colorHex: MemberColorToken.randomHex()
         )
         _ = try await cloudKit.saveMember(member)
     }
@@ -504,6 +594,7 @@ class HouseholdStore: ObservableObject {
     func clearCurrentHousehold() {
         currentHousehold = nil
         share = nil
+        activeInviteCode = nil
         activeContainer = nil
         activeShare = nil
         _ = _Concurrency.Task { [cloudKit] in
@@ -613,7 +704,8 @@ class HouseholdStore: ObservableObject {
             householdId: householdId,
             userId: userId,
             displayName: displayName,
-            role: .owner
+            role: .owner,
+            colorHex: MemberColorToken.randomHex()
         )
         context.insert(CachedMember(from: ownerMember))
 

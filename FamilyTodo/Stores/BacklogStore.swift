@@ -5,11 +5,29 @@ import SwiftUI
 /// Store for backlog management (categories and items)
 @MainActor
 final class BacklogStore: ObservableObject {
+    private enum BacklogSyncStatus {
+        static let synced = "synced"
+        static let pendingUpload = "pendingUpload"
+        static let pendingDelete = "pendingDelete"
+        static let awaitingCloudEcho = "awaitingCloudEcho"
+    }
+
     enum PromotionResult: Equatable {
         case success(createdTaskId: UUID)
         case assigneeRequired
         case wipLimitReached(current: Int, limit: Int)
         case failed(String)
+    }
+
+    private struct PendingSyncSnapshot {
+        var pendingUploadItemsByID: [UUID: BacklogItem]
+        var pendingDeleteItemIDs: Set<UUID>
+        var pendingCategoriesByID: [UUID: BacklogCategory]
+    }
+
+    private struct CacheSnapshot {
+        var categories: [CachedBacklogCategory]
+        var items: [CachedBacklogItem]
     }
 
     @Published private(set) var categories: [BacklogCategory] = []
@@ -21,6 +39,7 @@ final class BacklogStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
+    private var pendingMutationIDs: Set<UUID> = []
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -56,7 +75,11 @@ final class BacklogStore: ObservableObject {
         error = nil
 
         // 1. Load from cache first
-        loadFromCache()
+        let cacheSnapshot = loadFromCache()
+        let pendingSnapshot = pendingSyncSnapshot(
+            from: cacheSnapshot.items,
+            cachedCategories: cacheSnapshot.categories
+        )
 
         if !isCloudSyncEnabled {
             isLoading = false
@@ -72,11 +95,16 @@ final class BacklogStore: ObservableObject {
 
             let (categoriesResult, itemsResult) = try await (fetchedCategories, fetchedItems)
 
-            categories = categoriesResult
-            items = itemsResult
+            categories = mergeCloudCategories(categoriesResult, with: pendingSnapshot)
+            items = mergeCloudSnapshot(itemsResult, with: pendingSnapshot)
 
             // 3. Update cache
-            syncToCache(categories: categoriesResult, items: itemsResult)
+            syncToCache(
+                categories: categories,
+                items: items,
+                cloudCategoryIDs: Set(categoriesResult.map(\.id)),
+                cloudItemIDs: Set(itemsResult.map(\.id))
+            )
         } catch {
             self.error = error
         }
@@ -84,28 +112,42 @@ final class BacklogStore: ObservableObject {
         isLoading = false
     }
 
-    private func loadFromCache() {
-        guard let context = modelContext, let householdId else { return }
+    private func loadFromCache() -> CacheSnapshot {
+        guard let context = modelContext, let householdId else {
+            return CacheSnapshot(categories: [], items: [])
+        }
 
         // Load Categories
+        var cachedCategories: [CachedBacklogCategory] = []
         let categoryDescriptor = FetchDescriptor<CachedBacklogCategory>(
             predicate: #Predicate { $0.householdId == householdId },
             sortBy: [SortDescriptor(\.sortOrder)]
         )
-        if let cachedCategories = try? context.fetch(categoryDescriptor) {
-            categories = cachedCategories.map { $0.toBacklogCategory() }
+        if let fetchedCategories = try? context.fetch(categoryDescriptor) {
+            cachedCategories = fetchedCategories
+            categories = fetchedCategories.map { $0.toBacklogCategory() }
         }
 
         // Load Items
+        var cachedItems: [CachedBacklogItem] = []
         let itemDescriptor = FetchDescriptor<CachedBacklogItem>(
             predicate: #Predicate { $0.householdId == householdId }
         )
-        if let cachedItems = try? context.fetch(itemDescriptor) {
-            items = cachedItems.map { $0.toBacklogItem() }
+        if let fetchedItems = try? context.fetch(itemDescriptor) {
+            cachedItems = fetchedItems
+            items = fetchedItems
+                .filter { $0.syncStatusRaw != BacklogSyncStatus.pendingDelete }
+                .map { $0.toBacklogItem() }
         }
+        return CacheSnapshot(categories: cachedCategories, items: cachedItems)
     }
 
-    private func syncToCache(categories: [BacklogCategory], items: [BacklogItem]) {
+    private func syncToCache(
+        categories: [BacklogCategory],
+        items: [BacklogItem],
+        cloudCategoryIDs: Set<UUID>,
+        cloudItemIDs: Set<UUID>
+    ) {
         guard let context = modelContext else { return }
 
         // Sync Categories
@@ -114,6 +156,14 @@ final class BacklogStore: ObservableObject {
                 predicate: #Predicate { $0.id == category.id }
             )
             if let existing = try? context.fetch(descriptor).first {
+                if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload {
+                    continue
+                }
+                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho &&
+                    !cloudCategoryIDs.contains(category.id)
+                {
+                    continue
+                }
                 existing.update(from: category)
             } else {
                 let cached = CachedBacklogCategory(from: category)
@@ -127,6 +177,16 @@ final class BacklogStore: ObservableObject {
                 predicate: #Predicate { $0.id == item.id }
             )
             if let existing = try? context.fetch(descriptor).first {
+                if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
+                    existing.syncStatusRaw == BacklogSyncStatus.pendingDelete
+                {
+                    continue
+                }
+                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho &&
+                    !cloudItemIDs.contains(item.id)
+                {
+                    continue
+                }
                 existing.update(from: item)
             } else {
                 let cached = CachedBacklogItem(from: item)
@@ -139,12 +199,21 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Category Operations
 
-    func addCategory(_ title: String) async {
+    func addCategory(_ title: String, colorHex: String? = nil) async {
         guard let householdId else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        let categoryId = UUID()
+        let resolvedColorHex = resolveCategoryColorHex(
+            requested: colorHex,
+            stableId: categoryId
+        )
 
         let category = BacklogCategory(
+            id: categoryId,
             householdId: householdId,
-            title: title,
+            title: trimmedTitle,
+            colorHex: resolvedColorHex,
             sortOrder: categories.count
         )
 
@@ -156,7 +225,8 @@ final class BacklogStore: ObservableObject {
         // Cache
         if let context = modelContext {
             let cached = CachedBacklogCategory(from: category)
-            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.syncStatusRaw = isCloudSyncEnabled
+                ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             context.insert(cached)
             try? context.save()
@@ -173,7 +243,7 @@ final class BacklogStore: ObservableObject {
                     predicate: #Predicate { $0.id == category.id }
                 )
                 if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "synced"
+                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                     cached.lastSyncedAt = Date()
                     try? context.save()
                 }
@@ -231,12 +301,30 @@ final class BacklogStore: ObservableObject {
     }
 
     func renameCategory(_ category: BacklogCategory, newTitle: String) async {
+        await updateCategory(
+            category,
+            newTitle: newTitle,
+            newColorHex: category.colorHex
+        )
+    }
+
+    func updateCategory(
+        _ category: BacklogCategory,
+        newTitle: String,
+        newColorHex: String
+    ) async {
         let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         guard let index = categories.firstIndex(where: { $0.id == category.id }) else { return }
+        let resolvedColorHex = resolveCategoryColorHex(
+            requested: newColorHex,
+            stableId: category.id
+        )
 
+        let previousCategory = categories[index]
         var updatedCategory = categories[index]
         updatedCategory.title = trimmedTitle
+        updatedCategory.colorHex = resolvedColorHex
         updatedCategory.updatedAt = Date()
 
         withAnimation {
@@ -250,7 +338,8 @@ final class BacklogStore: ObservableObject {
             )
             if let cached = try? context.fetch(descriptor).first {
                 cached.update(from: updatedCategory)
-                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.syncStatusRaw = isCloudSyncEnabled
+                    ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                 cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 try? context.save()
             }
@@ -258,10 +347,41 @@ final class BacklogStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveBacklogCategory(updatedCategory)
+            _ = try await cloudKit.updateBacklogCategoryMetadata(
+                categoryId: updatedCategory.id,
+                householdId: updatedCategory.householdId,
+                newTitle: updatedCategory.title,
+                newColorHex: updatedCategory.colorHex
+            )
+
+            if let context = modelContext {
+                let categoryId = updatedCategory.id
+                let descriptor = FetchDescriptor<CachedBacklogCategory>(
+                    predicate: #Predicate { $0.id == categoryId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
         } catch {
             self.error = error
-            await loadData()
+            withAnimation {
+                categories[index] = previousCategory
+            }
+            if let context = modelContext {
+                let categoryId = previousCategory.id
+                let descriptor = FetchDescriptor<CachedBacklogCategory>(
+                    predicate: #Predicate { $0.id == categoryId }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.update(from: previousCategory)
+                    cached.syncStatusRaw = BacklogSyncStatus.synced
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
         }
     }
 
@@ -288,7 +408,8 @@ final class BacklogStore: ObservableObject {
                 )
                 if let cached = try? context.fetch(descriptor).first {
                     cached.update(from: category)
-                    cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                    cached.syncStatusRaw = isCloudSyncEnabled
+                        ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                     cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 }
             }
@@ -299,6 +420,7 @@ final class BacklogStore: ObservableObject {
         for category in categories {
             do {
                 _ = try await cloudKit.saveBacklogCategory(category)
+                markCachedCategoryAwaitingCloudEcho(id: category.id)
             } catch {
                 self.error = error
             }
@@ -306,6 +428,77 @@ final class BacklogStore: ObservableObject {
     }
 
     // MARK: - Item Operations
+
+    @discardableResult
+    func createFromTask(_ task: Task, fallbackCategoryId: UUID? = nil) async throws -> BacklogItem {
+        guard let householdId else {
+            throw HouseholdError.householdNotFound
+        }
+
+        let resolvedCategoryId: UUID?
+        if let backlogCategoryId = task.backlogCategoryId,
+           categories.contains(where: { $0.id == backlogCategoryId })
+        {
+            resolvedCategoryId = backlogCategoryId
+        } else if let fallbackCategoryId,
+                  categories.contains(where: { $0.id == fallbackCategoryId })
+        {
+            resolvedCategoryId = fallbackCategoryId
+        } else {
+            resolvedCategoryId = categories.first?.id
+        }
+
+        guard let categoryId = resolvedCategoryId else {
+            throw HouseholdError.invalidInviteCode
+        }
+
+        let item = BacklogItem(
+            categoryId: categoryId,
+            householdId: householdId,
+            title: task.title,
+            assigneeId: task.assigneeId,
+            notes: task.notes
+        )
+
+        withAnimation {
+            items.insert(item, at: 0)
+        }
+
+        if let context = modelContext {
+            let cached = CachedBacklogItem(from: item)
+            cached.syncStatusRaw = isCloudSyncEnabled
+                ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
+            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+            context.insert(cached)
+            try? context.save()
+        }
+
+        guard isCloudSyncEnabled else {
+            return item
+        }
+
+        do {
+            _ = try await cloudKit.saveBacklogItem(item)
+            if let context = modelContext {
+                let descriptor = FetchDescriptor<CachedBacklogItem>(
+                    predicate: #Predicate { $0.id == item.id }
+                )
+                if let cached = try? context.fetch(descriptor).first {
+                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
+                    cached.lastSyncedAt = Date()
+                    try? context.save()
+                }
+            }
+            return item
+        } catch {
+            self.error = error
+            withAnimation {
+                items.removeAll { $0.id == item.id }
+            }
+            removeCachedItem(id: item.id)
+            throw error
+        }
+    }
 
     func addItem(to categoryId: UUID, title: String, assigneeId: UUID? = nil, notes: String? = nil) async {
         guard let householdId else { return }
@@ -329,7 +522,8 @@ final class BacklogStore: ObservableObject {
         // Cache
         if let context = modelContext {
             let cached = CachedBacklogItem(from: item)
-            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.syncStatusRaw = isCloudSyncEnabled
+                ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             context.insert(cached)
             try? context.save()
@@ -346,7 +540,7 @@ final class BacklogStore: ObservableObject {
                     predicate: #Predicate { $0.id == item.id }
                 )
                 if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "synced"
+                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                     cached.lastSyncedAt = Date()
                     try? context.save()
                 }
@@ -417,6 +611,8 @@ final class BacklogStore: ObservableObject {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        beginMutation(item.id)
+        defer { endMutation(item.id) }
 
         var updatedItem = items[index]
         updatedItem.title = trimmedTitle
@@ -435,8 +631,16 @@ final class BacklogStore: ObservableObject {
             )
             if let cached = try? context.fetch(descriptor).first {
                 cached.update(from: updatedItem)
-                cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+                cached.syncStatusRaw = isCloudSyncEnabled
+                    ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                 cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+                try? context.save()
+            } else {
+                let cached = CachedBacklogItem(from: updatedItem)
+                cached.syncStatusRaw = isCloudSyncEnabled
+                    ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
+                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+                context.insert(cached)
                 try? context.save()
             }
         }
@@ -444,6 +648,7 @@ final class BacklogStore: ObservableObject {
         guard isCloudSyncEnabled else { return }
         do {
             _ = try await cloudKit.saveBacklogItem(updatedItem)
+            markCachedItemAwaitingCloudEcho(id: updatedItem.id)
         } catch {
             self.error = error
             // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
@@ -486,11 +691,132 @@ final class BacklogStore: ObservableObject {
                     "Couldn't remove item from Ideas. Promotion was rolled back."
                 )
             }
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
             return .success(createdTaskId: createdTaskId)
         case .assigneeRequired:
             return .assigneeRequired
         case let .wipLimitReached(current, limit):
             return .wipLimitReached(current: current, limit: limit)
+        }
+    }
+
+    private func beginMutation(_ id: UUID) {
+        pendingMutationIDs.insert(id)
+    }
+
+    private func endMutation(_ id: UUID) {
+        pendingMutationIDs.remove(id)
+    }
+
+    private func markCachedItemAwaitingCloudEcho(id: UUID) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
+            cached.lastSyncedAt = Date()
+            try? context.save()
+        }
+    }
+
+    private func markCachedCategoryAwaitingCloudEcho(id: UUID) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<CachedBacklogCategory>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
+            cached.lastSyncedAt = Date()
+            try? context.save()
+        }
+    }
+
+    private func resolveCategoryColorHex(requested: String?, stableId: UUID) -> String {
+        guard let normalized = MemberColorToken.normalize(hex: requested),
+              MemberColorToken.isAllowed(hex: normalized)
+        else {
+            return MemberColorToken.migratedHex(for: stableId)
+        }
+        return normalized
+    }
+
+    private func pendingSyncSnapshot(
+        from cachedItems: [CachedBacklogItem],
+        cachedCategories: [CachedBacklogCategory]
+    ) -> PendingSyncSnapshot {
+        var pendingUploadItemsByID: [UUID: BacklogItem] = [:]
+        var pendingDeleteItemIDs = Set<UUID>()
+        var pendingCategoriesByID: [UUID: BacklogCategory] = [:]
+        for cached in cachedItems {
+            switch cached.syncStatusRaw {
+            case BacklogSyncStatus.pendingUpload, BacklogSyncStatus.awaitingCloudEcho:
+                pendingUploadItemsByID[cached.id] = cached.toBacklogItem()
+            case BacklogSyncStatus.pendingDelete:
+                pendingDeleteItemIDs.insert(cached.id)
+            default:
+                continue
+            }
+        }
+        for cachedCategory in cachedCategories {
+            if cachedCategory.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
+                cachedCategory.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho
+            {
+                pendingCategoriesByID[cachedCategory.id] = cachedCategory.toBacklogCategory()
+            }
+        }
+        return PendingSyncSnapshot(
+            pendingUploadItemsByID: pendingUploadItemsByID,
+            pendingDeleteItemIDs: pendingDeleteItemIDs,
+            pendingCategoriesByID: pendingCategoriesByID
+        )
+    }
+
+    private func mergeCloudCategories(
+        _ cloudCategories: [BacklogCategory],
+        with pendingSnapshot: PendingSyncSnapshot
+    ) -> [BacklogCategory] {
+        var mergedByID = Dictionary(uniqueKeysWithValues: cloudCategories.map { ($0.id, $0) })
+        for (id, pendingCategory) in pendingSnapshot.pendingCategoriesByID {
+            mergedByID[id] = pendingCategory
+        }
+        return mergedByID.values.sorted { lhs, rhs in
+            if lhs.sortOrder != rhs.sortOrder {
+                return lhs.sortOrder < rhs.sortOrder
+            }
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+    }
+
+    private func mergeCloudSnapshot(
+        _ cloudItems: [BacklogItem],
+        with pendingSnapshot: PendingSyncSnapshot
+    ) -> [BacklogItem] {
+        var mergedByID = Dictionary(uniqueKeysWithValues: cloudItems.map { ($0.id, $0) })
+        let localByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+
+        for (id, pendingItem) in pendingSnapshot.pendingUploadItemsByID {
+            mergedByID[id] = pendingItem
+        }
+
+        for id in pendingSnapshot.pendingDeleteItemIDs {
+            mergedByID.removeValue(forKey: id)
+        }
+
+        for id in pendingMutationIDs {
+            if let local = localByID[id] {
+                mergedByID[id] = local
+            }
+        }
+
+        return mergedByID.values.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 }

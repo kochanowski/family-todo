@@ -75,6 +75,7 @@ extension CloudKitManager {
         record["householdId"] = reference(for: member.householdId)
         record["userId"] = member.userId as CKRecordValue
         record["displayName"] = member.displayName as CKRecordValue
+        record["colorHex"] = member.colorHex as CKRecordValue
         record["role"] = member.role.rawValue as CKRecordValue
         record["joinedAt"] = member.joinedAt as CKRecordValue
         record["isActive"] = (member.isActive ? 1 : 0) as CKRecordValue
@@ -104,7 +105,8 @@ extension CloudKitManager {
             displayName: displayName,
             role: role,
             joinedAt: joinedAt,
-            isActive: isActiveValue == 1
+            isActive: isActiveValue == 1,
+            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.migratedHex(for: id)
         )
     }
 
@@ -184,6 +186,7 @@ extension CloudKitManager {
         if let notes = task.notes {
             record["notes"] = notes as CKRecordValue
         }
+        record["order"] = Int64(task.order) as CKRecordValue
         record["createdAt"] = task.createdAt as CKRecordValue
         record["updatedAt"] = task.updatedAt as CKRecordValue
         return record
@@ -221,6 +224,7 @@ extension CloudKitManager {
             taskType: taskType,
             recurringChoreId: uuid(from: record["recurringChoreId"] as? CKRecord.Reference),
             notes: record["notes"] as? String,
+            order: Int(record["order"] as? Int64 ?? 0),
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -388,6 +392,7 @@ extension CloudKitManager {
         record["id"] = category.id.uuidString as CKRecordValue
         record["householdId"] = reference(for: category.householdId)
         record["title"] = category.title as CKRecordValue
+        record["colorHex"] = category.colorHex as CKRecordValue
         record["sortOrder"] = category.sortOrder as CKRecordValue
         record["createdAt"] = category.createdAt as CKRecordValue
         record["updatedAt"] = category.updatedAt as CKRecordValue
@@ -407,12 +412,16 @@ extension CloudKitManager {
             throw CloudKitManagerError.invalidRecord
         }
 
-        let sortOrder = record["sortOrder"] as? Int ?? 0
+        let sortOrder =
+            record["sortOrder"] as? Int
+                ?? (record["sortOrder"] as? Int64).map(Int.init)
+                ?? 0
 
         return BacklogCategory(
             id: id,
             householdId: householdId,
             title: title,
+            colorHex: (record["colorHex"] as? String) ?? MemberColorToken.migratedHex(for: id),
             sortOrder: sortOrder,
             createdAt: createdAt,
             updatedAt: updatedAt
@@ -462,6 +471,58 @@ extension CloudKitManager {
             notes: record["notes"] as? String,
             createdAt: createdAt,
             updatedAt: updatedAt
+        )
+    }
+
+    // MARK: - InviteToken Mapping
+
+    func inviteTokenRecord(from token: InviteToken) -> CKRecord {
+        let record = CKRecord(
+            recordType: "InviteToken",
+            recordID: CKRecord.ID(recordName: token.id)
+        )
+        record["code"] = token.code as CKRecordValue
+        record["householdId"] = token.householdId.uuidString as CKRecordValue
+        record["shareURL"] = token.shareURL as CKRecordValue
+        record["createdAt"] = token.createdAt as CKRecordValue
+        record["expiresAt"] = token.expiresAt as CKRecordValue
+        record["isRevoked"] = (token.isRevoked ? 1 : 0) as CKRecordValue
+        record["usesCount"] = Int64(token.usesCount) as CKRecordValue
+        if let lastRedeemedAt = token.lastRedeemedAt {
+            record["lastRedeemedAt"] = lastRedeemedAt as CKRecordValue
+        }
+        return record
+    }
+
+    func inviteToken(from record: CKRecord) throws -> InviteToken {
+        guard
+            let code = record["code"] as? String,
+            let householdRaw = record["householdId"] as? String,
+            let householdId = UUID(uuidString: householdRaw),
+            let shareURL = record["shareURL"] as? String,
+            let createdAt = record["createdAt"] as? Date,
+            let expiresAt = record["expiresAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        let isRevokedRaw =
+            record["isRevoked"] as? Int64
+                ?? Int64(record["isRevoked"] as? Int ?? 0)
+        let usesCountRaw =
+            record["usesCount"] as? Int64
+                ?? Int64(record["usesCount"] as? Int ?? 0)
+
+        return InviteToken(
+            id: record.recordID.recordName,
+            code: code,
+            householdId: householdId,
+            shareURL: shareURL,
+            createdAt: createdAt,
+            expiresAt: expiresAt,
+            isRevoked: isRevokedRaw == 1,
+            usesCount: max(Int(usesCountRaw), 0),
+            lastRedeemedAt: record["lastRedeemedAt"] as? Date
         )
     }
 }
