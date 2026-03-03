@@ -305,7 +305,7 @@ struct CategoriesManagementView: View {
                     newCategoryColorHex = MemberColorToken.randomHex()
                     isAddingCategory = true
                 } label: {
-                    Label("(+) New category", systemImage: "plus.circle")
+                    Label("New category", systemImage: "plus.circle")
                 }
             }
         }

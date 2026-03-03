@@ -16,7 +16,7 @@ Acceptance Criteria: The `TextField` row must have the exact same leading spacin
 Description: In Tasks -> Completed, tapping "Clear All" deletes tasks very slowly (one by one with individual animations).
 Acceptance Criteria: Mass deletion must be instant. Optimize the deletion loop (e.g., remove per-item animation, use a single batch delete, or wrap the state update in a single `withAnimation` block).
 
-- [ ] **Remove redundant "(+)" in Idea Categories**
+- [x] **Remove redundant "(+)" in Idea Categories**
 Description: In `More -> Idea Categories`, the "New category" button has a built-in plus icon, but the text also says `(+) New category`.
 Acceptance Criteria: Change the text string from `(+) New category` to just `New category`.
 
