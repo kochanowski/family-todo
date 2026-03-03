@@ -20,7 +20,7 @@ Acceptance Criteria: Mass deletion must be instant. Optimize the deletion loop (
 Description: In `More -> Idea Categories`, the "New category" button has a built-in plus icon, but the text also says `(+) New category`.
 Acceptance Criteria: Change the text string from `(+) New category` to just `New category`.
 
-- [ ] **Fix Invite Token wipe on Dev Deploy**
+- [x] **Fix Invite Token wipe on Dev Deploy**
 Description: Every time we deploy to the dev environment, the Invite Token gets deleted/wiped. This was supposed to be fixed but is still breaking.
 Acceptance Criteria: Investigate the token storage/generation or deployment scripts and ensure the Invite Token persists across deployments.
 
