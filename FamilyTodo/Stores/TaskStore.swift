@@ -574,10 +574,7 @@ final class TaskStore: ObservableObject {
         }
 
         guard !tasksToDelete.isEmpty else { return }
-
-        for task in tasksToDelete {
-            await deleteTask(task)
-        }
+        await deleteTasksBatch(tasksToDelete)
     }
 
     /// Clears archived done tasks (older than 24h).
@@ -599,10 +596,84 @@ final class TaskStore: ObservableObject {
         }
 
         guard !tasksToDelete.isEmpty else { return }
+        await deleteTasksBatch(tasksToDelete)
+    }
+
+    private func deleteTasksBatch(_ tasksToDelete: [Task]) async {
+        guard !tasksToDelete.isEmpty else { return }
+        let taskIDs = Set(tasksToDelete.map(\.id))
+
+        taskIDs.forEach(beginMutation)
+        defer { taskIDs.forEach(endMutation) }
+
+        withAnimation(.easeOut(duration: 0.16)) {
+            tasks.removeAll { taskIDs.contains($0.id) }
+        }
+
+        if !isCloudSyncEnabled {
+            batchDeleteCachedTasks(ids: taskIDs)
+            for task in tasksToDelete {
+                await notificationService.removeTaskReminder(for: task)
+            }
+            return
+        }
+
+        markCachedTasksPendingDelete(tasksToDelete)
+
+        var successfullyDeletedIDs = Set<UUID>()
+        for task in tasksToDelete {
+            do {
+                try await cloudKit.deleteTask(id: task.id, householdId: task.householdId)
+                successfullyDeletedIDs.insert(task.id)
+                await notificationService.removeTaskReminder(for: task)
+            } catch {
+                self.error = error
+            }
+        }
+
+        if !successfullyDeletedIDs.isEmpty {
+            batchDeleteCachedTasks(ids: successfullyDeletedIDs)
+        }
+    }
+
+    private func markCachedTasksPendingDelete(_ tasksToDelete: [Task]) {
+        guard !tasksToDelete.isEmpty else { return }
+        let cachedTasks = fetchCachedTasksForCurrentHousehold()
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedTasks.map { ($0.id, $0) })
 
         for task in tasksToDelete {
-            await deleteTask(task)
+            if let cached = cachedByID[task.id] {
+                cached.syncStatusRaw = "pendingDelete"
+                cached.lastSyncedAt = nil
+            } else {
+                let cached = CachedTask(from: task)
+                cached.syncStatusRaw = "pendingDelete"
+                cached.lastSyncedAt = nil
+                modelContext.insert(cached)
+            }
         }
+        saveContextOrSetError(operation: "batch mark tasks pending delete")
+    }
+
+    private func batchDeleteCachedTasks(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let cachedTasks = fetchCachedTasksForCurrentHousehold()
+        for cached in cachedTasks where ids.contains(cached.id) {
+            modelContext.delete(cached)
+        }
+        saveContextOrSetError(operation: "batch remove cached tasks")
+    }
+
+    private func fetchCachedTasksForCurrentHousehold() -> [CachedTask] {
+        if let householdId {
+            let descriptor = FetchDescriptor<CachedTask>(
+                predicate: #Predicate { $0.householdId == householdId }
+            )
+            return (try? modelContext.fetch(descriptor)) ?? []
+        }
+
+        let descriptor = FetchDescriptor<CachedTask>()
+        return (try? modelContext.fetch(descriptor)) ?? []
     }
 
     private func beginMutation(_ id: UUID) {

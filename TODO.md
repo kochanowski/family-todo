@@ -12,7 +12,7 @@
 Description: When typing a new item in the Shopping list, the `TextField` padding/alignment doesn't match the saved items. It lacks the empty circle placeholder, causing the text to shift left and break the vertical alignment.
 Acceptance Criteria: The `TextField` row must have the exact same leading spacing/layout (e.g., an invisible circle or matching padding) as the saved items so the text perfectly aligns vertically.
 
-- [ ] **Optimize Tasks "Clear All" Performance**
+- [x] **Optimize Tasks "Clear All" Performance**
 Description: In Tasks -> Completed, tapping "Clear All" deletes tasks very slowly (one by one with individual animations).
 Acceptance Criteria: Mass deletion must be instant. Optimize the deletion loop (e.g., remove per-item animation, use a single batch delete, or wrap the state update in a single `withAnimation` block).
 
