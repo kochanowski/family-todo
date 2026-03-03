@@ -150,13 +150,9 @@ struct ProfileView: View {
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .frame(width: 28, height: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(household.name)
-                                .foregroundStyle(themeStore.contentPrimaryColor)
-                            Text("Name")
-                                .font(themeStore.font(for: .bodySmall))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                        }
+                        Text(household.name)
+                            .font(themeStore.font(for: .listRowTitle))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .semibold))
