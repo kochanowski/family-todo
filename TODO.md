@@ -8,7 +8,7 @@
 
 ## Phase 1: Data Integrity & CloudKit (High Priority)
 
-- [ ] **P1.1 Replace Silent SwiftData Saves** ([Details](TODO_DETAILS.md#p11))
+- [x] **P1.1 Replace Silent SwiftData Saves** ([Details](TODO_DETAILS.md#p11))
 Description: Replace `try? modelContext.save()` with a shared `saveContextOrSetError(...)` pattern in all stores.
 Acceptance Criteria: No silent save calls remain in target stores; failures are logged and surfaced via store error state.
 Regression Risk: Local writes may fail visibly; verify create/edit/delete still works for Tasks, Shopping, Backlog.
