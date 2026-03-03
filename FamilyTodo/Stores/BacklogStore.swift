@@ -123,6 +123,7 @@ final class BacklogStore: ObservableObject {
                 cloudCategoryIDs: Set(categoriesResult.map(\.id)),
                 cloudItemIDs: Set(itemsResult.map(\.id))
             )
+            await flushPendingSync()
         } catch {
             self.error = error
         }
@@ -213,6 +214,77 @@ final class BacklogStore: ObservableObject {
         }
 
         saveContextOrSetError(context, operation: "persist backlog cache")
+    }
+
+    private func flushPendingSync() async {
+        guard isCloudSyncEnabled, let context = modelContext, let householdId else { return }
+
+        let categoryDescriptor = FetchDescriptor<CachedBacklogCategory>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let itemDescriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+
+        let cachedCategories = (try? context.fetch(categoryDescriptor)) ?? []
+        let cachedItems = (try? context.fetch(itemDescriptor)) ?? []
+
+        let pendingCategoryUploads = cachedCategories.filter {
+            $0.syncStatusRaw == BacklogSyncStatus.pendingUpload
+        }
+        let pendingItemUploads = cachedItems.filter {
+            $0.syncStatusRaw == BacklogSyncStatus.pendingUpload
+        }
+        let pendingItemDeletes = cachedItems.filter {
+            $0.syncStatusRaw == BacklogSyncStatus.pendingDelete
+        }
+
+        guard
+            !pendingCategoryUploads.isEmpty ||
+            !pendingItemUploads.isEmpty ||
+            !pendingItemDeletes.isEmpty
+        else {
+            return
+        }
+
+        var didMutateCache = false
+
+        for cached in pendingCategoryUploads {
+            do {
+                _ = try await cloudKit.saveBacklogCategory(cached.toBacklogCategory())
+                cached.syncStatusRaw = BacklogSyncStatus.synced
+                cached.lastSyncedAt = Date()
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        for cached in pendingItemUploads {
+            do {
+                _ = try await cloudKit.saveBacklogItem(cached.toBacklogItem())
+                cached.syncStatusRaw = BacklogSyncStatus.synced
+                cached.lastSyncedAt = Date()
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        for cached in pendingItemDeletes {
+            do {
+                try await cloudKit.deleteBacklogItem(id: cached.id, householdId: cached.householdId)
+                context.delete(cached)
+                items.removeAll { $0.id == cached.id }
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        if didMutateCache {
+            saveContextOrSetError(context, operation: "flush pending backlog sync mutations")
+        }
     }
 
     // MARK: - Category Operations

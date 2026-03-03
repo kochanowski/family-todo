@@ -115,6 +115,7 @@ final class ShoppingListStore: ObservableObject {
 
             // 3. Update cache
             syncToCache(fetchedItems)
+            await flushPendingSync()
         } catch {
             // Keep cached data on error
             self.error = error
@@ -157,6 +158,48 @@ final class ShoppingListStore: ObservableObject {
         }
 
         saveContextOrSetError(context, operation: "sync shopping cache from cloud")
+    }
+
+    private func flushPendingSync() async {
+        guard isCloudSyncEnabled, let context = modelContext, let householdId else { return }
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedItems = (try? context.fetch(descriptor)) ?? []
+
+        let pendingUploads = cachedItems.filter { $0.syncStatusRaw == "pendingUpload" }
+        let pendingDeletes = cachedItems.filter { $0.syncStatusRaw == "pendingDelete" }
+
+        guard !pendingUploads.isEmpty || !pendingDeletes.isEmpty else { return }
+
+        var didMutateCache = false
+
+        for cached in pendingUploads {
+            do {
+                _ = try await cloudKit.saveShoppingItem(cached.toShoppingItem())
+                cached.syncStatusRaw = "synced"
+                cached.lastSyncedAt = Date()
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        for cached in pendingDeletes {
+            do {
+                try await cloudKit.deleteShoppingItem(id: cached.id, householdId: cached.householdId)
+                context.delete(cached)
+                items.removeAll { $0.id == cached.id }
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        if didMutateCache {
+            saveContextOrSetError(context, operation: "flush pending shopping sync mutations")
+        }
     }
 
     // MARK: - Create Item

@@ -204,6 +204,7 @@ final class TaskStore: ObservableObject {
             let cloudTasks = try await cloudKit.fetchTasks(householdId: householdId)
             tasks = mergeCloudSnapshot(cloudTasks, with: pendingSnapshot)
             syncToCache(cloudTasks)
+            await flushPendingSync()
         } catch {
             // If CloudKit fails, we already have cached data
             self.error = error
@@ -242,6 +243,44 @@ final class TaskStore: ObservableObject {
             }
         }
         saveContextOrSetError(operation: "sync tasks cache from cloud")
+    }
+
+    private func flushPendingSync() async {
+        guard isCloudSyncEnabled, householdId != nil else { return }
+
+        let cachedTasks = fetchCachedTasksForCurrentHousehold()
+        let pendingUploads = cachedTasks.filter { $0.syncStatusRaw == "pendingUpload" }
+        let pendingDeletes = cachedTasks.filter { $0.syncStatusRaw == "pendingDelete" }
+
+        guard !pendingUploads.isEmpty || !pendingDeletes.isEmpty else { return }
+
+        var didMutateCache = false
+
+        for cached in pendingUploads where !pendingTaskMutations.contains(cached.id) {
+            do {
+                _ = try await cloudKit.saveTask(cached.toTask())
+                cached.syncStatusRaw = "synced"
+                cached.lastSyncedAt = Date()
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        for cached in pendingDeletes where !pendingTaskMutations.contains(cached.id) {
+            do {
+                try await cloudKit.deleteTask(id: cached.id, householdId: cached.householdId)
+                modelContext.delete(cached)
+                tasks.removeAll { $0.id == cached.id }
+                didMutateCache = true
+            } catch {
+                self.error = error
+            }
+        }
+
+        if didMutateCache {
+            saveContextOrSetError(operation: "flush pending task sync mutations")
+        }
     }
 
     // MARK: - Task Operations

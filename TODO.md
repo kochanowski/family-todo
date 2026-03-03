@@ -31,7 +31,7 @@ Description: Replace `try? modelContext.save()` with a shared `saveContextOrSetE
 Acceptance Criteria: No silent save calls remain in target stores; failures are logged and surfaced via store error state.
 Regression Risk: Local writes may fail visibly; verify create/edit/delete still works for Tasks, Shopping, Backlog.
 
-- [ ] **P1.2 Replay Pending Sync Mutations** ([Details](TODO_DETAILS.md#p12))
+- [x] **P1.2 Replay Pending Sync Mutations** ([Details](TODO_DETAILS.md#p12))
 Description: Add `flushPendingSync()` in stores to replay `pendingUpload` and `pendingDelete` after load/reconnect.
 Acceptance Criteria: Offline-created/edited/deleted records sync successfully after reconnect/app restart.
 Regression Risk: Duplicate operations or resurrection of deleted records; test offline -> restart -> reconnect flows.
