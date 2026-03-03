@@ -36,7 +36,7 @@ Description: Add `flushPendingSync()` in stores to replay `pendingUpload` and `p
 Acceptance Criteria: Offline-created/edited/deleted records sync successfully after reconnect/app restart.
 Regression Risk: Duplicate operations or resurrection of deleted records; test offline -> restart -> reconnect flows.
 
-- [ ] **P1.3 Add Conflict Policy in Merge (LWW)** ([Details](TODO_DETAILS.md#p13))
+- [x] **P1.3 Add Conflict Policy in Merge (LWW)** ([Details](TODO_DETAILS.md#p13))
 Description: Update merge logic to compare `updatedAt` instead of unconditional local overwrite.
 Acceptance Criteria: Newer cloud changes are not overwritten by stale local pending data.
 Regression Risk: Unexpected task/item state flips on multi-device edits; test concurrent edits on two devices.

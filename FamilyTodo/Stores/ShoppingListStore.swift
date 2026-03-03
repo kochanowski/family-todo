@@ -603,6 +603,9 @@ final class ShoppingListStore: ObservableObject {
         )
 
         for (id, pendingItem) in pendingSnapshot.pendingUploadByID {
+            if let cloudItem = mergedByID[id], cloudItem.updatedAt > pendingItem.updatedAt {
+                continue
+            }
             mergedByID[id] = pendingItem
         }
         for id in pendingSnapshot.pendingDeleteIDs {

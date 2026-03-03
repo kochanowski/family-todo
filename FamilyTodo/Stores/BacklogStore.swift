@@ -868,6 +868,9 @@ final class BacklogStore: ObservableObject {
     ) -> [BacklogCategory] {
         var mergedByID = Dictionary(uniqueKeysWithValues: cloudCategories.map { ($0.id, $0) })
         for (id, pendingCategory) in pendingSnapshot.pendingCategoriesByID {
+            if let cloudCategory = mergedByID[id], cloudCategory.updatedAt > pendingCategory.updatedAt {
+                continue
+            }
             mergedByID[id] = pendingCategory
         }
         return mergedByID.values.sorted { lhs, rhs in
@@ -889,6 +892,9 @@ final class BacklogStore: ObservableObject {
         let localByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
 
         for (id, pendingItem) in pendingSnapshot.pendingUploadItemsByID {
+            if let cloudItem = mergedByID[id], cloudItem.updatedAt > pendingItem.updatedAt {
+                continue
+            }
             mergedByID[id] = pendingItem
         }
 

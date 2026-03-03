@@ -791,6 +791,9 @@ final class TaskStore: ObservableObject {
         let localByID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
 
         for (id, pendingTask) in pendingSnapshot.pendingUploadByID {
+            if let cloudTask = mergedByID[id], cloudTask.updatedAt > pendingTask.updatedAt {
+                continue
+            }
             mergedByID[id] = pendingTask
         }
 
