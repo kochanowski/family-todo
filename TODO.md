@@ -41,7 +41,7 @@ Description: Update merge logic to compare `updatedAt` instead of unconditional 
 Acceptance Criteria: Newer cloud changes are not overwritten by stale local pending data.
 Regression Risk: Unexpected task/item state flips on multi-device edits; test concurrent edits on two devices.
 
-- [ ] **P1.4 Align Cache Delete Semantics** ([Details](TODO_DETAILS.md#p14))
+- [x] **P1.4 Align Cache Delete Semantics** ([Details](TODO_DETAILS.md#p14))
 Description: Ensure cache loads filter tombstones consistently (`pendingDelete`) across stores, including Shopping.
 Acceptance Criteria: Deleted items do not reappear from cache during offline or cold start.
 Regression Risk: Missing records due to over-filtering; verify restore and recent-item behaviors.

@@ -132,7 +132,9 @@ final class ShoppingListStore: ObservableObject {
         )
 
         if let cachedItems = try? context.fetch(descriptor) {
-            items = cachedItems.map { $0.toShoppingItem() }
+            items = cachedItems
+                .filter { $0.syncStatusRaw != "pendingDelete" }
+                .map { $0.toShoppingItem() }
             return cachedItems
         }
         return []
