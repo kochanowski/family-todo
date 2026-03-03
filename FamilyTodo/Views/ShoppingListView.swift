@@ -319,8 +319,15 @@ private struct ShoppingListContent: View {
     }
 
     private var rapidEntryRow: some View {
-        HStack(spacing: 10) {
-            rapidEntryPlaceholderIcon
+        HStack(spacing: ShoppingRowLayout.spacing) {
+            ThemedCheckbox(
+                isChecked: false,
+                onToggle: {},
+                size: 20,
+                style: .circle
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
 
             RapidEntryTextField(
                 text: $rapidEntryText,
@@ -337,29 +344,14 @@ private struct ShoppingListContent: View {
                 themeStore: themeStore
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
-        }
-        .padding(.vertical, 2)
-        .background(cardBackground.opacity(0.01)) // Tap target
-    }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-    @ViewBuilder
-    private var rapidEntryPlaceholderIcon: some View {
-        if themeStore.preset == .retro {
-            Rectangle()
-                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
-                .frame(width: 20, height: 20)
-                .overlay {
-                    Rectangle()
-                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
-                        .padding(0.8)
-                }
-                .frame(width: 44)
-        } else {
-            Circle()
-                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
-                .frame(width: 20, height: 20)
-                .frame(width: 44)
+            Color.clear
+                .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
+        .padding(.vertical, ShoppingRowLayout.verticalPadding)
+        .background(cardBackground.opacity(0.01)) // Tap target
     }
 
     // MARK: - Rapid Entry Logic

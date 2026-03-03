@@ -6,6 +6,24 @@
 3. Verify & Commit: after each task, run regression checks, commit, then mark `[x]`.
 4. CloudKit Safety First: if sync behavior is uncertain, stop and validate before continuing.
 
+## Bugfixes & Polish (High Priority)
+
+- [x] **Fix Shopping List Input Padding**
+Description: When typing a new item in the Shopping list, the `TextField` padding/alignment doesn't match the saved items. It lacks the empty circle placeholder, causing the text to shift left and break the vertical alignment.
+Acceptance Criteria: The `TextField` row must have the exact same leading spacing/layout (e.g., an invisible circle or matching padding) as the saved items so the text perfectly aligns vertically.
+
+- [ ] **Optimize Tasks "Clear All" Performance**
+Description: In Tasks -> Completed, tapping "Clear All" deletes tasks very slowly (one by one with individual animations).
+Acceptance Criteria: Mass deletion must be instant. Optimize the deletion loop (e.g., remove per-item animation, use a single batch delete, or wrap the state update in a single `withAnimation` block).
+
+- [ ] **Remove redundant "(+)" in Idea Categories**
+Description: In `More -> Idea Categories`, the "New category" button has a built-in plus icon, but the text also says `(+) New category`.
+Acceptance Criteria: Change the text string from `(+) New category` to just `New category`.
+
+- [ ] **Fix Invite Token wipe on Dev Deploy**
+Description: Every time we deploy to the dev environment, the Invite Token gets deleted/wiped. This was supposed to be fixed but is still breaking.
+Acceptance Criteria: Investigate the token storage/generation or deployment scripts and ensure the Invite Token persists across deployments.
+
 ## Phase 1: Data Integrity & CloudKit (High Priority)
 
 - [x] **P1.1 Replace Silent SwiftData Saves** ([Details](TODO_DETAILS.md#p11))
