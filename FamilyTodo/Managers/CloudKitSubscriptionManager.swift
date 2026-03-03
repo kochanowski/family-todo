@@ -176,7 +176,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     private func handleQueryNotification(_ notification: CKQueryNotification) {
-        let recordType = notification.recordType ?? "Unknown"
+        let recordType = notification.recordFields?["recordType"] as? String ?? "Unknown"
         let recordName = notification.recordID?.recordName
         triggerRefresh(for: recordType)
         guard !isLikelySelfNoise(recordName: recordName) else { return }
