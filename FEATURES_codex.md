@@ -1,55 +1,64 @@
 # FEATURES_codex
 
-Last updated: 2026-02-28
+Last updated: 2026-03-03
 
 ## 0) Zakres researchu
 
-Przeczytałem cały `FEATURES.md` i zrobiłem audit kodu oraz architektury pod wszystkie 6 części roadmapy.
+Przeczytałem cały `FEATURES.md` (łącznie z sekcją `NEW NEW NEW`) i zrobiłem aktualny audit kodu pod wszystkie części roadmapy.
 Research objął:
 - widoki: `ShoppingListView`, `TasksView`, `BacklogView`, `MoreView`, `RepetitiveTasksView`;
-- store’y i modele: `TaskStore`, `ShoppingListStore`, `RecurringChoreStore`/`ChoreScheduler`, `Task`, `RecurringChore`, modele cache SwiftData;
-- CloudKit: `CloudKitManager`, `CloudKitManager+Mapping`, `CloudKitSubscriptionManager`, `AppDelegateBridge`, schema i skrypty CI;
+- store’y i modele: `TaskStore`, `ShoppingListStore`, `BacklogStore`, `MemberStore`, `Task`, `CachedTask`;
+- CloudKit i push: `CloudKitManager`, `CloudKitManager+Mapping`, `CloudKitSubscriptionManager`, `AppDelegateBridge`, schema i skrypty CI;
+- istniejący system celebracji/toastów: `CelebrationManager`, `ToastView`, `CelebrationOverlay`;
 - testy: `FamilyTodoTests`.
-
-Dodatkowo zweryfikowałem ograniczenia CloudKit push dla shared DB (Apple QA1917 / Remote Notifications docs).
 
 ## 1) Gap analysis (stan obecny vs roadmapa)
 
 | Part | Status w kodzie | Wniosek |
 |---|---|---|
-| 1. Empty states | `ContentUnavailableView` już jest w `BacklogView` i dla Completed w `TasksView`; brak dla pustej listy `Shopping` i pustego `Active` w `Tasks` | Częściowo gotowe, potrzebny UX polish i ujednolicenie |
-| 2. Due date + rotation | `Task.dueDate` już istnieje (model, cache, UI, CloudKit). Round-robin nie istnieje. | Due date: done; rotation: do wdrożenia |
-| 3. Push notifications | Jest `CloudKitSubscriptionManager` z `CKDatabaseSubscription` (shared DB), ale brak spięcia `AppDelegate` dla remote push i brak pipeline z konkretną treścią eventów. | Audit wykazał częściowy fundament, brak końca procesu |
-| 4. Shopping Bundles | Brak modelu, store, CloudKit record type i UI bundli | Do wdrożenia od zera |
-| 5. Activity Log | Brak modelu/store/UI/integracji akcji | Do wdrożenia od zera |
-| 6. Task filtering by assignee | Brak poziomego filtra avatarów; są tylko przełączniki Active/Completed | Do wdrożenia |
+| 1. Empty states | `ContentUnavailableView` częściowo istnieje (`Backlog`, `Tasks/Completed`), brak pełnej spójności | Częściowo gotowe |
+| 2. Due date + rotation | `dueDate` jest wdrożone; round-robin dla recurring chores nie jest domknięty | Częściowo gotowe |
+| 3. Push notifications | Jest `CKDatabaseSubscription` w `CloudKitSubscriptionManager`, ale brak pełnego AppDelegate remote-push bridge i event pipeline | Fundament jest, ścieżka niepełna |
+| 4. Shopping Bundles | Brak modelu/store/UI/CloudKit dla bundli | Do wdrożenia |
+| 5. Activity Log | Brak pełnego modelu/store/UI i integracji akcji | Do wdrożenia |
+| 6. Conversational Task Filters (chips) | Brak chipów `All tasks / My tasks / [Name]'s tasks`; jest tylko Active/Completed | Do wdrożenia |
+| 7. Poke (friendly reminder) | Brak pola `lastPokedAt`, brak logiki cooldown/store/UI swipe | Do wdrożenia |
+| 8. Gentle Rewards | `CelebrationManager` + `ToastView` + `CelebrationOverlay` już istnieją, ale bez nowej logiki message-pool/milestone/surprise | Częściowo gotowe (rozszerzenie) |
 
-## 2) Rekomendowana kolejność wdrożenia
+## 2) Public APIs / Interfaces / Types do dodania
 
-Kolejność roadmapy jest sensowna, ale technicznie najbezpieczniej:
-1. Part 1 (szybki UX win, niskie ryzyko).
-2. Part 6 (UI-only + logika filtrowania, bez schema).
-3. Part 2 (round-robin + dane recurring).
-4. Part 4 (nowy model + CRUD + quick add).
-5. Part 5 (ActivityLog, fundament pod konkretne komunikaty push).
-6. Part 3 (push end-to-end, najlepiej już na bazie ActivityLog).
+1. `Task`:
+- `var lastPokedAt: Date?`
+2. `CachedTask`:
+- `var lastPokedAt: Date?`
+3. `TaskStore`:
+- `func canPoke(task: Task) -> Bool`
+- `func pokeTask(_ task: Task) async -> PokeResult`
+- `func weeklyCompletedCount(referenceDate: Date = Date()) -> Int`
+- `enum PokeResult { case success, cooldown, failed }`
+4. `CelebrationManager`:
+- `func getCompletionMessage(for task: Task, weeklyCompletedCount: Int, contextName: String?) -> String`
+- `func celebrateTaskCompletion(message: String, milestone: Bool)`
+5. `TasksView`:
+- `enum AssigneeFilter`
+- `@State private var selectedAssigneeFilter`
 
-Powód: Part 3 bez Part 5 wymaga cięższego parsowania zmian rekordów; z Part 5 push może bazować na gotowych wpisach aktywności.
+## 3) Rekomendowana kolejność wdrożenia (zaktualizowana)
 
-## 3) Plan implementacji per feature
+1. Part 6: Conversational filters (UI-only, niskie ryzyko).
+2. Part 7: model + mapping + store + UI swipe (bez push).
+3. Part 7: push groundwork (`AppDelegateBridge` + `CloudKitSubscriptionManager`).
+4. Part 8: Gentle Rewards (rozszerzenie istniejącego systemu celebracji).
+5. Następnie utrzymujemy wcześniej ustaloną kolejność dla Part 2/4/5/3.
+
+## 4) Plan implementacji per feature
 
 ## Part 1: Engaging Empty States
 
 ### Co zmieniamy
-- `ShoppingListView`:
-  - gdy `store.toBuyItems.isEmpty` i rapid-entry nie jest aktywne, pokazujemy `ContentUnavailableView` zamiast pustej listy;
-  - symbol: `cart`; tytuł/subtitle z CTA;
-  - action button: „Add first item” -> `startRapidEntry()`.
-- `TasksView`:
-  - dla `activeFilter == .active` i pustego `visibleNextTasks` wyświetlamy `ContentUnavailableView`;
-  - symbol: `checklist`; tekst kierujący do Ideas/promocji do Tasks.
-- `BacklogView` (Ideas):
-  - obecny empty state jest już poprawny technicznie; tylko dopasowanie copy/symbolu do roadmapy (`lightbulb`).
+- `ShoppingListView`: spójny `ContentUnavailableView` dla pustej listy zakupów.
+- `TasksView`: pusty stan dla `Active`, nie tylko dla `Completed`.
+- `BacklogView`: dopasowanie copy/symbolu do roadmapy.
 
 ### Pliki
 - `FamilyTodo/Views/ShoppingListView.swift`
@@ -57,197 +66,189 @@ Powód: Part 3 bez Part 5 wymaga cięższego parsowania zmian rekordów; z Part 
 - `FamilyTodo/Views/BacklogView.swift`
 
 ### Testy
-- UI testy snapshotowe/semantyczne dla pustych ekranów.
-- Sprawdzenie, że CTA z empty state faktycznie uruchamia dodawanie.
+- Empty state dla Shopping/Tasks/Ideas + CTA.
 
 ## Part 2: Due Dates & Rotating Repetitive Tasks
 
-### Co już jest
-- `Task.dueDate` jest wdrożone w:
-  - modelu (`Task`), cache (`CachedTask`), mapowaniu CloudKit,
-  - UI (`TasksView` + `TaskDetailSheet`), sortowaniu, reminderach.
-- `RecurringChore` ma już pola pomocnicze dla rotacji (`assigneeIds`, `rotationEnabled`), ale nie są użyte w schedulerze.
-
-### Co trzeba dowieźć
-- Round-robin dla recurring chores:
-  - rozbudowa `RecurringChore` o trwały cursor rotacji (`nextAssigneeIndex: Int`, rekomendowane);
-  - aktualizacja scheduler’a (`ChoreScheduler.runIfNeeded`) aby przypisywał kolejną osobę, nie zawsze `first`;
-  - aktualizacja po wygenerowaniu zadania (`markGenerated`) razem ze stanem rotacji.
-  - normalizacja cursora przy zmianie listy assignee (`nextAssigneeIndex = min(cursor, max(0, count - 1))`).
-- Uzupełnienie modelu cache recurring:
-  - obecny `CachedRecurringChore` przechowuje za mało pól (ryzyko utraty danych po offline/online);
-  - trzeba zapisać pola recurrence + assignee list + rotation cursor.
-- UI konfiguracji recurring:
-  - w `RepetitiveTasksView` dodać multi-assignee selection (co najmniej 2 osoby) i tryb rotacji.
-
-### CloudKit schema
-- Rekord `RecurringChore`: dodać pole stanu rotacji (`nextAssigneeIndex` Int64 lub równoważne).
-- Aktualizacja mapowania w `CloudKitManager+Mapping`.
+### Stan i plan
+- `dueDate` jest już wdrożone end-to-end.
+- Do dowiezienia: round-robin z trwałym cursorem rotacji i normalizacją po zmianie listy assignee.
 
 ### Pliki
-- `FamilyTodo/Models/LegacyStubs.swift` (RecurringChore / CachedRecurringChore / ChoreScheduler)
-- `FamilyTodo/Views/MoreView.swift` (sekcja RepetitiveTasksView)
+- `FamilyTodo/Models/LegacyStubs.swift`
+- `FamilyTodo/Views/MoreView.swift`
 - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
 - `cloudkit/schema/housepulse-schema.json`
 - `scripts/cloudkit/validate_schema.sh`
 
 ### Testy
-- rotacja 2+ osób: A->B->A...
-- zmiana listy assignee w trakcie (cursor normalization)
-- brak duplikacji wygenerowanych tasków dla tego samego dnia
+- A->B->A, zmiany listy assignee, brak duplikacji generatora.
 
 ## Part 3: Push Notifications (verification + implementation)
 
-### Wynik audytu
-- Jest `CloudKitSubscriptionManager`, ale:
-  - brak podpięcia zdalnych push callbacków w `AppDelegateBridge`;
-  - obsługa `CKQueryNotification` najpewniej martwa (brak realnych query subscriptions);
-  - aktualnie komunikaty są generyczne.
-
-### Ważna decyzja techniczna
-- W shared DB nie polegamy na `CKQuerySubscription` jako głównym mechanizmie (Apple QA1917).
-- Bazujemy na `CKDatabaseSubscription` + odczycie zmian danych po push.
-
-### Plan
-- `AppDelegateBridge`:
-  - dodać `didReceiveRemoteNotification:fetchCompletionHandler` i przekazanie payload do `CloudKitSubscriptionManager`.
-  - dodać także `didRegisterForRemoteNotificationsWithDeviceToken` i `didFailToRegisterForRemoteNotificationsWithError` (diagnostyka runtime).
-- `CloudKitSubscriptionManager`:
-  - utrzymać subskrypcję shared DB;
-  - wyciąć/ograniczyć martwą ścieżkę query-notification;
-  - na push pobierać nowe zdarzenia i składać czytelne notyfikacje.
-- Najprostsza stabilna ścieżka:
-  - po wdrożeniu Part 5 używać `ActivityLog` jako źródła wiadomości push:
-  - filtr: tylko wpisy innych użytkowników,
-  - deduplikacja po `activityLog.id`,
-  - komunikaty typu „Wojtek completed: Vacuuming”.
-- Fallback bez Part 5 (mniej preferowany):
-  - pobieranie zmian przez `CKFetchDatabaseChangesOperation` / `CKFetchRecordZoneChangesOperation`,
-  - budowanie treści notyfikacji z diffów rekordów.
-- Ustawienia:
-  - osobny toggle „Partner updates” w `SettingsView` (opcjonalnie, rekomendowane).
+### Kierunek
+- Bazujemy na `CKDatabaseSubscription` dla shared DB.
+- Domykamy remote push callbacki w `AppDelegateBridge`.
 
 ### Pliki
 - `FamilyTodo/Services/AppDelegateBridge.swift`
 - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
 - `FamilyTodo/Views/SettingsView.swift` (opcjonalny toggle)
-- `FamilyTodo/Models/LegacyStubs.swift` (jeśli rozszerzamy NotificationSettingsStore)
-
-### Testy i weryfikacja
-- Manualny test 2 Apple ID (fizyczne urządzenia, background/foreground).
-- Walidacja: brak self-notify, brak duplikatów, poprawna treść.
-
-## Part 4: Shopping Bundles (Smart Groups)
-
-### Model danych
-- Nowy model domenowy `ShoppingBundle`:
-  - `id`, `householdId`, `name`, `icon`, `items`, `createdAt`, `updatedAt`, opcjonalnie `sortOrder`.
-- Dla CloudKit i obecnych skryptów schema:
-  - `items` najlepiej trzymać jako JSON string (`itemsJSON`) zamiast listy stringów (mniej zmian w parserach/validatorze).
-- Dodać `CachedShoppingBundle` (SwiftData offline-first).
-
-### Store i sync
-- Nowy `ShoppingBundleStore` analogiczny do istniejących store’ów:
-  - CRUD bundle,
-  - load cache-first,
-  - sync cloud w trybie `.cloud`.
-- W `CloudKitManager` + mapping dodać save/fetch/delete dla `ShoppingBundle`.
-
-### UI
-- `ShoppingListView` header:
-  - ikona `archivebox` między `trash` a `clock.badge.checkmark`.
-- `BundlesManagementView`:
-  - lista bundli,
-  - create/edit/delete,
-  - edycja listy itemów w bundle.
-- Quick add:
-  - long press na `shoppingAddItemButton` otwiera poziomą listę ikon bundli;
-  - tap bundla dodaje wszystkie itemy do aktywnej listy.
-
-### Pliki
-- nowe: `FamilyTodo/Models/ShoppingBundle.swift`, `FamilyTodo/Models/CachedShoppingBundle.swift`, `FamilyTodo/Stores/ShoppingBundleStore.swift`, `FamilyTodo/Views/BundlesManagementView.swift`
-- modyfikacje: `FamilyTodo/Views/ShoppingListView.swift`, `FamilyTodo/Managers/CloudKitManager.swift`, `FamilyTodo/Managers/CloudKitManager+Mapping.swift`, `FamilyTodo/FamilyTodoApp.swift`, `FamilyTodo/Utilities/SwiftDataContainerFactory.swift`, `cloudkit/schema/housepulse-schema.json`, `scripts/cloudkit/validate_schema.sh`
 
 ### Testy
-- unit: CRUD + serializacja `itemsJSON` + quick-add wszystkich pozycji
-- UI: otwarcie Bundles i long-press quick add
+- 2 urządzenia, 2 Apple ID, brak self-notify, brak duplikatów.
+
+## Part 4: Shopping Bundles
+
+### Plan
+- `ShoppingBundle` + cache + store + CloudKit mapping + CRUD UI + quick add przez long press.
+
+### Pliki
+- modele/store/widoki bundli + `CloudKitManager`/schema/validator.
+
+### Testy
+- CRUD, serializacja itemów, quick add.
 
 ## Part 5: Activity Log
 
-### Model danych
-- Nowy `ActivityLog`:
-  - `id`, `householdId`, `actionType`, `userName`, `userId` (rekomendowane), `itemName`, `timestamp`.
-- Nowy cache `CachedActivityLog`.
-- Store `ActivityLogStore` (load/sync/logAction + opcjonalny retention, np. 30 dni / max 500 wpisów).
-
-### Integracja akcji
-- Logowanie przy:
-  - dodaniu pozycji zakupowej (`ShoppingListStore.createItem`),
-  - ukończeniu taska (`TaskStore.moveTask` przy przejściu do `.done`).
-- Wpis logu tworzony w warstwie store (jedno źródło prawdy, nie w samym UI).
-- Wymaganie architektoniczne:
-  - store’y muszą dostać `userId`/`userName` (przez iniekcję `UserSession` lub adapter kontekstu użytkownika), bo obecnie nie mają tych danych wprost.
-
-### UI
-- `MoreView`: link „Activity Log” nad „Settings”.
-- `ActivityLogView`: chronologiczna lista (najnowsze na górze), proste opisy.
-
-### CloudKit schema
-- nowy record type `ActivityLog` + indeks po `householdId` i sort po `timestamp`.
+### Plan
+- `ActivityLog` + cache + store + `ActivityLogView`.
+- Integracja logowania przy add shopping item i complete task.
 
 ### Pliki
-- nowe: `FamilyTodo/Models/ActivityLog.swift`, `FamilyTodo/Models/CachedActivityLog.swift`, `FamilyTodo/Stores/ActivityLogStore.swift`, `FamilyTodo/Views/ActivityLogView.swift`
-- modyfikacje: `FamilyTodo/Stores/TaskStore.swift`, `FamilyTodo/Stores/ShoppingListStore.swift`, `FamilyTodo/Views/MoreView.swift`, `FamilyTodo/Managers/CloudKitManager.swift`, `FamilyTodo/Managers/CloudKitManager+Mapping.swift`, `FamilyTodo/FamilyTodoApp.swift`, `FamilyTodo/Utilities/SwiftDataContainerFactory.swift`, `cloudkit/schema/housepulse-schema.json`, `scripts/cloudkit/validate_schema.sh`
+- nowe modele/store/widok + integracje w `TaskStore` i `ShoppingListStore`.
 
 ### Testy
-- unit: poprawne tworzenie wpisów dla add/complete
-- unit: sortowanie chronologiczne i mapowanie cache/cloud
+- poprawne wpisy, kolejność chronologiczna, mapowanie cache/cloud.
 
-## Part 6: Tasks Filtering by Assignee
+## Part 6: Conversational Task Filters (chips)  [REPLACES old avatar filter plan]
 
-### UI i logika
-- W `TasksView` pod przełącznikiem Active/Completed dodać poziomy `ScrollView(.horizontal)` z avatarami członków + „Unassigned”.
-- Stan filtra:
-  - `.all`, `.member(UUID)`, `.unassigned`.
-- Tap toggluje filtr, ponowny tap czyści.
-- Filtrowanie stosowane do listy poniżej (dla active i completed).
-
-### Detale UX
-- Avatar: inicjał + kolor członka (`Member.colorHex`).
-- Chip „Unassigned” z ikoną (np. `person.crop.circle.badge.questionmark`).
-- Empty state dla aktywnego filtra bez wyników.
+### Zakres
+- W `TasksView` pod `Active/Completed` dodaj poziomy `ScrollView(.horizontal)`.
+- Filtr:
+  - `.all` (default),
+  - `.mine`,
+  - `.member(UUID)` dla pozostałych członków.
+- Etykiety chipów:
+  - `All tasks`,
+  - `My tasks`,
+  - `\(name)'s tasks`.
+- Styl:
+  - selected: accent + biały tekst + semibold,
+  - unselected: jasnoszary + primary.
+- Filtrowanie działa jednocześnie z `Active/Completed`.
+- Brak duplikacji własnego użytkownika (`My tasks` nie dubluje `Wojtek's tasks`).
+- Gdy nie da się ustalić current membera: ukryj `My tasks`.
 
 ### Pliki
 - `FamilyTodo/Views/TasksView.swift`
 
 ### Testy
-- unit (pure filtering helper)
-- UI: wybór członka, unassigned, toggle-off
+- `All/My/Name's` dla Active i Completed.
+- Toggle filtra i powrót do `.all`.
 
-## 4) Zmiany przekrojowe (schema, cache, CI)
+## Part 7: Poke (Friendly Reminder)
 
-Przy Part 2/4/5 trzeba spiąć pełny łańcuch danych:
-1. Model domenowy.
-2. Model cache SwiftData.
-3. `FamilyTodoApp.appSchema`.
-4. `SwiftDataContainerFactory.runtimeModelProbes`.
-5. CloudKit mapping + CRUD w `CloudKitManager`.
-6. `cloudkit/schema/housepulse-schema.json`.
-7. `scripts/cloudkit/validate_schema.sh` required map/indexes.
-8. Testy unit + smoke manualny cloud.
+### 7.1 Model i mapowanie
+- `Task`: dodaj `lastPokedAt: Date?`.
+- `CachedTask`: dodaj pole i mapowanie `init/update/toTask`.
+- `CloudKitManager+Mapping`: zapis/odczyt `lastPokedAt`.
 
-Pominięcie któregokolwiek z kroków 1-7 grozi albo crashem przy starcie (niespójny model/cache), albo failem schema gate w CI.
+### 7.2 Schema i CI
+- `cloudkit/schema/housepulse-schema.json`: `Task.lastPokedAt` (`Date`, bez indeksu).
+- `scripts/cloudkit/validate_schema.sh`: dopisz `lastPokedAt` do `required_map.Task`.
 
-## 5) Ryzyka i guardrails
+### 7.3 Store
+- `TaskStore.canPoke(task:)`: true gdy `lastPokedAt == nil` lub nie jest today.
+- `TaskStore.pokeTask(_:)`:
+  - guard z `canPoke`,
+  - optimistic update (`lastPokedAt = Date()`, `updatedAt = Date()`),
+  - sync cache i CloudKit przez istniejące `saveTask`,
+  - zwrot `PokeResult`.
 
-- `RecurringChore` jest dziś w `LegacyStubs.swift`; modyfikacje łatwo mogą naruszyć stare ścieżki cache.
-- Push cloud wymaga testów na realnych urządzeniach i 2 Apple ID.
-- Schema gate musi być aktualizowany równolegle z modelem (inaczej CI fail).
-- Dla `ShoppingBundle.items` rekomenduję JSON string, żeby nie rozszerzać od razu parsera typów schema.
-- Dodanie nowych modeli `@Model` wymaga smoke testu upgrade z istniejącej instalacji (ryzyko migracji SwiftData).
-- Integracja `ActivityLog` wymaga jawnej strategii dostępu do kontekstu usera w store’ach (bez tego łatwo o logi bez autora).
+### 7.4 UI
+- `TasksView`:
+  - `swipeActions(edge: .leading, allowsFullSwipe: false)` dla aktywnych tasków,
+  - poke tylko dla tasków przypisanych do kogoś innego,
+  - aktywny: `hand.wave.fill`, orange/yellow, label `Poke`,
+  - cooldown: `moon.zzz.fill` lub `bell.slash.fill`, gray, disabled,
+  - guard na multitap: `@State pokingTaskIDs: Set<UUID>`,
+  - haptic na sukces: `HapticManager.impact(.soft)`.
 
-## 6) Definition of Done (per part)
+### 7.5 Push groundwork
+- `CloudKitSubscriptionManager`:
+  - zostaje na `CKDatabaseSubscription`,
+  - dodać ścieżkę poke-friendly local notification po remote update.
+- `AppDelegateBridge`:
+  - dodać `didReceiveRemoteNotification` i forwarding payloadu.
+- Teksty notyfikacji: krótka statyczna lub lokalnie losowana pula.
+
+### Pliki
+- `FamilyTodo/Models/Task.swift`
+- `FamilyTodo/Models/CachedTask.swift`
+- `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+- `FamilyTodo/Stores/TaskStore.swift`
+- `FamilyTodo/Views/TasksView.swift`
+- `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+- `FamilyTodo/Services/AppDelegateBridge.swift`
+- `cloudkit/schema/housepulse-schema.json`
+- `scripts/cloudkit/validate_schema.sh`
+
+### Testy
+- cooldown dzienny działa i resetuje się następnego dnia,
+- `Task -> CachedTask -> CloudKit -> Task` przenosi `lastPokedAt`,
+- poke swipe niewidoczne dla własnych tasków,
+- brak duplikacji przy multitap.
+
+## Part 8: Gentle Rewards (rozszerzenie istniejącego systemu)
+
+### Audit
+- Istnieją: `CelebrationManager`, `ToastView`, `CelebrationOverlay`, toggle `celebrationsEnabled`.
+- Nie tworzymy nowego systemu od zera, tylko rozszerzamy logikę.
+
+### Plan
+- Rozszerzyć `CelebrationManager`:
+  - pule wiadomości (~20): general, area-specific, milestone, surprise,
+  - priorytet: milestone -> surprise (max 1/tydzień przez `UserDefaults`) -> general/area.
+- Dodać API:
+  - `getCompletionMessage(for:weeklyCompletedCount:contextName:)`,
+  - `celebrateTaskCompletion(message:milestone:)`.
+- Completion flow:
+  - `TaskStore.weeklyCompletedCount(...)`,
+  - `TasksView` po udanym przejściu do `.done` pobiera message i pokazuje toast przez `CelebrationManager`.
+- Zero score/rankingu; tone household-positive.
+
+### Pliki
+- `FamilyTodo/Services/CelebrationManager.swift`
+- `FamilyTodo/Stores/TaskStore.swift`
+- `FamilyTodo/Views/TasksView.swift`
+- (bez zmian architektury dla `ToastView`/`CelebrationOverlay`, tylko kompatybilność)
+
+### Testy
+- milestone wygrywa nad message standardowym,
+- surprise max raz na tydzień,
+- toast auto-dismiss bez regresji overlay/confetti.
+
+## 5) Zmiany przekrojowe (schema, cache, CI)
+
+Przy zmianach modelu/sync (w tym Part 7 `lastPokedAt`) obowiązkowo:
+1. model domenowy (`Task`);
+2. cache SwiftData (`CachedTask`);
+3. mapping CloudKit (`CloudKitManager+Mapping`);
+4. schema JSON (`cloudkit/schema/housepulse-schema.json`);
+5. schema validator (`scripts/cloudkit/validate_schema.sh`);
+6. smoke test sync cloud + testy lokalne.
+
+Pominięcie kroku 4 lub 5 skończy się failem schema gate w CI.
+
+## 6) Ryzyka i guardrails
+
+- Shared DB push ma ograniczenia; nie zakładamy `CKQuerySubscription` jako jedynej ścieżki.
+- `lastPokedAt` musi być obsłużone spójnie w model/cache/cloud, inaczej pojawią się desynchronizacje.
+- Part 8 ma nie wejść w gamifikację rankingową (kontrakt produktowy).
+- Multi-tap przy poke i completion wymaga jawnych guardów UI/store.
+
+## 7) Definition of Done (per part)
 
 Part uznajemy za domknięty, gdy:
 1. UX działa lokalnie i w sync cloud.
@@ -255,29 +256,20 @@ Part uznajemy za domknięty, gdy:
 3. Testy unit/UI dla krytycznych ścieżek są zielone.
 4. Schema gate (dla zmian CloudKit) jest zielony.
 5. Smoke test na 2 kontach (jeśli feature dotyczy household sharing/push) jest zaliczony.
-6. GitHub Actions (build + test) przechodzi dla PR.
-7. Lokalny lint/hooks (SwiftLint / pre-commit) przechodzą.
+6. GitHub Actions (build + test) przechodzi.
 
-## 7) Estymacja orientacyjna
+## 8) Estymacja orientacyjna (z aktualizacją NEW NEW NEW)
 
-- Part 1: ~0.5 sesji
-- Part 6: ~1 sesja
-- Part 2: ~2 sesje
-- Part 4: ~3-4 sesje
-- Part 5: ~2-3 sesje
-- Part 3: ~2-3 sesje
-- Całość: ~11-14 sesji (przy sesji ~4h)
+- Part 6 (chips): ~1 sesja
+- Part 7 model/store/ui: ~1.5-2 sesje
+- Part 7 push groundwork: ~1 sesja
+- Part 8 rewards extension: ~1 sesja
 
-## 8) Źródła researchu (techniczne)
+## 9) Źródła (techniczne)
 
 - Apple QA1917: https://developer.apple.com/library/archive/qa/qa1917/_index.html
-- CloudKit Remote Notifications (Apple): https://developer.apple.com/documentation/cloudkit/subscribing-to-database-changes
-- CloudKit query/zone subscription constraints in shared DB (Apple docs):
-  - https://developer.apple.com/documentation/cloudkit/ckquerysubscription
-  - https://developer.apple.com/documentation/cloudkit/ckrecordzonesubscription
-- SwiftUI `ContentUnavailableView` (Apple): https://developer.apple.com/documentation/swiftui/contentunavailableview
-- CKDatabaseSubscription (Apple): https://developer.apple.com/documentation/cloudkit/ckdatabasesubscription
-- CKFetchDatabaseChangesOperation (Apple): https://developer.apple.com/documentation/cloudkit/ckfetchdatabasechangesoperation
-
+- CloudKit DB subscriptions: https://developer.apple.com/documentation/cloudkit/ckdatabasesubscription
+- CloudKit remote notifications: https://developer.apple.com/documentation/cloudkit/subscribing-to-database-changes
+- SwiftUI `ContentUnavailableView`: https://developer.apple.com/documentation/swiftui/contentunavailableview
 
 
