@@ -855,7 +855,7 @@ struct RestockSheet: View {
                         showClearAllConfirmation = true
                     } label: {
                         Text("Clear All")
-                            .font(themeStore.font(for: .buttonLabel))
+                            .font(themeStore.font(for: .listRowTitle))
                             .foregroundStyle(.red)
                     }
                     .tint(.red)
@@ -867,13 +867,14 @@ struct RestockSheet: View {
                     dismiss()
                 }
                 .font(themeStore.font(for: .buttonLabel))
-                .fontWeight(.bold)
+                .fontWeight(.semibold)
                 .tint(themeStore.accentTabColor)
             }
             .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
+        .padding(.bottom, 16)
     }
 }
 
