@@ -8,6 +8,50 @@ extension Notification.Name {
     static let taskBoardDataDidChange = Notification.Name("HousePulse.taskBoardDataDidChange")
 }
 
+struct StoreContextSaveError: LocalizedError {
+    let store: String
+    let operation: String
+    let sourceFile: String
+    let sourceLine: UInt
+    let underlying: Error
+
+    var errorDescription: String? {
+        "Could not save local changes in \(store)."
+    }
+}
+
+enum StoreContextSaver {
+    @discardableResult
+    static func saveContextOrSetError(
+        _ context: ModelContext?,
+        store: String,
+        operation: String,
+        file: StaticString = #fileID,
+        line: UInt = #line,
+        setError: (Error) -> Void
+    ) -> Bool {
+        guard let context else { return true }
+
+        do {
+            try context.save()
+            return true
+        } catch {
+            let wrapped = StoreContextSaveError(
+                store: store,
+                operation: operation,
+                sourceFile: String(describing: file),
+                sourceLine: line,
+                underlying: error
+            )
+            print(
+                "[\(store)] save failed during \(operation) at \(file):\(line) - \(error.localizedDescription)"
+            )
+            setError(wrapped)
+            return false
+        }
+    }
+}
+
 /// Main store for task management with offline-first architecture.
 /// Follows ADR-002: optimistic UI updates with background sync.
 @MainActor
@@ -61,6 +105,23 @@ final class TaskStore: ObservableObject {
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+    }
+
+    @discardableResult
+    private func saveContextOrSetError(
+        operation: String = "persist task cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            modelContext,
+            store: "TaskStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
     }
 
     // MARK: - Computed Properties
@@ -180,7 +241,7 @@ final class TaskStore: ObservableObject {
                 modelContext.insert(cached)
             }
         }
-        try? modelContext.save()
+        saveContextOrSetError(operation: "sync tasks cache from cloud")
     }
 
     // MARK: - Task Operations
@@ -252,7 +313,7 @@ final class TaskStore: ObservableObject {
         cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
         cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
         modelContext.insert(cached)
-        try? modelContext.save()
+        saveContextOrSetError(operation: "cache created task")
 
         if !isCloudSyncEnabled {
             if task.dueDate != nil, !notificationService.isAuthorized {
@@ -267,7 +328,7 @@ final class TaskStore: ObservableObject {
             _ = try await cloudKit.saveTask(task)
             cached.syncStatusRaw = "synced"
             cached.lastSyncedAt = Date()
-            try? modelContext.save()
+            saveContextOrSetError(operation: "mark created task as synced")
 
             // Schedule notification if task has due date
             if task.dueDate != nil, !notificationService.isAuthorized {
@@ -312,13 +373,13 @@ final class TaskStore: ObservableObject {
             cached.update(from: updatedTask)
             cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            try? modelContext.save()
+            saveContextOrSetError(operation: "cache updated task")
         } else {
             let cached = CachedTask(from: updatedTask)
             cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             modelContext.insert(cached)
-            try? modelContext.save()
+            saveContextOrSetError(operation: "cache inserted updated task")
         }
 
         if !isCloudSyncEnabled {
@@ -418,7 +479,7 @@ final class TaskStore: ObservableObject {
             cached.lastSyncedAt = nil
             modelContext.insert(cached)
         }
-        try? modelContext.save()
+        saveContextOrSetError(operation: "restore task locally")
     }
 
     func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
@@ -485,7 +546,7 @@ final class TaskStore: ObservableObject {
                 modelContext.insert(cached)
             }
         }
-        try? modelContext.save()
+        saveContextOrSetError(operation: "persist reordered tasks")
 
         guard isCloudSyncEnabled else { return }
         for updatedTask in updatedByID.values.sorted(by: { $0.order < $1.order }) {
@@ -559,7 +620,7 @@ final class TaskStore: ObservableObject {
         if let cached = try? modelContext.fetch(descriptor).first {
             cached.syncStatusRaw = "synced"
             cached.lastSyncedAt = Date()
-            try? modelContext.save()
+            saveContextOrSetError(operation: "mark cached task as synced")
         }
     }
 
@@ -570,7 +631,7 @@ final class TaskStore: ObservableObject {
         if let cached = try? modelContext.fetch(descriptor).first {
             cached.syncStatusRaw = "pendingDelete"
             cached.lastSyncedAt = nil
-            try? modelContext.save()
+            saveContextOrSetError(operation: "mark cached task pending delete")
             return
         }
 
@@ -578,7 +639,7 @@ final class TaskStore: ObservableObject {
         cached.syncStatusRaw = "pendingDelete"
         cached.lastSyncedAt = nil
         modelContext.insert(cached)
-        try? modelContext.save()
+        saveContextOrSetError(operation: "cache pending delete tombstone")
     }
 
     private func removeCachedTask(id: UUID) {
@@ -587,7 +648,7 @@ final class TaskStore: ObservableObject {
         )
         if let cached = try? modelContext.fetch(descriptor).first {
             modelContext.delete(cached)
-            try? modelContext.save()
+            saveContextOrSetError(operation: "remove cached task")
         }
     }
 

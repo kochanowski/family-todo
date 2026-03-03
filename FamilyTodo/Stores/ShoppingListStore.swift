@@ -32,6 +32,24 @@ final class ShoppingListStore: ObservableObject {
         self.modelContext = modelContext
     }
 
+    @discardableResult
+    private func saveContextOrSetError(
+        _ context: ModelContext? = nil,
+        operation: String = "persist shopping cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            context ?? modelContext,
+            store: "ShoppingListStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
+    }
+
     /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
         modelContext = context
@@ -138,7 +156,7 @@ final class ShoppingListStore: ObservableObject {
             }
         }
 
-        try? context.save()
+        saveContextOrSetError(context, operation: "sync shopping cache from cloud")
     }
 
     // MARK: - Create Item
@@ -180,7 +198,7 @@ final class ShoppingListStore: ObservableObject {
                 if let cached = try? context.fetch(descriptor).first {
                     cached.syncStatusRaw = "synced"
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "mark created shopping item as synced")
                 }
             }
         } catch {
@@ -225,7 +243,7 @@ final class ShoppingListStore: ObservableObject {
                 if let cached = try? context.fetch(descriptor).first {
                     cached.syncStatusRaw = "synced"
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "mark updated shopping item as synced")
                 }
             }
         } catch {
@@ -335,7 +353,7 @@ final class ShoppingListStore: ObservableObject {
         if let cached = try? context.fetch(descriptor).first {
             cached.syncStatusRaw = "synced"
             cached.lastSyncedAt = Date()
-            try? context.save()
+            saveContextOrSetError(context, operation: "mark reordered shopping item as synced")
         }
     }
 
@@ -387,7 +405,7 @@ final class ShoppingListStore: ObservableObject {
             }
         }
 
-        try? modelContext?.save()
+        saveContextOrSetError(operation: "clear recent shopping items cache")
     }
 
     // MARK: - Bulk Operations
@@ -451,7 +469,7 @@ final class ShoppingListStore: ObservableObject {
             }
         }
 
-        try? modelContext?.save()
+        saveContextOrSetError(operation: "clear to-buy shopping cache")
     }
 
     // MARK: - Delete Item
@@ -468,10 +486,10 @@ final class ShoppingListStore: ObservableObject {
             if let cached = try? context.fetch(descriptor).first {
                 if isCloudSyncEnabled {
                     cached.syncStatusRaw = "pendingDelete"
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "mark shopping item pending delete")
                 } else {
                     context.delete(cached)
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "delete shopping item from cache")
                 }
             }
         }
@@ -490,7 +508,7 @@ final class ShoppingListStore: ObservableObject {
                 )
                 if let cached = try? context.fetch(descriptor).first {
                     context.delete(cached)
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "remove synced shopping item from cache")
                 }
             }
         } catch {
@@ -579,6 +597,6 @@ final class ShoppingListStore: ObservableObject {
             context.insert(cached)
         }
 
-        try? context.save()
+        saveContextOrSetError(context, operation: "upsert shopping cache item")
     }
 }

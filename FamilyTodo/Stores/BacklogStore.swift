@@ -54,6 +54,24 @@ final class BacklogStore: ObservableObject {
         self.modelContext = modelContext
     }
 
+    @discardableResult
+    private func saveContextOrSetError(
+        _ context: ModelContext? = nil,
+        operation: String = "persist backlog cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            context ?? modelContext,
+            store: "BacklogStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
+    }
+
     /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
         modelContext = context
@@ -194,7 +212,7 @@ final class BacklogStore: ObservableObject {
             }
         }
 
-        try? context.save()
+        saveContextOrSetError(context, operation: "persist backlog cache")
     }
 
     // MARK: - Category Operations
@@ -229,7 +247,7 @@ final class BacklogStore: ObservableObject {
                 ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             context.insert(cached)
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
         if !isCloudSyncEnabled { return }
@@ -245,7 +263,7 @@ final class BacklogStore: ObservableObject {
                 if let cached = try? context.fetch(descriptor).first {
                     cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "persist backlog cache")
                 }
             }
         } catch {
@@ -282,7 +300,7 @@ final class BacklogStore: ObservableObject {
                     context.delete(item)
                 }
             }
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
         if !isCloudSyncEnabled { return }
@@ -341,7 +359,7 @@ final class BacklogStore: ObservableObject {
                 cached.syncStatusRaw = isCloudSyncEnabled
                     ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                 cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                try? context.save()
+                saveContextOrSetError(context, operation: "persist backlog cache")
             }
         }
 
@@ -362,7 +380,7 @@ final class BacklogStore: ObservableObject {
                 if let cached = try? context.fetch(descriptor).first {
                     cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "persist backlog cache")
                 }
             }
         } catch {
@@ -379,7 +397,7 @@ final class BacklogStore: ObservableObject {
                     cached.update(from: previousCategory)
                     cached.syncStatusRaw = BacklogSyncStatus.synced
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "persist backlog cache")
                 }
             }
         }
@@ -413,7 +431,7 @@ final class BacklogStore: ObservableObject {
                     cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 }
             }
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
         guard isCloudSyncEnabled else { return }
@@ -470,7 +488,7 @@ final class BacklogStore: ObservableObject {
                 ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             context.insert(cached)
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
         guard isCloudSyncEnabled else {
@@ -486,7 +504,7 @@ final class BacklogStore: ObservableObject {
                 if let cached = try? context.fetch(descriptor).first {
                     cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "persist backlog cache")
                 }
             }
             return item
@@ -526,7 +544,7 @@ final class BacklogStore: ObservableObject {
                 ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             context.insert(cached)
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
         if !isCloudSyncEnabled { return }
@@ -542,7 +560,7 @@ final class BacklogStore: ObservableObject {
                 if let cached = try? context.fetch(descriptor).first {
                     cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                     cached.lastSyncedAt = Date()
-                    try? context.save()
+                    saveContextOrSetError(context, operation: "persist backlog cache")
                 }
             }
         } catch {
@@ -599,7 +617,7 @@ final class BacklogStore: ObservableObject {
         )
         if let cached = try? context.fetch(descriptor).first {
             context.delete(cached)
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
     }
 
@@ -634,14 +652,14 @@ final class BacklogStore: ObservableObject {
                 cached.syncStatusRaw = isCloudSyncEnabled
                     ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                 cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                try? context.save()
+                saveContextOrSetError(context, operation: "persist backlog cache")
             } else {
                 let cached = CachedBacklogItem(from: updatedItem)
                 cached.syncStatusRaw = isCloudSyncEnabled
                     ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                 cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 context.insert(cached)
-                try? context.save()
+                saveContextOrSetError(context, operation: "persist backlog cache")
             }
         }
 
@@ -716,7 +734,7 @@ final class BacklogStore: ObservableObject {
         if let cached = try? context.fetch(descriptor).first {
             cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
             cached.lastSyncedAt = Date()
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
     }
 
@@ -728,7 +746,7 @@ final class BacklogStore: ObservableObject {
         if let cached = try? context.fetch(descriptor).first {
             cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
             cached.lastSyncedAt = Date()
-            try? context.save()
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
     }
 

@@ -31,6 +31,24 @@ class MemberStore: ObservableObject {
         syncMode = mode
     }
 
+    @discardableResult
+    private func saveContextOrSetError(
+        _ context: ModelContext? = nil,
+        operation: String = "persist member cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            context ?? modelContext,
+            store: "MemberStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
+    }
+
     // MARK: - Data Loading
 
     func loadMembers() async {
@@ -279,7 +297,7 @@ class MemberStore: ObservableObject {
             }
 
             if didMigrate {
-                try? context.save()
+                saveContextOrSetError(context, operation: "migrate cached member colors")
             }
 
             return resolvedMembers
@@ -316,9 +334,10 @@ class MemberStore: ObservableObject {
             } else {
                 context.insert(CachedMember(from: member))
             }
-            try context.save()
+            saveContextOrSetError(context, operation: "upsert cached member")
         } catch {
             print("Cache save error: \(error)")
+            self.error = error
         }
     }
 
@@ -331,10 +350,11 @@ class MemberStore: ObservableObject {
         do {
             if let cached = try context.fetch(descriptor).first {
                 context.delete(cached)
-                try context.save()
+                saveContextOrSetError(context, operation: "delete cached member")
             }
         } catch {
             print("Cache delete error: \(error)")
+            self.error = error
         }
     }
 

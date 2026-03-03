@@ -39,6 +39,24 @@ class HouseholdStore: ObservableObject {
         syncMode = mode
     }
 
+    @discardableResult
+    private func saveContextOrSetError(
+        _ context: ModelContext? = nil,
+        operation: String = "persist household cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            context ?? modelContext,
+            store: "HouseholdStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
+    }
+
     // MARK: - Lifecycle
 
     /// Preferred entry point for restoring session household context.
@@ -632,9 +650,10 @@ class HouseholdStore: ObservableObject {
             } else {
                 context.insert(CachedHousehold(from: household))
             }
-            try context.save()
+            saveContextOrSetError(context, operation: "upsert cached household")
         } catch {
             print("Cache update error: \(error)")
+            self.error = error
         }
     }
 
@@ -682,9 +701,10 @@ class HouseholdStore: ObservableObject {
                 context.delete(item)
             }
 
-            try context.save()
+            saveContextOrSetError(context, operation: "remove household cache graph")
         } catch {
             print("Cache household removal error: \(error)")
+            self.error = error
         }
     }
 
