@@ -381,7 +381,10 @@ actor CloudKitManager {
                 }
 
                 do {
-                    authoritativeRecord = try await db.save(migratedRecord)
+                    authoritativeRecord = try await saveRecordWithChangedKeys(
+                        migratedRecord,
+                        database: db
+                    )
                 } catch let ckError as CKError where ckError.code == .serverRecordChanged {
                     authoritativeRecord = try await db.record(for: ownerRecordID)
                 }
@@ -708,7 +711,7 @@ actor CloudKitManager {
             print(
                 "CloudKitScope: save \(record.recordType) in \(scopeName) zone \(scopedRecord.recordID.zoneID.zoneName)"
             )
-            let saved = try await db.save(scopedRecord)
+            let saved = try await saveRecordWithChangedKeys(scopedRecord, database: db)
             rememberRecordZone(saved, explicitHouseholdId: householdId)
             return saved
         } catch {
@@ -731,7 +734,7 @@ actor CloudKitManager {
                 "CloudKitScope: retry save \(record.recordType) in \(scopeName) zone \(retryRecord.recordID.zoneID.zoneName)"
             )
             do {
-                let saved = try await db.save(retryRecord)
+                let saved = try await saveRecordWithChangedKeys(retryRecord, database: db)
                 rememberRecordZone(saved, explicitHouseholdId: householdId)
                 return saved
             } catch {
@@ -1741,7 +1744,10 @@ actor CloudKitManager {
                 )
 
                 do {
-                    _ = try await db.save(inviteTokenRecord(from: token))
+                    _ = try await saveRecordWithChangedKeys(
+                        inviteTokenRecord(from: token),
+                        database: db
+                    )
                     clearCloudKitFailure()
                     return token
                 } catch let ckError as CKError where ckError.code == .serverRecordChanged {

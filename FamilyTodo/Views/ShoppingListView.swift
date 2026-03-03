@@ -125,9 +125,9 @@ private struct ShoppingListContent: View {
                                 }
                                 .listRowInsets(
                                     EdgeInsets(
-                                        top: 4,
+                                        top: 0,
                                         leading: 16,
-                                        bottom: 4,
+                                        bottom: 0,
                                         trailing: 16
                                     )
                                 )
@@ -142,9 +142,9 @@ private struct ShoppingListContent: View {
                                     .id("rapidEntry")
                                     .listRowInsets(
                                         EdgeInsets(
-                                            top: 4,
+                                            top: 0,
                                             leading: 16,
-                                            bottom: 4,
+                                            bottom: 0,
                                             trailing: 16
                                         )
                                     )
@@ -338,7 +338,7 @@ private struct ShoppingListContent: View {
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
         .background(cardBackground.opacity(0.01)) // Tap target
     }
 
@@ -549,6 +549,7 @@ struct ShoppingItemRow: View {
             Color.clear
                 .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
         .contentShape(Rectangle())
         .padding(.vertical, ShoppingRowLayout.verticalPadding)
         .accessibilityIdentifier("shoppingItemRow_\(item.title)")
@@ -557,7 +558,8 @@ struct ShoppingItemRow: View {
 
 private enum ShoppingRowLayout {
     static let spacing: CGFloat = 10
-    static let verticalPadding: CGFloat = 3
+    static let verticalPadding: CGFloat = 0
+    static let minRowHeight: CGFloat = 30
     static let trailingSlotWidth: CGFloat = 24
 }
 
@@ -604,6 +606,7 @@ private struct ShoppingItemInlineEditRow: View {
             .buttonStyle(.plain)
             .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
         .contentShape(Rectangle())
         .padding(.vertical, ShoppingRowLayout.verticalPadding)
         .onAppear {
@@ -776,77 +779,55 @@ struct RestockSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.recentItems.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "cart")
-                            .font(.system(size: 40, weight: .regular))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
+            VStack(spacing: 0) {
+                restockHeader
 
-                        Text("No Recent Purchases")
-                            .font(themeStore.font(for: .sectionHeader))
-                            .foregroundStyle(themeStore.contentPrimaryColor)
+                Group {
+                    if store.recentItems.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "cart")
+                                .font(.system(size: 40, weight: .regular))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
 
-                        Text("Items marked as bought appear here for one-tap restore.")
-                            .font(themeStore.font(for: .bodySmall))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
-                } else {
-                    List {
-                        ForEach(store.recentItems) { item in
-                            RestockItemRow(
-                                item: item,
-                                onRestore: { onRestore(item) },
-                                onDelete: { onDeleteItem(item) }
-                            )
-                            .listRowInsets(
-                                EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
-                            )
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            Text("No Recent Purchases")
+                                .font(themeStore.font(for: .sectionHeader))
+                                .foregroundStyle(themeStore.contentPrimaryColor)
+
+                            Text("Items marked as bought appear here for one-tap restore.")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
+                    } else {
+                        List {
+                            ForEach(store.recentItems) { item in
+                                RestockItemRow(
+                                    item: item,
+                                    onRestore: { onRestore(item) },
+                                    onDelete: { onDeleteItem(item) }
+                                )
+                                .listRowInsets(
+                                    EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
+                                )
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .background(themeStore.canvasColor)
+                        .environment(\.font, themeStore.font(for: .listRowTitle))
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(themeStore.canvasColor)
-                    .environment(\.font, themeStore.font(for: .listRowTitle))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .background(
                 themeStore.canvasColor.ignoresSafeArea()
             )
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Recently Purchased")
-                        .font(themeStore.font(for: .inlineTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    if !store.recentItems.isEmpty {
-                        Button(role: .destructive) {
-                            showClearAllConfirmation = true
-                        } label: {
-                            Text("Clear All")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .foregroundStyle(.red)
-                        }
-                        .tint(.red)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .fontWeight(.bold)
-                    .tint(themeStore.accentTabColor)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showClearAllConfirmation) {
                 AppConfirmationSheet(
                     title: "Clear all recently purchased?",
@@ -860,6 +841,39 @@ struct RestockSheet: View {
         .background(themeStore.canvasColor.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationBackground(themeStore.canvasColor)
+    }
+
+    private var restockHeader: some View {
+        ZStack {
+            Text("Recently Purchased")
+                .font(themeStore.font(for: .inlineTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+
+            HStack {
+                if !store.recentItems.isEmpty {
+                    Button(role: .destructive) {
+                        showClearAllConfirmation = true
+                    } label: {
+                        Text("Clear All")
+                            .font(themeStore.font(for: .buttonLabel))
+                            .foregroundStyle(.red)
+                    }
+                    .tint(.red)
+                }
+
+                Spacer()
+
+                Button("Done") {
+                    dismiss()
+                }
+                .font(themeStore.font(for: .buttonLabel))
+                .fontWeight(.bold)
+                .tint(themeStore.accentTabColor)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
 
