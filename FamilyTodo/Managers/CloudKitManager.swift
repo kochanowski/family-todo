@@ -595,7 +595,7 @@ actor CloudKitManager {
         _ query: CKQuery,
         database: CKDatabase,
         zoneID: CKRecordZone.ID? = nil,
-        resultsLimit: Int = Self.defaultQueryPageSize
+        resultsLimit: Int = CloudKitManager.defaultQueryPageSize
     ) async throws -> [CKRecord] {
         var allRecords: [CKRecord] = []
         var cursor: CKQueryOperation.Cursor?
