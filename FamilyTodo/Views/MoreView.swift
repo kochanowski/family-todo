@@ -113,28 +113,41 @@ struct HouseholdHeroCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @Query(sort: \CachedMember.joinedAt) private var cachedMembers: [CachedMember]
 
     var body: some View {
-        VStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: householdStore.currentHousehold?.iconSymbol ?? "house.fill")
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(householdColor)
+                .frame(width: 34, height: 34)
 
-            Text(householdStore.currentHousehold?.name ?? "No Household")
-                .font(themeStore.font(for: .profileName))
-                .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(householdStore.currentHousehold?.name ?? "Domownicy")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .lineLimit(1)
 
-            Text(userSession.displayName ?? "User")
-                .font(themeStore.font(for: .bodySmall))
-                .foregroundStyle(themeStore.contentSecondaryColor)
+                Text(membersLine)
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 14)
         .padding(.horizontal, 16)
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
         }
+        .contentShape(Rectangle())
     }
 
     private var cardBackground: Color {
@@ -143,6 +156,28 @@ struct HouseholdHeroCard: View {
 
     private var householdColor: Color {
         themeStore.accentTabColor
+    }
+
+    private var membersLine: String {
+        guard let householdId = householdStore.currentHousehold?.id else {
+            return userSession.displayName ?? "Tap to configure household"
+        }
+
+        let names = cachedMembers
+            .filter { $0.householdId == householdId && $0.isActive }
+            .map(\.displayName)
+            .sorted {
+                $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+            }
+
+        guard !names.isEmpty else {
+            return userSession.displayName ?? "No members yet"
+        }
+
+        let previewNames = names.prefix(3)
+        let preview = previewNames.joined(separator: ", ")
+        let remaining = names.count - previewNames.count
+        return remaining > 0 ? "\(preview) +\(remaining)" : preview
     }
 }
 

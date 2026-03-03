@@ -152,6 +152,7 @@ private struct ShoppingListContent: View {
                                     .listRowBackground(Color.clear)
                             }
                         }
+                        .environment(\.defaultMinListRowHeight, 10)
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
                         .background(Color.clear)
@@ -826,17 +827,16 @@ struct RestockSheet: View {
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(role: .destructive) {
-                        showClearAllConfirmation = true
-                    } label: {
-                        Text("Clear All")
-                            .font(themeStore.font(for: .buttonLabel))
-                            .foregroundStyle(.red)
+                    if !store.recentItems.isEmpty {
+                        Button(role: .destructive) {
+                            showClearAllConfirmation = true
+                        } label: {
+                            Text("Clear All")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .foregroundStyle(.red)
+                        }
+                        .tint(.red)
                     }
-                    .tint(.red)
-                    .opacity(store.recentItems.isEmpty ? 0 : 1)
-                    .disabled(store.recentItems.isEmpty)
-                    .accessibilityHidden(store.recentItems.isEmpty)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {

@@ -124,9 +124,11 @@ private struct TasksContent: View {
                 }
             }
 
-            unifiedListHeader
-                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.bottom, 8)
+            if activeFilter == .active {
+                unifiedListHeader
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                    .padding(.bottom, 8)
+            }
 
             if hasInitialMetadataLoaded {
                 List {
@@ -413,29 +415,21 @@ private struct TasksContent: View {
 
     private var unifiedListHeader: some View {
         HStack {
-            if activeFilter == .active {
-                Text("Active Tasks")
-                    .font(themeStore.font(for: .sectionHeader))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+            Text("Remaining")
+                .font(themeStore.font(for: .sectionHeader))
+                .foregroundStyle(themeStore.contentSecondaryColor)
 
-                Spacer()
+            Spacer()
 
-                let count = visibleNextTasks.count
-                let limit = normalizedWipLimit
-                let overLimit = count > limit
+            let count = visibleNextTasks.count
+            let limit = normalizedWipLimit
+            let overLimit = count > limit
 
-                Text("\(count) / \(limit)")
-                    .font(themeStore.font(for: .bodySmall))
-                    .fontWeight(overLimit ? .bold : .regular)
-                    .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
-                    .monospacedDigit()
-            } else {
-                Text("COMPLETED")
-                    .font(themeStore.font(for: .sectionHeader))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
-
-                Spacer()
-            }
+            Text("\(count) / \(limit)")
+                .font(themeStore.font(for: .bodySmall))
+                .fontWeight(overLimit ? .bold : .regular)
+                .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
+                .monospacedDigit()
         }
         .frame(minHeight: 30, alignment: .bottom)
     }
