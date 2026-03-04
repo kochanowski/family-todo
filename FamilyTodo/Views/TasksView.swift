@@ -225,9 +225,6 @@ private struct TasksContent: View {
                     _ = _Concurrency.Task {
                         await store.deleteTask(taskToDelete)
                     }
-                },
-                onDemoteToBacklog: { taskToDemote in
-                    demoteTaskToBacklog(taskToDemote)
                 }
             )
         }
@@ -1149,13 +1146,11 @@ private struct TaskDetailSheet: View {
     let members: [Member]
     let onSave: (Task) -> Void
     let onDelete: (Task) -> Void
-    let onDemoteToBacklog: (Task) -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
-    @State private var status: Task.TaskStatus
     @State private var assigneeId: UUID?
     @State private var hasDueDate: Bool
     @State private var dueDate: Date
@@ -1165,17 +1160,14 @@ private struct TaskDetailSheet: View {
         task: Task,
         members: [Member],
         onSave: @escaping (Task) -> Void,
-        onDelete: @escaping (Task) -> Void,
-        onDemoteToBacklog: @escaping (Task) -> Void
+        onDelete: @escaping (Task) -> Void
     ) {
         self.task = task
         self.members = members
         self.onSave = onSave
         self.onDelete = onDelete
-        self.onDemoteToBacklog = onDemoteToBacklog
 
         _title = State(initialValue: task.title)
-        _status = State(initialValue: task.status)
         _assigneeId = State(initialValue: task.assigneeId)
         _hasDueDate = State(initialValue: task.dueDate != nil)
         _dueDate = State(initialValue: task.dueDate ?? Date())
@@ -1185,48 +1177,51 @@ private struct TaskDetailSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Task") {
-                    TextField("Title", text: $title)
-                        .font(themeStore.font(for: .listRowTitle))
-                    Picker("Status", selection: $status) {
-                        Text("Ideas").tag(Task.TaskStatus.backlog)
-                        Text("Next").tag(Task.TaskStatus.next)
-                        Text("Done").tag(Task.TaskStatus.done)
-                    }
+                Section {
+                    TextField("Task title", text: $title)
+                        .font(.headline)
                 }
 
-                Section("Assignee") {
-                    Picker("Who", selection: $assigneeId) {
+                Section("Details") {
+                    Picker(selection: $assigneeId) {
                         Text("Unassigned").tag(UUID?.none)
                         ForEach(members.filter(\.isActive)) { member in
                             Text(member.displayName).tag(Optional(member.id))
                         }
+                    } label: {
+                        Label("Assigned To", systemImage: "person.fill")
                     }
-                }
 
-                Section("Due Date") {
-                    Toggle("Set due date", isOn: $hasDueDate)
+                    Toggle(isOn: $hasDueDate) {
+                        Label("Due Date", systemImage: "calendar")
+                    }
                     if hasDueDate {
                         DatePicker(
-                            "Due",
+                            "Choose Date",
                             selection: $dueDate,
                             displayedComponents: [.date]
                         )
                     }
                 }
 
-                Section("Notes") {
+                Section {
                     TextEditor(text: $notes)
                         .font(themeStore.font(for: .listRowTitle))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
+                } header: {
+                    Label("Notes", systemImage: "note.text")
                 }
 
                 Section {
-                    Button("Delete Task", role: .destructive) {
+                    Button(role: .destructive) {
                         onDelete(task)
                         dismiss()
+                    } label: {
+                        Text("Delete Task")
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
+                    .foregroundStyle(.red)
                 }
             }
             .navigationTitle("Task")
@@ -1251,18 +1246,13 @@ private struct TaskDetailSheet: View {
     private func save() {
         var updatedTask = task
         updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedTask.status = status
         updatedTask.assigneeId = assigneeId
         updatedTask.assigneeIds = assigneeId.map { [$0] } ?? []
         updatedTask.dueDate = hasDueDate ? dueDate : nil
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedTask.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
 
-        if status == .backlog {
-            onDemoteToBacklog(updatedTask)
-        } else {
-            onSave(updatedTask)
-        }
+        onSave(updatedTask)
         dismiss()
     }
 }
