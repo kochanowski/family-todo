@@ -93,7 +93,7 @@ Description: Add `lastPokedAt` to domain/cache/CloudKit schema + validator.
 Acceptance Criteria: Field round-trips model -> cache -> cloud -> model without loss.
 Regression Risk: Schema gate failures or mapping mismatches; test CI schema validation.
 
-- [ ] **P2.4 Poke Logic & Cooldown UX** ([Details](TODO_DETAILS.md#p24))
+- [x] **P2.4 Poke Logic & Cooldown UX** ([Details](TODO_DETAILS.md#p24))
 Description: Implement `canPoke`, `pokeTask`, leading swipe action, cooldown disabled state, anti-multitap guard.
 Acceptance Criteria: Poke only for other users’ tasks; once per day per task; no duplicate pokes.
 Regression Risk: Duplicate writes or wrong eligibility; test edge cases (unassigned/self/rapid taps).

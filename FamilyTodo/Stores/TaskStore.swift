@@ -302,6 +302,67 @@ final class TaskStore: ObservableObject {
 
     // MARK: - Task Operations
 
+    func canPoke(
+        task: Task,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let lastPokedAt = task.lastPokedAt else { return true }
+        return !calendar.isDate(lastPokedAt, inSameDayAs: now)
+    }
+
+    @discardableResult
+    func pokeTask(
+        _ task: Task,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) async -> Bool {
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return false }
+
+        let currentTask = tasks[index]
+        let assignedIDs = Set(
+            currentTask.assigneeIds + (currentTask.assigneeId.map { [$0] } ?? [])
+        )
+        guard !assignedIDs.isEmpty else { return false }
+        guard !pendingTaskMutations.contains(currentTask.id) else { return false }
+        guard canPoke(task: currentTask, now: now, calendar: calendar) else { return false }
+
+        beginMutation(currentTask.id)
+        defer { endMutation(currentTask.id) }
+
+        var updatedTask = currentTask
+        updatedTask.lastPokedAt = now
+        updatedTask.updatedAt = now
+        tasks[index] = updatedTask
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == updatedTask.id }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            cached.update(from: updatedTask)
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.lastSyncedAt = isCloudSyncEnabled ? nil : now
+            saveContextOrSetError(operation: "cache poked task")
+        } else {
+            let cached = CachedTask(from: updatedTask)
+            cached.syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+            cached.lastSyncedAt = isCloudSyncEnabled ? nil : now
+            modelContext.insert(cached)
+            saveContextOrSetError(operation: "cache inserted poked task")
+        }
+
+        guard isCloudSyncEnabled else { return true }
+
+        do {
+            _ = try await cloudKit.saveTask(updatedTask)
+            markCachedTaskSynced(id: updatedTask.id)
+            return true
+        } catch {
+            self.error = error
+            return false
+        }
+    }
+
     @discardableResult
     func createTask(
         taskId: UUID = UUID(),

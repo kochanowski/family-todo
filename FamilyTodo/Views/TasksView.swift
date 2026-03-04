@@ -331,6 +331,26 @@ private struct TasksContent: View {
                     onToggle: { toggleTask(task) },
                     onOpenDetail: { selectedTask = task }
                 )
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    if isTaskAssignedToOther(task) {
+                        let isPokeInFlight = store.pendingTaskMutations.contains(task.id)
+                        let isPokeAvailable = store.canPoke(task: task)
+                        Button {
+                            sendPoke(task)
+                        } label: {
+                            if isPokeInFlight {
+                                Label("Sending...", systemImage: "hourglass")
+                            } else {
+                                Label(
+                                    isPokeAvailable ? "Poke" : "Poked today",
+                                    systemImage: isPokeAvailable ? "hand.wave.fill" : "moon.zzz.fill"
+                                )
+                            }
+                        }
+                        .tint(isPokeInFlight ? .gray : (isPokeAvailable ? .orange : .gray))
+                        .disabled(isPokeInFlight || !isPokeAvailable)
+                    }
+                }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button {
                         HapticManager.lightTap()
@@ -784,6 +804,12 @@ private struct TasksContent: View {
         return memberStore.members.first(where: { $0.id == assigneeId })
     }
 
+    private func isTaskAssignedToOther(_ task: Task) -> Bool {
+        let assignedIDs = Set(task.assigneeIds + (task.assigneeId.map { [$0] } ?? []))
+        guard !assignedIDs.isEmpty, let currentMemberId else { return false }
+        return !assignedIDs.contains(currentMemberId)
+    }
+
     private func categoryName(for task: Task) -> String? {
         guard let backlogCategoryId = task.backlogCategoryId else { return nil }
         return backlogStore.categories.first(where: { $0.id == backlogCategoryId })?.title
@@ -955,6 +981,23 @@ private struct TasksContent: View {
     private func archiveTask(_ task: Task) {
         _ = _Concurrency.Task {
             await store.archiveTask(task)
+        }
+    }
+
+    private func sendPoke(_ task: Task) {
+        guard isTaskAssignedToOther(task) else { return }
+        guard store.canPoke(task: task), !store.pendingTaskMutations.contains(task.id) else {
+            HapticManager.warning()
+            return
+        }
+
+        _ = _Concurrency.Task {
+            let didPoke = await store.pokeTask(task)
+            if didPoke {
+                HapticManager.selection()
+            } else {
+                HapticManager.warning()
+            }
         }
     }
 
