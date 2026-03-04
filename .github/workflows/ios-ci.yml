@@ -29,12 +29,28 @@ jobs:
     steps:
       - name: Send Telegram start message
         run: |
+          if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] || [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            echo "Telegram secrets not configured. Skipping start notification."
+            exit 0
+          fi
+
+          escape_html() {
+            printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+
           JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG=$(printf '\360\237\232\200 <b>Build started</b>\nBranch: <code>${{ github.ref_name }}</code>\nCommit: <code>${{ github.sha }}</code>\n<a href="%s">Sledz postep</a>' "${JOB_URL}")
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          BRANCH="$(escape_html '${{ github.ref_name }}')"
+          SHORT_SHA="$(printf '%s' '${{ github.sha }}' | cut -c1-7)"
+          EVENT_NAME="$(escape_html '${{ github.event_name }}')"
+          ACTOR="$(escape_html '${{ github.actor }}')"
+          MSG=$(printf '🚀 <b>CI started</b>\nBranch: <code>%s</code>\nCommit: <code>%s</code>\nEvent: <code>%s</code>\nActor: <code>%s</code>\n<a href="%s">Open run</a>' "${BRANCH}" "${SHORT_SHA}" "${EVENT_NAME}" "${ACTOR}" "${JOB_URL}")
+          curl -fsS --retry 3 -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "text=${MSG}"
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=${MSG}" || {
+              echo "::warning::Telegram start notification failed."
+            }
 
   # ─────────────────────────────────────────────────────────────────────────
   # Build and Test
@@ -163,16 +179,6 @@ jobs:
       #     name: HousePulse-TestResults
       #     path: TestResults.xcresult
 
-      - name: Notify build success
-        if: success()
-        run: |
-          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG=$(printf '\342\234\205 <b>Build OK</b>\nBranch: <code>${{ github.ref_name }}</code>\n<a href="%s">Szczegoly</a>' "${JOB_URL}")
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "text=${MSG}"
-
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
   # ─────────────────────────────────────────────────────────────
@@ -189,16 +195,6 @@ jobs:
 
       - name: Run SwiftLint
         run: swiftlint lint --reporter github-actions-logging
-
-      - name: Notify SwiftLint success
-        if: success()
-        run: |
-          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG=$(printf '\342\234\205 <b>SwiftLint OK</b>\nBranch: <code>${{ github.ref_name }}</code>\n<a href="%s">Szczegoly</a>' "${JOB_URL}")
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "text=${MSG}"
 
   # ─────────────────────────────────────────────────────────────
   # CloudKit schema gate (Development -> Production)
@@ -333,39 +329,74 @@ jobs:
           retention-days: 30
 
   # ─────────────────────────────────────────────────────────────
-  # Notify: failure (build, lint, OR deploy)
+  # Notify: final CI summary
   # ─────────────────────────────────────────────────────────────
-  notify-failure:
-    name: Notify Failure (Telegram)
+  notify-summary:
+    name: Notify Summary (Telegram)
     runs-on: ubuntu-latest
     needs: [build-and-test, swiftlint, cloudkit-schema, deploy-testflight]
-    if: failure()
+    if: always()
 
     steps:
-      - name: Send Telegram failure message
+      - name: Send Telegram summary message
         run: |
+          if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] || [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            echo "Telegram secrets not configured. Skipping summary notification."
+            exit 0
+          fi
+
+          escape_html() {
+            printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+
+          icon_for_result() {
+            case "$1" in
+              success) echo "✅" ;;
+              failure) echo "❌" ;;
+              cancelled) echo "🛑" ;;
+              skipped) echo "⏭" ;;
+              *) echo "❔" ;;
+            esac
+          }
+
+          BUILD_RESULT="${{ needs.build-and-test.result }}"
+          LINT_RESULT="${{ needs.swiftlint.result }}"
+          CLOUDKIT_RESULT="${{ needs.cloudkit-schema.result }}"
+          DEPLOY_RESULT="${{ needs.deploy-testflight.result }}"
+
+          FINAL_TITLE="✅ CI succeeded"
+          if [ "$BUILD_RESULT" = "failure" ] || [ "$LINT_RESULT" = "failure" ] || [ "$CLOUDKIT_RESULT" = "failure" ] || [ "$DEPLOY_RESULT" = "failure" ] || \
+             [ "$BUILD_RESULT" = "cancelled" ] || [ "$LINT_RESULT" = "cancelled" ] || [ "$CLOUDKIT_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "cancelled" ]; then
+            FINAL_TITLE="❌ CI failed"
+          fi
+
+          FAILED_STAGES=""
+          [ "$BUILD_RESULT" = "failure" ] || [ "$BUILD_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• Build and Test (${BUILD_RESULT})\n"
+          [ "$LINT_RESULT" = "failure" ] || [ "$LINT_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• SwiftLint (${LINT_RESULT})\n"
+          [ "$CLOUDKIT_RESULT" = "failure" ] || [ "$CLOUDKIT_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• CloudKit Schema Gate (${CLOUDKIT_RESULT})\n"
+          [ "$DEPLOY_RESULT" = "failure" ] || [ "$DEPLOY_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• Deploy to TestFlight (${DEPLOY_RESULT})\n"
+
           JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG=$(printf '❌ <b>Build failed</b>\nBranch: <code>${{ github.ref_name }}</code>\nCommit: <code>${{ github.sha }}</code>\n<a href="'"${JOB_URL}"'">Zobacz logi →</a>')
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          BRANCH="$(escape_html '${{ github.ref_name }}')"
+          SHORT_SHA="$(printf '%s' '${{ github.sha }}' | cut -c1-7)"
+          EVENT_NAME="$(escape_html '${{ github.event_name }}')"
+          ACTOR="$(escape_html '${{ github.actor }}')"
+
+          STATUS_LINES="$(printf '%s <b>SwiftLint</b>: <code>%s</code>\n' "$(icon_for_result "$LINT_RESULT")" "$LINT_RESULT")"
+          STATUS_LINES="${STATUS_LINES}$(printf '%s <b>Build and Test</b>: <code>%s</code>\n' "$(icon_for_result "$BUILD_RESULT")" "$BUILD_RESULT")"
+          STATUS_LINES="${STATUS_LINES}$(printf '%s <b>CloudKit Schema</b>: <code>%s</code>\n' "$(icon_for_result "$CLOUDKIT_RESULT")" "$CLOUDKIT_RESULT")"
+          STATUS_LINES="${STATUS_LINES}$(printf '%s <b>Deploy TestFlight</b>: <code>%s</code>\n' "$(icon_for_result "$DEPLOY_RESULT")" "$DEPLOY_RESULT")"
+
+          MSG=$(printf '%s\nBranch: <code>%s</code>\nCommit: <code>%s</code>\nEvent: <code>%s</code>\nActor: <code>%s</code>\n\n%s' "${FINAL_TITLE}" "${BRANCH}" "${SHORT_SHA}" "${EVENT_NAME}" "${ACTOR}" "${STATUS_LINES}")
+          if [ -n "$FAILED_STAGES" ]; then
+            MSG="${MSG}\n<b>Failed stages:</b>\n${FAILED_STAGES}"
+          fi
+          MSG="${MSG}\n<a href=\"${JOB_URL}\">Open run</a>"
+
+          curl -fsS --retry 3 -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "text=${MSG}"
-
-  # ─────────────────────────────────────────────────────────────
-  # Notify: TestFlight deploy success
-  # ─────────────────────────────────────────────────────────────
-  notify-success:
-    name: Notify Success (Telegram)
-    runs-on: ubuntu-latest
-    needs: [deploy-testflight]
-    if: success()
-
-    steps:
-      - name: Send Telegram success message
-        run: |
-          JOB_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG=$(printf '✅ <b>TestFlight deploy OK</b>\nBranch: <code>${{ github.ref_name }}</code>\nBuild: <code>#${{ github.run_number }}</code>\n<a href="'"${JOB_URL}"'">Szczegóły →</a>')
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "text=${MSG}"
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=${MSG}" || {
+              echo "::warning::Telegram summary notification failed."
+            }
