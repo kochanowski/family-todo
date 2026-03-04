@@ -395,7 +395,6 @@ private struct EditProfileView: View {
     @State private var displayName = ""
     @State private var selectedColorHex = MemberColorToken.fallbackHex
     @State private var hasLoaded = false
-    @State private var isSaving = false
     @State private var errorMessage: String?
 
     private let modelContext: ModelContext
@@ -449,13 +448,9 @@ private struct EditProfileView: View {
                 Button {
                     saveProfile()
                 } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text("Save")
-                    }
+                    Text("Save")
                 }
-                .disabled(isSaving || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -491,21 +486,28 @@ private struct EditProfileView: View {
     private func saveProfile() {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        do {
+            _ = try DisplayNameValidator.validate(trimmedName)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        guard let currentUserId = userSession.userId else {
+            errorMessage = "Session expired. Sign in again."
+            return
+        }
 
-        isSaving = true
+        dismiss()
         _ = _Concurrency.Task {
             do {
                 try await memberStore.updateCurrentUserProfile(
                     displayName: trimmedName,
                     colorHex: selectedColorHex,
-                    currentUserId: userSession.userId
+                    currentUserId: currentUserId
                 )
                 userSession.applyProfileUpdate(displayName: trimmedName)
-                isSaving = false
-                dismiss()
             } catch {
-                isSaving = false
-                errorMessage = error.localizedDescription
+                memberStore.error = error
             }
         }
     }
@@ -520,7 +522,6 @@ private struct EditHouseholdView: View {
 
     @State private var name: String
     @State private var selectedIconSymbol: String
-    @State private var isSaving = false
     @State private var errorMessage: String?
 
     private let iconOptions = [
@@ -600,13 +601,9 @@ private struct EditHouseholdView: View {
                 Button {
                     saveHousehold()
                 } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text("Save")
-                    }
+                    Text("Save")
                 }
-                .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -627,7 +624,7 @@ private struct EditHouseholdView: View {
             return
         }
 
-        isSaving = true
+        dismiss()
         _ = _Concurrency.Task {
             do {
                 try await householdStore.updateCurrentHousehold(
@@ -635,11 +632,8 @@ private struct EditHouseholdView: View {
                     userId: userId,
                     iconSymbol: selectedIconSymbol
                 )
-                isSaving = false
-                dismiss()
             } catch {
-                isSaving = false
-                errorMessage = error.localizedDescription
+                householdStore.error = error
             }
         }
     }

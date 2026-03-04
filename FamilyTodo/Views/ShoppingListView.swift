@@ -24,7 +24,10 @@ struct ShoppingListView: View {
                         // Recovery: Try to load from cache if session is lost
                         if userSession.currentHouseholdID == nil, let userId = userSession.userId {
                             print("DEBUG: Attempting household recovery for user: \(userId)")
-                            await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+                            await householdStore.loadCurrentHouseholdAndMembership(
+                                userId: userId,
+                                preferredHouseholdId: userSession.currentHouseholdID
+                            )
                             if let household = householdStore.currentHousehold {
                                 print("DEBUG: Recovered household: \(household.id)")
                                 userSession.setCurrentHousehold(household.id)

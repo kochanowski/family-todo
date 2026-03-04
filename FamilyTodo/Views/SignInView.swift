@@ -243,7 +243,10 @@ struct SignInView: View {
 
         if userSession.currentHouseholdID == nil, let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
-            await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+            await householdStore.loadCurrentHouseholdAndMembership(
+                userId: userId,
+                preferredHouseholdId: userSession.currentHouseholdID
+            )
             if let household = householdStore.currentHousehold {
                 userSession.setCurrentHousehold(household.id)
             }

@@ -245,6 +245,9 @@ struct RootView: View {
                 onboardingState: onboardingState
             )
         }
+        .task(id: householdRecoveryKey) {
+            await recoverHouseholdRouteIfNeeded()
+        }
         .alert(
             "Invitation Error",
             isPresented: Binding(
@@ -273,6 +276,38 @@ struct RootView: View {
             shareAcceptanceCoordinator.pendingInviteCode ?? "none",
             shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "none",
         ].joined(separator: "|")
+    }
+
+    private var householdRecoveryKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+            householdStore.currentHousehold?.id.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private func recoverHouseholdRouteIfNeeded() async {
+        guard onboardingState.currentState == .householdSetup else { return }
+        guard userSession.hasActiveSession else { return }
+
+        if userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil {
+            onboardingState.completeHouseholdSetup(withHousehold: true)
+            return
+        }
+
+        guard let userId = userSession.userId else { return }
+        householdStore.setSyncMode(userSession.syncMode)
+        await householdStore.loadCurrentHouseholdAndMembership(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        )
+
+        if let household = householdStore.currentHousehold {
+            userSession.setCurrentHousehold(household.id)
+            onboardingState.completeHouseholdSetup(withHousehold: true)
+        }
     }
 }
 

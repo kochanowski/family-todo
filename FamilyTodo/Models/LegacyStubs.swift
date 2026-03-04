@@ -417,13 +417,15 @@ final class RecurringChoreStore: ObservableObject {
         defer { isLoading = false }
 
         loadFromCache(householdId: householdId)
+        let cacheSnapshot = chores
         guard isCloudSyncEnabled else { return }
 
         do {
             await cloudKit.ensureReady()
             let fetched = try await cloudKit.fetchRecurringChores(householdId: householdId)
-            chores = fetched
-            syncToCache(fetched)
+            let merged = mergeCloudSnapshot(fetched, with: cacheSnapshot)
+            chores = merged
+            syncToCache(merged)
         } catch {
             self.error = error
         }
@@ -461,6 +463,10 @@ final class RecurringChoreStore: ObservableObject {
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
         chores.append(chore)
         upsertCachedChore(chore)
+
+        if let generatedChore = await seedInitialBacklogTaskIfNeeded(for: chore) {
+            chore = generatedChore
+        }
 
         guard isCloudSyncEnabled else { return }
         do {
@@ -544,6 +550,118 @@ final class RecurringChoreStore: ObservableObject {
         if let cached = try? modelContext.fetch(descriptor) {
             chores = cached.map { $0.toRecurringChore() }
         }
+    }
+
+    private func mergeCloudSnapshot(
+        _ cloudChores: [RecurringChore],
+        with localChores: [RecurringChore]
+    ) -> [RecurringChore] {
+        var mergedByID = Dictionary(uniqueKeysWithValues: cloudChores.map { ($0.id, $0) })
+
+        for localChore in localChores {
+            if let cloudChore = mergedByID[localChore.id], cloudChore.updatedAt > localChore.updatedAt {
+                continue
+            }
+            mergedByID[localChore.id] = localChore
+        }
+
+        return mergedByID
+            .values
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    private func seedInitialBacklogTaskIfNeeded(for chore: RecurringChore) async -> RecurringChore? {
+        guard chore.isActive else { return nil }
+        guard let modelContext else { return nil }
+
+        let generatedDueDate = chore.nextScheduledDate
+            ?? ChoreScheduler.nextScheduledDate(for: chore, from: Date())
+            ?? Date()
+
+        guard !hasGeneratedTask(for: chore.id, dueDate: generatedDueDate) else {
+            return nil
+        }
+
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(chore.householdId)
+        taskStore.setSyncMode(syncMode)
+        await taskStore.loadTasks()
+
+        if taskStore.tasks.contains(where: { task in
+            task.recurringChoreId == chore.id &&
+                task.dueDate.map { Calendar.current.isDate($0, inSameDayAs: generatedDueDate) } == true
+        }) {
+            return nil
+        }
+
+        let assignment = resolveAssignment(for: chore)
+        _ = await taskStore.createTask(
+            title: chore.title,
+            status: .backlog,
+            assigneeId: assignment.assigneeId,
+            assigneeIds: chore.normalizedAssigneeIDs,
+            backlogCategoryId: chore.categoryId,
+            areaId: chore.areaId,
+            dueDate: generatedDueDate,
+            notes: chore.notes,
+            taskType: .recurring,
+            recurringChoreId: chore.id
+        )
+
+        var generatedChore = chore
+        generatedChore.lastGeneratedDate = Date()
+        generatedChore.nextScheduledDate =
+            ChoreScheduler.nextScheduledDate(for: generatedChore, from: generatedDueDate)
+                ?? generatedDueDate
+        generatedChore.nextAssigneeIndex = assignment.nextAssigneeIndex
+        generatedChore.updatedAt = Date()
+
+        if let index = chores.firstIndex(where: { $0.id == generatedChore.id }) {
+            chores[index] = generatedChore
+        }
+        upsertCachedChore(generatedChore)
+        return generatedChore
+    }
+
+    private func hasGeneratedTask(for recurringChoreId: UUID, dueDate: Date) -> Bool {
+        guard let householdId else { return false }
+        guard let modelContext else { return false }
+
+        let targetHouseholdId = householdId
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate {
+                $0.householdId == targetHouseholdId
+            }
+        )
+        let calendar = Calendar.current
+        let cachedTasks = (try? modelContext.fetch(descriptor)) ?? []
+        return cachedTasks.contains { cachedTask in
+            guard cachedTask.recurringChoreId == recurringChoreId else { return false }
+            cachedTask.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
+        }
+    }
+
+    private func resolveAssignment(
+        for chore: RecurringChore
+    ) -> (assigneeId: UUID?, nextAssigneeIndex: Int) {
+        let assigneeIds = chore.normalizedAssigneeIDs
+        guard !assigneeIds.isEmpty else {
+            return (nil, 0)
+        }
+
+        guard chore.rotationEnabled, assigneeIds.count > 1 else {
+            return (assigneeIds.first, 0)
+        }
+
+        let currentIndex = chore.normalizedRotationCursor()
+        let assigneeId = assigneeIds[currentIndex]
+        let nextIndex = (currentIndex + 1) % assigneeIds.count
+        return (assigneeId, nextIndex)
     }
 
     private func syncToCache(_ chores: [RecurringChore]) {

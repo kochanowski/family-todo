@@ -22,6 +22,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     /// Use CloudKitManager for consistent container access
     private let cloudKit = CloudKitManager.shared
     private var subscriptionIds: [String] = []
+    private var configuredHouseholdId: UUID?
     private var aggregationTimer: Timer?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
     private var lastLocalMutationAt: Date?
@@ -36,9 +37,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
     // MARK: - Setup
 
     func configure(userId _: String, householdId: UUID) {
+        guard configuredHouseholdId != householdId else { return }
+        configuredHouseholdId = householdId
+
         _Concurrency.Task {
             await setupSubscriptions(householdId: householdId)
-            await registerForPushNotifications()
+            await registerForRemoteNotifications()
         }
     }
 
@@ -66,7 +70,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             // Check if subscription already exists
             _ = try await database.subscription(for: subscriptionId)
-            subscriptionIds.append(subscriptionId)
+            if !subscriptionIds.contains(subscriptionId) {
+                subscriptionIds.append(subscriptionId)
+            }
             return // Already exists
         } catch {
             // Subscription doesn't exist, proceed to create
@@ -79,7 +85,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
         do {
             _ = try await database.save(subscription)
-            subscriptionIds.append(subscriptionId)
+            if !subscriptionIds.contains(subscriptionId) {
+                subscriptionIds.append(subscriptionId)
+            }
             print("✅ Created database subscription: \(subscriptionId)")
         } catch {
             print("❌ Failed to create database subscription: \(error)")
@@ -88,17 +96,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Push Notification Registration
 
-    private func registerForPushNotifications() async {
+    private func registerForRemoteNotifications() async {
         #if !CI
-            do {
-                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
-                if granted {
-                    await MainActor.run {
-                        UIApplication.shared.registerForRemoteNotifications()
-                    }
-                }
-            } catch {
-                print("❌ Push notification permission error: \(error)")
+            await MainActor.run {
+                UIApplication.shared.registerForRemoteNotifications()
             }
         #endif
     }
