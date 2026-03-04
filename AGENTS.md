@@ -201,7 +201,7 @@ feat(tasks): add conversational filter chips for assignee filtering
 
 ## 8) After Implementation — Required Handoff Summary
 
-**Every time you finish implementing a feature or fix**, you MUST print a brief summary in the following format before stopping:
+**Every time you finish implementing a feature or fix**, you MUST print in POLISH a brief summary in the following format before stopping:
 
 ```
 ## What I changed (Task IDs)

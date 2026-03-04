@@ -336,11 +336,10 @@ final class TaskStore: ObservableObject {
             []
         }
 
-        let resolvedOrder: Int
-        if status == .next {
-            resolvedOrder = order ?? (nextTaskOrderBaseline() + 1)
+        let resolvedOrder: Int = if status == .next {
+            order ?? (nextTaskOrderBaseline() + 1)
         } else {
-            resolvedOrder = order ?? 0
+            order ?? 0
         }
 
         let task = Task(

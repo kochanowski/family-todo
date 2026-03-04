@@ -92,7 +92,7 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertTrue(store.recentItems.isEmpty)
     }
 
-    func testMergeCloudSnapshot_PendingUploadWinsAndPendingDeleteRemoved() async {
+    func testMergeCloudSnapshot_PendingUploadWinsAndPendingDeleteRemoved() {
         let baseDate = Date()
         let pendingID = UUID()
         let deleteID = UUID()

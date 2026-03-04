@@ -1,7 +1,7 @@
 # Plan FINAL: Naprawa bugów z `bugs-and-fixes.md` + błędy potwierdzone na screenshotach/wideo
 
 ## Summary
-Plan obejmuje 6 punktów z [bugs-and-fixes.md](/home/wkochanowski/code/family-todo/bugs-and-fixes.md) oraz błąd widoczny na nagraniu: częsty rollback promocji z Ideas do Tasks.  
+Plan obejmuje 6 punktów z [bugs-and-fixes.md](/home/wkochanowski/code/family-todo/bugs-and-fixes.md) oraz błąd widoczny na nagraniu: częsty rollback promocji z Ideas do Tasks.
 Priorytet wykonania: najpierw CloudKit/shared-zone (bo blokuje poprawność danych), potem UI/UX i regresje.
 
 ## Zweryfikowane problemy (repo + media)

@@ -162,7 +162,7 @@ final class BacklogStore: ObservableObject {
         return CacheSnapshot(categories: cachedCategories, items: cachedItems)
     }
 
-    private func syncToCache(
+    func syncToCache(
         categories: [BacklogCategory],
         items: [BacklogItem],
         cloudCategoryIDs: Set<UUID>,
@@ -181,6 +181,11 @@ final class BacklogStore: ObservableObject {
         let cachedItems = (try? context.fetch(itemCacheDescriptor)) ?? []
         let cachedCategoryByID = Dictionary(uniqueKeysWithValues: cachedCategories.map { ($0.id, $0) })
         let cachedItemByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
+        let tombstonedItemIDs = Set(
+            cachedItems.compactMap { cachedItem in
+                cachedItem.syncStatusRaw == BacklogSyncStatus.pendingDelete ? cachedItem.id : nil
+            }
+        )
 
         // Sync Categories
         for category in categories {
@@ -188,8 +193,8 @@ final class BacklogStore: ObservableObject {
                 if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload {
                     continue
                 }
-                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho &&
-                    !cloudCategoryIDs.contains(category.id)
+                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho,
+                   !cloudCategoryIDs.contains(category.id)
                 {
                     continue
                 }
@@ -202,14 +207,17 @@ final class BacklogStore: ObservableObject {
 
         // Sync Items
         for item in items {
+            if tombstonedItemIDs.contains(item.id) {
+                continue
+            }
             if let existing = cachedItemByID[item.id] {
                 if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
                     existing.syncStatusRaw == BacklogSyncStatus.pendingDelete
                 {
                     continue
                 }
-                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho &&
-                    !cloudItemIDs.contains(item.id)
+                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho,
+                   !cloudItemIDs.contains(item.id)
                 {
                     continue
                 }
@@ -550,17 +558,16 @@ final class BacklogStore: ObservableObject {
             throw HouseholdError.householdNotFound
         }
 
-        let resolvedCategoryId: UUID?
-        if let backlogCategoryId = task.backlogCategoryId,
-           categories.contains(where: { $0.id == backlogCategoryId })
+        let resolvedCategoryId: UUID? = if let backlogCategoryId = task.backlogCategoryId,
+                                           categories.contains(where: { $0.id == backlogCategoryId })
         {
-            resolvedCategoryId = backlogCategoryId
+            backlogCategoryId
         } else if let fallbackCategoryId,
                   categories.contains(where: { $0.id == fallbackCategoryId })
         {
-            resolvedCategoryId = fallbackCategoryId
+            fallbackCategoryId
         } else {
-            resolvedCategoryId = categories.first?.id
+            categories.first?.id
         }
 
         guard let categoryId = resolvedCategoryId else {
@@ -670,24 +677,30 @@ final class BacklogStore: ObservableObject {
 
     @discardableResult
     func deleteItem(_ item: BacklogItem) async -> Bool {
-        await deleteItemInternal(item, reloadOnFailure: true)
+        await deleteItemInternal(item)
     }
 
-    private func deleteItemInternal(_ item: BacklogItem, reloadOnFailure: Bool) async -> Bool {
-        guard let currentIndex = items.firstIndex(where: { $0.id == item.id }) else {
-            removeCachedItem(id: item.id)
-            return true
-        }
-
-        let removedItem = items[currentIndex]
-
-        withAnimation {
-            items.remove(at: currentIndex)
+    private func deleteItemInternal(_ item: BacklogItem) async -> Bool {
+        let removedItemIndex = items.firstIndex(where: { $0.id == item.id })
+        if let removedItemIndex {
+            withAnimation {
+                items.remove(at: removedItemIndex)
+            }
         }
 
         if !isCloudSyncEnabled {
             removeCachedItem(id: item.id)
             return true
+        }
+
+        guard markCachedItemPendingDelete(item) else {
+            if let removedItemIndex {
+                withAnimation {
+                    let safeIndex = min(removedItemIndex, items.count)
+                    items.insert(item, at: safeIndex)
+                }
+            }
+            return false
         }
 
         do {
@@ -696,15 +709,30 @@ final class BacklogStore: ObservableObject {
             return true
         } catch {
             self.error = error
-            withAnimation {
-                let safeIndex = min(currentIndex, items.count)
-                items.insert(removedItem, at: safeIndex)
-            }
-            if reloadOnFailure {
-                await loadData()
-            }
-            return false
+            replayPendingMutationsInBackground()
+            return true
         }
+    }
+
+    @discardableResult
+    private func markCachedItemPendingDelete(_ item: BacklogItem) -> Bool {
+        guard let context = modelContext else { return false }
+
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == item.id }
+        )
+
+        if let cached = try? context.fetch(descriptor).first {
+            cached.syncStatusRaw = BacklogSyncStatus.pendingDelete
+            cached.lastSyncedAt = nil
+            return saveContextOrSetError(context, operation: "mark backlog item pending delete")
+        }
+
+        let tombstone = CachedBacklogItem(from: item)
+        tombstone.syncStatusRaw = BacklogSyncStatus.pendingDelete
+        tombstone.lastSyncedAt = nil
+        context.insert(tombstone)
+        return saveContextOrSetError(context, operation: "insert backlog tombstone")
     }
 
     private func removeCachedItem(id: UUID) {
@@ -797,7 +825,7 @@ final class BacklogStore: ObservableObject {
 
         switch validation {
         case .ok:
-            let didDeleteBacklogItem = await deleteItemInternal(item, reloadOnFailure: false)
+            let didDeleteBacklogItem = await deleteItemInternal(item)
             guard didDeleteBacklogItem else {
                 if let createdTask = taskStore.tasks.first(where: { $0.id == createdTaskId }) {
                     await taskStore.deleteTask(createdTask)

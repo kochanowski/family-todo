@@ -321,10 +321,10 @@ final class ShareAcceptanceCoordinatorTests: XCTestCase {
         return defaults
     }
 
-    func testEnqueueInviteURLPersistsAndRestoresPendingInvite() {
+    func testEnqueueInviteURLPersistsAndRestoresPendingInvite() throws {
         let defaults = makeUserDefaults()
         let coordinator = ShareAcceptanceCoordinator(userDefaults: defaults)
-        let inviteURL = URL(string: "https://www.icloud.com/share/AbCdEf123")!
+        let inviteURL = try XCTUnwrap(URL(string: "https://www.icloud.com/share/AbCdEf123"))
 
         coordinator.enqueue(inviteURL: inviteURL)
 

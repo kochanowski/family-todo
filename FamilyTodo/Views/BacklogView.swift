@@ -86,11 +86,7 @@ private struct BacklogContent: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if store.isLoading, store.categories.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.bottom, listBottomInset)
-            } else if store.categories.isEmpty {
+            if store.categories.isEmpty {
                 emptyState
                     .padding(.bottom, listBottomInset)
             } else {

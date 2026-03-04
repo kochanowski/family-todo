@@ -1,4 +1,4 @@
-Act as an expert iOS Developer and Software Architect. We need to build the core navigation, onboarding, and authentication flow for our household management app. 
+Act as an expert iOS Developer and Software Architect. We need to build the core navigation, onboarding, and authentication flow for our household management app.
 
 Please implement this complete flow using modern SwiftUI, clean MVVM architecture, and a central App State router. Use placeholders for complex backend logic (like actual database sync or camera AVFoundation setup), but the UI, navigation, and state transitions must be fully functional.
 

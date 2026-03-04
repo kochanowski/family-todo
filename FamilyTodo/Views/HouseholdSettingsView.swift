@@ -170,7 +170,6 @@ struct ProfileView: View {
         }
     }
 
-    @ViewBuilder
     private var membersSection: some View {
         Section("Members") {
             if activeMembers.isEmpty {

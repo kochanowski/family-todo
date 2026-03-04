@@ -1,7 +1,7 @@
 # HousePulse CloudKit Sharing: Bulletproof Architecture Plan
 
 ## Summary
-After reviewing your current implementation in [CloudKitManager.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Managers/CloudKitManager.swift), [HouseholdStore.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Stores/HouseholdStore.swift), [ShareAcceptanceCoordinator.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Services/ShareAcceptanceCoordinator.swift), [AppDelegateBridge.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Services/AppDelegateBridge.swift), and [FamilyTodoApp.swift](/home/wkochanowski/code/family-todo/FamilyTodo/FamilyTodoApp.swift), the core architecture is close, but one root flaw is still likely causing false `shareNotCreated`: `CKModifyRecordsOperation` per-record failures are not treated as hard failures in share creation.  
+After reviewing your current implementation in [CloudKitManager.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Managers/CloudKitManager.swift), [HouseholdStore.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Stores/HouseholdStore.swift), [ShareAcceptanceCoordinator.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Services/ShareAcceptanceCoordinator.swift), [AppDelegateBridge.swift](/home/wkochanowski/code/family-todo/FamilyTodo/Services/AppDelegateBridge.swift), and [FamilyTodoApp.swift](/home/wkochanowski/code/family-todo/FamilyTodo/FamilyTodoApp.swift), the core architecture is close, but one root flaw is still likely causing false `shareNotCreated`: `CKModifyRecordsOperation` per-record failures are not treated as hard failures in share creation.
 That can produce exactly your TestFlight symptom: `operation=createShare` + `shareNotCreated` without the real CKError.
 
 ---

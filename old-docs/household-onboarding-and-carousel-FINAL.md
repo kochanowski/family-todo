@@ -1,7 +1,7 @@
 # Household Onboarding + Carousel — Plan FINAL
 
 ## Summary
-Wdrażamy spójny flow `onboarding -> auth -> householdSetup/mainApp` zgodny ze specyfikacją, bez duplikacji routera i bez regresji startup recovery.  
+Wdrażamy spójny flow `onboarding -> auth -> householdSetup/mainApp` zgodny ze specyfikacją, bez duplikacji routera i bez regresji startup recovery.
 Kluczowe decyzje: guest po auth idzie bezpośrednio do `mainApp`; Apple Sign-In idzie do `householdSetup` jeśli brak household; `syncChoice` znika z aktywnego flow.
 
 ## Decyzje Zamknięte

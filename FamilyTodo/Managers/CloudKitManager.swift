@@ -167,7 +167,7 @@ actor CloudKitManager {
         await ensureReady()
 
         // Return cached result if available
-        if let isAvailable = self.isAvailable {
+        if let isAvailable {
             if !isAvailable {
                 let error = CloudKitManagerError.notAuthenticated
                 recordCloudKitFailure(error, operation: "checkAvailability.cached")
@@ -313,13 +313,13 @@ actor CloudKitManager {
         print("CloudKitScope: cleared cached zone for household \(householdId)")
     }
 
-    nonisolated private func recordCloudKitFailure(_ error: Error, operation: String) {
+    private nonisolated func recordCloudKitFailure(_ error: Error, operation: String) {
         _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.record(error: error, operation: operation)
         }
     }
 
-    nonisolated private func clearCloudKitFailure() {
+    private nonisolated func clearCloudKitFailure() {
         _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.clear()
         }
@@ -328,7 +328,7 @@ actor CloudKitManager {
     nonisolated static func generateInviteCode(length: Int = inviteCodeLength) -> String {
         let resolvedLength = max(inviteCodeLength, length)
         var generator = SystemRandomNumberGenerator()
-        return String((0..<resolvedLength).map { _ in
+        return String((0 ..< resolvedLength).map { _ in
             inviteCodeAlphabet.randomElement(using: &generator) ?? "A"
         })
     }
@@ -532,7 +532,7 @@ actor CloudKitManager {
         appendUnique(resolveCachedZone(for: householdId))
 
         if let householdId {
-            appendUnique(try await resolveHouseholdZone(for: householdId))
+            try await appendUnique(resolveHouseholdZone(for: householdId))
         }
 
         switch householdScope {
@@ -632,11 +632,10 @@ actor CloudKitManager {
 
         case .participantShared:
             let cachedZone = resolveCachedZone(for: householdId)
-            let initialZoneIDs: [CKRecordZone.ID]
-            if let cachedZone {
-                initialZoneIDs = [cachedZone]
+            let initialZoneIDs: [CKRecordZone.ID] = if let cachedZone {
+                [cachedZone]
             } else {
-                initialZoneIDs = try await allSharedZoneIDs()
+                try await allSharedZoneIDs()
             }
 
             var aggregatedByRecordName: [String: CKRecord] = [:]
@@ -667,7 +666,7 @@ actor CloudKitManager {
 
             var records = Array(aggregatedByRecordName.values)
 
-            if let cachedZone, (records.isEmpty || needsZoneRefresh) {
+            if let cachedZone, records.isEmpty || needsZoneRefresh {
                 clearCachedZone(for: householdId)
                 var fallbackZones = try await allSharedZoneIDs()
                 fallbackZones.removeAll(where: { $0 == cachedZone })
@@ -941,7 +940,7 @@ actor CloudKitManager {
             var output: [CKRecord] = []
             output.reserveCapacity(sourceRecords.count)
             for record in sourceRecords {
-                output.append(try await recordForSave(record, householdId: householdId))
+                try await output.append(recordForSave(record, householdId: householdId))
             }
             return output
         }
@@ -2132,7 +2131,7 @@ actor CloudKitManager {
             }
 
             stage = "inviteCode.create.save"
-            for _ in 0..<Self.inviteCodeMaxAttempts {
+            for _ in 0 ..< Self.inviteCodeMaxAttempts {
                 let code = Self.generateInviteCode(length: Self.inviteCodeLength)
                 if try await fetchInviteTokenRecordIfExists(code: code, database: db) != nil {
                     continue
@@ -2329,7 +2328,7 @@ actor CloudKitManager {
         ]
 
         var lastError: Error?
-        for attempt in 0..<backoffDelays.count {
+        for attempt in 0 ..< backoffDelays.count {
             do {
                 return try await database.record(for: metadata.rootRecordID)
             } catch let ckError as CKError where ckError.code == .unknownItem {

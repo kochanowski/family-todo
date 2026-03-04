@@ -280,13 +280,12 @@ class MemberStore: ObservableObject {
             let cachedMembers = try context.fetch(descriptor)
             var didMigrate = false
             let resolvedMembers = cachedMembers.map { cached -> Member in
-                let resolvedColor: String
-                if let normalized = MemberColorToken.normalize(hex: cached.colorHex),
-                   MemberColorToken.isAllowed(hex: normalized)
+                let resolvedColor: String = if let normalized = MemberColorToken.normalize(hex: cached.colorHex),
+                                               MemberColorToken.isAllowed(hex: normalized)
                 {
-                    resolvedColor = normalized
+                    normalized
                 } else {
-                    resolvedColor = MemberColorToken.migratedHex(for: cached.id)
+                    MemberColorToken.migratedHex(for: cached.id)
                 }
 
                 if cached.colorHex != resolvedColor {

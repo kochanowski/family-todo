@@ -1,6 +1,6 @@
 Act as a Senior iOS Developer, UX Expert, and CloudKit/SwiftData Architect. I am building an iOS app called "HousePulse" for household management. You have full access to my entire codebase.
 
-I have a roadmap of 6 major features and UX improvements to implement. I want to build these step-by-step to ensure high code quality and proper data modeling. 
+I have a roadmap of 6 major features and UX improvements to implement. I want to build these step-by-step to ensure high code quality and proper data modeling.
 
 Here is the complete roadmap. Please read it to understand the context, but **only implement the parts I specifically ask for in my subsequent messages** (or if I ask you to start with Part 1 now).
 
@@ -66,7 +66,7 @@ NEW NEW NEW:
 
 
 ### Context
-We want to add a "Poke" feature in our Family-Todo app (HousePulse). It allows users to send a friendly reminder to a household member about a task assigned to them. To prevent spam, a task can only be "poked" once per day. 
+We want to add a "Poke" feature in our Family-Todo app (HousePulse). It allows users to send a friendly reminder to a household member about a task assigned to them. To prevent spam, a task can only be "poked" once per day.
 
 Please implement this feature step-by-step, following our existing architecture (SwiftUI, SwiftData for local cache, CloudKit for sync).
 
@@ -108,7 +108,7 @@ File to modify: `CloudKitManager.swift`
 1. We need the assignee to receive a push notification when `lastPokedAt` changes.
 2. Create or update a `CKQuerySubscription` for the `Task` record type.
 3. The subscription should trigger on `.updates`.
-4. The `CKNotificationInfo` should have a friendly, randomized localized payload (e.g., "👋 Puk puk! Ktoś przypomina Ci o zadaniu: %1$@", using the task title as an argument). 
+4. The `CKNotificationInfo` should have a friendly, randomized localized payload (e.g., "👋 Puk puk! Ktoś przypomina Ci o zadaniu: %1$@", using the task title as an argument).
 *(Note: If dynamic random text is too complex for basic CKNotificationInfo, just set a friendly static message like "👋 Masz nową, przyjazną przypominajkę o zadaniu!").*
 
 Please provide the code changes for each file. Ensure the code is safe, handles optionals correctly, and follows SwiftUI best practices.
@@ -117,11 +117,11 @@ Please provide the code changes for each file. Ensure the code is safe, handles 
 ### Part 8: Feature Request: Implement "Gentle Rewards" (Duolingo-style Micro-celebrations)
 
 ### Context
-We want to implement a positive reinforcement system in our Family-Todo app. When a user completes a task, we want to show a gentle, playful in-app notification (Toast/Snackbar). We want to avoid toxic competition (no individual scores) and focus on shared household achievements. 
+We want to implement a positive reinforcement system in our Family-Todo app. When a user completes a task, we want to show a gentle, playful in-app notification (Toast/Snackbar). We want to avoid toxic competition (no individual scores) and focus on shared household achievements.
 The user mentioned that *some* of these notifications might already be implemented.
 
 ### Step 1: Audit Existing Code
-Before writing new code, please search the codebase for existing toast, snackbar, or notification UI components (e.g., `ToastView`, `NotificationBanner`, or completion logic in `TaskStore.swift`). 
+Before writing new code, please search the codebase for existing toast, snackbar, or notification UI components (e.g., `ToastView`, `NotificationBanner`, or completion logic in `TaskStore.swift`).
 - If a Toast system exists, we will reuse and expand it.
 - If it doesn't exist, we need to create a simple, reusable SwiftUI Toast modifier.
 
@@ -129,7 +129,7 @@ Before writing new code, please search the codebase for existing toast, snackbar
 Create a new service/manager to handle the logic and store a pool of ~20 different messages to prevent repetition.
 1. **Message Pools (Arrays of Strings):**
    - **General Micro-celebrations:** "Boom! Done. 💥", "One step closer to a clean home! 🏡", "Nailed it! 🎯", "Task destroyed! 👾", "Love to see it! ✨", "Another one bites the dust! 🎵", "You're on fire! 🔥", "Household hero! 🦸"
-   - **Area-specific (if category matches):** 
+   - **Area-specific (if category matches):**
      - Kitchen: "Kitchen is sparkling! ✨", "Chef's domain is clean! 🍳"
      - Bathroom: "Bathroom sorted! 🧼", "Shiny and clean! 🛁"
    - **Milestones (Shared progress):** "10 tasks done this week! Home is happy 🏡", "5 tasks crushed today! High five ✋"
@@ -169,7 +169,7 @@ Please acknowledge that you have read and understood this roadmap. Then, analyze
 Research TODO:
 
 1. Jeżeli task jest na kimś innym, to czy mogę (czy powinienem móc?) zmienić jego stan, np go ukończyć lub zrzucić do Ideas?
-   
+
 Odpowiedź do analizy:
 
 Zdecydowanie TAK. Z perspektywy UX i projektowania aplikacji dla domowników (rodzin, par, współlokatorów), powinieneś mieć pełną swobodę zmiany stanu zadań innych osób.
