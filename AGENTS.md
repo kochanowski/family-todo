@@ -201,7 +201,7 @@ feat(tasks): add conversational filter chips for assignee filtering
 
 ## 8) After Implementation — Required Handoff Summary
 
-**Every time you finish implementing a feature or fix**, you MUST print in POLISH a brief summary in the following format before stopping:
+**Every time you finish implementing a feature or fix**, you MUST print a brief summary in the following format before stopping:
 
 ```
 ## What I changed (Task IDs)
@@ -250,6 +250,18 @@ do {
     self.error = error
 }
 ```
+
+### Store delete/promotion pattern (Tombstone + Retry)
+When deleting or promoting an item (e.g., Idea -> Task), DO NOT rollback the UI if the initial CloudKit delete fails.
+1. Mark local record as `pendingDelete = true` (or delete locally).
+2. Create the new item locally (if promoting).
+3. Try CloudKit sync in a background task.
+4. If CloudKit fails, keep the local tombstone and let `replayPendingMutations` handle the retry later.
+
+### syncToCache pattern (Ghost Record Prevention)
+When merging incoming CloudKit records with local SwiftData:
+- ALWAYS check if the local record exists and has `pendingDelete == true`.
+- If `pendingDelete == true`, IGNORE the incoming CloudKit record. Local tombstones must win against incoming server data until the pending delete is successfully pushed.
 
 ### SwiftData query pattern (avoid N+1)
 ```swift
@@ -347,12 +359,21 @@ If Development schema loses these settings after deploy, re-apply them in CloudK
 ## 13) Session Learnings (2026-03-04)
 
 ### Fast Boot contract (must preserve)
-
 App launch must prioritize instant local UI:
 1. Route to UI from local session/cache state immediately.
 2. Do not block launch transition on CloudKit initialization or auth status checks.
 3. Run CloudKit startup work in background tasks (auth refresh, replay pending mutations, initial cloud fetches).
 4. User should see SwiftData-backed content instantly; cloud sync may update afterward.
+
+### Optimistic UI & Tombstones (Ghost Record Prevention)
+- UI must update immediately on mutations (e.g., Idea -> Task conversion) without waiting for CloudKit.
+- If a CloudKit delete fails, we use the **"Keep task + tombstone"** policy. Do not rollback the UI. Keep the local `pendingDelete` flag and let background retries handle it.
+- `syncToCache` MUST respect local tombstones. If a local record is marked `pendingDelete`, ignore incoming CloudKit updates for that record to prevent "ghost records" from reappearing.
+
+### Silent Background Sync
+- Do not use blocking full-screen spinners on tab switches (e.g., `TasksView`, `IdeasView`) if local data exists.
+- Show local SwiftData immediately via `@Query`.
+- CloudKit fetches should happen silently in the background and update the UI reactively.
 
 ---
 
