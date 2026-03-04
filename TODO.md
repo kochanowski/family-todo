@@ -123,6 +123,11 @@ Description: Improve push/in-app update messaging using activity events where av
 Acceptance Criteria: Notifications are contextual (“who did what”) and avoid self-noise.
 Regression Risk: Notification duplication or stale events; test event de-duplication.
 
+- [ ] **P2.10 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p210))
+Description: Implement iOS 17 TipKit for non-intrusive, context-aware feature discovery in Shopping, Ideas, and Tasks.
+Acceptance Criteria: Tips appear based on specific user state rules, dismiss gracefully, and do not block the UI.
+Regression Risk: UI layout shifts with inline tips; ensure `Tips.configure()` runs safely on app startup.
+
 ## Phase 3: Polish & Future (Low Priority)
 
 - [ ] **P3.1 Versioned SwiftData Schema Framework** ([Details](TODO_DETAILS.md#p31))

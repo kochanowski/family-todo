@@ -265,6 +265,24 @@ Please implement this two-tier empty state logic for ShoppingListView, TasksView
 - Likely files: `CloudKitSubscriptionManager.swift` plus activity log integration points.
 - Validation: notifications show "who did what" without duplicate spam.
 
+## <a id="p210"></a>P2.10 Contextual Onboarding (TipKit)
+- Objective: guide users to discover advanced features without blocking their workflow.
+- In scope:
+  - Shopping Restock Tip: popover pointing to the `+` button in Recently Purchased.
+  - Rule: show only if history has items and user has not used the restock feature yet.
+  - Idea Promotion Tip: popover pointing to the `arrow.up` icon in Ideas.
+  - Rule: show when user adds their first idea.
+  - Task Swipe Tip: inline tip in the Tasks list explaining swipe-to-delete/edit.
+  - Rule: show if user has active tasks but has never used swipe actions.
+  - TipKit bootstrap in app startup with safe `Tips.configure()` execution.
+- Likely files: `FamilyTodoApp.swift`, `ShoppingListView.swift`, `BacklogView.swift`, `TasksView.swift`, new `AppTips.swift`.
+- Out of scope: full-screen blocking tutorials.
+- Validation:
+  - Tips render only when matching their state rules.
+  - Tip dismissal is graceful and non-blocking.
+  - Inline tip does not cause disruptive list layout shifts.
+  - Startup remains stable with `Tips.configure()`.
+
 ## Phase 3 - Polish & Future
 
 ## <a id="p31"></a>P3.1 Versioned SwiftData Schema Framework
