@@ -480,6 +480,13 @@ final class TaskStore: ObservableObject {
         return await updateTask(updatedTask)
     }
 
+    func archiveTask(_ task: Task) async {
+        guard task.status == .done else { return }
+        var archivedTask = task
+        archivedTask.completedAt = Date().addingTimeInterval(-86401)
+        _ = await updateTask(archivedTask)
+    }
+
     func deleteTask(_ task: Task) async {
         beginMutation(task.id)
         defer { endMutation(task.id) }

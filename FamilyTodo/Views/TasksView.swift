@@ -106,7 +106,7 @@ private struct TasksContent: View {
     var body: some View {
         let listBottomInset: CGFloat = 16
         let shouldShowActiveEmptyState = activeFilter == .active && store.nextTasks.isEmpty
-        let shouldShowCompletedEmptyState = activeFilter == .completed && store.doneTasks.isEmpty
+        let shouldShowCompletedEmptyState = activeFilter == .completed && store.recentlyDoneTasks.isEmpty
 
         VStack(spacing: 0) {
             header
@@ -330,7 +330,7 @@ private struct TasksContent: View {
     }
 
     private var completedTasksContent: some View {
-        ForEach(store.doneTasks) { task in
+        ForEach(store.recentlyDoneTasks) { task in
             TaskRow(
                 task: task,
                 assignee: assignee(for: task),
@@ -792,10 +792,8 @@ private struct TasksContent: View {
     }
 
     private func archiveTask(_ task: Task) {
-        var updatedTask = task
-        updatedTask.completedAt = Date().addingTimeInterval(-86401)
         _ = _Concurrency.Task {
-            _ = await store.updateTask(updatedTask)
+            await store.archiveTask(task)
         }
     }
 

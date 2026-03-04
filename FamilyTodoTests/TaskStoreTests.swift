@@ -183,6 +183,67 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(store.tasks.isEmpty)
     }
 
+    func testArchiveTaskMovesTaskFromRecentlyDoneToArchivedDone() async {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Archive me",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: Date().addingTimeInterval(-60),
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try? modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        XCTAssertTrue(store.recentlyDoneTasks.contains(where: { $0.id == task.id }))
+        XCTAssertFalse(store.archivedDoneTasks.contains(where: { $0.id == task.id }))
+
+        await store.archiveTask(task)
+
+        XCTAssertFalse(store.recentlyDoneTasks.contains(where: { $0.id == task.id }))
+        XCTAssertTrue(store.archivedDoneTasks.contains(where: { $0.id == task.id }))
+    }
+
+    func testArchiveTaskPersistsArchivedCompletedAtToCache() async throws {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Persist archive date",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: Date(),
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        await store.archiveTask(task)
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == task.id }
+        )
+        guard let cachedTask = try modelContainer.mainContext.fetch(descriptor).first else {
+            XCTFail("Expected cached task to exist after archiving")
+            return
+        }
+        guard let completedAt = cachedTask.completedAt else {
+            XCTFail("Expected archived task to have completedAt")
+            return
+        }
+
+        XCTAssertLessThanOrEqual(completedAt, Date().addingTimeInterval(-86400))
+        XCTAssertEqual(cachedTask.statusRaw, Task.TaskStatus.done.rawValue)
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {
