@@ -13,6 +13,7 @@ final class ShoppingListStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
+    private var isReplayingPendingMutations = false
 
     struct PendingSyncSnapshot {
         var pendingUploadByID: [UUID: ShoppingItem]
@@ -115,7 +116,7 @@ final class ShoppingListStore: ObservableObject {
 
             // 3. Update cache
             syncToCache(fetchedItems)
-            await flushPendingSync()
+            replayPendingMutationsInBackground()
         } catch {
             // Keep cached data on error
             self.error = error
@@ -162,6 +163,16 @@ final class ShoppingListStore: ObservableObject {
         }
 
         saveContextOrSetError(context, operation: "sync shopping cache from cloud")
+    }
+
+    private func replayPendingMutationsInBackground() {
+        guard !isReplayingPendingMutations else { return }
+        isReplayingPendingMutations = true
+
+        _ = _Concurrency.Task(priority: .utility) { [self] in
+            await flushPendingSync()
+            isReplayingPendingMutations = false
+        }
     }
 
     private func flushPendingSync() async {

@@ -67,6 +67,7 @@ final class TaskStore: ObservableObject {
     private let modelContext: ModelContext
     private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
+    private var isReplayingPendingMutations = false
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -205,7 +206,7 @@ final class TaskStore: ObservableObject {
             let cloudTasks = try await cloudKit.fetchTasks(householdId: householdId)
             tasks = mergeCloudSnapshot(cloudTasks, with: pendingSnapshot)
             syncToCache(cloudTasks)
-            await flushPendingSync()
+            replayPendingMutationsInBackground()
         } catch {
             // If CloudKit fails, we already have cached data
             self.error = error
@@ -249,6 +250,16 @@ final class TaskStore: ObservableObject {
             }
         }
         saveContextOrSetError(operation: "sync tasks cache from cloud")
+    }
+
+    private func replayPendingMutationsInBackground() {
+        guard !isReplayingPendingMutations else { return }
+        isReplayingPendingMutations = true
+
+        _ = _Concurrency.Task(priority: .utility) { [self] in
+            await flushPendingSync()
+            isReplayingPendingMutations = false
+        }
     }
 
     private func flushPendingSync() async {

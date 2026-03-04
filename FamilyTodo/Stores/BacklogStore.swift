@@ -40,6 +40,7 @@ final class BacklogStore: ObservableObject {
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
     private var pendingMutationIDs: Set<UUID> = []
+    private var isReplayingPendingMutations = false
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -123,7 +124,7 @@ final class BacklogStore: ObservableObject {
                 cloudCategoryIDs: Set(categoriesResult.map(\.id)),
                 cloudItemIDs: Set(itemsResult.map(\.id))
             )
-            await flushPendingSync()
+            replayPendingMutationsInBackground()
         } catch {
             self.error = error
         }
@@ -220,6 +221,16 @@ final class BacklogStore: ObservableObject {
         }
 
         saveContextOrSetError(context, operation: "persist backlog cache")
+    }
+
+    private func replayPendingMutationsInBackground() {
+        guard !isReplayingPendingMutations else { return }
+        isReplayingPendingMutations = true
+
+        _ = _Concurrency.Task(priority: .utility) { [self] in
+            await flushPendingSync()
+            isReplayingPendingMutations = false
+        }
     }
 
     private func flushPendingSync() async {

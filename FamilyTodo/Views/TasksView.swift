@@ -156,8 +156,8 @@ private struct TasksContent: View {
         .task {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
-            await refreshData()
             hasInitialMetadataLoaded = true
+            await refreshData()
         }
         .onChange(of: selectedTab) { _, newTab in
             guard newTab == .tasks else { return }

@@ -16,6 +16,7 @@ struct FamilyTodoApp: App {
     @State private var startupRecoveryMessage: String?
     @State private var startupBootstrapState: StartupBootstrapState
     @State private var startupDiagnostics: BootstrapDiagnostics?
+    @State private var hasScheduledDeferredStartupTasks = false
 
     private let sharedModelContainer: ModelContainer?
 
@@ -51,6 +52,51 @@ struct FamilyTodoApp: App {
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
         _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
         _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
+    }
+
+    private func scheduleDeferredStartupTasks(modelContext: ModelContext) {
+        guard !hasScheduledDeferredStartupTasks else { return }
+        hasScheduledDeferredStartupTasks = true
+
+        _ = _Concurrency.Task(priority: .utility) {
+            #if !CI
+                await userSession.checkAuthenticationStatus()
+                if userSession.syncMode == .cloud,
+                   let userId = userSession.userId,
+                   let householdId = userSession.currentHouseholdID
+                {
+                    subscriptionManager.configure(userId: userId, householdId: householdId)
+                }
+            #endif
+
+            await shareAcceptanceCoordinator.processPendingIfPossible(
+                userSession: userSession,
+                householdStore: householdStore,
+                onboardingState: onboardingState
+            )
+
+            await ChoreScheduler.shared.runIfNeeded(
+                householdId: userSession.currentHouseholdID,
+                modelContext: modelContext,
+                syncMode: userSession.syncMode
+            )
+
+            #if !CI
+                let notifSettings = NotificationSettingsStore()
+                NotificationService.shared.setSettingsStore(notifSettings)
+                await NotificationService.shared.checkAuthorizationStatus()
+                if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
+                    let components = Calendar.current.dateComponents(
+                        [.hour, .minute],
+                        from: notifSettings.reminderTime
+                    )
+                    await NotificationService.shared.scheduleDailyDigest(
+                        at: components.hour ?? 8,
+                        minute: components.minute ?? 0
+                    )
+                }
+            #endif
+        }
     }
 
     var body: some Scene {
@@ -91,9 +137,6 @@ struct FamilyTodoApp: App {
                         UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
 
                         #if !CI
-                            await userSession.checkAuthenticationStatus()
-                            // Configure subscriptions only for cloud users with household
-                            // Skip for guest users (localOnly mode) to avoid CloudKit access
                             if userSession.syncMode == .cloud,
                                let userId = userSession.userId,
                                let householdId = userSession.currentHouseholdID
@@ -101,35 +144,7 @@ struct FamilyTodoApp: App {
                                 subscriptionManager.configure(userId: userId, householdId: householdId)
                             }
                         #endif
-
-                        await shareAcceptanceCoordinator.processPendingIfPossible(
-                            userSession: userSession,
-                            householdStore: householdStore,
-                            onboardingState: onboardingState
-                        )
-
-                        await ChoreScheduler.shared.runIfNeeded(
-                            householdId: userSession.currentHouseholdID,
-                            modelContext: sharedModelContainer.mainContext,
-                            syncMode: userSession.syncMode
-                        )
-
-                        #if !CI
-                            // Re-schedule daily digest on every app launch.
-                            let notifSettings = NotificationSettingsStore()
-                            NotificationService.shared.setSettingsStore(notifSettings)
-                            await NotificationService.shared.checkAuthorizationStatus()
-                            if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
-                                let components = Calendar.current.dateComponents(
-                                    [.hour, .minute],
-                                    from: notifSettings.reminderTime
-                                )
-                                await NotificationService.shared.scheduleDailyDigest(
-                                    at: components.hour ?? 8,
-                                    minute: components.minute ?? 0
-                                )
-                            }
-                        #endif
+                        scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
                     }
                     .onOpenURL { url in
                         if url.scheme?.lowercased() == "housepulse" {
