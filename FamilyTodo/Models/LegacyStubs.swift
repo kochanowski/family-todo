@@ -642,7 +642,7 @@ final class RecurringChoreStore: ObservableObject {
         let cachedTasks = (try? modelContext.fetch(descriptor)) ?? []
         return cachedTasks.contains { cachedTask in
             guard cachedTask.recurringChoreId == recurringChoreId else { return false }
-            cachedTask.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
+            return cachedTask.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
         }
     }
 
