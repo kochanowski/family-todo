@@ -365,31 +365,36 @@ private struct BacklogContent: View {
     }
 
     private var emptyState: some View {
-        Group {
-            if hasSeenIdeasTutorial {
-                ContentUnavailableView(
-                    "No Ideas Yet",
-                    systemImage: "lightbulb",
-                    description: Text(
-                        "Capture home improvement projects, wishlists, or future plans here."
+        VStack(spacing: 0) {
+            Group {
+                if hasSeenIdeasTutorial {
+                    ContentUnavailableView(
+                        "No Ideas Yet",
+                        systemImage: "lightbulb",
+                        description: Text(
+                            "Capture home improvement projects, wishlists, or future plans here."
+                        )
                     )
-                )
-            } else {
-                ContentUnavailableView {
-                    Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
-                } description: {
-                    Text(
-                        "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
-                    )
-                } actions: {
-                    Button("Start Dreaming") {
-                        HapticManager.lightTap()
-                        hasSeenIdeasTutorial = true
+                } else {
+                    ContentUnavailableView {
+                        Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
+                    } description: {
+                        Text(
+                            "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
+                        )
+                    } actions: {
+                        Button("Start Dreaming") {
+                            HapticManager.lightTap()
+                            hasSeenIdeasTutorial = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(themeStore.accentTabColor)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(themeStore.accentColor)
                 }
             }
+            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
+
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

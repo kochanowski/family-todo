@@ -353,48 +353,61 @@ private struct TasksContent: View {
         }
     }
 
-    @ViewBuilder
     private var activeTasksEmptyState: some View {
-        if hasSeenTasksTutorial {
-            if store.doneTasks.isEmpty {
-                ContentUnavailableView(
-                    "No Tasks Yet",
-                    systemImage: "checklist",
-                    description: Text("Ready to get organized? Create your first task.")
-                )
-            } else {
-                ContentUnavailableView(
-                    "All Caught Up!",
-                    systemImage: "sparkles",
-                    description: Text(
-                        "The house is looking great. Enjoy your free time or create a new task."
-                    )
-                )
-            }
-        } else {
-            ContentUnavailableView {
-                Label("Master Your Chores", systemImage: "checkmark.square.fill")
-            } description: {
-                Text(
-                    "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
-                )
-            } actions: {
-                Button("Let's Go!") {
-                    HapticManager.lightTap()
-                    hasSeenTasksTutorial = true
+        VStack(spacing: 0) {
+            Group {
+                if hasSeenTasksTutorial {
+                    if store.doneTasks.isEmpty {
+                        ContentUnavailableView(
+                            "No Tasks Yet",
+                            systemImage: "checklist",
+                            description: Text("Ready to get organized? Create your first task.")
+                        )
+                    } else {
+                        ContentUnavailableView(
+                            "All Caught Up!",
+                            systemImage: "sparkles",
+                            description: Text(
+                                "The house is looking great. Enjoy your free time or create a new task."
+                            )
+                        )
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label("Master Your Chores", systemImage: "checkmark.square.fill")
+                    } description: {
+                        Text(
+                            "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
+                        )
+                    } actions: {
+                        Button("Let's Go!") {
+                            HapticManager.lightTap()
+                            hasSeenTasksTutorial = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(themeStore.accentTabColor)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(themeStore.accentColor)
             }
+            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
+
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var completedTasksEmptyState: some View {
-        ContentUnavailableView(
-            "No Completed Tasks",
-            systemImage: "checkmark.circle",
-            description: Text("Tasks you finish will appear here.")
-        )
+        VStack(spacing: 0) {
+            ContentUnavailableView(
+                "No Completed Tasks",
+                systemImage: "checkmark.circle",
+                description: Text("Tasks you finish will appear here.")
+            )
+            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var activeMembers: [Member] {

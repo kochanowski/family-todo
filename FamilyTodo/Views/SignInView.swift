@@ -26,7 +26,7 @@ struct SignInView: View {
                     .font(.system(size: 80))
                     .foregroundColor(.blue)
 
-                Text("Family To-Do")
+                Text("HousePulse")
                     .font(.largeTitle)
                     .fontWeight(.bold)
 

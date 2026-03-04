@@ -9,6 +9,7 @@ enum AppChromeMetrics {
     static let compactCTAHeight: CGFloat = 44
     static let compactCTAHorizontalPadding: CGFloat = 20
     static let keyboardAccessoryBottomInset: CGFloat = 8
+    static let emptyStateTopPadding: CGFloat = 100
 }
 
 /// App tab identity used by native TabView.

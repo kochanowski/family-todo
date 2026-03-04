@@ -254,32 +254,39 @@ private struct ShoppingListContent: View {
 
     // MARK: - Empty State
 
-    @ViewBuilder
     private var shoppingEmptyState: some View {
-        if hasSeenShoppingTutorial {
-            ContentUnavailableView(
-                "Your List is Empty",
-                systemImage: "cart.badge.plus",
-                description: Text(
-                    "Time to restock! Add groceries or household items you need to buy."
-                )
-            )
-        } else {
-            ContentUnavailableView {
-                Label("Welcome to Shopping!", systemImage: "cart.fill.badge.plus")
-            } description: {
-                Text(
-                    "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
-                )
-            } actions: {
-                Button("Got it!") {
-                    HapticManager.lightTap()
-                    hasSeenShoppingTutorial = true
+        VStack(spacing: 0) {
+            Group {
+                if hasSeenShoppingTutorial {
+                    ContentUnavailableView(
+                        "Your List is Empty",
+                        systemImage: "cart.badge.plus",
+                        description: Text(
+                            "Time to restock! Add groceries or household items you need to buy."
+                        )
+                    )
+                } else {
+                    ContentUnavailableView {
+                        Label("Welcome to Shopping!", systemImage: "cart.fill.badge.plus")
+                    } description: {
+                        Text(
+                            "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
+                        )
+                    } actions: {
+                        Button("Got it!") {
+                            HapticManager.lightTap()
+                            hasSeenShoppingTutorial = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(themeStore.accentTabColor)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(themeStore.accentTabColor)
             }
+            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
+
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Header

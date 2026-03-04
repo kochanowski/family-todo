@@ -64,19 +64,19 @@ struct ToastView: View {
     }
 
     private var backgroundColor: Color {
-        colorScheme == .light ? Color(uiColor: .darkGray) : Color(uiColor: .systemGray5)
+        themeStore.surfaceElevatedColor
     }
 
     private var messageColor: Color {
-        colorScheme == .light ? .white : .black
+        themeStore.foregroundOnAccent(for: backgroundColor, colorScheme: colorScheme)
     }
 
     private var strokeColor: Color {
-        colorScheme == .light ? .white.opacity(0.2) : .black.opacity(0.12)
+        themeStore.borderLightColor.opacity(0.55)
     }
 
     private var shadowColor: Color {
-        colorScheme == .light ? .black.opacity(0.32) : .black.opacity(0.12)
+        themeStore.inkColor.opacity(0.18)
     }
 }
 

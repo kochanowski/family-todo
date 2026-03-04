@@ -21,7 +21,7 @@ struct OnboardingView: View {
                         .font(.system(size: 60))
                         .foregroundStyle(.blue)
 
-                    Text("Welcome to Family To-Do")
+                    Text("Welcome to HousePulse")
                         .font(.title)
                         .fontWeight(.bold)
 
