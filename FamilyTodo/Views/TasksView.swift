@@ -354,60 +354,52 @@ private struct TasksContent: View {
     }
 
     private var activeTasksEmptyState: some View {
-        VStack(spacing: 0) {
-            Group {
-                if hasSeenTasksTutorial {
-                    if store.doneTasks.isEmpty {
-                        ContentUnavailableView(
-                            "No Tasks Yet",
-                            systemImage: "checklist",
-                            description: Text("Ready to get organized? Create your first task.")
-                        )
-                    } else {
-                        ContentUnavailableView(
-                            "All Caught Up!",
-                            systemImage: "sparkles",
-                            description: Text(
-                                "The house is looking great. Enjoy your free time or create a new task."
-                            )
-                        )
-                    }
+        Group {
+            if hasSeenTasksTutorial {
+                if store.doneTasks.isEmpty {
+                    ContentUnavailableView(
+                        "No Tasks Yet",
+                        systemImage: "checklist",
+                        description: Text("Ready to get organized? Create your first task.")
+                    )
                 } else {
-                    ContentUnavailableView {
-                        Label("Master Your Chores", systemImage: "checkmark.square.fill")
-                    } description: {
-                        Text(
-                            "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
+                    ContentUnavailableView(
+                        "All Caught Up!",
+                        systemImage: "sparkles",
+                        description: Text(
+                            "The house is looking great. Enjoy your free time or create a new task."
                         )
-                    } actions: {
-                        Button("Let's Go!") {
-                            HapticManager.lightTap()
-                            hasSeenTasksTutorial = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(themeStore.accentTabColor)
+                    )
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("Master Your Chores", systemImage: "checkmark.square.fill")
+                } description: {
+                    Text(
+                        "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
+                    )
+                } actions: {
+                    Button("Let's Go!") {
+                        HapticManager.lightTap()
+                        hasSeenTasksTutorial = true
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
                 }
             }
-            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
-
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
     }
 
     private var completedTasksEmptyState: some View {
-        VStack(spacing: 0) {
-            ContentUnavailableView(
-                "No Completed Tasks",
-                systemImage: "checkmark.circle",
-                description: Text("Tasks you finish will appear here.")
-            )
-            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
-
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        ContentUnavailableView(
+            "No Completed Tasks",
+            systemImage: "checkmark.circle",
+            description: Text("Tasks you finish will appear here.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
     }
 
     private var activeMembers: [Member] {

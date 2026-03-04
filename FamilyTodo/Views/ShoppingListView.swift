@@ -255,38 +255,34 @@ private struct ShoppingListContent: View {
     // MARK: - Empty State
 
     private var shoppingEmptyState: some View {
-        VStack(spacing: 0) {
-            Group {
-                if hasSeenShoppingTutorial {
-                    ContentUnavailableView(
-                        "Your List is Empty",
-                        systemImage: "cart.badge.plus",
-                        description: Text(
-                            "Time to restock! Add groceries or household items you need to buy."
-                        )
+        Group {
+            if hasSeenShoppingTutorial {
+                ContentUnavailableView(
+                    "Your List is Empty",
+                    systemImage: "cart.badge.plus",
+                    description: Text(
+                        "Time to restock! Add groceries or household items you need to buy."
                     )
-                } else {
-                    ContentUnavailableView {
-                        Label("Welcome to Shopping!", systemImage: "cart.fill.badge.plus")
-                    } description: {
-                        Text(
-                            "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
-                        )
-                    } actions: {
-                        Button("Got it!") {
-                            HapticManager.lightTap()
-                            hasSeenShoppingTutorial = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(themeStore.accentTabColor)
+                )
+            } else {
+                ContentUnavailableView {
+                    Label("Welcome to Shopping!", systemImage: "cart.fill.badge.plus")
+                } description: {
+                    Text(
+                        "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
+                    )
+                } actions: {
+                    Button("Got it!") {
+                        HapticManager.lightTap()
+                        hasSeenShoppingTutorial = true
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
                 }
             }
-            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
-
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
     }
 
     // MARK: - Header

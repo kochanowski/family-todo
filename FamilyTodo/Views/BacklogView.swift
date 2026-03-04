@@ -365,38 +365,34 @@ private struct BacklogContent: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 0) {
-            Group {
-                if hasSeenIdeasTutorial {
-                    ContentUnavailableView(
-                        "No Ideas Yet",
-                        systemImage: "lightbulb",
-                        description: Text(
-                            "Capture home improvement projects, wishlists, or future plans here."
-                        )
+        Group {
+            if hasSeenIdeasTutorial {
+                ContentUnavailableView(
+                    "No Ideas Yet",
+                    systemImage: "lightbulb",
+                    description: Text(
+                        "Capture home improvement projects, wishlists, or future plans here."
                     )
-                } else {
-                    ContentUnavailableView {
-                        Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
-                    } description: {
-                        Text(
-                            "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
-                        )
-                    } actions: {
-                        Button("Start Dreaming") {
-                            HapticManager.lightTap()
-                            hasSeenIdeasTutorial = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(themeStore.accentTabColor)
+                )
+            } else {
+                ContentUnavailableView {
+                    Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
+                } description: {
+                    Text(
+                        "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
+                    )
+                } actions: {
+                    Button("Start Dreaming") {
+                        HapticManager.lightTap()
+                        hasSeenIdeasTutorial = true
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
                 }
             }
-            .padding(.top, AppChromeMetrics.emptyStateTopPadding)
-
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
     }
 
     private func markIdeasTutorialAsSeenIfNeeded() {
@@ -803,7 +799,7 @@ struct CategoryCard: View {
             AppConfirmationSheet(
                 title: "Delete \"\(category.title)\"?",
                 message: "This will permanently delete the category and all its items.",
-                primaryTitle: "Delete Category and \(items.count) Items",
+                primaryTitle: deleteCategoryPrimaryTitle,
                 primaryStyle: .destructive,
                 onPrimary: {
                     withAnimation(WowAnimation.easeOut) {
@@ -812,6 +808,11 @@ struct CategoryCard: View {
                 }
             )
         }
+    }
+
+    private var deleteCategoryPrimaryTitle: String {
+        let itemLabel = items.count == 1 ? "Item" : "Items"
+        return "Delete Category and \(items.count) \(itemLabel)"
     }
 
     private var cardBackground: Color {

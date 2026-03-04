@@ -7,15 +7,18 @@ struct CelebrationOverlay: View {
     @ObservedObject var manager: CelebrationManager
     let messageFont: Font
     let accentPalette: [Color]?
+    let toastAppearance: ToastView.Appearance?
 
     init(
         manager: CelebrationManager,
         messageFont: Font = .system(size: 15, weight: .semibold),
-        accentPalette: [Color]? = nil
+        accentPalette: [Color]? = nil,
+        toastAppearance: ToastView.Appearance? = nil
     ) {
         self.manager = manager
         self.messageFont = messageFont
         self.accentPalette = accentPalette
+        self.toastAppearance = toastAppearance
     }
 
     var body: some View {
@@ -28,7 +31,8 @@ struct CelebrationOverlay: View {
                         ToastView(
                             message: celebration.message,
                             messageFont: messageFont,
-                            leadingText: celebration.emoji
+                            leadingText: celebration.emoji,
+                            appearance: toastAppearance
                         )
                         .padding(.horizontal, ToastView.Metrics.horizontalInset)
                         .padding(.bottom, toastBottomInset(for: proxy))

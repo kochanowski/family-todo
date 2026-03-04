@@ -121,11 +121,24 @@ struct FamilyTodoApp: App {
                     .modelContainer(sharedModelContainer)
                     .preferredColorScheme(themeStore.colorScheme)
                     .overlay {
+                        let toastBackground = themeStore.surfaceElevatedColor
+                        let toastAppearance = ToastView.Appearance(
+                            backgroundColor: toastBackground,
+                            messageColor: themeStore.inkColor,
+                            strokeColor: themeStore.borderLightColor.opacity(0.55),
+                            shadowColor: themeStore.inkColor.opacity(0.18),
+                            actionColor: themeStore.accentTabColor,
+                            messageFont: themeStore.font(for: .celebrationMessage),
+                            actionFont: themeStore.font(for: .buttonLabel)
+                        )
+
                         CelebrationOverlay(
                             manager: celebrationManager,
                             messageFont: themeStore.font(for: .celebrationMessage),
-                            accentPalette: themeStore.confettiAccentPalette
+                            accentPalette: themeStore.confettiAccentPalette,
+                            toastAppearance: toastAppearance
                         )
+                        .environmentObject(themeStore)
                     }
                     .task {
                         appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator

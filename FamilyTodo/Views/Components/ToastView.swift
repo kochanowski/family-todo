@@ -2,6 +2,34 @@ import SwiftUI
 
 /// Shared toast/snackbar used across Ideas/Tasks undo and celebrations.
 struct ToastView: View {
+    struct Appearance {
+        let backgroundColor: Color
+        let messageColor: Color
+        let strokeColor: Color
+        let shadowColor: Color
+        var actionColor: Color
+        var messageFont: Font?
+        var actionFont: Font
+
+        init(
+            backgroundColor: Color,
+            messageColor: Color,
+            strokeColor: Color,
+            shadowColor: Color,
+            actionColor: Color,
+            messageFont: Font? = nil,
+            actionFont: Font = .headline
+        ) {
+            self.backgroundColor = backgroundColor
+            self.messageColor = messageColor
+            self.strokeColor = strokeColor
+            self.shadowColor = shadowColor
+            self.actionColor = actionColor
+            self.messageFont = messageFont
+            self.actionFont = actionFont
+        }
+    }
+
     enum Metrics {
         static let height: CGFloat = 52
         static let horizontalInset: CGFloat = 20
@@ -22,8 +50,41 @@ struct ToastView: View {
     var leadingText: String?
     var actionTitle: String?
     var action: (() -> Void)?
+    var appearance: Appearance?
 
     var body: some View {
+        if let appearance {
+            toastBody(
+                messageColor: appearance.messageColor,
+                actionColor: appearance.actionColor,
+                messageFont: messageFont ?? appearance.messageFont ?? .system(size: 13),
+                actionFont: appearance.actionFont,
+                backgroundColor: appearance.backgroundColor,
+                strokeColor: appearance.strokeColor,
+                shadowColor: appearance.shadowColor
+            )
+        } else {
+            toastBody(
+                messageColor: messageColor,
+                actionColor: themeStore.accentTabColor,
+                messageFont: messageFont ?? themeStore.font(for: .bodySmall),
+                actionFont: themeStore.font(for: .buttonLabel),
+                backgroundColor: backgroundColor,
+                strokeColor: strokeColor,
+                shadowColor: shadowColor
+            )
+        }
+    }
+
+    private func toastBody(
+        messageColor: Color,
+        actionColor: Color,
+        messageFont: Font,
+        actionFont: Font,
+        backgroundColor: Color,
+        strokeColor: Color,
+        shadowColor: Color
+    ) -> some View {
         HStack(spacing: 12) {
             if let leadingText {
                 Text(leadingText)
@@ -33,7 +94,7 @@ struct ToastView: View {
             }
 
             Text(message)
-                .font(messageFont ?? themeStore.font(for: .bodySmall))
+                .font(messageFont)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .foregroundStyle(messageColor)
@@ -43,9 +104,9 @@ struct ToastView: View {
                 Button(actionTitle) {
                     action()
                 }
-                .font(themeStore.font(for: .buttonLabel))
+                .font(actionFont)
                 .fontWeight(.bold)
-                .foregroundStyle(themeStore.accentTabColor)
+                .foregroundStyle(actionColor)
             }
         }
         .padding(.horizontal, Metrics.horizontalPadding)
@@ -88,6 +149,7 @@ struct ToastView: View {
         VStack {
             Spacer()
             ToastView(message: "3 items cleared", actionTitle: "Undo", action: { print("Undo!") })
+                .environmentObject(ThemeStore())
                 .padding(.bottom, 100)
         }
     }

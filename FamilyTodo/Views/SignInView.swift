@@ -22,9 +22,7 @@ struct SignInView: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
+                housePulseLogo
 
                 Text("HousePulse")
                     .font(.largeTitle)
@@ -110,6 +108,24 @@ struct SignInView: View {
         .task(id: authRoutingKey) {
             await handleAuthRoutingIfNeeded()
         }
+    }
+
+    private var housePulseLogo: some View {
+        ZStack {
+            Circle()
+                .fill(Color.accentColor.opacity(0.14))
+                .frame(width: 116, height: 116)
+
+            Image(systemName: "house.fill")
+                .font(.system(size: 66, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(Color(uiColor: .systemBackground))
+                .offset(y: 8)
+        }
+        .accessibilityHidden(true)
     }
 
     private var defaultAuthActions: some View {
