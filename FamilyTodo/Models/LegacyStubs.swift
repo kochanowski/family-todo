@@ -454,9 +454,9 @@ final class RecurringChoreStore: ObservableObject {
             recurrenceDayOfMonth: recurrenceDayOfMonth,
             recurrenceInterval: recurrenceInterval,
             defaultAssigneeIds: normalizedAssigneeIDs,
-            rotationEnabled: resolvedRotationEnabled,
+            categoryId: categoryId,
             frequencyDays: max(recurrenceInterval ?? 1, 1),
-            categoryId: categoryId
+            rotationEnabled: resolvedRotationEnabled
         )
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
         chores.append(chore)
@@ -878,7 +878,7 @@ final class CachedRecurringChore {
             return min(max(nextAssigneeIndex, 0), assigneeIds.count - 1)
         }()
 
-        RecurringChore(
+        return RecurringChore(
             id: id,
             householdId: householdId,
             title: title,
