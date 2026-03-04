@@ -104,24 +104,24 @@ Acceptance Criteria: Completion toast logic follows priority and respects `celeb
 Regression Risk: Toast spam or missing celebrations; test milestone and non-milestone completions.
 
 - [ ] **P2.6 Round-Robin Recurring Task Rotation** ([Details](TODO_DETAILS.md#p26))
-Description: Implement persistent rotation cursor for recurring chores and generation logic updates.
-Acceptance Criteria: Multi-assignee chores rotate predictably (A->B->A...).
-Regression Risk: Assignment drift or duplicate generation; test recurring generation across days.
+Description: Implement round-robin recurring assignment with a persistent `nextAssigneeIndex` cursor and scheduler integration.
+Acceptance Criteria: Multi-assignee chores rotate predictably (A->B->A...) across generations, and cursor normalizes after assignee list edits.
+Regression Risk: Rotation cursor drift or stale cache fields; test assignee changes + offline/online recurring generation.
 
 - [ ] **P2.7 Shopping Bundles End-to-End** ([Details](TODO_DETAILS.md#p27))
-Description: Implement bundle model/store/cloud/UI + long-press quick add.
-Acceptance Criteria: Bundle CRUD works and adds all items instantly to list.
-Regression Risk: Duplicate shopping items or sync mismatch; test local+cloud behavior.
+Description: Implement ShoppingBundle domain/cache/store/cloud + management UI (`archivebox` entry in Shopping header) + long-press quick add on `+ Add Item`.
+Acceptance Criteria: Bundle CRUD works, bundle items persist via CloudKit-safe serialization (`itemsJSON`), and tapping a bundle icon instantly adds all bundle items to active list.
+Regression Risk: Serialization mismatch or duplicate quick-add inserts; test local/cloud merge and repeated quick-add behavior.
 
 - [ ] **P2.8 Activity Log End-to-End** ([Details](TODO_DETAILS.md#p28))
-Description: Implement ActivityLog model/store/view and integrate logging in task/shopping actions.
-Acceptance Criteria: Logs are created for defined action types with `userId`.
-Regression Risk: Missing/incorrect actor attribution; test actions from multiple users.
+Description: Implement ActivityLog model/cache/store/view and store-level action logging for task/shopping mutations.
+Acceptance Criteria: Logs are generated for defined action types with required `userId` + readable `userName`; More tab exposes Activity Log above Settings; list is newest-first.
+Regression Risk: Missing actor context or event spam from retries; test multi-user attribution and ordering.
 
 - [ ] **P2.9 Push Message Enrichment via Activity Log** ([Details](TODO_DETAILS.md#p29))
-Description: Improve push/in-app update messaging using activity events where available.
-Acceptance Criteria: Notifications are contextual (“who did what”) and avoid self-noise.
-Regression Risk: Notification duplication or stale events; test event de-duplication.
+Description: Enrich push/in-app update messaging from ActivityLog events via the existing `CKDatabaseSubscription` pipeline.
+Acceptance Criteria: Remote events from other users produce contextual messages (“who did what”), deduplicated by activity id, with self-noise suppression.
+Regression Risk: Duplicate notifications or stale replayed events; test foreground/background behavior across two devices.
 
 - [ ] **P2.10 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p210))
 Description: Implement iOS 17 TipKit for non-intrusive, context-aware feature discovery in Shopping, Ideas, and Tasks.

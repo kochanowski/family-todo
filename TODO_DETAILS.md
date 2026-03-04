@@ -236,34 +236,108 @@ Please implement this two-tier empty state logic for ShoppingListView, TasksView
 ## <a id="p26"></a>P2.6 Round-Robin Recurring Task Rotation
 - Objective: deterministic rotation for recurring chores.
 - In scope:
-  - Add persistent rotation cursor and generation updates.
-  - Normalize cursor when assignee set changes.
-- Likely files: recurring chore model/store/scheduler and CloudKit mapping/schema.
-- Validation: A->B->A assignment pattern over repeated generations.
+  - Add persistent rotation cursor (`nextAssigneeIndex`) to recurring chore domain/cache/cloud mapping.
+  - Update scheduler generation path to pick assignee by cursor and advance cursor after successful generation.
+  - Normalize cursor when assignee list changes (`nextAssigneeIndex = min(cursor, max(0, count - 1))`).
+  - Ensure cached recurring model stores recurrence config + assignee list + rotation cursor (avoid offline data loss).
+  - Update repetitive chores configuration UI to support multi-assignee rotation where needed.
+- Likely files:
+  - `FamilyTodo/Models/LegacyStubs.swift` (RecurringChore / CachedRecurringChore / ChoreScheduler)
+  - `FamilyTodo/Views/MoreView.swift` (RepetitiveTasksView)
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope: redesigning recurring chores UX beyond rotation-specific controls.
+- Validation:
+  - Multi-assignee rotation follows A->B->A... over consecutive generations.
+  - Cursor remains valid after assignee removal/reorder.
+  - No duplicate recurring task generation for the same schedule window.
+  - Rotation state survives app restart and cloud sync merge.
 
 ## <a id="p27"></a>P2.7 Shopping Bundles End-to-End
 - Objective: reusable shopping bundles with quick add.
 - In scope:
-  - Bundle model/cache/store/cloud mapping.
-  - Bundles management UI and long-press quick add from Shopping.
-- Likely files: new bundle model/store/view files + shopping/cloud integration.
-- Validation: bundle CRUD + one-tap add all items works locally and via cloud sync.
+  - Add `ShoppingBundle` model (`id`, `householdId`, `name`, `icon`, `items`, `createdAt`, `updatedAt`, optional `sortOrder`).
+  - Persist bundle items in CloudKit-safe serialized form (`itemsJSON`) to keep schema/validator stable.
+  - Add `CachedShoppingBundle` with full conversion chain (`init/update/toModel`) and sync metadata.
+  - Add `ShoppingBundleStore` with offline-first load/merge and CRUD operations.
+  - Add bundle CloudKit CRUD + mapping + schema/validator entries.
+  - Shopping header UX: add `archivebox` entry between Trash and Recently Purchased to open `BundlesManagementView`.
+  - `BundlesManagementView`: create/edit/delete bundles and edit bundle item list.
+  - Quick add UX: long-press/context menu on main `+ Add Item` button showing bundle icons; tap adds all bundle items instantly.
+  - Ensure quick add reuses existing shopping create path (normalization/dedup/sync behavior parity).
+- Likely files:
+  - New: `FamilyTodo/Models/ShoppingBundle.swift`
+  - New: `FamilyTodo/Models/CachedShoppingBundle.swift`
+  - New: `FamilyTodo/Stores/ShoppingBundleStore.swift`
+  - New: `FamilyTodo/Views/BundlesManagementView.swift`
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Stores/ShoppingListStore.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `FamilyTodo/FamilyTodoApp.swift`
+  - `FamilyTodo/Utilities/SwiftDataContainerFactory.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope: recipe import and automatic bundle generation.
+- Validation:
+  - Bundle CRUD works in local-only and cloud mode.
+  - `itemsJSON` encode/decode round-trip is stable (including empty and multi-item bundles).
+  - Quick add inserts every bundle item exactly once per tap.
+  - Long-press discovery flow is responsive and does not block regular add-item flow.
 
 ## <a id="p28"></a>P2.8 Activity Log End-to-End
 - Objective: transparent audit trail for household actions.
 - In scope:
-  - ActivityLog model/cache/store/view.
-  - Integrate logging in task/shopping actions with required `userId`.
-- Likely files: activity log files + `TaskStore.swift` + `ShoppingListStore.swift` + `MoreView.swift`.
-- Validation: correct actor/action entries across devices.
+  - Add `ActivityLog` model (`id`, `householdId`, `actionType`, `userId`, `userName`, `itemName`, `timestamp`).
+  - Add `CachedActivityLog` and offline-first `ActivityLogStore` (`load`, `sync`, `logAction`).
+  - Define action mapping contract:
+    - `taskCreated` -> `TaskStore.createTask(...)`
+    - `taskCompleted` -> `TaskStore.moveTask(_:to: .done)`
+    - `shoppingItemAdded` -> `ShoppingListStore.createItem(...)`
+    - `shoppingItemBought` -> `ShoppingListStore.toggleBought(...)` on transition to bought
+  - Keep logging calls in stores (single source of truth), not view layer callbacks.
+  - Add Activity Log entry point in More tab above Settings and implement `ActivityLogView` (newest first).
+  - Add CloudKit record type + mapping + schema contract (query by `householdId`, sort by `timestamp`).
+- Likely files:
+  - New: `FamilyTodo/Models/ActivityLog.swift`
+  - New: `FamilyTodo/Models/CachedActivityLog.swift`
+  - New: `FamilyTodo/Stores/ActivityLogStore.swift`
+  - New: `FamilyTodo/Views/ActivityLogView.swift`
+  - `FamilyTodo/Stores/TaskStore.swift`
+  - `FamilyTodo/Stores/ShoppingListStore.swift`
+  - `FamilyTodo/Views/MoreView.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `FamilyTodo/FamilyTodoApp.swift`
+  - `FamilyTodo/Utilities/SwiftDataContainerFactory.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope: moderation/admin role permissions for log visibility.
+- Validation:
+  - Correct action type + actor attribution for defined events.
+  - Newest-first ordering in UI and cloud-synced data.
+  - No missing log entries during offline mutations followed by reconnect.
 
 ## <a id="p29"></a>P2.9 Push Message Enrichment via Activity Log
 - Objective: make notifications contextual and useful.
 - In scope:
-  - Use activity events for user-facing push/in-app messages.
-  - Keep de-dup and self-noise suppression.
-- Likely files: `CloudKitSubscriptionManager.swift` plus activity log integration points.
-- Validation: notifications show "who did what" without duplicate spam.
+  - Use ActivityLog as primary source for message text in push/in-app update pipeline.
+  - Keep `CKDatabaseSubscription` as shared DB foundation (do not rely on query-only path).
+  - Build friendly templates by activity type (e.g., "`<name>` completed: `<item>`").
+  - Filter out self events (`activity.userId == current user`) and suppress duplicate deliveries.
+  - Add de-dup cache keyed by `activityLog.id` (or equivalent stable identifier).
+  - Keep generic fallback banner/message when no parseable activity event is available.
+- Likely files:
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `FamilyTodo/Services/AppDelegateBridge.swift` (verification of forwarding path)
+  - `FamilyTodo/Stores/ActivityLogStore.swift` (query helpers for latest events)
+  - Optional: `FamilyTodo/Views/SettingsView.swift` (partner-updates toggle)
+- Out of scope: server-side random notification copy generation.
+- Validation:
+  - Notifications are contextual ("who did what") for non-self events.
+  - No duplicate notification storms from repeated sync callbacks.
+  - Foreground/background behavior remains stable on two devices and two accounts.
 
 ## <a id="p210"></a>P2.10 Contextual Onboarding (TipKit)
 - Objective: guide users to discover advanced features without blocking their workflow.
