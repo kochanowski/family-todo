@@ -88,7 +88,7 @@ Description: Add `All tasks`, `My tasks`, `[Name]'s tasks` chips with ID-based f
 Acceptance Criteria: Filters work for Active and Completed; no duplicate current-user chip.
 Regression Risk: Wrong task subset or filter reset issues; test toggling and state persistence.
 
-- [ ] **P2.3 Poke Data Model & Mapping** ([Details](TODO_DETAILS.md#p23))
+- [x] **P2.3 Poke Data Model & Mapping** ([Details](TODO_DETAILS.md#p23))
 Description: Add `lastPokedAt` to domain/cache/CloudKit schema + validator.
 Acceptance Criteria: Field round-trips model -> cache -> cloud -> model without loss.
 Regression Risk: Schema gate failures or mapping mismatches; test CI schema validation.

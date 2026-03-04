@@ -173,6 +173,9 @@ extension CloudKitManager {
         if let dueDate = task.dueDate {
             record["dueDate"] = dueDate as CKRecordValue
         }
+        if let lastPokedAt = task.lastPokedAt {
+            record["lastPokedAt"] = lastPokedAt as CKRecordValue
+        }
         if let completedAt = task.completedAt {
             record["completedAt"] = completedAt as CKRecordValue
         }
@@ -219,6 +222,7 @@ extension CloudKitManager {
             backlogCategoryId: uuid(from: record["backlogCategoryId"] as? CKRecord.Reference),
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             dueDate: record["dueDate"] as? Date,
+            lastPokedAt: record["lastPokedAt"] as? Date,
             completedAt: record["completedAt"] as? Date,
             completedById: record["completedById"] as? String,
             taskType: taskType,
