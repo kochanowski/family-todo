@@ -359,6 +359,113 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(updatedTask.lastPokedAt, firstPokeAt)
     }
 
+    func testCompletedTaskCountThisWeekCountsOnlyDoneTasksInReferenceWeek() async throws {
+        let referenceDate = Date(timeIntervalSince1970: 1_736_800_000)
+        guard
+            let thisWeekDate = utcCalendar.date(byAdding: .day, value: -1, to: referenceDate),
+            let previousWeekDate = utcCalendar.date(byAdding: .day, value: -8, to: referenceDate)
+        else {
+            XCTFail("Failed to create reference dates")
+            return
+        }
+
+        let doneThisWeekA = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done this week A",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: thisWeekDate,
+            taskType: .oneOff
+        )
+        let doneThisWeekB = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done this week B",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: referenceDate,
+            taskType: .oneOff
+        )
+        let donePreviousWeek = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done previous week",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: previousWeekDate,
+            taskType: .oneOff
+        )
+        let activeTask = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Still active",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        [doneThisWeekA, doneThisWeekB, donePreviousWeek, activeTask]
+            .map(CachedTask.init(from:))
+            .forEach(modelContainer.mainContext.insert)
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let count = store.completedTaskCountThisWeek(
+            referenceDate: referenceDate,
+            calendar: utcCalendar
+        )
+        XCTAssertEqual(count, 2)
+    }
+
+    func testCompletedTaskCountThisWeekUsesUpdatedAtWhenCompletedAtMissing() async throws {
+        let referenceDate = Date(timeIntervalSince1970: 1_736_850_000)
+        guard
+            let thisWeekUpdatedAt = utcCalendar.date(byAdding: .day, value: -2, to: referenceDate),
+            let previousWeekUpdatedAt = utcCalendar.date(byAdding: .day, value: -9, to: referenceDate)
+        else {
+            XCTFail("Failed to create fallback dates")
+            return
+        }
+
+        let doneWithoutCompletedAtInWeek = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done fallback this week",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: nil,
+            taskType: .oneOff,
+            updatedAt: thisWeekUpdatedAt
+        )
+        let doneWithoutCompletedAtOld = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done fallback old",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: nil,
+            taskType: .oneOff,
+            updatedAt: previousWeekUpdatedAt
+        )
+
+        [doneWithoutCompletedAtInWeek, doneWithoutCompletedAtOld]
+            .map(CachedTask.init(from:))
+            .forEach(modelContainer.mainContext.insert)
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let count = store.completedTaskCountThisWeek(
+            referenceDate: referenceDate,
+            calendar: utcCalendar
+        )
+        XCTAssertEqual(count, 1)
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {

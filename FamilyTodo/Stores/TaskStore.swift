@@ -178,6 +178,29 @@ final class TaskStore: ObservableObject {
         validateNextTransition(assigneeId: assigneeId, excludingTaskId: excludingTaskId) == .ok
     }
 
+    func completedTaskCountThisWeek(
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Int {
+        let referenceComponents = calendar.dateComponents(
+            [.yearForWeekOfYear, .weekOfYear],
+            from: referenceDate
+        )
+
+        return tasks.filter { task in
+            guard task.status == .done else { return false }
+
+            let completionDate = task.completedAt ?? task.updatedAt
+            let completionComponents = calendar.dateComponents(
+                [.yearForWeekOfYear, .weekOfYear],
+                from: completionDate
+            )
+
+            return completionComponents.weekOfYear == referenceComponents.weekOfYear &&
+                completionComponents.yearForWeekOfYear == referenceComponents.yearForWeekOfYear
+        }.count
+    }
+
     // MARK: - Data Loading
 
     func setHousehold(_ id: UUID) {

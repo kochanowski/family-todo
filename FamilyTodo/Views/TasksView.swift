@@ -741,7 +741,6 @@ private struct TasksContent: View {
                         HapticManager.success()
                         if themeStore.celebrationsEnabled {
                             celebrationManager.celebrateAllTasksComplete()
-                            celebrationManager.triggerConfetti()
                             if activeMembers.count > 1, let name = currentMember?.displayName {
                                 celebrationManager.notifyPartner(
                                     completedBy: name,
@@ -752,7 +751,11 @@ private struct TasksContent: View {
                     } else {
                         HapticManager.mediumTap()
                         if themeStore.celebrationsEnabled {
-                            celebrationManager.celebrateTaskCompletion(taskTitle: task.title)
+                            let weeklyCompletedCount = store.completedTaskCountThisWeek()
+                            celebrationManager.celebrateTaskCompletion(
+                                taskTitle: task.title,
+                                weeklyCompletedCount: weeklyCompletedCount
+                            )
                             if activeMembers.count > 1, let name = currentMember?.displayName {
                                 celebrationManager.notifyPartner(
                                     completedBy: name,

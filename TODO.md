@@ -98,7 +98,7 @@ Description: Implement `canPoke`, `pokeTask`, leading swipe action, cooldown dis
 Acceptance Criteria: Poke only for other users’ tasks; once per day per task; no duplicate pokes.
 Regression Risk: Duplicate writes or wrong eligibility; test edge cases (unassigned/self/rapid taps).
 
-- [ ] **P2.5 Gentle Rewards Expansion** ([Details](TODO_DETAILS.md#p25))
+- [x] **P2.5 Gentle Rewards Expansion** ([Details](TODO_DETAILS.md#p25))
 Description: Extend CelebrationManager with prioritized message selection (milestone > surprise > fallback) and weekly surprise cap.
 Acceptance Criteria: Completion toast logic follows priority and respects `celebrationsEnabled`.
 Regression Risk: Toast spam or missing celebrations; test milestone and non-milestone completions.

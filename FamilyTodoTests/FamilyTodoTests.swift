@@ -350,3 +350,134 @@ final class ShareAcceptanceCoordinatorTests: XCTestCase {
         XCTAssertNil(restored.pendingInviteCode)
     }
 }
+
+@MainActor
+final class CelebrationManagerTests: XCTestCase {
+    private func makeUserDefaults() -> UserDefaults {
+        let suiteName = "CelebrationManagerTests-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Failed to create UserDefaults suite")
+            return .standard
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar
+    }
+
+    func testDecideTaskCompletionUsesMilestonePriorityAtFive() {
+        let defaults = makeUserDefaults()
+        let now = Date(timeIntervalSince1970: 1_736_900_000)
+        let manager = CelebrationManager(
+            userDefaults: defaults,
+            nowProvider: { now },
+            randomInt: { _ in 1 }
+        )
+
+        let decision = manager.decideTaskCompletion(
+            taskTitle: "Kitchen wipe-down",
+            weeklyCompletedCount: 5,
+            now: now,
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(decision.tier, .milestone)
+        XCTAssertEqual(decision.celebration.style, .milestone)
+        XCTAssertNil(defaults.object(forKey: "celebrations.lastSurpriseAt"))
+    }
+
+    func testDecideTaskCompletionUsesMilestonePriorityAtTen() {
+        let defaults = makeUserDefaults()
+        let now = Date(timeIntervalSince1970: 1_736_910_000)
+        let manager = CelebrationManager(
+            userDefaults: defaults,
+            nowProvider: { now },
+            randomInt: { _ in 1 }
+        )
+
+        let decision = manager.decideTaskCompletion(
+            taskTitle: "Laundry folded",
+            weeklyCompletedCount: 10,
+            now: now,
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(decision.tier, .milestone)
+        XCTAssertEqual(decision.celebration.style, .milestone)
+    }
+
+    func testDecideTaskCompletionUsesSurpriseWhenEligibleAndRandomHits() {
+        let defaults = makeUserDefaults()
+        let now = Date(timeIntervalSince1970: 1_736_920_000)
+        let manager = CelebrationManager(
+            userDefaults: defaults,
+            nowProvider: { now },
+            randomInt: { _ in 1 }
+        )
+
+        let decision = manager.decideTaskCompletion(
+            taskTitle: "Trash out",
+            weeklyCompletedCount: 2,
+            now: now,
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(decision.tier, .surprise)
+        XCTAssertEqual(decision.celebration.style, .normal)
+        XCTAssertEqual(
+            defaults.object(forKey: "celebrations.lastSurpriseAt") as? Date,
+            now
+        )
+    }
+
+    func testDecideTaskCompletionSkipsSurpriseWhenInsideWeeklyCap() {
+        let defaults = makeUserDefaults()
+        let now = Date(timeIntervalSince1970: 1_736_930_000)
+        let recentSurpriseDate = now.addingTimeInterval(-3 * 86400)
+        defaults.set(recentSurpriseDate, forKey: "celebrations.lastSurpriseAt")
+        let manager = CelebrationManager(
+            userDefaults: defaults,
+            nowProvider: { now },
+            randomInt: { _ in 1 }
+        )
+
+        let decision = manager.decideTaskCompletion(
+            taskTitle: "Vacuum room",
+            weeklyCompletedCount: 2,
+            now: now,
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(decision.tier, .fallback)
+        XCTAssertEqual(decision.celebration.style, .normal)
+        XCTAssertEqual(
+            defaults.object(forKey: "celebrations.lastSurpriseAt") as? Date,
+            recentSurpriseDate
+        )
+    }
+
+    func testDecideTaskCompletionUsesFallbackWhenRandomMisses() {
+        let defaults = makeUserDefaults()
+        let now = Date(timeIntervalSince1970: 1_736_940_000)
+        let manager = CelebrationManager(
+            userDefaults: defaults,
+            nowProvider: { now },
+            randomInt: { _ in 7 }
+        )
+
+        let decision = manager.decideTaskCompletion(
+            taskTitle: "Water plants",
+            weeklyCompletedCount: 3,
+            now: now,
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(decision.tier, .fallback)
+        XCTAssertEqual(decision.celebration.style, .normal)
+        XCTAssertNil(defaults.object(forKey: "celebrations.lastSurpriseAt"))
+    }
+}
