@@ -10,6 +10,7 @@ final class TaskStoreTests: XCTestCase {
     private var store: TaskStore!
     private let householdId = UUID()
     private let assigneeId = UUID()
+    private let secondaryAssigneeId = UUID()
 
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -29,7 +30,7 @@ final class TaskStoreTests: XCTestCase {
         defaults.set(3, forKey: recommendedWipDefaultsKey)
 
         // Create in-memory model container for testing
-        let schema = Schema([CachedTask.self])
+        let schema = Schema([CachedTask.self, CachedRecurringChore.self])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         modelContainer = try ModelContainer(for: schema, configurations: [config])
 
@@ -464,6 +465,132 @@ final class TaskStoreTests: XCTestCase {
             calendar: utcCalendar
         )
         XCTAssertEqual(count, 1)
+    }
+
+    func testMoveTaskDoneForRecurringGeneratesBacklogSuccessorAndAdvancesRotation() async throws {
+        let dueDate = Date(timeIntervalSince1970: 1_735_689_600) // 2025-01-01 00:00:00 UTC
+        let recurringChore = RecurringChore(
+            id: UUID(),
+            householdId: householdId,
+            title: "Trash day",
+            recurrenceType: .custom,
+            recurrenceInterval: 2,
+            defaultAssigneeIds: [assigneeId, secondaryAssigneeId],
+            isActive: true,
+            nextScheduledDate: dueDate,
+            rotationEnabled: true,
+            nextAssigneeIndex: 1
+        )
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: recurringChore.title,
+            status: .next,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId, secondaryAssigneeId],
+            dueDate: dueDate,
+            taskType: .recurring,
+            recurringChoreId: recurringChore.id
+        )
+
+        modelContainer.mainContext.insert(CachedRecurringChore(from: recurringChore))
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        guard let loadedTask = store.tasks.first(where: { $0.id == task.id }) else {
+            XCTFail("Expected recurring task in memory before completion")
+            return
+        }
+
+        _ = await store.moveTask(loadedTask, to: .done)
+
+        let expectedSuccessorDate = Date(timeIntervalSince1970: 1_735_862_400) // +2 days
+        let generated = store.backlogTasks.filter {
+            $0.recurringChoreId == recurringChore.id &&
+                $0.id != task.id &&
+                utcCalendar.isDate($0.dueDate ?? .distantPast, inSameDayAs: expectedSuccessorDate)
+        }
+
+        XCTAssertEqual(generated.count, 1, "Expected exactly one generated recurring successor")
+        XCTAssertEqual(generated.first?.assigneeId, secondaryAssigneeId)
+        XCTAssertEqual(generated.first?.assigneeIds, [assigneeId, secondaryAssigneeId])
+
+        let choreID = recurringChore.id
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.id == choreID }
+        )
+        guard let cachedChore = try modelContainer.mainContext.fetch(descriptor).first else {
+            XCTFail("Expected cached recurring chore metadata to be updated")
+            return
+        }
+
+        XCTAssertEqual(cachedChore.nextAssigneeIndex, 0)
+        let expectedFollowingDate = Date(timeIntervalSince1970: 1_736_035_200) // +4 days
+        XCTAssertTrue(
+            utcCalendar.isDate(cachedChore.nextScheduledDate ?? .distantPast, inSameDayAs: expectedFollowingDate)
+        )
+    }
+
+    func testMoveTaskDoneForRecurringSkipsDuplicateWhenSuccessorAlreadyExists() async throws {
+        let dueDate = Date(timeIntervalSince1970: 1_736_121_600) // 2025-01-06 00:00:00 UTC
+        let nextDueDate = Date(timeIntervalSince1970: 1_736_208_000) // +1 day
+        let recurringChore = RecurringChore(
+            id: UUID(),
+            householdId: householdId,
+            title: "Water plants",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            defaultAssigneeIds: [assigneeId],
+            isActive: true,
+            nextScheduledDate: dueDate,
+            rotationEnabled: false
+        )
+        let completedCandidate = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: recurringChore.title,
+            status: .next,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
+            dueDate: dueDate,
+            taskType: .recurring,
+            recurringChoreId: recurringChore.id
+        )
+        let existingSuccessor = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: recurringChore.title,
+            status: .backlog,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
+            dueDate: nextDueDate,
+            taskType: .recurring,
+            recurringChoreId: recurringChore.id
+        )
+
+        modelContainer.mainContext.insert(CachedRecurringChore(from: recurringChore))
+        modelContainer.mainContext.insert(CachedTask(from: completedCandidate))
+        modelContainer.mainContext.insert(CachedTask(from: existingSuccessor))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        guard let loadedTask = store.tasks.first(where: { $0.id == completedCandidate.id }) else {
+            XCTFail("Expected recurring task in memory before completion")
+            return
+        }
+
+        _ = await store.moveTask(loadedTask, to: .done)
+
+        let successors = store.backlogTasks.filter {
+            $0.recurringChoreId == recurringChore.id &&
+                utcCalendar.isDate($0.dueDate ?? .distantPast, inSameDayAs: nextDueDate)
+        }
+        XCTAssertEqual(successors.count, 1, "Expected idempotency guard to prevent duplicate successor")
     }
 
     // MARK: - TaskStoreError Tests

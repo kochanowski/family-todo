@@ -77,6 +77,7 @@ private struct TasksContent: View {
     @StateObject private var store: TaskStore
     @StateObject private var memberStore: MemberStore
     @StateObject private var backlogStore: BacklogStore
+    @StateObject private var recurringStore: RecurringChoreStore
 
     @State private var taskBeingCompleted: UUID?
     @State private var selectedTask: Task?
@@ -113,6 +114,9 @@ private struct TasksContent: View {
         )
         _backlogStore = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
+        )
+        _recurringStore = StateObject(
+            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
         )
         _selectedTab = selectedTab
     }
@@ -247,6 +251,7 @@ private struct TasksContent: View {
             TaskDetailSheet(
                 task: task,
                 members: memberStore.members,
+                nextUpAssigneeName: nextUpAssigneeName(for: task),
                 onSave: { updatedTask in
                     _ = _Concurrency.Task {
                         let validation = await store.updateTask(updatedTask)
@@ -325,6 +330,7 @@ private struct TasksContent: View {
                 TaskRow(
                     task: task,
                     assignee: assignee(for: task),
+                    isRotatingRecurring: isRotatingRecurringTask(task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: wipZone(for: index),
@@ -383,6 +389,7 @@ private struct TasksContent: View {
             TaskRow(
                 task: task,
                 assignee: assignee(for: task),
+                isRotatingRecurring: isRotatingRecurringTask(task),
                 categoryName: categoryName(for: task),
                 categoryColor: categoryColor(for: task),
                 wipZone: .normal,
@@ -807,6 +814,33 @@ private struct TasksContent: View {
         return memberStore.members.first(where: { $0.id == assigneeId })
     }
 
+    private func recurringChore(for task: Task) -> RecurringChore? {
+        guard let recurringChoreId = task.recurringChoreId else { return nil }
+        return recurringStore.chores.first(where: { $0.id == recurringChoreId })
+    }
+
+    private func isRotatingRecurringTask(_ task: Task) -> Bool {
+        guard let recurringChore = recurringChore(for: task) else { return false }
+        return recurringChore.rotationEnabled && recurringChore.normalizedAssigneeIDs.count > 1
+    }
+
+    private func nextUpAssigneeName(for task: Task) -> String? {
+        guard let recurringChore = recurringChore(for: task),
+              recurringChore.rotationEnabled
+        else {
+            return nil
+        }
+
+        let assigneeIds = recurringChore.normalizedAssigneeIDs
+        guard assigneeIds.count > 1 else {
+            return nil
+        }
+
+        let nextIndex = recurringChore.normalizedRotationCursor()
+        let nextAssigneeId = assigneeIds[nextIndex]
+        return memberStore.members.first(where: { $0.id == nextAssigneeId })?.displayName
+    }
+
     private func isTaskAssignedToOther(_ task: Task) -> Bool {
         let assignedIDs = Set(task.assigneeIds + (task.assigneeId.map { [$0] } ?? []))
         guard !assignedIDs.isEmpty, let currentMemberId else { return false }
@@ -967,12 +1001,14 @@ private struct TasksContent: View {
         store.setSyncMode(userSession.syncMode)
         memberStore.setSyncMode(userSession.syncMode)
         backlogStore.setSyncMode(userSession.syncMode)
+        recurringStore.setSyncMode(userSession.syncMode)
 
         async let loadTasks = store.loadTasks()
         async let loadMembers = memberStore.loadMembers()
         async let loadBacklog = backlogStore.loadData()
+        async let loadRecurringChores = recurringStore.loadChores()
 
-        _ = await (loadTasks, loadMembers, loadBacklog)
+        _ = await (loadTasks, loadMembers, loadBacklog, loadRecurringChores)
         normalizeAssigneeFilterSelection()
     }
 
@@ -1200,6 +1236,7 @@ struct TaskRow: View {
 
     let task: Task
     let assignee: Member?
+    let isRotatingRecurring: Bool
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
@@ -1242,6 +1279,12 @@ struct TaskRow: View {
                                     name: assignee.displayName,
                                     colorHex: assignee.colorHex
                                 )
+
+                                if isRotatingRecurring {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(themeStore.font(for: .chip))
+                                        .foregroundStyle(themeStore.accentTabColor)
+                                }
                             }
 
                             if let dueDate = task.dueDate {
@@ -1354,6 +1397,7 @@ struct TaskRow: View {
 private struct TaskDetailSheet: View {
     let task: Task
     let members: [Member]
+    let nextUpAssigneeName: String?
     let onSave: (Task) -> Void
     let onDelete: (Task) -> Void
 
@@ -1369,11 +1413,13 @@ private struct TaskDetailSheet: View {
     init(
         task: Task,
         members: [Member],
+        nextUpAssigneeName: String? = nil,
         onSave: @escaping (Task) -> Void,
         onDelete: @escaping (Task) -> Void
     ) {
         self.task = task
         self.members = members
+        self.nextUpAssigneeName = nextUpAssigneeName
         self.onSave = onSave
         self.onDelete = onDelete
 
@@ -1411,6 +1457,12 @@ private struct TaskDetailSheet: View {
                             selection: $dueDate,
                             displayedComponents: [.date]
                         )
+                    }
+
+                    if let nextUpAssigneeName {
+                        Label("Next up: \(nextUpAssigneeName)", systemImage: "arrow.triangle.2.circlepath")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                     }
                 }
 

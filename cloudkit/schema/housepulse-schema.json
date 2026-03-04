@@ -96,6 +96,8 @@
         { "name": "lastGeneratedDate", "type": "Date", "queryable": false, "sortable": false },
         { "name": "nextScheduledDate", "type": "Date", "queryable": false, "sortable": false },
         { "name": "notes", "type": "String", "queryable": false, "sortable": false },
+        { "name": "rotationEnabled", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "nextAssigneeIndex", "type": "Int64", "queryable": false, "sortable": false },
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],

@@ -274,6 +274,8 @@ extension CloudKitManager {
         if let notes = chore.notes {
             record["notes"] = notes as CKRecordValue
         }
+        record["rotationEnabled"] = (chore.rotationEnabled ? 1 : 0) as CKRecordValue
+        record["nextAssigneeIndex"] = Int64(chore.normalizedRotationCursor()) as CKRecordValue
         record["createdAt"] = chore.createdAt as CKRecordValue
         record["updatedAt"] = chore.updatedAt as CKRecordValue
         return record
@@ -306,14 +308,25 @@ extension CloudKitManager {
             defaultAssigneeIds.isEmpty
                 ? (fallbackAssigneeId.map { [$0] } ?? [])
                 : defaultAssigneeIds
+        let recurrenceDayValue =
+            record["recurrenceDay"] as? Int
+                ?? (record["recurrenceDay"] as? Int64).map(Int.init)
+        let recurrenceDayOfMonthValue =
+            record["recurrenceDayOfMonth"] as? Int
+                ?? (record["recurrenceDayOfMonth"] as? Int64).map(Int.init)
+        let rotationEnabledRaw = record["rotationEnabled"] as? Int64 ?? 0
+        let nextAssigneeIndexValue =
+            record["nextAssigneeIndex"] as? Int
+                ?? (record["nextAssigneeIndex"] as? Int64).map(Int.init)
+                ?? 0
 
         return RecurringChore(
             id: id,
             householdId: householdId,
             title: title,
             recurrenceType: recurrenceType,
-            recurrenceDay: record["recurrenceDay"] as? Int,
-            recurrenceDayOfMonth: record["recurrenceDayOfMonth"] as? Int,
+            recurrenceDay: recurrenceDayValue,
+            recurrenceDayOfMonth: recurrenceDayOfMonthValue,
             recurrenceInterval: intervalValue,
             defaultAssigneeIds: resolvedAssigneeIds,
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
@@ -323,7 +336,9 @@ extension CloudKitManager {
             nextScheduledDate: record["nextScheduledDate"] as? Date,
             notes: record["notes"] as? String,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            rotationEnabled: rotationEnabledRaw == 1,
+            nextAssigneeIndex: max(nextAssigneeIndexValue, 0)
         )
     }
 

@@ -362,15 +362,19 @@ struct CategoriesManagementView: View {
 struct RepetitiveTasksView: View {
     @StateObject private var store: RecurringChoreStore
     @StateObject private var backlogStore: BacklogStore
+    @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
 
+    @State private var editingChoreId: UUID?
     @State private var newTitle = ""
     @State private var recurrenceType: RecurringChore.RecurrenceType = .weekly
     @State private var recurrenceDay = 2
     @State private var recurrenceDayOfMonth = 1
     @State private var recurrenceInterval = 1
     @State private var selectedCategoryId: UUID?
+    @State private var selectedAssigneeIds = Set<UUID>()
+    @State private var rotationEnabled = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -378,6 +382,9 @@ struct RepetitiveTasksView: View {
         )
         _backlogStore = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
+        )
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
         )
     }
 
@@ -393,6 +400,13 @@ struct RepetitiveTasksView: View {
                             HStack {
                                 Text(chore.title)
                                     .font(themeStore.font(for: .inlineTitle))
+
+                                if chore.rotationEnabled, chore.normalizedAssigneeIDs.count > 1 {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(themeStore.font(for: .chip))
+                                        .foregroundStyle(themeStore.accentTabColor)
+                                }
+
                                 Spacer()
                                 Toggle("", isOn: Binding(
                                     get: { chore.isActive },
@@ -411,6 +425,13 @@ struct RepetitiveTasksView: View {
                                 .font(themeStore.font(for: .chip))
                                 .foregroundStyle(.secondary)
 
+                            let assigneeNames = assigneeNames(for: chore)
+                            if !assigneeNames.isEmpty {
+                                Text(assigneeNames.joined(separator: " • "))
+                                    .font(themeStore.font(for: .chip))
+                                    .foregroundStyle(.secondary)
+                            }
+
                             if let categoryId = chore.categoryId,
                                let category = backlogStore.categories.first(where: { $0.id == categoryId })
                             {
@@ -421,6 +442,14 @@ struct RepetitiveTasksView: View {
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(category.color.opacity(0.12)))
                             }
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button {
+                                startEditing(chore)
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.blue)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -435,7 +464,7 @@ struct RepetitiveTasksView: View {
                 }
             }
 
-            Section("Add repetitive task") {
+            Section(editingChoreId == nil ? "Add repetitive task" : "Edit repetitive task") {
                 TextField("Task title", text: $newTitle)
                 Picker("Frequency", selection: $recurrenceType) {
                     ForEach(RecurringChore.RecurrenceType.allCases, id: \.self) { type in
@@ -469,26 +498,56 @@ struct RepetitiveTasksView: View {
                     }
                 }
 
-                Button {
-                    let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !title.isEmpty else { return }
-                    _ = _Concurrency.Task {
-                        await store.addChore(
-                            title: title,
-                            recurrenceType: recurrenceType,
-                            recurrenceInterval: recurrenceType == .custom ? recurrenceInterval : 1,
-                            recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
-                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
-                            categoryId: selectedCategoryId
-                        )
+                Text("Assigned To")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+
+                if activeMembers.isEmpty {
+                    Text("No members available.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(activeMembers) { member in
+                        Button {
+                            toggleAssignee(member.id)
+                        } label: {
+                            HStack {
+                                Text(member.displayName)
+                                    .font(themeStore.font(for: .inlineTitle))
+                                Spacer()
+                                if selectedAssigneeIds.contains(member.id) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(themeStore.accentTabColor)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
-                    newTitle = ""
-                    recurrenceInterval = 1
-                    selectedCategoryId = nil
+                }
+
+                Toggle("Rotate between assignees", isOn: $rotationEnabled)
+                    .disabled(selectedAssigneeIds.count < 2)
+
+                Button {
+                    submitComposer()
                 } label: {
-                    Label("Add repetitive task", systemImage: "plus.circle.fill")
+                    Label(
+                        editingChoreId == nil ? "Add repetitive task" : "Save changes",
+                        systemImage: editingChoreId == nil ? "plus.circle.fill" : "checkmark.circle.fill"
+                    )
                 }
                 .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if editingChoreId != nil {
+                    Button("Cancel Editing", role: .cancel) {
+                        resetComposer()
+                    }
+                }
+            }
+        }
+        .onChange(of: selectedAssigneeIds) { _, newValue in
+            if newValue.count < 2 {
+                rotationEnabled = false
             }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
@@ -497,9 +556,106 @@ struct RepetitiveTasksView: View {
         .task {
             store.setSyncMode(userSession.syncMode)
             backlogStore.setSyncMode(userSession.syncMode)
+            memberStore.setSyncMode(userSession.syncMode)
             await store.loadChores()
             await backlogStore.loadData()
+            await memberStore.loadMembers()
         }
+    }
+
+    private var activeMembers: [Member] {
+        memberStore.members
+            .filter(\.isActive)
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+    }
+
+    private func assigneeNames(for chore: RecurringChore) -> [String] {
+        chore.normalizedAssigneeIDs.compactMap { id in
+            activeMembers.first(where: { $0.id == id })?.displayName
+        }
+    }
+
+    private func toggleAssignee(_ memberId: UUID) {
+        if selectedAssigneeIds.contains(memberId) {
+            selectedAssigneeIds.remove(memberId)
+        } else {
+            selectedAssigneeIds.insert(memberId)
+        }
+    }
+
+    private func startEditing(_ chore: RecurringChore) {
+        editingChoreId = chore.id
+        newTitle = chore.title
+        recurrenceType = chore.recurrenceType
+        recurrenceDay = chore.recurrenceDay ?? 2
+        recurrenceDayOfMonth = chore.recurrenceDayOfMonth ?? 1
+        recurrenceInterval = max(chore.recurrenceInterval ?? 1, 1)
+        selectedCategoryId = chore.categoryId
+        selectedAssigneeIds = Set(chore.normalizedAssigneeIDs)
+        rotationEnabled = chore.rotationEnabled && chore.normalizedAssigneeIDs.count > 1
+    }
+
+    private func submitComposer() {
+        let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        let orderedAssigneeIds = activeMembers.compactMap { member in
+            selectedAssigneeIds.contains(member.id) ? member.id : nil
+        }
+        let resolvedRotationEnabled = rotationEnabled && orderedAssigneeIds.count > 1
+
+        _ = _Concurrency.Task {
+            if let editingChoreId,
+               let existing = store.chores.first(where: { $0.id == editingChoreId })
+            {
+                var updated = existing
+                updated.title = trimmedTitle
+                updated.recurrenceType = recurrenceType
+                updated.recurrenceDay = recurrenceType == .weekly ? recurrenceDay : nil
+                updated.recurrenceDayOfMonth = recurrenceType == .monthly ? recurrenceDayOfMonth : nil
+                updated.recurrenceInterval = recurrenceType == .custom ? recurrenceInterval : 1
+                updated.defaultAssigneeIds = orderedAssigneeIds
+                updated.assigneeIds = orderedAssigneeIds
+                updated.rotationEnabled = resolvedRotationEnabled
+                updated.nextAssigneeIndex = {
+                    guard !orderedAssigneeIds.isEmpty else { return 0 }
+                    return min(max(updated.nextAssigneeIndex, 0), orderedAssigneeIds.count - 1)
+                }()
+                updated.categoryId = selectedCategoryId
+                let scheduleAnchor = updated.lastGeneratedDate ?? Date()
+                updated.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: updated, from: scheduleAnchor)
+                updated.updatedAt = Date()
+                await store.updateChore(updated)
+            } else {
+                await store.addChore(
+                    title: trimmedTitle,
+                    recurrenceType: recurrenceType,
+                    recurrenceInterval: recurrenceType == .custom ? recurrenceInterval : 1,
+                    recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
+                    recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
+                    defaultAssigneeIds: orderedAssigneeIds,
+                    rotationEnabled: resolvedRotationEnabled,
+                    categoryId: selectedCategoryId
+                )
+            }
+            await MainActor.run {
+                resetComposer()
+            }
+        }
+    }
+
+    private func resetComposer() {
+        editingChoreId = nil
+        newTitle = ""
+        recurrenceType = .weekly
+        recurrenceDay = 2
+        recurrenceDayOfMonth = 1
+        recurrenceInterval = 1
+        selectedCategoryId = nil
+        selectedAssigneeIds = []
+        rotationEnabled = false
     }
 
     private var weekdayOptions: [String] {

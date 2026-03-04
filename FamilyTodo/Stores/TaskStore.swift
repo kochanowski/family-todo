@@ -561,7 +561,17 @@ final class TaskStore: ObservableObject {
             updatedTask.order = nextTaskOrderBaseline() + 1
         }
 
-        return await updateTask(updatedTask)
+        let validation = await updateTask(updatedTask)
+
+        guard validation == .ok else {
+            return validation
+        }
+
+        if status == .done, task.status != .done {
+            await generateRecurringSuccessorIfNeeded(for: updatedTask)
+        }
+
+        return validation
     }
 
     func archiveTask(_ task: Task) async {
@@ -598,6 +608,122 @@ final class TaskStore: ObservableObject {
         } catch {
             self.error = error
         }
+    }
+
+    private func generateRecurringSuccessorIfNeeded(for completedTask: Task) async {
+        guard completedTask.taskType == .recurring,
+              let recurringChoreId = completedTask.recurringChoreId
+        else {
+            return
+        }
+
+        guard var recurringChore = await loadRecurringChore(id: recurringChoreId) else {
+            return
+        }
+        guard recurringChore.isActive else {
+            return
+        }
+
+        let anchorDate = completedTask.dueDate ?? completedTask.completedAt ?? completedTask.updatedAt
+        guard let generatedDueDate = ChoreScheduler.nextScheduledDate(for: recurringChore, from: anchorDate) else {
+            return
+        }
+        guard !hasGeneratedRecurringTask(for: recurringChoreId, dueDate: generatedDueDate) else {
+            return
+        }
+
+        let assignment = resolveRecurringAssignment(for: recurringChore)
+        _ = await createTask(
+            title: recurringChore.title,
+            status: .backlog,
+            assigneeId: assignment.assigneeId,
+            assigneeIds: assignment.assigneeIds,
+            backlogCategoryId: recurringChore.categoryId,
+            areaId: recurringChore.areaId,
+            dueDate: generatedDueDate,
+            notes: recurringChore.notes,
+            taskType: .recurring,
+            recurringChoreId: recurringChore.id
+        )
+
+        recurringChore.lastGeneratedDate = completedTask.completedAt ?? Date()
+        recurringChore.nextScheduledDate =
+            ChoreScheduler.nextScheduledDate(for: recurringChore, from: generatedDueDate)
+                ?? generatedDueDate
+        recurringChore.nextAssigneeIndex = assignment.nextAssigneeIndex
+        recurringChore.updatedAt = Date()
+        saveRecurringChoreToCache(recurringChore)
+
+        guard isCloudSyncEnabled else { return }
+
+        do {
+            _ = try await cloudKit.saveRecurringChore(recurringChore)
+        } catch {
+            self.error = error
+        }
+    }
+
+    private func hasGeneratedRecurringTask(for recurringChoreId: UUID, dueDate: Date) -> Bool {
+        let calendar = Calendar.current
+        return tasks.contains { task in
+            task.recurringChoreId == recurringChoreId &&
+                task.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
+        }
+    }
+
+    private func resolveRecurringAssignment(
+        for recurringChore: RecurringChore
+    ) -> (assigneeId: UUID?, assigneeIds: [UUID], nextAssigneeIndex: Int) {
+        let assigneeIds = recurringChore.normalizedAssigneeIDs
+        guard !assigneeIds.isEmpty else {
+            return (nil, [], 0)
+        }
+
+        guard recurringChore.rotationEnabled, assigneeIds.count > 1 else {
+            return (assigneeIds.first, assigneeIds, 0)
+        }
+
+        let currentIndex = recurringChore.normalizedRotationCursor()
+        let assigneeId = assigneeIds[currentIndex]
+        let nextIndex = (currentIndex + 1) % assigneeIds.count
+        return (assigneeId, assigneeIds, nextIndex)
+    }
+
+    private func loadRecurringChore(id: UUID) async -> RecurringChore? {
+        if let cached = cachedRecurringChore(id: id) {
+            return cached.toRecurringChore()
+        }
+
+        guard isCloudSyncEnabled else {
+            return nil
+        }
+
+        do {
+            await cloudKit.ensureReady()
+            let recurringChore = try await cloudKit.fetchRecurringChore(id: id)
+            saveRecurringChoreToCache(recurringChore)
+            return recurringChore
+        } catch {
+            self.error = error
+            return nil
+        }
+    }
+
+    private func cachedRecurringChore(id: UUID) -> CachedRecurringChore? {
+        let recurringChoreId = id
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.id == recurringChoreId }
+        )
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    private func saveRecurringChoreToCache(_ recurringChore: RecurringChore) {
+        if let cached = cachedRecurringChore(id: recurringChore.id) {
+            cached.update(from: recurringChore)
+        } else {
+            modelContext.insert(CachedRecurringChore(from: recurringChore))
+        }
+        saveContextOrSetError(operation: "cache recurring chore metadata")
     }
 
     func removeTaskLocally(_ task: Task) {
