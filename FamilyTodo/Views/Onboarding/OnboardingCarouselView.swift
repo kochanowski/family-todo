@@ -41,8 +41,11 @@ private let slides: [OnboardingSlide] = [
 struct OnboardingCarouselView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @State private var currentSlide = 0
+    private let getStartedSlotHeight = AppChromeMetrics.compactCTAHeight + 8
 
     var body: some View {
+        let isLastSlide = currentSlide == slides.count - 1
+
         ZStack {
             // Animated Aurora Background
             AnimatedAuroraBackground(currentSlide: currentSlide)
@@ -75,24 +78,28 @@ struct OnboardingCarouselView: View {
                 Spacer()
                     .frame(height: 40)
 
-                // Get Started Button (only on last slide)
-                if currentSlide == slides.count - 1 {
-                    Button {
-                        onboardingState.completeOnboarding()
-                    } label: {
-                        Text("Get Started")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                Capsule()
-                                    .fill(Color.blue)
-                            )
+                // Keep a fixed CTA slot so page indicator dots stay vertically stable.
+                ZStack {
+                    if isLastSlide {
+                        Button {
+                            onboardingState.completeOnboarding()
+                        } label: {
+                            Text("Get Started")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.blue)
+                                )
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
-                    .padding(.horizontal, 40)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
+                .frame(height: getStartedSlotHeight)
+                .padding(.horizontal, 40)
+                .animation(.easeInOut(duration: 0.25), value: isLastSlide)
 
                 Spacer()
                     .frame(height: 60)

@@ -277,7 +277,7 @@ private struct ShoppingListContent: View {
                     hasSeenShoppingTutorial = true
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(themeStore.accentColor)
+                .tint(themeStore.accentTabColor)
             }
         }
     }

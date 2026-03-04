@@ -356,13 +356,21 @@ private struct TasksContent: View {
     @ViewBuilder
     private var activeTasksEmptyState: some View {
         if hasSeenTasksTutorial {
-            ContentUnavailableView(
-                "All Caught Up!",
-                systemImage: "sparkles",
-                description: Text(
-                    "The house is looking great. Enjoy your free time or create a new task."
+            if store.doneTasks.isEmpty {
+                ContentUnavailableView(
+                    "No Tasks Yet",
+                    systemImage: "checklist",
+                    description: Text("Ready to get organized? Create your first task.")
                 )
-            )
+            } else {
+                ContentUnavailableView(
+                    "All Caught Up!",
+                    systemImage: "sparkles",
+                    description: Text(
+                        "The house is looking great. Enjoy your free time or create a new task."
+                    )
+                )
+            }
         } else {
             ContentUnavailableView {
                 Label("Master Your Chores", systemImage: "checkmark.square.fill")
