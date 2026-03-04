@@ -78,12 +78,12 @@ Regression Risk: Partial-save edge cases; test failure handling and rollback exp
 
 ## Phase 2: Core Features & UX (Medium Priority)
 
-- [ ] **P2.1 Engaging Empty States** ([Details](TODO_DETAILS.md#p21))
+- [x] **P2.1 Engaging Empty States** ([Details](TODO_DETAILS.md#p21))
 Description: Complete empty-state coverage in Shopping/Tasks Active/Ideas with `ContentUnavailableView`.
 Acceptance Criteria: Empty states appear correctly with CTA and proper symbols.
 Regression Risk: List visibility regressions; test empty and non-empty transitions.
 
-- [ ] **P2.2 Conversational Task Filter Chips** ([Details](TODO_DETAILS.md#p22))
+- [x] **P2.2 Conversational Task Filter Chips** ([Details](TODO_DETAILS.md#p22))
 Description: Add `All tasks`, `My tasks`, `[Name]'s tasks` chips with ID-based filtering.
 Acceptance Criteria: Filters work for Active and Completed; no duplicate current-user chip.
 Regression Risk: Wrong task subset or filter reset issues; test toggling and state persistence.

@@ -52,6 +52,18 @@ private struct TasksContent: View {
         case completed = "Completed"
     }
 
+    private enum AssigneeFilter: Equatable {
+        case all
+        case mine
+        case member(UUID)
+    }
+
+    private struct AssigneeFilterChip: Identifiable {
+        let id: String
+        let title: String
+        let filter: AssigneeFilter
+    }
+
     private enum CompletedCleanupAction: String, Identifiable {
         case clearAll
         case keepLast7Days
@@ -72,6 +84,7 @@ private struct TasksContent: View {
     @State private var selectedAssigneeIdForNext: UUID?
     @State private var activeBanner: InlineBanner?
     @State private var activeFilter: TasksFilter = .active
+    @State private var assigneeFilter: AssigneeFilter = .all
     @State private var pendingCleanupAction: CompletedCleanupAction?
     @State private var pendingDeletedTask: Task?
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
@@ -89,6 +102,7 @@ private struct TasksContent: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         let taskStore = TaskStore(modelContext: modelContext)
@@ -105,8 +119,9 @@ private struct TasksContent: View {
 
     var body: some View {
         let listBottomInset: CGFloat = 16
-        let shouldShowActiveEmptyState = activeFilter == .active && store.nextTasks.isEmpty
-        let shouldShowCompletedEmptyState = activeFilter == .completed && store.recentlyDoneTasks.isEmpty
+        let shouldShowActiveEmptyState = activeFilter == .active && filteredActiveTasks.isEmpty
+        let shouldShowCompletedEmptyState =
+            activeFilter == .completed && filteredCompletedTasks.isEmpty
 
         VStack(spacing: 0) {
             header
@@ -115,6 +130,10 @@ private struct TasksContent: View {
                 .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
             filterToggle
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, 10)
+
+            assigneeFilterChips
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.bottom, 12)
 
@@ -187,6 +206,19 @@ private struct TasksContent: View {
             if !isEmpty {
                 markTasksTutorialAsSeenIfNeeded()
             }
+        }
+        .onChange(of: activeFilter) { _, newFilter in
+            if newFilter != .active, editMode.isEditing {
+                editMode = .inactive
+            }
+        }
+        .onChange(of: assigneeFilter) { _, newFilter in
+            if newFilter != .all, editMode.isEditing {
+                editMode = .inactive
+            }
+        }
+        .onChange(of: activeMembers.map(\.id)) { _, _ in
+            normalizeAssigneeFilterSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
             _ = _Concurrency.Task {
@@ -281,11 +313,11 @@ private struct TasksContent: View {
 
     @ViewBuilder
     private var activeTasksContent: some View {
-        let displayedTasks = visibleNextTasks
+        let displayedTasks = filteredActiveTasks
         ForEach(displayedTasks) { task in
             if taskBeingCompleted != task.id {
                 let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
-                if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
+                if index == normalizedWipLimit, displayedTasks.count > normalizedWipLimit {
                     overLimitSeparator
                         .tasksListRowStyle(taskListRowInsets)
                 }
@@ -327,7 +359,7 @@ private struct TasksContent: View {
     }
 
     private var completedTasksContent: some View {
-        ForEach(store.recentlyDoneTasks) { task in
+        ForEach(filteredCompletedTasks) { task in
             TaskRow(
                 task: task,
                 assignee: assignee(for: task),
@@ -352,7 +384,13 @@ private struct TasksContent: View {
 
     private var activeTasksEmptyState: some View {
         Group {
-            if hasSeenTasksTutorial {
+            if shouldShowFilteredActiveEmptyState {
+                ContentUnavailableView(
+                    "No Matching Active Tasks",
+                    systemImage: "line.3.horizontal.decrease.circle",
+                    description: Text("Try a different filter or create a new task.")
+                )
+            } else if hasSeenTasksTutorial {
                 if store.doneTasks.isEmpty {
                     ContentUnavailableView(
                         "No Tasks Yet",
@@ -390,11 +428,21 @@ private struct TasksContent: View {
     }
 
     private var completedTasksEmptyState: some View {
-        ContentUnavailableView(
-            "No Completed Tasks",
-            systemImage: "checkmark.circle",
-            description: Text("Tasks you finish will appear here.")
-        )
+        Group {
+            if shouldShowFilteredCompletedEmptyState {
+                ContentUnavailableView(
+                    "No Matching Completed Tasks",
+                    systemImage: "line.3.horizontal.decrease.circle",
+                    description: Text("Try another filter to see completed items.")
+                )
+            } else {
+                ContentUnavailableView(
+                    "No Completed Tasks",
+                    systemImage: "checkmark.circle",
+                    description: Text("Tasks you finish will appear here.")
+                )
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .offset(y: -40)
     }
@@ -412,6 +460,48 @@ private struct TasksContent: View {
         return activeMembers.first { $0.userId == userId }
     }
 
+    private var currentMemberId: UUID? {
+        currentMember?.id ?? userSession.userId.flatMap(UUID.init(uuidString:))
+    }
+
+    private var assigneeFilterOptions: [AssigneeFilterChip] {
+        var options: [AssigneeFilterChip] = [
+            AssigneeFilterChip(id: "all", title: "All tasks", filter: .all),
+        ]
+
+        if currentMemberId != nil {
+            options.append(AssigneeFilterChip(id: "mine", title: "My tasks", filter: .mine))
+        }
+
+        for member in activeMembers where member.id != currentMemberId {
+            options.append(
+                AssigneeFilterChip(
+                    id: "member-\(member.id.uuidString)",
+                    title: "\(member.displayName)'s tasks",
+                    filter: .member(member.id)
+                )
+            )
+        }
+
+        return options
+    }
+
+    private var filteredActiveTasks: [Task] {
+        visibleNextTasks.filter(matchesAssigneeFilter)
+    }
+
+    private var filteredCompletedTasks: [Task] {
+        store.recentlyDoneTasks.filter(matchesAssigneeFilter)
+    }
+
+    private var shouldShowFilteredActiveEmptyState: Bool {
+        assigneeFilter != .all && !visibleNextTasks.isEmpty
+    }
+
+    private var shouldShowFilteredCompletedEmptyState: Bool {
+        assigneeFilter != .all && !store.recentlyDoneTasks.isEmpty
+    }
+
     private var header: some View {
         HStack(alignment: .center) {
             Text("Tasks")
@@ -421,12 +511,14 @@ private struct TasksContent: View {
             Spacer()
 
             if activeFilter == .active {
-                Button(editMode.isEditing ? "Done" : "Reorder") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        editMode = editMode.isEditing ? .inactive : .active
+                if assigneeFilter == .all {
+                    Button(editMode.isEditing ? "Done" : "Reorder") {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            editMode = editMode.isEditing ? .inactive : .active
+                        }
                     }
+                    .disabled(visibleNextTasks.isEmpty)
                 }
-                .disabled(visibleNextTasks.isEmpty)
             } else {
                 completedCleanupMenu
             }
@@ -471,6 +563,50 @@ private struct TasksContent: View {
         }
     }
 
+    private var assigneeFilterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(assigneeFilterOptions) { option in
+                    let isSelected = assigneeFilter == option.filter
+                    let foreground =
+                        isSelected
+                            ? themeStore.foregroundOnAccent(
+                                for: themeStore.accentTabColor,
+                                colorScheme: colorScheme
+                            ) : themeStore.contentSecondaryColor
+
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            assigneeFilter = option.filter
+                        }
+                    } label: {
+                        Text(option.title)
+                            .font(themeStore.font(for: .chip))
+                            .foregroundStyle(foreground)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background {
+                                Capsule()
+                                    .fill(isSelected ? themeStore.accentTabColor : Color(.systemGray6))
+                            }
+                            .overlay {
+                                Capsule()
+                                    .stroke(
+                                        isSelected
+                                            ? themeStore.accentTabColor.opacity(0.5)
+                                            : themeStore.borderLightColor.opacity(0.5),
+                                        lineWidth: 0.9
+                                    )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
     private var unifiedListHeader: some View {
         HStack {
             Text("Remaining")
@@ -479,7 +615,7 @@ private struct TasksContent: View {
 
             Spacer()
 
-            let count = visibleNextTasks.count
+            let count = filteredActiveTasks.count
             let limit = normalizedWipLimit
             let overLimit = count > limit
 
@@ -704,6 +840,33 @@ private struct TasksContent: View {
         }
     }
 
+    private func matchesAssigneeFilter(_ task: Task) -> Bool {
+        switch assigneeFilter {
+        case .all:
+            return true
+        case .mine:
+            guard let currentMemberId else { return false }
+            return task.assigneeId == currentMemberId
+        case let .member(memberId):
+            return task.assigneeId == memberId
+        }
+    }
+
+    private func normalizeAssigneeFilterSelection() {
+        switch assigneeFilter {
+        case .all:
+            return
+        case .mine:
+            if currentMemberId == nil {
+                assigneeFilter = .all
+            }
+        case let .member(memberId):
+            if !activeMembers.contains(where: { $0.id == memberId }) {
+                assigneeFilter = .all
+            }
+        }
+    }
+
     private var taskListRowInsets: EdgeInsets {
         EdgeInsets(
             top: 0,
@@ -781,6 +944,7 @@ private struct TasksContent: View {
         async let loadBacklog = backlogStore.loadData()
 
         _ = await (loadTasks, loadMembers, loadBacklog)
+        normalizeAssigneeFilterSelection()
     }
 
     private func markTasksTutorialAsSeenIfNeeded() {
