@@ -82,6 +82,7 @@ private struct TasksContent: View {
     @State private var editMode: EditMode = .inactive
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
+    @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
@@ -104,6 +105,8 @@ private struct TasksContent: View {
 
     var body: some View {
         let listBottomInset: CGFloat = 16
+        let shouldShowActiveEmptyState = activeFilter == .active && store.nextTasks.isEmpty
+        let shouldShowCompletedEmptyState = activeFilter == .completed && store.doneTasks.isEmpty
 
         VStack(spacing: 0) {
             header
@@ -131,20 +134,33 @@ private struct TasksContent: View {
             }
 
             if hasInitialMetadataLoaded {
-                List {
-                    if activeFilter == .active {
-                        activeTasksContent
-                    } else {
-                        completedTasksContent
+                if shouldShowActiveEmptyState {
+                    activeTasksEmptyState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else if shouldShowCompletedEmptyState {
+                    completedTasksEmptyState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else {
+                    List {
+                        if activeFilter == .active {
+                            activeTasksContent
+                        } else {
+                            completedTasksContent
+                        }
                     }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
-                .padding(.bottom, listBottomInset)
-                .environment(\.editMode, $editMode)
-                .refreshable {
-                    await refreshData()
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .padding(.bottom, listBottomInset)
+                    .environment(\.editMode, $editMode)
+                    .refreshable {
+                        await refreshData()
+                        markTasksTutorialAsSeenIfNeeded()
+                    }
                 }
             } else {
                 ProgressView("Loading tasks...")
@@ -158,21 +174,30 @@ private struct TasksContent: View {
             hasStartedInitialLoad = true
             hasInitialMetadataLoaded = true
             await refreshData()
+            markTasksTutorialAsSeenIfNeeded()
         }
         .onChange(of: selectedTab) { _, newTab in
             guard newTab == .tasks else { return }
             _ = _Concurrency.Task {
                 await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: store.nextTasks.isEmpty) { _, isEmpty in
+            if !isEmpty {
+                markTasksTutorialAsSeenIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
             _ = _Concurrency.Task {
                 await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
             _ = _Concurrency.Task {
                 await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
             }
         }
         .sheet(item: $pendingCleanupAction) { action in
@@ -260,85 +285,108 @@ private struct TasksContent: View {
     @ViewBuilder
     private var activeTasksContent: some View {
         let displayedTasks = visibleNextTasks
-        if !displayedTasks.isEmpty {
-            ForEach(displayedTasks) { task in
-                if taskBeingCompleted != task.id {
-                    let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
-                    if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
-                        overLimitSeparator
-                            .tasksListRowStyle(taskListRowInsets)
-                    }
-
-                    TaskRow(
-                        task: task,
-                        assignee: assignee(for: task),
-                        categoryName: categoryName(for: task),
-                        categoryColor: categoryColor(for: task),
-                        wipZone: wipZone(for: index),
-                        onToggle: { toggleTask(task) },
-                        onOpenDetail: { selectedTask = task }
-                    )
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button {
-                            HapticManager.lightTap()
-                            demoteTaskToBacklog(task)
-                        } label: {
-                            Label("Move to Ideas", systemImage: "archivebox.fill")
-                        }
-                        .tint(.indigo)
-
-                        Button(role: .destructive) {
-                            queueDeleteTask(task)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .accessibilityIdentifier("taskRow_\(task.title)")
-                    .tasksListRowStyle(taskListRowInsets)
+        ForEach(displayedTasks) { task in
+            if taskBeingCompleted != task.id {
+                let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
+                if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
+                    overLimitSeparator
+                        .tasksListRowStyle(taskListRowInsets)
                 }
-            }
-            .onMove(perform: moveActiveTasks)
-            .moveDisabled(
-                taskBeingCompleted != nil ||
-                    !hiddenPendingDeleteIds.isEmpty ||
-                    !hiddenMovedToIdeasIds.isEmpty
-            )
-        }
-    }
 
-    @ViewBuilder
-    private var completedTasksContent: some View {
-        if store.doneTasks.isEmpty {
-            ContentUnavailableView {
-                Label("No Completed Tasks", systemImage: "checkmark.circle")
-            } description: {
-                Text("Complete some tasks to see them here.")
-            }
-            .padding(.top, 40)
-            .tasksListRowStyle(taskListRowInsets)
-        } else {
-            ForEach(store.doneTasks) { task in
                 TaskRow(
                     task: task,
                     assignee: assignee(for: task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
-                    wipZone: .normal,
+                    wipZone: wipZone(for: index),
                     onToggle: { toggleTask(task) },
                     onOpenDetail: { selectedTask = task }
                 )
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button {
-                        archiveTask(task)
+                        HapticManager.lightTap()
+                        demoteTaskToBacklog(task)
                     } label: {
-                        Label("Archive", systemImage: "archivebox")
+                        Label("Move to Ideas", systemImage: "archivebox.fill")
                     }
-                    .tint(.orange)
+                    .tint(.indigo)
+
+                    Button(role: .destructive) {
+                        queueDeleteTask(task)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
-                .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+                .accessibilityIdentifier("taskRow_\(task.title)")
                 .tasksListRowStyle(taskListRowInsets)
             }
         }
+        .onMove(perform: moveActiveTasks)
+        .moveDisabled(
+            taskBeingCompleted != nil ||
+                !hiddenPendingDeleteIds.isEmpty ||
+                !hiddenMovedToIdeasIds.isEmpty
+        )
+    }
+
+    private var completedTasksContent: some View {
+        ForEach(store.doneTasks) { task in
+            TaskRow(
+                task: task,
+                assignee: assignee(for: task),
+                categoryName: categoryName(for: task),
+                categoryColor: categoryColor(for: task),
+                wipZone: .normal,
+                onToggle: { toggleTask(task) },
+                onOpenDetail: { selectedTask = task }
+            )
+            .swipeActions(edge: .trailing) {
+                Button {
+                    archiveTask(task)
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+                .tint(.orange)
+            }
+            .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+            .tasksListRowStyle(taskListRowInsets)
+        }
+    }
+
+    @ViewBuilder
+    private var activeTasksEmptyState: some View {
+        if hasSeenTasksTutorial {
+            ContentUnavailableView(
+                "All Caught Up!",
+                systemImage: "sparkles",
+                description: Text(
+                    "The house is looking great. Enjoy your free time or create a new task."
+                )
+            )
+        } else {
+            ContentUnavailableView {
+                Label("Master Your Chores", systemImage: "checkmark.square.fill")
+            } description: {
+                Text(
+                    "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
+                )
+            } actions: {
+                Button("Let's Go!") {
+                    HapticManager.lightTap()
+                    hasSeenTasksTutorial = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(themeStore.accentColor)
+            }
+        }
+    }
+
+    private var completedTasksEmptyState: some View {
+        ContentUnavailableView(
+            "No Completed Tasks",
+            systemImage: "checkmark.circle",
+            description: Text("Tasks you finish will appear here.")
+        )
     }
 
     private var activeMembers: [Member] {
@@ -723,6 +771,11 @@ private struct TasksContent: View {
         async let loadBacklog = backlogStore.loadData()
 
         _ = await (loadTasks, loadMembers, loadBacklog)
+    }
+
+    private func markTasksTutorialAsSeenIfNeeded() {
+        guard !store.nextTasks.isEmpty, !hasSeenTasksTutorial else { return }
+        hasSeenTasksTutorial = true
     }
 
     private func archiveTask(_ task: Task) {
