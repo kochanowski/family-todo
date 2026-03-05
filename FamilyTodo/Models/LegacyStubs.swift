@@ -259,6 +259,23 @@ class AreaStore: ObservableObject {
         syncMode == .cloud
     }
 
+    @discardableResult
+    private func saveContextOrSetError(
+        operation: String = "persist recurring chore cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            modelContext,
+            store: "RecurringChoreStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
+    }
+
     func loadAreas(householdId: UUID? = nil) async {
         let resolvedHouseholdId = householdId ?? self.householdId
         guard let resolvedHouseholdId else { return }
@@ -496,8 +513,16 @@ final class RecurringChoreStore: ObservableObject {
         normalizedChore.frequencyDays = max(normalizedChore.recurrenceInterval ?? 1, 1)
 
         guard let index = chores.firstIndex(where: { $0.id == normalizedChore.id }) else { return }
+        let previous = chores[index]
         chores[index] = normalizedChore
         upsertCachedChore(normalizedChore)
+
+        if !previous.isActive,
+           normalizedChore.isActive,
+           let seeded = await seedInitialBacklogTaskIfNeeded(for: normalizedChore)
+        {
+            normalizedChore = seeded
+        }
 
         guard isCloudSyncEnabled else { return }
         do {
@@ -508,8 +533,10 @@ final class RecurringChoreStore: ObservableObject {
     }
 
     func deleteChore(_ chore: RecurringChore) async {
+        await deletePendingBacklogInstances(for: chore)
         chores.removeAll { $0.id == chore.id }
         deleteCachedChore(id: chore.id)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
 
         guard isCloudSyncEnabled else { return }
         do {
@@ -600,7 +627,7 @@ final class RecurringChoreStore: ObservableObject {
         }
 
         let assignment = resolveAssignment(for: chore)
-        _ = await taskStore.createTask(
+        let creationResult = await taskStore.createTask(
             title: chore.title,
             status: .backlog,
             assigneeId: assignment.assigneeId,
@@ -612,6 +639,12 @@ final class RecurringChoreStore: ObservableObject {
             taskType: .recurring,
             recurringChoreId: chore.id
         )
+        guard creationResult == .ok else {
+            if let storeError = taskStore.error {
+                error = storeError
+            }
+            return nil
+        }
 
         var generatedChore = chore
         generatedChore.lastGeneratedDate = Date()
@@ -625,6 +658,7 @@ final class RecurringChoreStore: ObservableObject {
             chores[index] = generatedChore
         }
         upsertCachedChore(generatedChore)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
         return generatedChore
     }
 
@@ -681,7 +715,7 @@ final class RecurringChoreStore: ObservableObject {
         } else {
             modelContext.insert(CachedRecurringChore(from: chore))
         }
-        try? modelContext.save()
+        _ = saveContextOrSetError(operation: "upsert recurring chore cache")
     }
 
     private func deleteCachedChore(id: UUID) {
@@ -692,7 +726,22 @@ final class RecurringChoreStore: ObservableObject {
         )
         if let cached = try? modelContext.fetch(descriptor).first {
             modelContext.delete(cached)
-            try? modelContext.save()
+            _ = saveContextOrSetError(operation: "delete recurring chore cache")
+        }
+    }
+
+    private func deletePendingBacklogInstances(for chore: RecurringChore) async {
+        guard let modelContext else { return }
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(chore.householdId)
+        taskStore.setSyncMode(syncMode)
+        await taskStore.loadTasks()
+
+        let pendingBacklogInstances = taskStore.backlogTasks.filter { task in
+            task.taskType == .recurring && task.recurringChoreId == chore.id
+        }
+        for task in pendingBacklogInstances {
+            await taskStore.deleteTask(task)
         }
     }
 }

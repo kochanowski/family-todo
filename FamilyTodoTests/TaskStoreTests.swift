@@ -593,6 +593,130 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(successors.count, 1, "Expected idempotency guard to prevent duplicate successor")
     }
 
+    func testAddChoreGeneratesInitialRecurringBacklogTaskWithCategoryAndHousehold() async {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+
+        let categoryId = UUID()
+        await recurringStore.addChore(
+            title: "Laundry",
+            recurrenceType: .weekly,
+            recurrenceDay: 2,
+            defaultAssigneeIds: [assigneeId],
+            rotationEnabled: false,
+            categoryId: categoryId
+        )
+
+        let taskStore = TaskStore(modelContext: modelContainer.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+        await taskStore.loadTasks()
+
+        let generated = taskStore.backlogTasks.filter {
+            $0.taskType == .recurring && $0.title == "Laundry"
+        }
+
+        XCTAssertEqual(generated.count, 1, "Expected one generated backlog recurring task")
+        XCTAssertEqual(generated.first?.householdId, householdId)
+        XCTAssertEqual(generated.first?.status, .backlog)
+        XCTAssertEqual(generated.first?.backlogCategoryId, categoryId)
+        XCTAssertNotNil(generated.first?.recurringChoreId)
+    }
+
+    func testReactivatingChoreSeedsRecurringBacklogWhenNoPendingInstanceExists() async {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+
+        await recurringStore.addChore(
+            title: "Water plants",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            defaultAssigneeIds: [assigneeId]
+        )
+
+        let taskStore = TaskStore(modelContext: modelContainer.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+        await taskStore.loadTasks()
+
+        guard let initialGenerated = taskStore.backlogTasks.first(where: { $0.taskType == .recurring }) else {
+            XCTFail("Expected initial recurring backlog task")
+            return
+        }
+        await taskStore.deleteTask(initialGenerated)
+        await taskStore.loadTasks()
+        XCTAssertFalse(taskStore.backlogTasks.contains(where: { $0.id == initialGenerated.id }))
+
+        guard var chore = recurringStore.chores.first else {
+            XCTFail("Expected recurring chore to exist")
+            return
+        }
+
+        chore.isActive = false
+        await recurringStore.updateChore(chore)
+
+        chore.isActive = true
+        await recurringStore.updateChore(chore)
+
+        await taskStore.loadTasks()
+        let regenerated = taskStore.backlogTasks.filter {
+            $0.taskType == .recurring && $0.recurringChoreId == chore.id
+        }
+        XCTAssertEqual(regenerated.count, 1, "Expected one regenerated pending backlog recurring task")
+    }
+
+    func testDeletingChoreRemovesPendingBacklogInstancesButKeepsDoneHistory() async {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+
+        await recurringStore.addChore(
+            title: "Trash day",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            defaultAssigneeIds: [assigneeId]
+        )
+
+        let taskStore = TaskStore(modelContext: modelContainer.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+        await taskStore.loadTasks()
+
+        guard let firstPending = taskStore.backlogTasks.first(where: { $0.taskType == .recurring }) else {
+            XCTFail("Expected first pending recurring task")
+            return
+        }
+
+        _ = await taskStore.moveTask(firstPending, to: .done)
+        await taskStore.loadTasks()
+
+        guard let chore = recurringStore.chores.first else {
+            XCTFail("Expected recurring chore to exist before deletion")
+            return
+        }
+
+        await recurringStore.deleteChore(chore)
+        await taskStore.loadTasks()
+
+        let pendingAfterDelete = taskStore.backlogTasks.filter {
+            $0.taskType == .recurring && $0.recurringChoreId == chore.id
+        }
+        let doneAfterDelete = taskStore.doneTasks.filter {
+            $0.taskType == .recurring && $0.recurringChoreId == chore.id
+        }
+
+        XCTAssertTrue(pendingAfterDelete.isEmpty, "Pending recurring backlog tasks should be removed")
+        XCTAssertFalse(doneAfterDelete.isEmpty, "Completed recurring history should remain")
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {

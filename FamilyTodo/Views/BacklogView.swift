@@ -36,6 +36,7 @@ private struct BacklogContent: View {
     }
 
     @StateObject private var store: BacklogStore
+    @StateObject private var taskStore: TaskStore
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
@@ -64,6 +65,9 @@ private struct BacklogContent: View {
         _store = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
+        let tasks = TaskStore(modelContext: modelContext)
+        tasks.setHousehold(householdId)
+        _taskStore = StateObject(wrappedValue: tasks)
         _memberStore = StateObject(
             wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
         )
@@ -71,6 +75,7 @@ private struct BacklogContent: View {
 
     var body: some View {
         let listBottomInset: CGFloat = 16
+        let hasRecurringIdeas = !recurringBacklogTasks.isEmpty
 
         VStack(spacing: 0) {
             header
@@ -87,7 +92,7 @@ private struct BacklogContent: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if store.categories.isEmpty {
+            if store.categories.isEmpty, !hasRecurringIdeas {
                 emptyState
                     .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.bottom, listBottomInset)
@@ -95,6 +100,10 @@ private struct BacklogContent: View {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
                         VStack(spacing: 16) {
+                            if hasRecurringIdeas {
+                                recurringIdeasCard
+                            }
+
                             ForEach(store.categories) { category in
                                 let categoryItems = visibleItems(for: category.id)
                                 CategoryCard(
@@ -160,8 +169,10 @@ private struct BacklogContent: View {
                 }
                 .refreshable {
                     store.setSyncMode(userSession.syncMode)
+                    taskStore.setSyncMode(userSession.syncMode)
                     memberStore.setSyncMode(userSession.syncMode)
                     await store.loadData()
+                    await taskStore.loadTasks()
                     await memberStore.loadMembers()
                     markIdeasTutorialAsSeenIfNeeded()
                 }
@@ -172,19 +183,22 @@ private struct BacklogContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             store.setSyncMode(userSession.syncMode)
+            taskStore.setSyncMode(userSession.syncMode)
             memberStore.setSyncMode(userSession.syncMode)
             await store.loadData()
+            await taskStore.loadTasks()
             await memberStore.loadMembers()
             markIdeasTutorialAsSeenIfNeeded()
         }
-        .onChange(of: store.categories.isEmpty) { _, isEmpty in
-            if !isEmpty {
+        .onChange(of: store.categories.isEmpty) { _, categoriesAreEmpty in
+            if !categoriesAreEmpty || !recurringBacklogTasks.isEmpty {
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
             _ = _Concurrency.Task {
                 await store.loadData()
+                await taskStore.loadTasks()
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
@@ -344,6 +358,82 @@ private struct BacklogContent: View {
         return activeMembers.first(where: { $0.id == assigneeId })
     }
 
+    private var recurringBacklogTasks: [Task] {
+        taskStore.backlogTasks
+            .filter { $0.taskType == .recurring }
+            .sorted { lhs, rhs in
+                let lhsDue = lhs.dueDate ?? .distantFuture
+                let rhsDue = rhs.dueDate ?? .distantFuture
+                if lhsDue != rhsDue {
+                    return lhsDue < rhsDue
+                }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    private var recurringIdeasCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "repeat")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(themeStore.accentTabColor)
+
+                Text("Recurring Ideas")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+
+                Spacer()
+            }
+
+            ForEach(Array(recurringBacklogTasks.enumerated()), id: \.element.id) { index, task in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(task.title)
+                            .font(themeStore.font(for: .listRowTitle))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
+
+                        Spacer()
+
+                        if let dueDate = task.dueDate {
+                            Text(dueDate, style: .date)
+                                .font(themeStore.font(for: .chip))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        if let categoryId = task.backlogCategoryId,
+                           let category = store.categories.first(where: { $0.id == categoryId })
+                        {
+                            Text(category.title)
+                                .font(themeStore.font(for: .chip))
+                                .foregroundStyle(category.color)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(category.color.opacity(0.12)))
+                        }
+
+                        if let assignee = assignee(for: task.assigneeId) {
+                            MemberBadgeView(
+                                name: assignee.displayName,
+                                colorHex: assignee.colorHex
+                            )
+                        }
+                    }
+                }
+
+                if index < recurringBacklogTasks.count - 1 {
+                    Divider()
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(themeStore.surfaceColor)
+        )
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Ideas")
@@ -396,7 +486,7 @@ private struct BacklogContent: View {
     }
 
     private func markIdeasTutorialAsSeenIfNeeded() {
-        guard !store.categories.isEmpty, !hasSeenIdeasTutorial else { return }
+        guard !store.categories.isEmpty || !recurringBacklogTasks.isEmpty, !hasSeenIdeasTutorial else { return }
         hasSeenIdeasTutorial = true
     }
 
