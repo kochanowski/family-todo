@@ -284,7 +284,7 @@ struct CategoriesManagementView: View {
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         _ = _Concurrency.Task {
-                            await store.deleteCategory(category)
+                            _ = await store.deleteCategory(category)
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -583,10 +583,15 @@ private struct RecurringTaskEditorView: View {
                     }
 
                     Section("Details") {
-                        Picker("Category", selection: $selectedCategoryId) {
-                            Text("None").tag(UUID?.none)
-                            ForEach(backlogStore.categories) { category in
-                                Text(category.title).tag(UUID?.some(category.id))
+                        if backlogStore.categories.isEmpty {
+                            Text("Create an Ideas category first. Recurring tasks always need a category.")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Category", selection: $selectedCategoryId) {
+                                ForEach(backlogStore.categories) { category in
+                                    Text(category.title).tag(UUID?.some(category.id))
+                                }
                             }
                         }
 
@@ -636,7 +641,7 @@ private struct RecurringTaskEditorView: View {
                                 systemImage: isEditMode ? "checkmark.circle.fill" : "plus.circle.fill"
                             )
                         }
-                        .disabled(trimmedTitle.isEmpty)
+                        .disabled(!canSubmit)
                     }
 
                     if isEditMode {
@@ -651,6 +656,10 @@ private struct RecurringTaskEditorView: View {
                     if newValue.count < 2 {
                         rotationEnabled = false
                     }
+                }
+                .onChange(of: backlogStore.categories.map(\.id)) { _, categoryIDs in
+                    guard !isEditMode, selectedCategoryId == nil else { return }
+                    selectedCategoryId = categoryIDs.first
                 }
             }
         }
@@ -687,6 +696,10 @@ private struct RecurringTaskEditorView: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var canSubmit: Bool {
+        !trimmedTitle.isEmpty && selectedCategoryId != nil
+    }
+
     private var activeMembers: [Member] {
         memberStore.members
             .filter(\.isActive)
@@ -705,7 +718,7 @@ private struct RecurringTaskEditorView: View {
             recurrenceDay = 2
             recurrenceDayOfMonth = 1
             recurrenceInterval = 1
-            selectedCategoryId = nil
+            selectedCategoryId = backlogStore.categories.first?.id
             selectedAssigneeIds = []
             rotationEnabled = false
             isPaused = false
@@ -733,7 +746,7 @@ private struct RecurringTaskEditorView: View {
     }
 
     private func submit() {
-        guard !trimmedTitle.isEmpty else { return }
+        guard !trimmedTitle.isEmpty, let selectedCategoryId else { return }
 
         let orderedAssigneeIds = activeMembers.compactMap { member in
             selectedAssigneeIds.contains(member.id) ? member.id : nil

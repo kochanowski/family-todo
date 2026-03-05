@@ -163,4 +163,32 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(cachedItems.first?.syncStatusRaw, "pendingDelete")
         XCTAssertEqual(cachedItems.first?.title, "Local tombstone title")
     }
+
+    func testDeleteCategoryBlocksWhenBacklogTaskStillUsesCategory() async throws {
+        let category = BacklogCategory(
+            householdId: householdId,
+            title: "Errands",
+            sortOrder: 0
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
+
+        let backlogTask = Task(
+            householdId: householdId,
+            title: "Return package",
+            status: .backlog,
+            assigneeId: UUID(),
+            backlogCategoryId: category.id,
+            taskType: .oneOff
+        )
+        modelContainer.mainContext.insert(CachedTask(from: backlogTask))
+        try modelContainer.mainContext.save()
+
+        let result = await store.deleteCategory(category)
+
+        XCTAssertEqual(result, .blockedByBacklogTasks(count: 1))
+
+        let cachedCategories = try modelContainer.mainContext.fetch(FetchDescriptor<CachedBacklogCategory>())
+        XCTAssertEqual(cachedCategories.count, 1)
+        XCTAssertEqual(cachedCategories.first?.id, category.id)
+    }
 }

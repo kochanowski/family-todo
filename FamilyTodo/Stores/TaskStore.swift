@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Combine
 import Foundation
 import SwiftData
@@ -285,6 +286,10 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    func replayPendingMutationsIfNeeded() {
+        replayPendingMutationsInBackground()
+    }
+
     private func flushPendingSync() async {
         guard isCloudSyncEnabled, householdId != nil else { return }
 
@@ -297,8 +302,10 @@ final class TaskStore: ObservableObject {
         var didMutateCache = false
 
         for cached in pendingUploads where !pendingTaskMutations.contains(cached.id) {
+            let task = cached.toTask()
+            guard !shouldDeferRecurringTaskUpload(task) else { continue }
             do {
-                _ = try await cloudKit.saveTask(cached.toTask())
+                _ = try await cloudKit.saveTask(task)
                 cached.syncStatusRaw = "synced"
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -308,6 +315,8 @@ final class TaskStore: ObservableObject {
         }
 
         for cached in pendingDeletes where !pendingTaskMutations.contains(cached.id) {
+            let task = cached.toTask()
+            guard !shouldDeferRecurringTaskDelete(task) else { continue }
             do {
                 try await cloudKit.deleteTask(id: cached.id, householdId: cached.householdId)
                 modelContext.delete(cached)
@@ -399,7 +408,8 @@ final class TaskStore: ObservableObject {
         notes: String? = nil,
         taskType: Task.TaskType = .oneOff,
         recurringChoreId: UUID? = nil,
-        order: Int? = nil
+        order: Int? = nil,
+        deferCloudSync: Bool = false
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
@@ -454,7 +464,7 @@ final class TaskStore: ObservableObject {
         modelContext.insert(cached)
         saveContextOrSetError(operation: "cache created task")
 
-        if !isCloudSyncEnabled {
+        if !isCloudSyncEnabled || deferCloudSync {
             if task.dueDate != nil, !notificationService.isAuthorized {
                 await notificationService.requestAuthorization()
             }
@@ -481,7 +491,7 @@ final class TaskStore: ObservableObject {
     }
 
     @discardableResult
-    func updateTask(_ task: Task) async -> NextTransitionValidation {
+    func updateTask(_ task: Task, deferCloudSync: Bool = false) async -> NextTransitionValidation {
         var updatedTask = task
         updatedTask.updatedAt = Date()
         beginMutation(updatedTask.id)
@@ -521,7 +531,7 @@ final class TaskStore: ObservableObject {
             saveContextOrSetError(operation: "cache inserted updated task")
         }
 
-        if !isCloudSyncEnabled {
+        if !isCloudSyncEnabled || deferCloudSync {
             if updatedTask.dueDate != nil, !notificationService.isAuthorized {
                 await notificationService.requestAuthorization()
             }
@@ -581,7 +591,7 @@ final class TaskStore: ObservableObject {
         _ = await updateTask(archivedTask)
     }
 
-    func deleteTask(_ task: Task) async {
+    func deleteTask(_ task: Task, deferCloudSync: Bool = false) async {
         beginMutation(task.id)
         defer { endMutation(task.id) }
 
@@ -597,6 +607,11 @@ final class TaskStore: ObservableObject {
         }
 
         markCachedTaskPendingDelete(task)
+
+        if deferCloudSync {
+            await notificationService.removeTaskReminder(for: task)
+            return
+        }
 
         // Delete from CloudKit
         do {
@@ -633,6 +648,17 @@ final class TaskStore: ObservableObject {
         }
 
         let assignment = resolveRecurringAssignment(for: recurringChore)
+        recurringChore.lastGeneratedDate = completedTask.completedAt ?? Date()
+        recurringChore.nextScheduledDate =
+            ChoreScheduler.nextScheduledDate(for: recurringChore, from: generatedDueDate)
+                ?? generatedDueDate
+        recurringChore.nextAssigneeIndex = assignment.nextAssigneeIndex
+        recurringChore.updatedAt = Date()
+        saveRecurringChoreToCache(
+            recurringChore,
+            syncStatus: isCloudSyncEnabled ? .pendingUpload : .synced
+        )
+
         _ = await createTask(
             title: recurringChore.title,
             status: .backlog,
@@ -643,21 +669,16 @@ final class TaskStore: ObservableObject {
             dueDate: generatedDueDate,
             notes: recurringChore.notes,
             taskType: .recurring,
-            recurringChoreId: recurringChore.id
+            recurringChoreId: recurringChore.id,
+            deferCloudSync: isCloudSyncEnabled
         )
-
-        recurringChore.lastGeneratedDate = completedTask.completedAt ?? Date()
-        recurringChore.nextScheduledDate =
-            ChoreScheduler.nextScheduledDate(for: recurringChore, from: generatedDueDate)
-                ?? generatedDueDate
-        recurringChore.nextAssigneeIndex = assignment.nextAssigneeIndex
-        recurringChore.updatedAt = Date()
-        saveRecurringChoreToCache(recurringChore)
 
         guard isCloudSyncEnabled else { return }
 
         do {
             _ = try await cloudKit.saveRecurringChore(recurringChore)
+            markCachedRecurringChoreSynced(id: recurringChore.id)
+            replayPendingMutationsIfNeeded()
         } catch {
             self.error = error
         }
@@ -691,6 +712,9 @@ final class TaskStore: ObservableObject {
 
     private func loadRecurringChore(id: UUID) async -> RecurringChore? {
         if let cached = cachedRecurringChore(id: id) {
+            if cached.syncStatusRaw == RecurringChoreSyncStatus.pendingDelete.rawValue {
+                return nil
+            }
             return cached.toRecurringChore()
         }
 
@@ -717,13 +741,28 @@ final class TaskStore: ObservableObject {
         return try? modelContext.fetch(descriptor).first
     }
 
-    private func saveRecurringChoreToCache(_ recurringChore: RecurringChore) {
+    private func saveRecurringChoreToCache(
+        _ recurringChore: RecurringChore,
+        syncStatus: RecurringChoreSyncStatus = .synced
+    ) {
         if let cached = cachedRecurringChore(id: recurringChore.id) {
             cached.update(from: recurringChore)
+            cached.syncStatusRaw = syncStatus.rawValue
+            cached.lastSyncedAt = syncStatus == .synced ? Date() : nil
         } else {
-            modelContext.insert(CachedRecurringChore(from: recurringChore))
+            let cached = CachedRecurringChore(from: recurringChore)
+            cached.syncStatusRaw = syncStatus.rawValue
+            cached.lastSyncedAt = syncStatus == .synced ? Date() : nil
+            modelContext.insert(cached)
         }
         saveContextOrSetError(operation: "cache recurring chore metadata")
+    }
+
+    private func markCachedRecurringChoreSynced(id: UUID) {
+        guard let cached = cachedRecurringChore(id: id) else { return }
+        cached.syncStatusRaw = RecurringChoreSyncStatus.synced.rawValue
+        cached.lastSyncedAt = Date()
+        saveContextOrSetError(operation: "mark recurring chore metadata as synced")
     }
 
     func removeTaskLocally(_ task: Task) {
@@ -978,6 +1017,30 @@ final class TaskStore: ObservableObject {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
+    private func shouldDeferRecurringTaskUpload(_ task: Task) -> Bool {
+        guard task.taskType == .recurring, let recurringChoreId = task.recurringChoreId else {
+            return false
+        }
+
+        guard let cachedChore = cachedRecurringChore(id: recurringChoreId) else {
+            return true
+        }
+
+        return cachedChore.syncStatusRaw != RecurringChoreSyncStatus.synced.rawValue
+    }
+
+    private func shouldDeferRecurringTaskDelete(_ task: Task) -> Bool {
+        guard task.taskType == .recurring, let recurringChoreId = task.recurringChoreId else {
+            return false
+        }
+
+        guard let cachedChore = cachedRecurringChore(id: recurringChoreId) else {
+            return false
+        }
+
+        return cachedChore.syncStatusRaw != RecurringChoreSyncStatus.synced.rawValue
+    }
+
     private func beginMutation(_ id: UUID) {
         pendingTaskMutations.insert(id)
     }
@@ -1163,3 +1226,5 @@ enum TaskStoreError: LocalizedError, Equatable {
         }
     }
 }
+
+// swiftlint:enable file_length

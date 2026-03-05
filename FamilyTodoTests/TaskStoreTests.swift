@@ -632,12 +632,14 @@ final class TaskStoreTests: XCTestCase {
             modelContext: modelContainer.mainContext
         )
         recurringStore.setSyncMode(.localOnly)
+        let categoryId = UUID()
 
         await recurringStore.addChore(
             title: "Water plants",
             recurrenceType: .daily,
             recurrenceInterval: 1,
-            defaultAssigneeIds: [assigneeId]
+            defaultAssigneeIds: [assigneeId],
+            categoryId: categoryId
         )
 
         let taskStore = TaskStore(modelContext: modelContainer.mainContext)
@@ -677,12 +679,14 @@ final class TaskStoreTests: XCTestCase {
             modelContext: modelContainer.mainContext
         )
         recurringStore.setSyncMode(.localOnly)
+        let categoryId = UUID()
 
         await recurringStore.addChore(
             title: "Trash day",
             recurrenceType: .daily,
             recurrenceInterval: 1,
-            defaultAssigneeIds: [assigneeId]
+            defaultAssigneeIds: [assigneeId],
+            categoryId: categoryId
         )
 
         let taskStore = TaskStore(modelContext: modelContainer.mainContext)
@@ -715,6 +719,158 @@ final class TaskStoreTests: XCTestCase {
 
         XCTAssertTrue(pendingAfterDelete.isEmpty, "Pending recurring backlog tasks should be removed")
         XCTAssertFalse(doneAfterDelete.isEmpty, "Completed recurring history should remain")
+    }
+
+    func testPausingChoreRemovesBacklogInstancesButKeepsNextTask() async {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+        let categoryId = UUID()
+
+        await recurringStore.addChore(
+            title: "Laundry",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            defaultAssigneeIds: [assigneeId],
+            categoryId: categoryId
+        )
+
+        let taskStore = TaskStore(modelContext: modelContainer.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+        await taskStore.loadTasks()
+
+        guard let generated = taskStore.backlogTasks.first(where: { $0.taskType == .recurring }) else {
+            XCTFail("Expected recurring backlog task")
+            return
+        }
+
+        _ = await taskStore.moveTask(generated, to: .next)
+        _ = await taskStore.createTask(
+            title: "Laundry",
+            status: .backlog,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
+            backlogCategoryId: categoryId,
+            taskType: .recurring,
+            recurringChoreId: recurringStore.chores.first?.id
+        )
+
+        guard var chore = recurringStore.chores.first else {
+            XCTFail("Expected recurring chore")
+            return
+        }
+
+        chore.isActive = false
+        await recurringStore.updateChore(chore)
+        await taskStore.loadTasks()
+
+        XCTAssertTrue(
+            taskStore.backlogTasks.filter { $0.recurringChoreId == chore.id }.isEmpty,
+            "Pausing should clear pending backlog instances"
+        )
+        XCTAssertEqual(
+            taskStore.nextTasks.filter { $0.recurringChoreId == chore.id }.count,
+            1,
+            "Pausing should keep active Next tasks"
+        )
+    }
+
+    func testUpdatingActiveChoreRefreshesPendingBacklogTaskMetadata() async {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+        let originalCategoryId = UUID()
+        let updatedCategoryId = UUID()
+
+        await recurringStore.addChore(
+            title: "Trash day",
+            recurrenceType: .weekly,
+            recurrenceDay: 2,
+            defaultAssigneeIds: [assigneeId],
+            categoryId: originalCategoryId
+        )
+
+        guard var chore = recurringStore.chores.first else {
+            XCTFail("Expected recurring chore")
+            return
+        }
+
+        chore.title = "Take recycling out"
+        chore.categoryId = updatedCategoryId
+        chore.notes = "Blue bins only"
+        chore.defaultAssigneeIds = [secondaryAssigneeId]
+        chore.assigneeIds = [secondaryAssigneeId]
+        await recurringStore.updateChore(chore)
+
+        let taskStore = TaskStore(modelContext: modelContainer.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+        await taskStore.loadTasks()
+
+        guard let pending = taskStore.backlogTasks.first(where: { $0.recurringChoreId == chore.id }) else {
+            XCTFail("Expected pending recurring backlog task")
+            return
+        }
+
+        XCTAssertEqual(pending.title, "Take recycling out")
+        XCTAssertEqual(pending.backlogCategoryId, updatedCategoryId)
+        XCTAssertEqual(pending.notes, "Blue bins only")
+        XCTAssertEqual(pending.assigneeId, secondaryAssigneeId)
+        XCTAssertEqual(pending.assigneeIds, [secondaryAssigneeId])
+    }
+
+    func testPendingDeleteRecurringChoreDoesNotGenerateSuccessorOnCompletion() async throws {
+        let dueDate = Date(timeIntervalSince1970: 1_736_467_200)
+        let recurringChore = RecurringChore(
+            id: UUID(),
+            householdId: householdId,
+            title: "Bins",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            defaultAssigneeIds: [assigneeId],
+            categoryId: UUID(),
+            isActive: true,
+            nextScheduledDate: dueDate
+        )
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: recurringChore.title,
+            status: .next,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
+            backlogCategoryId: recurringChore.categoryId,
+            dueDate: dueDate,
+            taskType: .recurring,
+            recurringChoreId: recurringChore.id
+        )
+
+        let cachedChore = CachedRecurringChore(from: recurringChore)
+        cachedChore.syncStatusRaw = RecurringChoreSyncStatus.pendingDelete.rawValue
+        cachedChore.lastSyncedAt = nil
+        modelContainer.mainContext.insert(cachedChore)
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        guard let loadedTask = store.tasks.first(where: { $0.id == task.id }) else {
+            XCTFail("Expected recurring task before completion")
+            return
+        }
+
+        _ = await store.moveTask(loadedTask, to: .done)
+
+        let successors = store.backlogTasks.filter {
+            $0.recurringChoreId == recurringChore.id && $0.id != task.id
+        }
+        XCTAssertTrue(successors.isEmpty, "Deleted recurring chores must not generate new backlog successors")
     }
 
     // MARK: - TaskStoreError Tests

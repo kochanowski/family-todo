@@ -19,6 +19,12 @@ final class BacklogStore: ObservableObject {
         case failed(String)
     }
 
+    enum CategoryDeletionResult: Equatable {
+        case deleted
+        case blockedByBacklogTasks(count: Int)
+        case failed(String)
+    }
+
     private struct PendingSyncSnapshot {
         var pendingUploadItemsByID: [UUID: BacklogItem]
         var pendingDeleteItemIDs: Set<UUID>
@@ -369,7 +375,12 @@ final class BacklogStore: ObservableObject {
         }
     }
 
-    func deleteCategory(_ category: BacklogCategory) async {
+    func deleteCategory(_ category: BacklogCategory) async -> CategoryDeletionResult {
+        let blockingTaskCount = backlogTaskCount(for: category.id)
+        guard blockingTaskCount == 0 else {
+            return .blockedByBacklogTasks(count: blockingTaskCount)
+        }
+
         // Optimistic UI
         withAnimation {
             categories.removeAll { $0.id == category.id }
@@ -400,7 +411,7 @@ final class BacklogStore: ObservableObject {
             saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
-        if !isCloudSyncEnabled { return }
+        if !isCloudSyncEnabled { return .deleted }
 
         do {
             try await cloudKit.deleteBacklogCategory(id: category.id, householdId: category.householdId)
@@ -409,9 +420,11 @@ final class BacklogStore: ObservableObject {
             // Ideally we should delete items first or rely on CloudKit references if configured.
             // For safety, let's assume we need to delete items locally and hope valid refs handle it or we iterate.
             // But deleting the category is the main action here.
+            return .deleted
         } catch {
             self.error = error
             await loadData() // Reload on error
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -712,6 +725,20 @@ final class BacklogStore: ObservableObject {
             replayPendingMutationsInBackground()
             return true
         }
+    }
+
+    private func backlogTaskCount(for categoryId: UUID) -> Int {
+        guard let context = modelContext, let householdId else { return 0 }
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedTasks = (try? context.fetch(descriptor)) ?? []
+        return cachedTasks.filter { cachedTask in
+            cachedTask.statusRaw == Task.TaskStatus.backlog.rawValue &&
+                cachedTask.backlogCategoryId == categoryId &&
+                cachedTask.syncStatusRaw != SyncStatus.pendingDelete.rawValue
+        }.count
     }
 
     @discardableResult

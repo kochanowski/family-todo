@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import SwiftData
 import SwiftUI
@@ -383,6 +384,11 @@ class NotificationSettingsStore: ObservableObject {
 
 @MainActor
 final class RecurringChoreStore: ObservableObject {
+    private struct PendingSyncSnapshot {
+        var pendingUploadByID: [UUID: RecurringChore]
+        var pendingDeleteIDs: Set<UUID>
+    }
+
     @Published private(set) var chores: [RecurringChore] = []
     @Published var isLoading = false
     @Published var error: Error?
@@ -391,6 +397,8 @@ final class RecurringChoreStore: ObservableObject {
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
     private lazy var cloudKit = CloudKitManager.shared
+    private var pendingMutationIDs: Set<UUID> = []
+    private var isReplayingPendingMutations = false
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
@@ -433,16 +441,16 @@ final class RecurringChoreStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        loadFromCache(householdId: householdId)
-        let cacheSnapshot = chores
+        let cachedChores = loadFromCache(householdId: householdId)
+        let pendingSnapshot = pendingSyncSnapshot(from: cachedChores)
         guard isCloudSyncEnabled else { return }
 
         do {
             await cloudKit.ensureReady()
             let fetched = try await cloudKit.fetchRecurringChores(householdId: householdId)
-            let merged = mergeCloudSnapshot(fetched, with: cacheSnapshot)
-            chores = merged
-            syncToCache(merged)
+            chores = mergeCloudSnapshot(fetched, with: pendingSnapshot)
+            syncToCache(fetched)
+            replayPendingMutationsInBackground()
         } catch {
             self.error = error
         }
@@ -456,7 +464,7 @@ final class RecurringChoreStore: ObservableObject {
         recurrenceDayOfMonth: Int? = nil,
         defaultAssigneeIds: [UUID] = [],
         rotationEnabled: Bool = false,
-        categoryId: UUID? = nil
+        categoryId: UUID
     ) async {
         guard let householdId else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -478,22 +486,28 @@ final class RecurringChoreStore: ObservableObject {
             rotationEnabled: resolvedRotationEnabled
         )
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
-        chores.append(chore)
-        upsertCachedChore(chore)
 
-        if let generatedChore = await seedInitialBacklogTaskIfNeeded(for: chore) {
+        beginMutation(chore.id)
+        defer { endMutation(chore.id) }
+
+        chores.append(chore)
+        upsertCachedChore(
+            chore,
+            syncStatus: isCloudSyncEnabled ? .pendingUpload : .synced
+        )
+
+        if let generatedChore = await seedInitialBacklogTaskIfNeeded(
+            for: chore,
+            deferCloudSync: isCloudSyncEnabled
+        ) {
             chore = generatedChore
         }
 
         guard isCloudSyncEnabled else { return }
-        do {
-            _ = try await cloudKit.saveRecurringChore(chore)
-        } catch {
-            self.error = error
-        }
+        await persistChoreUpload(chore)
     }
 
-    func updateChore(_ chore: RecurringChore) async {
+    func updateChore(_ chore: RecurringChore, reconcilePendingBacklog: Bool = true) async {
         var normalizedChore = chore
         let normalizedAssigneeIDs = normalizedChore.normalizedAssigneeIDs
         normalizedChore.defaultAssigneeIds = normalizedAssigneeIDs
@@ -513,37 +527,58 @@ final class RecurringChoreStore: ObservableObject {
         normalizedChore.frequencyDays = max(normalizedChore.recurrenceInterval ?? 1, 1)
 
         guard let index = chores.firstIndex(where: { $0.id == normalizedChore.id }) else { return }
+
+        beginMutation(normalizedChore.id)
+        defer { endMutation(normalizedChore.id) }
+
         let previous = chores[index]
         chores[index] = normalizedChore
-        upsertCachedChore(normalizedChore)
+        upsertCachedChore(
+            normalizedChore,
+            syncStatus: isCloudSyncEnabled ? .pendingUpload : .synced
+        )
 
-        if !previous.isActive,
-           normalizedChore.isActive,
-           let seeded = await seedInitialBacklogTaskIfNeeded(for: normalizedChore)
-        {
-            normalizedChore = seeded
+        if reconcilePendingBacklog {
+            if previous.isActive, !normalizedChore.isActive {
+                await deletePendingBacklogInstances(
+                    for: normalizedChore,
+                    deferCloudSync: isCloudSyncEnabled
+                )
+            } else if !previous.isActive,
+                      normalizedChore.isActive,
+                      let seeded = await seedInitialBacklogTaskIfNeeded(
+                          for: normalizedChore,
+                          deferCloudSync: isCloudSyncEnabled
+                      )
+            {
+                normalizedChore = seeded
+            } else if normalizedChore.isActive {
+                await syncPendingBacklogInstances(
+                    with: normalizedChore,
+                    deferCloudSync: isCloudSyncEnabled
+                )
+            }
         }
 
         guard isCloudSyncEnabled else { return }
-        do {
-            _ = try await cloudKit.saveRecurringChore(normalizedChore)
-        } catch {
-            self.error = error
-        }
+        await persistChoreUpload(normalizedChore)
     }
 
     func deleteChore(_ chore: RecurringChore) async {
-        await deletePendingBacklogInstances(for: chore)
+        beginMutation(chore.id)
+        defer { endMutation(chore.id) }
+
         chores.removeAll { $0.id == chore.id }
-        deleteCachedChore(id: chore.id)
+        if isCloudSyncEnabled {
+            markCachedChorePendingDelete(chore)
+        } else {
+            deleteCachedChore(id: chore.id)
+        }
+        await deletePendingBacklogInstances(for: chore, deferCloudSync: isCloudSyncEnabled)
         NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
 
         guard isCloudSyncEnabled else { return }
-        do {
-            try await cloudKit.deleteRecurringChore(id: chore.id)
-        } catch {
-            self.error = error
-        }
+        await persistChoreDelete(chore)
     }
 
     func markGenerated(
@@ -565,31 +600,44 @@ final class RecurringChoreStore: ObservableObject {
             }
         }
         updated.updatedAt = Date()
-        await updateChore(updated)
+        await updateChore(updated, reconcilePendingBacklog: false)
     }
 
-    private func loadFromCache(householdId: UUID) {
-        guard let modelContext else { return }
+    private func loadFromCache(householdId: UUID) -> [CachedRecurringChore] {
+        guard let modelContext else { return [] }
         let descriptor = FetchDescriptor<CachedRecurringChore>(
             predicate: #Predicate { $0.householdId == householdId },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        if let cached = try? modelContext.fetch(descriptor) {
-            chores = cached.map { $0.toRecurringChore() }
-        }
+        let cached = (try? modelContext.fetch(descriptor)) ?? []
+        chores = cached
+            .filter { $0.syncStatusRaw != RecurringChoreSyncStatus.pendingDelete.rawValue }
+            .map { $0.toRecurringChore() }
+        return cached
     }
 
     private func mergeCloudSnapshot(
         _ cloudChores: [RecurringChore],
-        with localChores: [RecurringChore]
+        with pendingSnapshot: PendingSyncSnapshot
     ) -> [RecurringChore] {
         var mergedByID = Dictionary(uniqueKeysWithValues: cloudChores.map { ($0.id, $0) })
+        let localByID = Dictionary(uniqueKeysWithValues: chores.map { ($0.id, $0) })
 
-        for localChore in localChores {
-            if let cloudChore = mergedByID[localChore.id], cloudChore.updatedAt > localChore.updatedAt {
+        for (id, pendingChore) in pendingSnapshot.pendingUploadByID {
+            if let cloudChore = mergedByID[id], cloudChore.updatedAt > pendingChore.updatedAt {
                 continue
             }
-            mergedByID[localChore.id] = localChore
+            mergedByID[id] = pendingChore
+        }
+
+        for id in pendingSnapshot.pendingDeleteIDs {
+            mergedByID.removeValue(forKey: id)
+        }
+
+        for id in pendingMutationIDs {
+            if let localChore = localByID[id] {
+                mergedByID[id] = localChore
+            }
         }
 
         return mergedByID
@@ -602,7 +650,88 @@ final class RecurringChoreStore: ObservableObject {
             }
     }
 
-    private func seedInitialBacklogTaskIfNeeded(for chore: RecurringChore) async -> RecurringChore? {
+    private func pendingSyncSnapshot(
+        from cachedChores: [CachedRecurringChore]
+    ) -> PendingSyncSnapshot {
+        var pendingUploadByID: [UUID: RecurringChore] = [:]
+        var pendingDeleteIDs = Set<UUID>()
+
+        for cached in cachedChores {
+            switch cached.syncStatusRaw {
+            case RecurringChoreSyncStatus.pendingUpload.rawValue:
+                pendingUploadByID[cached.id] = cached.toRecurringChore()
+            case RecurringChoreSyncStatus.pendingDelete.rawValue:
+                pendingDeleteIDs.insert(cached.id)
+            default:
+                continue
+            }
+        }
+
+        return PendingSyncSnapshot(
+            pendingUploadByID: pendingUploadByID,
+            pendingDeleteIDs: pendingDeleteIDs
+        )
+    }
+
+    private func replayPendingMutationsInBackground() {
+        guard !isReplayingPendingMutations else { return }
+        isReplayingPendingMutations = true
+
+        _ = _Concurrency.Task(priority: .utility) { [self] in
+            await flushPendingSync()
+            isReplayingPendingMutations = false
+        }
+    }
+
+    private func flushPendingSync() async {
+        guard isCloudSyncEnabled, householdId != nil else { return }
+
+        let cachedChores = fetchCachedChoresForCurrentHousehold()
+        let pendingUploads = cachedChores.filter {
+            $0.syncStatusRaw == RecurringChoreSyncStatus.pendingUpload.rawValue
+        }
+        let pendingDeletes = cachedChores.filter {
+            $0.syncStatusRaw == RecurringChoreSyncStatus.pendingDelete.rawValue
+        }
+
+        guard !pendingUploads.isEmpty || !pendingDeletes.isEmpty else { return }
+
+        var didMutateCache = false
+
+        for cached in pendingUploads where !pendingMutationIDs.contains(cached.id) {
+            do {
+                await cloudKit.ensureReady()
+                _ = try await cloudKit.saveRecurringChore(cached.toRecurringChore())
+                cached.syncStatusRaw = RecurringChoreSyncStatus.synced.rawValue
+                cached.lastSyncedAt = Date()
+                didMutateCache = true
+                await replayPendingTaskMutations()
+            } catch {
+                self.error = error
+            }
+        }
+
+        for cached in pendingDeletes where !pendingMutationIDs.contains(cached.id) {
+            do {
+                await cloudKit.ensureReady()
+                try await cloudKit.deleteRecurringChore(id: cached.id, householdId: cached.householdId)
+                modelContext?.delete(cached)
+                didMutateCache = true
+                await replayPendingTaskMutations()
+            } catch {
+                self.error = error
+            }
+        }
+
+        if didMutateCache {
+            _ = saveContextOrSetError(operation: "flush pending recurring chore sync")
+        }
+    }
+
+    private func seedInitialBacklogTaskIfNeeded(
+        for chore: RecurringChore,
+        deferCloudSync: Bool
+    ) async -> RecurringChore? {
         guard chore.isActive else { return nil }
         guard let modelContext else { return nil }
 
@@ -637,7 +766,8 @@ final class RecurringChoreStore: ObservableObject {
             dueDate: generatedDueDate,
             notes: chore.notes,
             taskType: .recurring,
-            recurringChoreId: chore.id
+            recurringChoreId: chore.id,
+            deferCloudSync: deferCloudSync
         )
         guard creationResult == .ok else {
             if let storeError = taskStore.error {
@@ -657,7 +787,10 @@ final class RecurringChoreStore: ObservableObject {
         if let index = chores.firstIndex(where: { $0.id == generatedChore.id }) {
             chores[index] = generatedChore
         }
-        upsertCachedChore(generatedChore)
+        upsertCachedChore(
+            generatedChore,
+            syncStatus: isCloudSyncEnabled ? .pendingUpload : .synced
+        )
         NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
         return generatedChore
     }
@@ -675,6 +808,7 @@ final class RecurringChoreStore: ObservableObject {
         let calendar = Calendar.current
         let cachedTasks = (try? modelContext.fetch(descriptor)) ?? []
         return cachedTasks.contains { cachedTask in
+            guard cachedTask.syncStatusRaw != "pendingDelete" else { return false }
             guard cachedTask.recurringChoreId == recurringChoreId else { return false }
             return cachedTask.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
         }
@@ -699,12 +833,46 @@ final class RecurringChoreStore: ObservableObject {
     }
 
     private func syncToCache(_ chores: [RecurringChore]) {
+        guard let modelContext, let householdId else { return }
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedChores = (try? modelContext.fetch(descriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedChores.map { ($0.id, $0) })
+        let cloudIDs = Set(chores.map(\.id))
+
         for chore in chores {
-            upsertCachedChore(chore)
+            if let existing = cachedByID[chore.id] {
+                if existing.syncStatusRaw == RecurringChoreSyncStatus.pendingUpload.rawValue ||
+                    existing.syncStatusRaw == RecurringChoreSyncStatus.pendingDelete.rawValue
+                {
+                    continue
+                }
+                existing.update(from: chore)
+                existing.syncStatusRaw = RecurringChoreSyncStatus.synced.rawValue
+                existing.lastSyncedAt = Date()
+            } else {
+                let cached = CachedRecurringChore(from: chore)
+                cached.syncStatusRaw = RecurringChoreSyncStatus.synced.rawValue
+                cached.lastSyncedAt = Date()
+                modelContext.insert(cached)
+            }
         }
+
+        for cached in cachedChores where
+            cached.syncStatusRaw == RecurringChoreSyncStatus.synced.rawValue &&
+            !cloudIDs.contains(cached.id)
+        {
+            modelContext.delete(cached)
+        }
+
+        _ = saveContextOrSetError(operation: "sync recurring chore cache from cloud")
     }
 
-    private func upsertCachedChore(_ chore: RecurringChore) {
+    private func upsertCachedChore(
+        _ chore: RecurringChore,
+        syncStatus: RecurringChoreSyncStatus
+    ) {
         guard let modelContext else { return }
         let choreId = chore.id
         let descriptor = FetchDescriptor<CachedRecurringChore>(
@@ -712,10 +880,47 @@ final class RecurringChoreStore: ObservableObject {
         )
         if let cached = try? modelContext.fetch(descriptor).first {
             cached.update(from: chore)
+            cached.syncStatusRaw = syncStatus.rawValue
+            cached.lastSyncedAt = syncStatus == .synced ? Date() : nil
         } else {
-            modelContext.insert(CachedRecurringChore(from: chore))
+            let cached = CachedRecurringChore(from: chore)
+            cached.syncStatusRaw = syncStatus.rawValue
+            cached.lastSyncedAt = syncStatus == .synced ? Date() : nil
+            modelContext.insert(cached)
         }
         _ = saveContextOrSetError(operation: "upsert recurring chore cache")
+    }
+
+    private func markCachedChoreSynced(id: UUID) {
+        guard let modelContext else { return }
+        let choreId = id
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.id == choreId }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            cached.syncStatusRaw = RecurringChoreSyncStatus.synced.rawValue
+            cached.lastSyncedAt = Date()
+            _ = saveContextOrSetError(operation: "mark recurring chore as synced")
+        }
+    }
+
+    private func markCachedChorePendingDelete(_ chore: RecurringChore) {
+        guard let modelContext else { return }
+        let choreId = chore.id
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.id == choreId }
+        )
+        if let cached = try? modelContext.fetch(descriptor).first {
+            cached.update(from: chore)
+            cached.syncStatusRaw = RecurringChoreSyncStatus.pendingDelete.rawValue
+            cached.lastSyncedAt = nil
+        } else {
+            let cached = CachedRecurringChore(from: chore)
+            cached.syncStatusRaw = RecurringChoreSyncStatus.pendingDelete.rawValue
+            cached.lastSyncedAt = nil
+            modelContext.insert(cached)
+        }
+        _ = saveContextOrSetError(operation: "mark recurring chore pending delete")
     }
 
     private func deleteCachedChore(id: UUID) {
@@ -730,7 +935,10 @@ final class RecurringChoreStore: ObservableObject {
         }
     }
 
-    private func deletePendingBacklogInstances(for chore: RecurringChore) async {
+    private func deletePendingBacklogInstances(
+        for chore: RecurringChore,
+        deferCloudSync: Bool
+    ) async {
         guard let modelContext else { return }
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(chore.householdId)
@@ -741,8 +949,116 @@ final class RecurringChoreStore: ObservableObject {
             task.taskType == .recurring && task.recurringChoreId == chore.id
         }
         for task in pendingBacklogInstances {
-            await taskStore.deleteTask(task)
+            await taskStore.deleteTask(task, deferCloudSync: deferCloudSync)
         }
+    }
+
+    private func syncPendingBacklogInstances(
+        with chore: RecurringChore,
+        deferCloudSync: Bool
+    ) async {
+        guard let modelContext else { return }
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(chore.householdId)
+        taskStore.setSyncMode(syncMode)
+        await taskStore.loadTasks()
+
+        let assignment = resolveAssignment(for: chore)
+        let pendingBacklogInstances = taskStore.backlogTasks.filter { task in
+            task.taskType == .recurring && task.recurringChoreId == chore.id
+        }
+
+        for task in pendingBacklogInstances {
+            var updatedTask = task
+            updatedTask.title = chore.title
+            updatedTask.assigneeIds = chore.normalizedAssigneeIDs
+            updatedTask.assigneeId = resolvedAssigneeID(
+                for: task,
+                fallback: assignment.assigneeId,
+                chore: chore
+            )
+            updatedTask.backlogCategoryId = chore.categoryId
+            updatedTask.areaId = chore.areaId
+            updatedTask.notes = chore.notes
+            updatedTask.dueDate = rescheduledDueDate(for: task, using: chore)
+            _ = await taskStore.updateTask(updatedTask, deferCloudSync: deferCloudSync)
+        }
+
+        if !pendingBacklogInstances.isEmpty {
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        }
+    }
+
+    private func rescheduledDueDate(for task: Task, using chore: RecurringChore) -> Date? {
+        guard let dueDate = task.dueDate else { return nil }
+        let anchor = Calendar.current.date(byAdding: .day, value: -1, to: dueDate) ?? dueDate
+        return ChoreScheduler.nextScheduledDate(for: chore, from: anchor) ?? dueDate
+    }
+
+    private func resolvedAssigneeID(
+        for task: Task,
+        fallback: UUID?,
+        chore: RecurringChore
+    ) -> UUID? {
+        if let assigneeId = task.assigneeId,
+           chore.normalizedAssigneeIDs.contains(assigneeId)
+        {
+            return assigneeId
+        }
+
+        return fallback
+    }
+
+    private func fetchCachedChoresForCurrentHousehold() -> [CachedRecurringChore] {
+        guard let modelContext else { return [] }
+
+        if let householdId {
+            let descriptor = FetchDescriptor<CachedRecurringChore>(
+                predicate: #Predicate { $0.householdId == householdId }
+            )
+            return (try? modelContext.fetch(descriptor)) ?? []
+        }
+
+        let descriptor = FetchDescriptor<CachedRecurringChore>()
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func beginMutation(_ id: UUID) {
+        pendingMutationIDs.insert(id)
+    }
+
+    private func endMutation(_ id: UUID) {
+        pendingMutationIDs.remove(id)
+    }
+
+    private func persistChoreUpload(_ chore: RecurringChore) async {
+        do {
+            await cloudKit.ensureReady()
+            _ = try await cloudKit.saveRecurringChore(chore)
+            markCachedChoreSynced(id: chore.id)
+            await replayPendingTaskMutations()
+        } catch {
+            self.error = error
+        }
+    }
+
+    private func persistChoreDelete(_ chore: RecurringChore) async {
+        do {
+            await cloudKit.ensureReady()
+            try await cloudKit.deleteRecurringChore(id: chore.id, householdId: chore.householdId)
+            deleteCachedChore(id: chore.id)
+            await replayPendingTaskMutations()
+        } catch {
+            self.error = error
+        }
+    }
+
+    private func replayPendingTaskMutations() async {
+        guard let modelContext, let householdId else { return }
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(syncMode)
+        taskStore.replayPendingMutationsIfNeeded()
     }
 }
 
@@ -792,7 +1108,8 @@ final class ChoreScheduler {
                     dueDate: nextDate,
                     notes: chore.notes,
                     taskType: .recurring,
-                    recurringChoreId: chore.id
+                    recurringChoreId: chore.id,
+                    deferCloudSync: syncMode == .cloud
                 )
                 await recurringStore.markGenerated(
                     chore,
@@ -864,6 +1181,12 @@ final class ChoreScheduler {
 }
 
 // MARK: - Cached Models
+
+enum RecurringChoreSyncStatus: String {
+    case synced
+    case pendingUpload
+    case pendingDelete
+}
 
 @Model
 final class CachedArea {
@@ -949,6 +1272,8 @@ final class CachedRecurringChore {
     var frequencyDays: Int
     var createdAt: Date
     var updatedAt: Date
+    var syncStatusRaw: String
+    var lastSyncedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -969,7 +1294,9 @@ final class CachedRecurringChore {
         nextAssigneeIndex: Int = 0,
         frequencyDays: Int = 7,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        syncStatusRaw: String = RecurringChoreSyncStatus.synced.rawValue,
+        lastSyncedAt: Date? = Date()
     ) {
         self.id = id
         self.householdId = householdId
@@ -990,6 +1317,8 @@ final class CachedRecurringChore {
         self.frequencyDays = max(frequencyDays, 1)
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.syncStatusRaw = syncStatusRaw
+        self.lastSyncedAt = lastSyncedAt
     }
 
     convenience init(from chore: RecurringChore) {
@@ -1078,3 +1407,5 @@ final class CachedRecurringChore {
         return (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
     }
 }
+
+// swiftlint:enable file_length
