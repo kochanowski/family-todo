@@ -260,14 +260,14 @@ If you need to create a @StateObject with initialization parameters in your view
 // WRONG - creates a new ViewModel instance each time the view's initializer is called
 // (which can happen multiple times during SwiftUI's structural identity evaluation)
 struct MovieDetailsView: View {
-    
+
     @StateObject private var viewModel: MovieDetailsViewModel
-    
+
     init(movie: Movie) {
         let viewModel = MovieDetailsViewModel(movie: movie)
-        _viewModel = StateObject(wrappedValue: viewModel)      
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
-    
+
     var body: some View {
         // ...
     }
@@ -275,15 +275,15 @@ struct MovieDetailsView: View {
 
 // CORRECT - creation in @autoclosure prevents multiple instantiations
 struct MovieDetailsView: View {
-    
+
     @StateObject private var viewModel: MovieDetailsViewModel
-    
+
     init(movie: Movie) {
         _viewModel = StateObject(
             wrappedValue: MovieDetailsViewModel(movie: movie)
-        )      
+        )
     }
-    
+
     var body: some View {
         // ...
     }
@@ -300,7 +300,7 @@ struct MovieDetailsView: View {
 // Parent
 struct ParentView: View {
     @State private var item = Item(name: "Original")
-    
+
     var body: some View {
         ChildView(item: item)
         Button("Change") {
@@ -312,7 +312,7 @@ struct ParentView: View {
 // Wrong - child ignores updates from parent
 struct ChildView: View {
     @State var item: Item  // Accepts initial value only!
-    
+
     var body: some View {
         Text(item.name)  // Shows "Original" forever
     }
@@ -321,7 +321,7 @@ struct ChildView: View {
 // Correct - child receives updates
 struct ChildView: View {
     let item: Item  // Or @Binding if child needs to modify
-    
+
     var body: some View {
         Text(item.name)  // Updates when parent changes
     }
@@ -512,12 +512,12 @@ struct MyView: View {
     @State private var viewModel = ViewModel()
     @AppStorage("theme") private var theme = "light"
     @Environment(\.colorScheme) private var colorScheme
-    
+
     // Passed from parent - not private
     let title: String
     @Binding var isSelected: Bool
     @Bindable var user: User
-    
+
     var body: some View {
         // ...
     }
@@ -543,7 +543,7 @@ class Child: ObservableObject {
 // Workaround - pass child directly to views
 struct ParentView: View {
     @StateObject private var parent = Parent()
-    
+
     var body: some View {
         ChildView(child: parent.child)  // Pass nested object directly
     }
@@ -551,7 +551,7 @@ struct ParentView: View {
 
 struct ChildView: View {
     @ObservedObject var child: Child
-    
+
     var body: some View {
         Text("\(child.value)")
     }

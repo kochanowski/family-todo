@@ -259,23 +259,6 @@ class AreaStore: ObservableObject {
         syncMode == .cloud
     }
 
-    @discardableResult
-    private func saveContextOrSetError(
-        operation: String = "persist recurring chore cache",
-        file: StaticString = #fileID,
-        line: UInt = #line
-    ) -> Bool {
-        StoreContextSaver.saveContextOrSetError(
-            modelContext,
-            store: "RecurringChoreStore",
-            operation: operation,
-            file: file,
-            line: line
-        ) { [self] saveError in
-            error = saveError
-        }
-    }
-
     func loadAreas(householdId: UUID? = nil) async {
         let resolvedHouseholdId = householdId ?? self.householdId
         guard let resolvedHouseholdId else { return }
@@ -424,6 +407,23 @@ final class RecurringChoreStore: ObservableObject {
 
     private var isCloudSyncEnabled: Bool {
         syncMode == .cloud
+    }
+
+    @discardableResult
+    private func saveContextOrSetError(
+        operation: String = "persist recurring chore cache",
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) -> Bool {
+        StoreContextSaver.saveContextOrSetError(
+            modelContext,
+            store: "RecurringChoreStore",
+            operation: operation,
+            file: file,
+            line: line
+        ) { [self] saveError in
+            error = saveError
+        }
     }
 
     func loadChores() async {

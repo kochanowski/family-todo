@@ -32,7 +32,7 @@ VStack {
 // Good - adapts to given space
 struct ProfileCard: View {
     let user: User
-    
+
     var body: some View {
         VStack {
             Image(user.avatar)
@@ -48,7 +48,7 @@ struct ProfileCard: View {
 // Avoid - assumes full screen
 struct ProfileCard: View {
     let user: User
-    
+
     var body: some View {
         VStack {
             Image(user.avatar)
@@ -89,7 +89,7 @@ struct HeaderView: View {
 // Good - caller owns lazy container
 struct FeedView: View {
     let items: [Item]
-    
+
     var body: some View {
         LazyVStack {
             ForEach(items) { item in
@@ -240,7 +240,7 @@ struct LoginView: View {
 struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
-    
+
     var body: some View {
         Form {
             TextField("Email", text: $email)
@@ -267,7 +267,7 @@ struct LoginView: View {
 // Good - action references method
 struct PublishView: View {
     @State private var publishService = PublishService()
-    
+
     var body: some View {
         Button("Publish Project", action: publishService.handlePublish)
     }
@@ -277,7 +277,7 @@ struct PublishView: View {
 struct PublishView: View {
     @State private var isLoading = false
     @State private var showError = false
-    
+
     var body: some View {
         Button("Publish Project") {
             isLoading = true

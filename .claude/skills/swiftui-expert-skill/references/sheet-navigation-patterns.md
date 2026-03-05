@@ -51,16 +51,16 @@ var body: some View {
 struct EditItemSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(DataStore.self) private var store
-    
+
     let item: Item
     @State private var name: String
     @State private var isSaving = false
-    
+
     init(item: Item) {
         self.item = item
         _name = State(initialValue: item.name)
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -82,7 +82,7 @@ struct EditItemSheet: View {
             }
         }
     }
-    
+
     private func save() async {
         isSaving = true
         await store.updateItem(item, name: name)
@@ -93,7 +93,7 @@ struct EditItemSheet: View {
 // Avoid - parent manages sheet actions via closures
 struct ParentView: View {
     @State private var selectedItem: Item?
-    
+
     var body: some View {
         List(items) { item in
             Button(item.name) {
@@ -189,7 +189,7 @@ enum Route: Hashable {
 ```swift
 struct ContentView: View {
     @State private var navigationPath = NavigationPath()
-    
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             List {
@@ -217,7 +217,7 @@ enum DetailRoute: Hashable {
 ```swift
 struct ContentView: View {
     @State private var navigationPath = NavigationPath()
-    
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             RootView()
@@ -226,7 +226,7 @@ struct ContentView: View {
                 }
         }
     }
-    
+
     @ViewBuilder
     private func destinationView(for route: Route) -> some View {
         switch route {
@@ -246,7 +246,7 @@ struct ContentView: View {
 ```swift
 struct ContentView: View {
     @State private var showFullScreen = false
-    
+
     var body: some View {
         Button("Show Full Screen") {
             showFullScreen = true
@@ -263,7 +263,7 @@ struct ContentView: View {
 ```swift
 struct ContentView: View {
     @State private var showPopover = false
-    
+
     var body: some View {
         Button("Show Popover") {
             showPopover = true
@@ -281,7 +281,7 @@ struct ContentView: View {
 ```swift
 struct ContentView: View {
     @State private var showAlert = false
-    
+
     var body: some View {
         Button("Show Alert") {
             showAlert = true
@@ -303,7 +303,7 @@ struct ContentView: View {
 ```swift
 struct ContentView: View {
     @State private var showDialog = false
-    
+
     var body: some View {
         Button("Show Options") {
             showDialog = true
