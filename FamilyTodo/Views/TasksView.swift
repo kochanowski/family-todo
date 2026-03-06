@@ -236,6 +236,11 @@ private struct TasksContent: View {
                 markTasksTutorialAsSeenIfNeeded()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .recurringChoresDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await recurringStore.loadChores()
+            }
+        }
         .sheet(item: $pendingCleanupAction) { action in
             AppConfirmationSheet(
                 title: "Completed Tasks Cleanup",
@@ -330,7 +335,6 @@ private struct TasksContent: View {
                 TaskRow(
                     task: task,
                     assignee: assignee(for: task),
-                    isRotatingRecurring: isRotatingRecurringTask(task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: wipZone(for: index),
@@ -389,7 +393,6 @@ private struct TasksContent: View {
             TaskRow(
                 task: task,
                 assignee: assignee(for: task),
-                isRotatingRecurring: isRotatingRecurringTask(task),
                 categoryName: categoryName(for: task),
                 categoryColor: categoryColor(for: task),
                 wipZone: .normal,
@@ -819,11 +822,6 @@ private struct TasksContent: View {
         return recurringStore.chores.first(where: { $0.id == recurringChoreId })
     }
 
-    private func isRotatingRecurringTask(_ task: Task) -> Bool {
-        guard let recurringChore = recurringChore(for: task) else { return false }
-        return recurringChore.rotationEnabled && recurringChore.normalizedAssigneeIDs.count > 1
-    }
-
     private func nextUpAssigneeName(for task: Task) -> String? {
         guard let recurringChore = recurringChore(for: task),
               recurringChore.rotationEnabled
@@ -1046,6 +1044,20 @@ private struct TasksContent: View {
         }
 
         _ = _Concurrency.Task {
+            if task.taskType == .recurring {
+                let didMove = await store.moveRecurringTaskToBacklog(task)
+                await MainActor.run {
+                    hiddenMovedToIdeasIds.remove(task.id)
+                    if !didMove {
+                        showBanner(.moveToIdeasFailed)
+                    }
+                }
+                if !didMove {
+                    HapticManager.warning()
+                }
+                return
+            }
+
             if userSession.syncMode == .localOnly {
                 do {
                     _ = try await backlogStore.createFromTask(task)
@@ -1236,7 +1248,6 @@ struct TaskRow: View {
 
     let task: Task
     let assignee: Member?
-    let isRotatingRecurring: Bool
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
@@ -1255,54 +1266,23 @@ struct TaskRow: View {
             )
 
             Button(action: onOpenDetail) {
-                HStack {
+                HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
                             .font(themeStore.font(for: .listRowTitle))
                             .foregroundStyle(taskTitleColor)
                             .strikethrough(isCompleted)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
 
-                        HStack(spacing: 6) {
-                            if let categoryName, let categoryColor {
-                                HStack(spacing: 0) {
-                                    Text(categoryName)
-                                        .font(themeStore.font(for: .chip))
-                                        .foregroundStyle(categoryColor)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(categoryColor.opacity(0.12)))
-                            }
-
-                            if let assignee {
-                                MemberBadgeView(
-                                    name: assignee.displayName,
-                                    colorHex: assignee.colorHex
-                                )
-
-                                if isRotatingRecurring {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                        .font(themeStore.font(for: .chip))
-                                        .foregroundStyle(themeStore.accentTabColor)
-                                }
-                            }
-
-                            if let dueDate = task.dueDate {
-                                dueDateLabel(dueDate)
-                            }
-
-                            if task.taskType == .recurring {
-                                Label("Recurring", systemImage: "repeat")
-                                    .font(themeStore.font(for: .chip))
-                                    .foregroundStyle(.purple)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Capsule().fill(Color.purple.opacity(0.12)))
+                        if hasMetadata {
+                            ViewThatFits(in: .horizontal) {
+                                metadataInlineRow
+                                metadataStackedRows
                             }
                         }
                     }
-
-                    Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -1353,7 +1333,84 @@ struct TaskRow: View {
         .clear
     }
 
+    private var hasMetadata: Bool {
+        categoryName != nil || assignee != nil || task.dueDate != nil || task.taskType == .recurring
+    }
+
+    private var hasPrimaryMetadata: Bool {
+        categoryName != nil || assignee != nil
+    }
+
+    private var hasSecondaryMetadata: Bool {
+        task.dueDate != nil || task.taskType == .recurring
+    }
+
+    private var metadataInlineRow: some View {
+        HStack(spacing: 6) {
+            categoryChip
+            assigneeChip
+            dueDateChip
+
+            if task.taskType == .recurring {
+                RecurringIndicatorView()
+            }
+        }
+    }
+
+    private var metadataStackedRows: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if hasPrimaryMetadata {
+                HStack(spacing: 6) {
+                    categoryChip
+                    assigneeChip
+                }
+            }
+
+            if hasSecondaryMetadata {
+                HStack(spacing: 6) {
+                    dueDateChip
+
+                    if task.taskType == .recurring {
+                        RecurringIndicatorView()
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
+    private var categoryChip: some View {
+        if let categoryName, let categoryColor {
+            HStack(spacing: 0) {
+                Text(categoryName)
+                    .font(themeStore.font(for: .chip))
+                    .foregroundStyle(categoryColor)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(categoryColor.opacity(0.12)))
+        }
+    }
+
+    @ViewBuilder
+    private var assigneeChip: some View {
+        if let assignee {
+            MemberBadgeView(
+                name: assignee.displayName,
+                colorHex: assignee.colorHex,
+                displayStyle: .compact
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var dueDateChip: some View {
+        if let dueDate = task.dueDate {
+            dueDateLabel(dueDate)
+        }
+    }
+
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
         let isOverdue = task.isOverdue
@@ -1376,7 +1433,7 @@ struct TaskRow: View {
                 .orange
             }
 
-        Text(dateFormatter.string(from: date))
+        return Text(date.formatted(.dateTime.day().month(.abbreviated)))
             .font(themeStore.font(for: .chip))
             .foregroundStyle(dueColor)
             .padding(.horizontal, 8)
@@ -1385,12 +1442,6 @@ struct TaskRow: View {
                 Capsule()
                     .fill(dueBackgroundColor.opacity(0.12))
             )
-    }
-
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        return formatter
     }
 }
 

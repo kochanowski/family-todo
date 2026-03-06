@@ -873,6 +873,54 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(successors.isEmpty, "Deleted recurring chores must not generate new backlog successors")
     }
 
+    func testMoveRecurringTaskToBacklogPreservesRecurringMetadata() async throws {
+        let recurringChoreId = UUID()
+        let categoryId = UUID()
+        let dueDate = Date(timeIntervalSince1970: 1_736_553_600)
+        let recurringTask = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Take bins out",
+            status: .next,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId, secondaryAssigneeId],
+            backlogCategoryId: categoryId,
+            dueDate: dueDate,
+            taskType: .recurring,
+            recurringChoreId: recurringChoreId,
+            notes: "Blue bin first"
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: recurringTask))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        guard let loadedTask = store.nextTasks.first(where: { $0.id == recurringTask.id }) else {
+            XCTFail("Expected recurring task in Next before moving it back to Ideas")
+            return
+        }
+
+        let didMove = await store.moveRecurringTaskToBacklog(loadedTask)
+
+        XCTAssertTrue(didMove)
+
+        guard let movedTask = store.backlogTasks.first(where: { $0.id == recurringTask.id }) else {
+            XCTFail("Expected recurring task to remain in backlog after demotion")
+            return
+        }
+
+        XCTAssertEqual(movedTask.status, .backlog)
+        XCTAssertEqual(movedTask.taskType, .recurring)
+        XCTAssertEqual(movedTask.recurringChoreId, recurringChoreId)
+        XCTAssertEqual(movedTask.backlogCategoryId, categoryId)
+        XCTAssertEqual(movedTask.assigneeId, assigneeId)
+        XCTAssertEqual(movedTask.assigneeIds, [assigneeId, secondaryAssigneeId])
+        XCTAssertEqual(movedTask.notes, "Blue bin first")
+        XCTAssertEqual(movedTask.dueDate, dueDate)
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {

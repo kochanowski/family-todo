@@ -503,6 +503,8 @@ final class RecurringChoreStore: ObservableObject {
             chore = generatedChore
         }
 
+        broadcastRecurringChoresDidChange()
+
         guard isCloudSyncEnabled else { return }
         await persistChoreUpload(chore)
     }
@@ -560,6 +562,8 @@ final class RecurringChoreStore: ObservableObject {
             }
         }
 
+        broadcastRecurringChoresDidChange()
+
         guard isCloudSyncEnabled else { return }
         await persistChoreUpload(normalizedChore)
     }
@@ -575,6 +579,7 @@ final class RecurringChoreStore: ObservableObject {
             deleteCachedChore(id: chore.id)
         }
         await deletePendingBacklogInstances(for: chore, deferCloudSync: isCloudSyncEnabled)
+        broadcastRecurringChoresDidChange()
         NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
 
         guard isCloudSyncEnabled else { return }
@@ -1059,6 +1064,10 @@ final class RecurringChoreStore: ObservableObject {
         taskStore.setHousehold(householdId)
         taskStore.setSyncMode(syncMode)
         taskStore.replayPendingMutationsIfNeeded()
+    }
+
+    private func broadcastRecurringChoresDidChange() {
+        NotificationCenter.default.post(name: .recurringChoresDidChange, object: nil)
     }
 }
 

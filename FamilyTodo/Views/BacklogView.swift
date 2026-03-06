@@ -459,31 +459,21 @@ private struct BacklogContent: View {
     }
 
     private var emptyState: some View {
-        Group {
-            if hasSeenIdeasTutorial {
-                ContentUnavailableView(
-                    "No Ideas Yet",
-                    systemImage: "lightbulb",
-                    description: Text(
-                        "Capture home improvement projects, wishlists, or future plans here."
-                    )
-                )
-            } else {
-                ContentUnavailableView {
-                    Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
-                } description: {
-                    Text(
-                        "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
-                    )
-                } actions: {
-                    Button("Start Dreaming") {
-                        HapticManager.lightTap()
-                        hasSeenIdeasTutorial = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(themeStore.accentTabColor)
-                }
+        ContentUnavailableView {
+            Label("Create a Category First", systemImage: "folder.badge.plus")
+        } description: {
+            Text(
+                "Ideas are organized into categories like Home, Errands, or Wishlist. Add a category first, then start collecting ideas inside it."
+            )
+        } actions: {
+            Button("Add Category") {
+                HapticManager.lightTap()
+                newCategoryColorHex = MemberColorToken.randomHex()
+                isAddingCategory = true
+                hasSeenIdeasTutorial = true
             }
+            .buttonStyle(.borderedProminent)
+            .tint(themeStore.accentTabColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .offset(y: -40)
@@ -977,7 +967,7 @@ struct CategoryCard: View {
 
             VStack(spacing: 6) {
                 ForEach(backlogTasks) { task in
-                    let canPromote = task.assigneeId != nil
+                    let canPromote = task.taskType == .recurring || task.assigneeId != nil
                     let isPromoting = isPromotingEntry(task.id)
                     BacklogTaskRow(
                         task: task,
@@ -1215,7 +1205,7 @@ private struct UncategorizedBacklogTasksCard: View {
                     BacklogTaskRow(
                         task: task,
                         assignee: assigneeFor(task.assigneeId),
-                        canPromote: task.assigneeId != nil,
+                        canPromote: task.taskType == .recurring || task.assigneeId != nil,
                         isPromotionDisabled: isPromotingTask(task.id),
                         onAssign: { onAssignTask(task) },
                         onPromote: { onPromoteTask(task) },
@@ -1255,19 +1245,17 @@ private struct BacklogTaskRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(task.title)
-                        .font(themeStore.font(for: .listRowTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
+                Text(task.title)
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
 
+                HStack(spacing: 8) {
                     if task.taskType == .recurring {
-                        Label("Recurring", systemImage: "repeat")
-                            .font(themeStore.font(for: .chip))
-                            .foregroundStyle(themeStore.accentTabColor)
+                        RecurringIndicatorView()
                     }
-                }
 
-                HStack(spacing: 8) {
                     if let dueDate = task.dueDate {
                         Text(dueDate, style: .date)
                             .font(themeStore.font(for: .chip))
@@ -1286,13 +1274,15 @@ private struct BacklogTaskRow: View {
             Spacer()
 
             HStack(spacing: 16) {
-                Button(action: onAssign) {
-                    Image(systemName: "person.badge.plus")
-                        .font(.system(size: 14))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                        .frame(width: 32, height: 32)
+                if task.taskType != .recurring {
+                    Button(action: onAssign) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 14))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 if canPromote {
                     Button(action: onPromote) {

@@ -8,6 +8,7 @@ extension Notification.Name {
     static let memberProfileDidChange = Notification.Name("HousePulse.memberProfileDidChange")
     static let taskBoardDataDidChange = Notification.Name("HousePulse.taskBoardDataDidChange")
     static let shoppingListDataDidChange = Notification.Name("HousePulse.shoppingListDataDidChange")
+    static let recurringChoresDidChange = Notification.Name("HousePulse.recurringChoresDidChange")
 }
 
 struct StoreContextSaveError: LocalizedError {
@@ -623,6 +624,19 @@ final class TaskStore: ObservableObject {
         } catch {
             self.error = error
         }
+    }
+
+    @discardableResult
+    func moveRecurringTaskToBacklog(_ task: Task) async -> Bool {
+        guard task.taskType == .recurring else { return false }
+
+        let validation = await moveTask(task, to: .backlog)
+        guard validation == .ok else {
+            return false
+        }
+
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        return true
     }
 
     private func generateRecurringSuccessorIfNeeded(for completedTask: Task) async {

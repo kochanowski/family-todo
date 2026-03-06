@@ -385,22 +385,15 @@ struct RecurringTasksView: View {
 
     var body: some View {
         List {
-            Section("Active recurring tasks") {
-                if activeChores.isEmpty {
-                    Text("No recurring tasks yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(activeChores) { chore in
-                        choreNavigationRow(chore)
-                    }
-                }
-            }
-
-            if !pausedChores.isEmpty {
-                Section("Paused recurring tasks") {
-                    ForEach(pausedChores) { chore in
-                        choreNavigationRow(chore)
-                    }
+            if sortedChores.isEmpty {
+                ContentUnavailableView(
+                    "No Recurring Tasks Yet",
+                    systemImage: "repeat",
+                    description: Text("Create a recurring task to keep chores moving automatically.")
+                )
+            } else {
+                ForEach(sortedChores) { chore in
+                    choreNavigationRow(chore)
                 }
             }
 
@@ -429,23 +422,23 @@ struct RecurringTasksView: View {
             await backlogStore.loadData()
             await memberStore.loadMembers()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .recurringChoresDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await store.loadChores()
+            }
+        }
     }
 
     private var sortedChores: [RecurringChore] {
         store.chores.sorted { lhs, rhs in
+            if lhs.isActive != rhs.isActive {
+                return lhs.isActive && !rhs.isActive
+            }
             if lhs.updatedAt != rhs.updatedAt {
                 return lhs.updatedAt > rhs.updatedAt
             }
             return lhs.createdAt > rhs.createdAt
         }
-    }
-
-    private var activeChores: [RecurringChore] {
-        sortedChores.filter(\.isActive)
-    }
-
-    private var pausedChores: [RecurringChore] {
-        sortedChores.filter { !$0.isActive }
     }
 
     private var activeMembers: [Member] {
@@ -457,61 +450,107 @@ struct RecurringTasksView: View {
     }
 
     private func choreNavigationRow(_ chore: RecurringChore) -> some View {
-        NavigationLink {
-            RecurringTaskEditorView(
-                mode: .edit(choreID: chore.id),
-                store: store,
-                backlogStore: backlogStore,
-                memberStore: memberStore
-            )
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(chore.title)
-                        .font(themeStore.font(for: .inlineTitle))
+        HStack(spacing: 12) {
+            NavigationLink {
+                RecurringTaskEditorView(
+                    mode: .edit(choreID: chore.id),
+                    store: store,
+                    backlogStore: backlogStore,
+                    memberStore: memberStore
+                )
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(chore.title)
+                            .font(themeStore.font(for: .inlineTitle))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
 
-                    if chore.rotationEnabled, chore.normalizedAssigneeIDs.count > 1 {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(themeStore.font(for: .chip))
-                            .foregroundStyle(themeStore.accentTabColor)
+                        if !chore.isActive {
+                            Text("Paused")
+                                .font(themeStore.font(for: .chip))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(Color.secondary.opacity(0.12)))
+                        }
                     }
 
-                    if !chore.isActive {
-                        Text("Paused")
+                    HStack(spacing: 8) {
+                        if let categoryId = chore.categoryId,
+                           let category = backlogStore.categories.first(where: { $0.id == categoryId })
+                        {
+                            Text(category.title)
+                                .font(themeStore.font(for: .chip))
+                                .foregroundStyle(category.color)
+                                .lineLimit(1)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(category.color.opacity(0.12)))
+                        }
+
+                        Text(chore.recurrenceType.rawValue.capitalized)
                             .font(themeStore.font(for: .chip))
                             .foregroundStyle(.secondary)
+
+                        if chore.rotationEnabled, chore.normalizedAssigneeIDs.count > 1 {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(themeStore.font(for: .chip))
+                                .foregroundStyle(themeStore.accentTabColor)
+                        }
+                    }
+
+                    let assignees = assigneeNames(for: chore)
+                    if !assignees.isEmpty {
+                        Text(assignees.joined(separator: " • "))
+                            .font(themeStore.font(for: .chip))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
                     }
                 }
-
-                Text(chore.recurrenceType.rawValue.capitalized)
-                    .font(themeStore.font(for: .chip))
-                    .foregroundStyle(.secondary)
-
-                let assignees = assigneeNames(for: chore)
-                if !assignees.isEmpty {
-                    Text(assignees.joined(separator: " • "))
-                        .font(themeStore.font(for: .chip))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let categoryId = chore.categoryId,
-                   let category = backlogStore.categories.first(where: { $0.id == categoryId })
-                {
-                    Text(category.title)
-                        .font(themeStore.font(for: .chip))
-                        .foregroundStyle(category.color)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(category.color.opacity(0.12)))
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+
+            Toggle(
+                chore.isActive ? "On" : "Off",
+                isOn: Binding(
+                    get: { chore.isActive },
+                    set: { isActive in
+                        setChoreActive(chore, isActive: isActive)
+                    }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .tint(themeStore.accentTabColor)
+            .accessibilityLabel(chore.isActive ? "Turn recurring task off" : "Turn recurring task on")
         }
-        .buttonStyle(.plain)
     }
 
     private func assigneeNames(for chore: RecurringChore) -> [String] {
         chore.normalizedAssigneeIDs.compactMap { id in
             activeMembers.first(where: { $0.id == id })?.displayName
+        }
+    }
+
+    private func setChoreActive(_ chore: RecurringChore, isActive: Bool) {
+        guard chore.isActive != isActive else { return }
+
+        _ = _Concurrency.Task {
+            var updated = chore
+            updated.isActive = isActive
+            if isActive, updated.nextScheduledDate == nil {
+                let scheduleAnchor = updated.lastGeneratedDate ?? Date()
+                updated.nextScheduledDate = ChoreScheduler.nextScheduledDate(
+                    for: updated,
+                    from: scheduleAnchor
+                )
+            }
+            updated.updatedAt = Date()
+            await store.updateChore(updated)
         }
     }
 }
@@ -537,6 +576,8 @@ private struct RecurringTaskEditorView: View {
     @State private var isPaused = false
     @State private var hasLoadedInitialValues = false
     @State private var showDeleteConfirmation = false
+    @State private var showCategoryCreationSheet = false
+    @State private var newCategoryColorHex = MemberColorToken.randomHex()
 
     var body: some View {
         Group {
@@ -547,6 +588,22 @@ private struct RecurringTaskEditorView: View {
                     "Recurring Task Not Found",
                     systemImage: "exclamationmark.triangle",
                     description: Text("This template may have been removed.")
+                )
+            } else if backlogStore.categories.isEmpty {
+                RecurringTaskCategoryRequiredState(
+                    title: isEditMode ? "This Task Needs a Category" : "Let's Start with a Category",
+                    message: isEditMode
+                        ? "Before you save changes, choose or create an Ideas category for this recurring task."
+                        : "Recurring tasks live in Ideas, so they need a place to land first. Create a category like Home, Errands, or Wishlist, then add your recurring task.",
+                    primaryTitle: "Create Category",
+                    secondaryTitle: isEditMode ? "Go Back" : "Not Now",
+                    onPrimary: {
+                        newCategoryColorHex = MemberColorToken.randomHex()
+                        showCategoryCreationSheet = true
+                    },
+                    onSecondary: {
+                        dismiss()
+                    }
                 )
             } else {
                 List {
@@ -583,16 +640,30 @@ private struct RecurringTaskEditorView: View {
                     }
 
                     Section("Details") {
-                        if backlogStore.categories.isEmpty {
-                            Text("Create an Ideas category first. Recurring tasks always need a category.")
+                        Picker("Category", selection: $selectedCategoryId) {
+                            ForEach(backlogStore.categories) { category in
+                                Text(category.title).tag(UUID?.some(category.id))
+                            }
+                        }
+
+                        Button {
+                            newCategoryColorHex = MemberColorToken.randomHex()
+                            showCategoryCreationSheet = true
+                        } label: {
+                            Label("Create Category", systemImage: "folder.badge.plus")
+                                .font(themeStore.font(for: .buttonLabel))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(themeStore.accentTabColor)
+
+                        if !isEditMode {
+                            Text("Recurring tasks always need an Ideas category.")
                                 .font(themeStore.font(for: .bodySmall))
                                 .foregroundStyle(.secondary)
-                        } else {
-                            Picker("Category", selection: $selectedCategoryId) {
-                                ForEach(backlogStore.categories) { category in
-                                    Text(category.title).tag(UUID?.some(category.id))
-                                }
-                            }
+                        } else if selectedCategoryId == nil {
+                            Text("Choose a category before saving your changes.")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(.secondary)
                         }
 
                         Text("Assigned To")
@@ -658,14 +729,38 @@ private struct RecurringTaskEditorView: View {
                     }
                 }
                 .onChange(of: backlogStore.categories.map(\.id)) { _, categoryIDs in
-                    guard !isEditMode, selectedCategoryId == nil else { return }
-                    selectedCategoryId = categoryIDs.first
+                    if categoryIDs.isEmpty {
+                        selectedCategoryId = nil
+                        return
+                    }
+
+                    let selectedCategoryIsStillAvailable = selectedCategoryId.map { categoryIDs.contains($0) } ?? false
+                    if !selectedCategoryIsStillAvailable {
+                        selectedCategoryId = categoryIDs.first
+                    }
                 }
             }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle(isEditMode ? "Edit Recurring Task" : "Add Recurring Task")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showCategoryCreationSheet) {
+            CategoryEditorSheet(
+                title: "New Category",
+                initialName: "",
+                initialColorHex: newCategoryColorHex,
+                primaryTitle: "Create",
+                onCancel: {
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                },
+                onSubmit: { name, colorHex in
+                    newCategoryColorHex = MemberColorToken.randomHex()
+                    _ = _Concurrency.Task {
+                        await backlogStore.addCategory(name, colorHex: colorHex)
+                    }
+                }
+            )
+        }
         .task {
             guard !hasLoadedInitialValues else { return }
             hasLoadedInitialValues = loadInitialValues()
@@ -806,6 +901,36 @@ private struct RecurringTaskEditorView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale.current
         return formatter.weekdaySymbols
+    }
+}
+
+private struct RecurringTaskCategoryRequiredState: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    let title: String
+    let message: String
+    let primaryTitle: String
+    let secondaryTitle: String
+    let onPrimary: () -> Void
+    let onSecondary: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "folder.badge.plus")
+        } description: {
+            Text(message)
+        } actions: {
+            Button(primaryTitle) {
+                onPrimary()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(themeStore.accentTabColor)
+
+            Button(secondaryTitle) {
+                onSecondary()
+            }
+            .buttonStyle(.bordered)
+        }
     }
 }
 

@@ -1,10 +1,16 @@
 import SwiftUI
 
 struct MemberBadgeView: View {
+    enum DisplayStyle {
+        case regular
+        case compact
+    }
+
     @EnvironmentObject private var themeStore: ThemeStore
 
     let name: String
     let colorHex: String
+    var displayStyle: DisplayStyle = .regular
 
     private var badgeColor: Color {
         Color(hex: colorHex)
@@ -18,21 +24,41 @@ struct MemberBadgeView: View {
         String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1)).uppercased()
     }
 
+    private var displayedName: String {
+        switch displayStyle {
+        case .regular:
+            name
+        case .compact:
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedName.split(separator: " ").first.map(String.init) ?? trimmedName
+        }
+    }
+
+    private var avatarSize: CGFloat {
+        switch displayStyle {
+        case .regular:
+            20
+        case .compact:
+            18
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: displayStyle == .compact ? 6 : 4) {
             Text(initial)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: displayStyle == .compact ? 9 : 10, weight: .bold))
                 .foregroundStyle(foregroundColor)
-                .frame(width: 20, height: 20)
+                .frame(width: avatarSize, height: avatarSize)
                 .background(Circle().fill(badgeColor))
 
-            Text(name)
+            Text(displayedName)
                 .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(themeStore.contentPrimaryColor)
+                .lineLimit(1)
         }
-        .padding(.leading, 2)
-        .padding(.trailing, 8)
-        .padding(.vertical, 3)
+        .padding(.leading, displayStyle == .compact ? 2 : 2)
+        .padding(.trailing, displayStyle == .compact ? 7 : 8)
+        .padding(.vertical, displayStyle == .compact ? 2 : 3)
         .background(Capsule().fill(badgeColor.opacity(0.16)))
     }
 }
