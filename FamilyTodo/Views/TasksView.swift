@@ -1347,13 +1347,13 @@ struct TaskRow: View {
 
     private var metadataInlineRow: some View {
         HStack(spacing: 6) {
-            categoryChip
-            assigneeChip
-            dueDateChip
-
             if task.taskType == .recurring {
                 RecurringIndicatorView()
             }
+
+            categoryChip
+            assigneeChip
+            dueDateChip
         }
     }
 
@@ -1361,18 +1361,22 @@ struct TaskRow: View {
         VStack(alignment: .leading, spacing: 6) {
             if hasPrimaryMetadata {
                 HStack(spacing: 6) {
+                    if task.taskType == .recurring {
+                        RecurringIndicatorView()
+                    }
+
                     categoryChip
                     assigneeChip
+                }
+            } else if task.taskType == .recurring {
+                HStack(spacing: 6) {
+                    RecurringIndicatorView()
                 }
             }
 
             if hasSecondaryMetadata {
                 HStack(spacing: 6) {
                     dueDateChip
-
-                    if task.taskType == .recurring {
-                        RecurringIndicatorView()
-                    }
                 }
             }
         }

@@ -44,21 +44,33 @@ struct MemberBadgeView: View {
     }
 
     var body: some View {
-        HStack(spacing: displayStyle == .compact ? 6 : 4) {
-            Text(initial)
-                .font(.system(size: displayStyle == .compact ? 9 : 10, weight: .bold))
-                .foregroundStyle(foregroundColor)
-                .frame(width: avatarSize, height: avatarSize)
-                .background(Circle().fill(badgeColor))
+        Group {
+            switch displayStyle {
+            case .regular:
+                HStack(spacing: 4) {
+                    Text(initial)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(foregroundColor)
+                        .frame(width: avatarSize, height: avatarSize)
+                        .background(Circle().fill(badgeColor))
 
-            Text(displayedName)
-                .font(themeStore.font(for: .bodySmall))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-                .lineLimit(1)
+                    Text(displayedName)
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 2)
+                .padding(.trailing, 8)
+                .padding(.vertical, 3)
+            case .compact:
+                Text(displayedName)
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+            }
         }
-        .padding(.leading, displayStyle == .compact ? 2 : 2)
-        .padding(.trailing, displayStyle == .compact ? 7 : 8)
-        .padding(.vertical, displayStyle == .compact ? 2 : 3)
         .background(Capsule().fill(badgeColor.opacity(0.16)))
     }
 }

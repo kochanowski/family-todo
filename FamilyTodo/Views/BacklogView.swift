@@ -64,8 +64,12 @@ private struct BacklogContent: View {
     @State private var processingPromotionEntryIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
+    private let householdId: UUID
+    private let modelContext: ModelContext
 
     init(householdId: UUID, modelContext: ModelContext) {
+        self.householdId = householdId
+        self.modelContext = modelContext
         _store = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
@@ -562,6 +566,12 @@ private struct BacklogContent: View {
     private func promoteTask(_ task: Task) {
         guard processingPromotionEntryIds.insert(task.id).inserted else { return }
 
+        if task.taskType == .recurring, task.assigneeId == nil {
+            processingPromotionEntryIds.remove(task.id)
+            showBanner(.assigneeRequired)
+            return
+        }
+
         if activeMembers.isEmpty {
             if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
                 completePromotion(of: task, assigneeId: assigneeId)
@@ -742,6 +752,27 @@ private struct BacklogContent: View {
     }
 
     private func updateBacklogTaskAssignment(_ task: Task, assigneeId: UUID) async {
+        if task.taskType == .recurring,
+           let recurringChoreId = task.recurringChoreId
+        {
+            let recurringStore = RecurringChoreStore(
+                householdId: householdId,
+                modelContext: modelContext
+            )
+            recurringStore.setSyncMode(userSession.syncMode)
+            await recurringStore.loadChores()
+
+            if var recurringChore = recurringStore.chores.first(where: { $0.id == recurringChoreId }) {
+                recurringChore.defaultAssigneeIds = [assigneeId]
+                recurringChore.assigneeIds = [assigneeId]
+                recurringChore.rotationEnabled = false
+                recurringChore.nextAssigneeIndex = 0
+                recurringChore.updatedAt = Date()
+                await recurringStore.updateChore(recurringChore)
+                return
+            }
+        }
+
         var updatedTask = task
         updatedTask.assigneeId = assigneeId
         updatedTask.assigneeIds = task.assigneeIds.isEmpty
@@ -967,7 +998,7 @@ struct CategoryCard: View {
 
             VStack(spacing: 6) {
                 ForEach(backlogTasks) { task in
-                    let canPromote = task.taskType == .recurring || task.assigneeId != nil
+                    let canPromote = task.assigneeId != nil
                     let isPromoting = isPromotingEntry(task.id)
                     BacklogTaskRow(
                         task: task,
@@ -1205,7 +1236,7 @@ private struct UncategorizedBacklogTasksCard: View {
                     BacklogTaskRow(
                         task: task,
                         assignee: assigneeFor(task.assigneeId),
-                        canPromote: task.taskType == .recurring || task.assigneeId != nil,
+                        canPromote: task.assigneeId != nil,
                         isPromotionDisabled: isPromotingTask(task.id),
                         onAssign: { onAssignTask(task) },
                         onPromote: { onPromoteTask(task) },
@@ -1274,7 +1305,7 @@ private struct BacklogTaskRow: View {
             Spacer()
 
             HStack(spacing: 16) {
-                if task.taskType != .recurring {
+                if task.taskType != .recurring || task.assigneeId == nil {
                     Button(action: onAssign) {
                         Image(systemName: "person.badge.plus")
                             .font(.system(size: 14))
@@ -1339,7 +1370,8 @@ struct BacklogItemRow: View {
                 if let assignee {
                     MemberBadgeView(
                         name: assignee.displayName,
-                        colorHex: assignee.colorHex
+                        colorHex: assignee.colorHex,
+                        displayStyle: .compact
                     )
                 }
             }

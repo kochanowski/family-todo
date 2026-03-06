@@ -398,7 +398,9 @@ final class RecurringChoreStore: ObservableObject {
     private var syncMode: SyncMode = .cloud
     private lazy var cloudKit = CloudKitManager.shared
     private var pendingMutationIDs: Set<UUID> = []
+    private var mutationIDsDuringCurrentLoad: Set<UUID> = []
     private var isReplayingPendingMutations = false
+    private var needsReloadAfterCurrentLoad = false
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
@@ -436,23 +438,39 @@ final class RecurringChoreStore: ObservableObject {
 
     func loadChores() async {
         guard let householdId else { return }
-        guard !isLoading else { return }
+        guard !isLoading else {
+            needsReloadAfterCurrentLoad = true
+            return
+        }
 
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+        }
 
-        let cachedChores = loadFromCache(householdId: householdId)
-        let pendingSnapshot = pendingSyncSnapshot(from: cachedChores)
+        _ = loadFromCache(householdId: householdId)
         guard isCloudSyncEnabled else { return }
 
         do {
             await cloudKit.ensureReady()
             let fetched = try await cloudKit.fetchRecurringChores(householdId: householdId)
-            chores = mergeCloudSnapshot(fetched, with: pendingSnapshot)
+            let latestPendingSnapshot = pendingSyncSnapshot(from: fetchCachedChoresForCurrentHousehold())
+            let locallyMutatedIDs = mutationIDsDuringCurrentLoad
+            chores = mergeCloudSnapshot(
+                fetched,
+                with: latestPendingSnapshot,
+                locallyMutatedIDs: locallyMutatedIDs
+            )
+            mutationIDsDuringCurrentLoad = []
             syncToCache(fetched)
             replayPendingMutationsInBackground()
         } catch {
             self.error = error
+        }
+
+        if needsReloadAfterCurrentLoad {
+            needsReloadAfterCurrentLoad = false
+            await loadChores()
         }
     }
 
@@ -623,7 +641,8 @@ final class RecurringChoreStore: ObservableObject {
 
     private func mergeCloudSnapshot(
         _ cloudChores: [RecurringChore],
-        with pendingSnapshot: PendingSyncSnapshot
+        with pendingSnapshot: PendingSyncSnapshot,
+        locallyMutatedIDs: Set<UUID>
     ) -> [RecurringChore] {
         var mergedByID = Dictionary(uniqueKeysWithValues: cloudChores.map { ($0.id, $0) })
         let localByID = Dictionary(uniqueKeysWithValues: chores.map { ($0.id, $0) })
@@ -639,9 +658,11 @@ final class RecurringChoreStore: ObservableObject {
             mergedByID.removeValue(forKey: id)
         }
 
-        for id in pendingMutationIDs {
+        for id in locallyMutatedIDs.union(pendingMutationIDs) {
             if let localChore = localByID[id] {
                 mergedByID[id] = localChore
+            } else {
+                mergedByID.removeValue(forKey: id)
             }
         }
 
@@ -1030,6 +1051,9 @@ final class RecurringChoreStore: ObservableObject {
 
     private func beginMutation(_ id: UUID) {
         pendingMutationIDs.insert(id)
+        if isLoading {
+            mutationIDsDuringCurrentLoad.insert(id)
+        }
     }
 
     private func endMutation(_ id: UUID) {
