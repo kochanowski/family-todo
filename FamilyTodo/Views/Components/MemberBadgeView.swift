@@ -27,7 +27,7 @@ struct MemberBadgeView: View {
     private var displayedName: String {
         switch displayStyle {
         case .regular:
-            name
+            return name
         case .compact:
             let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmedName.split(separator: " ").first.map(String.init) ?? trimmedName
@@ -60,5 +60,16 @@ struct MemberBadgeView: View {
         .padding(.trailing, displayStyle == .compact ? 7 : 8)
         .padding(.vertical, displayStyle == .compact ? 2 : 3)
         .background(Capsule().fill(badgeColor.opacity(0.16)))
+    }
+}
+
+struct RecurringIndicatorView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    var body: some View {
+        Image(systemName: "repeat")
+            .font(themeStore.font(for: .chip))
+            .foregroundStyle(themeStore.accentTabColor)
+            .accessibilityLabel("Recurring task")
     }
 }
