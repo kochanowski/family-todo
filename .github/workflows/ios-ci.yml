@@ -220,8 +220,32 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     needs: [build-and-test, swiftlint, cloudkit-schema]
-    # Only run on manual dispatch, tags starting with 'v', or pushes to release/testing branches.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login' || github.ref == 'refs/heads/features-and-testing'))
+    # Run on release/testing lanes and on feature/cloudkit-fixes, allowing that branch to bypass the production schema gate.
+    if: >
+      always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        startsWith(github.ref, 'refs/tags/v') ||
+        (
+          github.event_name == 'push' &&
+          (
+            github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/r4-features' ||
+            github.ref == 'refs/heads/appleid-login' ||
+            github.ref == 'refs/heads/features-and-testing' ||
+            github.ref == 'refs/heads/feature/cloudkit-fixes'
+          )
+        )
+      ) &&
+      needs.build-and-test.result == 'success' &&
+      needs.swiftlint.result == 'success' &&
+      (
+        needs.cloudkit-schema.result == 'success' ||
+        (
+          github.ref == 'refs/heads/feature/cloudkit-fixes' &&
+          needs.cloudkit-schema.result == 'skipped'
+        )
+      )
 
     steps:
       - name: Checkout
