@@ -533,7 +533,7 @@ private struct TasksContent: View {
     }
 
     private var header: some View {
-        AppScreenHeader(title: "Tasks") {
+        AppScreenHeader(title: "Tasks", trailing: {
             if activeFilter == .active {
                 if assigneeFilter == .all {
                     Button(editMode.isEditing ? "Done" : "Reorder") {
@@ -546,7 +546,7 @@ private struct TasksContent: View {
             } else {
                 completedCleanupMenu
             }
-        }
+        })
     }
 
     private var filterToggle: some View {

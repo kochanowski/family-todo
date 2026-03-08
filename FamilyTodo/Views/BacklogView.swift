@@ -443,7 +443,7 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        AppScreenHeader(title: "Ideas") {
+        AppScreenHeader(title: "Ideas", trailing: {
             Button {
                 newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
@@ -454,7 +454,7 @@ private struct BacklogContent: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
-        }
+        })
     }
 
     private var emptyState: some View {
