@@ -335,44 +335,123 @@ private struct ShoppingBundleEditorSheet: View {
 
 private struct ShoppingBundleIconPicker: View {
     @Binding var selectedIcon: String
+    @State private var currentPage: Int
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
+    @ScaledMetric(relativeTo: .body) private var iconTileMinHeight = 52
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    private let gridSpacing: CGFloat = 12
+    private let iconsPerPage = 12
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    init(selectedIcon: Binding<String>) {
+        _selectedIcon = selectedIcon
+        _currentPage = State(initialValue: Self.pageIndex(for: selectedIcon.wrappedValue))
+    }
+
+    var body: some View {
+        TabView(selection: $currentPage) {
+            ForEach(Array(iconPages.enumerated()), id: \.offset) { pageIndex, icons in
+                ShoppingBundleIconPage(
+                    icons: icons,
+                    columns: columns,
+                    iconTileMinHeight: iconTileMinHeight,
+                    selectedIcon: $selectedIcon
+                )
+                .tag(pageIndex)
+            }
+        }
+        .frame(height: pickerHeight)
+        .tabViewStyle(.page(indexDisplayMode: .always))
+        .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+        .onChange(of: selectedIcon) { _, icon in
+            syncCurrentPage(with: icon)
+        }
+    }
+
+    private var iconPages: [[String]] {
+        ShoppingBundle.curatedIcons.chunked(into: iconsPerPage)
+    }
+
+    private var pickerHeight: CGFloat {
+        (iconTileMinHeight * 4) + (gridSpacing * 3) + 34
+    }
+
+    private func syncCurrentPage(with icon: String) {
+        let pageIndex = Self.pageIndex(for: icon)
+        guard currentPage != pageIndex else { return }
+        currentPage = pageIndex
+    }
+
+    private static func pageIndex(for icon: String) -> Int {
+        let resolvedIcon = ShoppingBundle.resolvedIconName(icon)
+        guard let iconIndex = ShoppingBundle.curatedIcons.firstIndex(of: resolvedIcon) else {
+            return 0
+        }
+        return iconIndex / 12
+    }
+}
+
+private struct ShoppingBundleIconPage: View {
+    let icons: [String]
+    let columns: [GridItem]
+    let iconTileMinHeight: CGFloat
+    @Binding var selectedIcon: String
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(ShoppingBundle.curatedIcons, id: \.self) { icon in
-                Button {
-                    selectedIcon = icon
-                } label: {
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(
-                            selectedIcon == icon
-                                ? themeStore.foregroundOnAccent(
-                                    for: themeStore.accentTabColor,
-                                    colorScheme: colorScheme
-                                )
-                                : themeStore.contentPrimaryColor
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(
-                                    selectedIcon == icon
-                                        ? themeStore.accentTabColor
-                                        : themeStore.surfaceElevatedColor
-                                )
-                        }
+        VStack(alignment: .leading, spacing: 0) {
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(icons, id: \.self) { icon in
+                    Button {
+                        selectedIcon = icon
+                    } label: {
+                        Image(systemName: icon)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(
+                                selectedIcon == icon
+                                    ? themeStore.foregroundOnAccent(
+                                        for: themeStore.accentTabColor,
+                                        colorScheme: colorScheme
+                                    )
+                                    : themeStore.contentPrimaryColor
+                            )
+                            .frame(maxWidth: .infinity, minHeight: iconTileMinHeight)
+                            .background {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(
+                                        selectedIcon == icon
+                                            ? themeStore.accentTabColor
+                                            : themeStore.surfaceElevatedColor
+                                    )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(ShoppingBundle.iconLabel(for: icon))
+                    .accessibilityAddTraits(selectedIcon == icon ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(ShoppingBundle.iconLabel(for: icon))
-                .accessibilityAddTraits(selectedIcon == icon ? .isSelected : [])
             }
+
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 2)
+        .padding(.top, 4)
+    }
+}
+
+private extension Array {
+    func chunked(into chunkSize: Int) -> [[Element]] {
+        guard chunkSize > 0, !isEmpty else {
+            return isEmpty ? [] : [self]
+        }
+
+        return stride(from: 0, to: count, by: chunkSize).map { startIndex in
+            Array(self[startIndex ..< Swift.min(startIndex + chunkSize, count)])
+        }
     }
 }
 

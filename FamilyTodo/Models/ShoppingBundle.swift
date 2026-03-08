@@ -9,6 +9,74 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         "shippingbox",
         "cube.box",
         "archivebox",
+        "cart.fill",
+        "basket.fill",
+        "bag.fill",
+        "fork.knife",
+        "cup.and.saucer.fill",
+        "birthday.cake.fill",
+        "wineglass.fill",
+        "fish.fill",
+        "carrot.fill",
+        "sparkles",
+        "drop.fill",
+        "leaf.fill",
+        "house.fill",
+        "pawprint.fill",
+        "car.fill",
+        "gift.fill",
+        "shower.fill",
+        "cross.case.fill",
+        "pill.fill",
+        "bandage.fill",
+        "heart.fill",
+        "star.fill",
+        "moon.stars.fill",
+        "sun.max.fill",
+        "snowflake",
+        "flame.fill",
+        "lightbulb.fill",
+        "book.fill",
+        "paintpalette.fill",
+        "music.note",
+    ]
+    private static let curatedIconLabels = [
+        "shippingbox.fill": "Shipping box",
+        "cube.box.fill": "Packed box",
+        "archivebox.fill": "Archive box",
+        "shippingbox": "Shipping box outline",
+        "cube.box": "Packed box outline",
+        "archivebox": "Archive box outline",
+        "cart.fill": "Shopping cart",
+        "basket.fill": "Market basket",
+        "bag.fill": "Shopping bag",
+        "fork.knife": "Meal plan",
+        "cup.and.saucer.fill": "Breakfast",
+        "birthday.cake.fill": "Celebration",
+        "wineglass.fill": "Drinks",
+        "fish.fill": "Seafood",
+        "carrot.fill": "Produce",
+        "sparkles": "Cleaning",
+        "drop.fill": "Bathroom",
+        "leaf.fill": "Fresh",
+        "house.fill": "Home",
+        "pawprint.fill": "Pets",
+        "car.fill": "Car",
+        "gift.fill": "Party",
+        "shower.fill": "Self care",
+        "cross.case.fill": "Pharmacy",
+        "pill.fill": "Medicine",
+        "bandage.fill": "First aid",
+        "heart.fill": "Favorites",
+        "star.fill": "Special",
+        "moon.stars.fill": "Evening",
+        "sun.max.fill": "Sunny day",
+        "snowflake": "Frozen",
+        "flame.fill": "Grill",
+        "lightbulb.fill": "Household essentials",
+        "book.fill": "School",
+        "paintpalette.fill": "Crafts",
+        "music.note": "Entertainment",
     ]
 
     let id: UUID
@@ -90,21 +158,6 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
     }
 
     static func iconLabel(for icon: String) -> String {
-        switch resolvedIconName(icon) {
-        case "shippingbox.fill":
-            "Shipping box"
-        case "cube.box.fill":
-            "Packed box"
-        case "archivebox.fill":
-            "Archive box"
-        case "shippingbox":
-            "Shipping box outline"
-        case "cube.box":
-            "Packed box outline"
-        case "archivebox":
-            "Archive box outline"
-        default:
-            "Bundle"
-        }
+        curatedIconLabels[resolvedIconName(icon)] ?? "Bundle"
     }
 }
