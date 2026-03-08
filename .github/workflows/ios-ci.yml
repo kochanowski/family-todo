@@ -202,8 +202,8 @@ jobs:
   cloudkit-schema:
     name: CloudKit Schema Gate
     needs: [build-and-test, swiftlint]
-    # Run whenever TestFlight deploy would run (release/testing branches).
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login' || github.ref == 'refs/heads/features-and-testing' || github.ref == 'refs/heads/feature/cloudkit-fixes'))
+    # Run only on release/testing lanes that should promote schema toward Production.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login' || github.ref == 'refs/heads/features-and-testing'))
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
       promote_to_production: true
@@ -221,7 +221,7 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     needs: [build-and-test, swiftlint, cloudkit-schema]
     # Only run on manual dispatch, tags starting with 'v', or pushes to release/testing branches.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login' || github.ref == 'refs/heads/features-and-testing' || github.ref == 'refs/heads/feature/cloudkit-fixes'))
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login' || github.ref == 'refs/heads/features-and-testing'))
 
     steps:
       - name: Checkout

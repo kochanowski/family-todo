@@ -250,10 +250,17 @@ list_field_signatures_from_ckdb() {
     }
 
     in_record {
-      if (match($0, /^[[:space:]]*"([^"]+)"[[:space:]]+([^[:space:],;]+)(.*)$/, captures)) {
-        field_name = captures[1]
-        field_type = toupper(captures[2])
-        flags = toupper(captures[3])
+      line = $0
+      gsub(/\r/, "", line)
+
+      if (line ~ /^[[:space:]]*"/) {
+        sub(/^[[:space:]]*"/, "", line)
+        split(line, segments, "\"")
+        field_name = segments[1]
+        flags = toupper(segments[2])
+        gsub(/^[[:space:]]+/, "", flags)
+        split(flags, flag_parts, /[[:space:]]+/)
+        field_type = toupper(flag_parts[1])
         is_queryable = (index(flags, "QUERYABLE") > 0) ? 1 : 0
         is_sortable = (index(flags, "SORTABLE") > 0) ? 1 : 0
         print record_type "|" field_name "|" field_type "|" is_queryable "|" is_sortable
