@@ -32,7 +32,7 @@ struct BundlesManagementView: View {
             if store.bundles.isEmpty {
                 ContentUnavailableView(
                     "No Bundles Yet",
-                    systemImage: "archivebox",
+                    systemImage: ShoppingBundle.defaultIcon,
                     description: Text(
                         "Create reusable shopping bundles for quick add from the main Shopping button."
                     )
@@ -150,6 +150,7 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var itemDrafts: [BundleItemDraft]
     @State private var isSaving = false
     @State private var showDeleteConfirmation = false
+    @FocusState private var focusedDraftID: UUID?
 
     init(store: ShoppingBundleStore, bundle: ShoppingBundle?) {
         self.store = store
@@ -180,9 +181,14 @@ private struct ShoppingBundleEditorSheet: View {
                 Section("Items") {
                     ForEach($itemDrafts) { $draft in
                         HStack(spacing: 12) {
-                            TextField("Milk", text: $draft.title)
+                            TextField(itemPlaceholder(forDraftID: draft.id), text: $draft.title)
                                 .textInputAutocapitalization(.words)
                                 .autocorrectionDisabled()
+                                .submitLabel(.next)
+                                .focused($focusedDraftID, equals: draft.id)
+                                .onSubmit {
+                                    handleItemSubmit(forDraftID: draft.id)
+                                }
 
                             Button(role: .destructive) {
                                 removeItemDraft(withID: draft.id)
@@ -196,7 +202,7 @@ private struct ShoppingBundleEditorSheet: View {
                     }
 
                     Button {
-                        itemDrafts.append(BundleItemDraft())
+                        appendItemDraft(shouldFocus: true)
                     } label: {
                         Label("Add item", systemImage: "plus.circle")
                     }
@@ -262,6 +268,10 @@ private struct ShoppingBundleEditorSheet: View {
 
     private func removeItemDraft(withID id: UUID) {
         itemDrafts.removeAll { $0.id == id }
+
+        if itemDrafts.isEmpty {
+            appendItemDraft(shouldFocus: false)
+        }
     }
 
     private func saveBundle() async {
@@ -289,6 +299,37 @@ private struct ShoppingBundleEditorSheet: View {
         guard let bundle else { return }
         await store.deleteBundle(bundle)
         dismiss()
+    }
+
+    private func appendItemDraft(shouldFocus: Bool) {
+        let draft = BundleItemDraft()
+        itemDrafts.append(draft)
+
+        guard shouldFocus else { return }
+        focusedDraftID = draft.id
+    }
+
+    private func itemPlaceholder(forDraftID id: UUID) -> String {
+        itemDrafts.first?.id == id ? "Milk" : "Item"
+    }
+
+    private func handleItemSubmit(forDraftID id: UUID) {
+        guard let index = itemDrafts.firstIndex(where: { $0.id == id }) else { return }
+
+        let trimmedTitle = itemDrafts[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextIndex = itemDrafts.index(after: index)
+
+        if nextIndex < itemDrafts.endIndex {
+            focusedDraftID = itemDrafts[nextIndex].id
+            return
+        }
+
+        guard !trimmedTitle.isEmpty else {
+            focusedDraftID = id
+            return
+        }
+
+        appendItemDraft(shouldFocus: true)
     }
 }
 

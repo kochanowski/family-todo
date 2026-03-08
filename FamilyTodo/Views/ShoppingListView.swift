@@ -296,7 +296,7 @@ private struct ShoppingListContent: View {
                 ShoppingCountBadge(count: store.toBuyItems.count)
             }
         } trailing: {
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: 8) {
                 // Clear To Buy button
                 if !store.toBuyItems.isEmpty {
                     Button {
@@ -315,7 +315,7 @@ private struct ShoppingListContent: View {
                 NavigationLink {
                     BundlesManagementView(store: bundleStore)
                 } label: {
-                    Image(systemName: "archivebox")
+                    Image(systemName: ShoppingBundle.defaultIcon)
                         .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(themeStore.contentSecondaryColor)
                         .frame(width: 44, height: 44)

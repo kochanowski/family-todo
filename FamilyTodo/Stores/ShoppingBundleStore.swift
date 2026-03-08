@@ -25,6 +25,7 @@ final class ShoppingBundleStore: ObservableObject {
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
     private var isReplayingPendingMutations = false
+    private var shouldReplayPendingMutationsAfterCurrentPass = false
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -141,11 +142,20 @@ final class ShoppingBundleStore: ObservableObject {
     }
 
     private func replayPendingMutationsInBackground() {
-        guard !isReplayingPendingMutations else { return }
+        if isReplayingPendingMutations {
+            shouldReplayPendingMutationsAfterCurrentPass = true
+            return
+        }
         isReplayingPendingMutations = true
 
         _ = _Concurrency.Task(priority: .utility) { [self] in
-            await flushPendingSync()
+            while true {
+                shouldReplayPendingMutationsAfterCurrentPass = false
+                await flushPendingSync()
+                if !shouldReplayPendingMutationsAfterCurrentPass {
+                    break
+                }
+            }
             isReplayingPendingMutations = false
         }
     }
@@ -229,13 +239,7 @@ final class ShoppingBundleStore: ObservableObject {
         )
 
         guard isCloudSyncEnabled else { return }
-
-        do {
-            _ = try await cloudKit.saveShoppingBundle(bundle)
-            markCachedBundleAwaitingCloudEcho(id: bundle.id)
-        } catch {
-            self.error = error
-        }
+        replayPendingMutationsInBackground()
     }
 
     func updateBundle(_ bundle: ShoppingBundle) async {
@@ -263,13 +267,7 @@ final class ShoppingBundleStore: ObservableObject {
         )
 
         guard isCloudSyncEnabled else { return }
-
-        do {
-            _ = try await cloudKit.saveShoppingBundle(updatedBundle)
-            markCachedBundleAwaitingCloudEcho(id: updatedBundle.id)
-        } catch {
-            self.error = error
-        }
+        replayPendingMutationsInBackground()
     }
 
     func deleteBundle(_ bundle: ShoppingBundle) async {

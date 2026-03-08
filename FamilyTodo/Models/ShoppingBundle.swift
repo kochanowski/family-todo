@@ -1,20 +1,14 @@
 import Foundation
 
 struct ShoppingBundle: Identifiable, Codable, Hashable {
-    static let defaultIcon = "archivebox.fill"
+    static let defaultIcon = "shippingbox.fill"
     static let curatedIcons = [
+        "shippingbox.fill",
+        "cube.box.fill",
         "archivebox.fill",
-        "cart.fill",
-        "fork.knife",
-        "cup.and.saucer.fill",
-        "sparkles",
-        "drop.fill",
-        "leaf.fill",
-        "house.fill",
-        "pawprint.fill",
-        "car.fill",
-        "gift.fill",
-        "shower.fill",
+        "shippingbox",
+        "cube.box",
+        "archivebox",
     ]
 
     let id: UUID
@@ -97,30 +91,18 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
 
     static func iconLabel(for icon: String) -> String {
         switch resolvedIconName(icon) {
+        case "shippingbox.fill":
+            "Shipping box"
+        case "cube.box.fill":
+            "Packed box"
         case "archivebox.fill":
-            "Essentials"
-        case "cart.fill":
-            "Groceries"
-        case "fork.knife":
-            "Recipe"
-        case "cup.and.saucer.fill":
-            "Breakfast"
-        case "sparkles":
-            "Cleaning"
-        case "drop.fill":
-            "Bathroom"
-        case "leaf.fill":
-            "Fresh produce"
-        case "house.fill":
-            "Home"
-        case "pawprint.fill":
-            "Pets"
-        case "car.fill":
-            "Car"
-        case "gift.fill":
-            "Party"
-        case "shower.fill":
-            "Self care"
+            "Archive box"
+        case "shippingbox":
+            "Shipping box outline"
+        case "cube.box":
+            "Packed box outline"
+        case "archivebox":
+            "Archive box outline"
         default:
             "Bundle"
         }

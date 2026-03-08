@@ -32,7 +32,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
         let bundle = ShoppingBundle(
             householdId: householdId,
             name: "Weekend breakfast",
-            icon: "cup.and.saucer.fill",
+            icon: "shippingbox.fill",
             items: ["Eggs", "Bread", "Coffee"],
             sortOrder: 2
         )
@@ -41,7 +41,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
         let restored = cached.toShoppingBundle()
 
         XCTAssertEqual(restored.name, "Weekend breakfast")
-        XCTAssertEqual(restored.icon, "cup.and.saucer.fill")
+        XCTAssertEqual(restored.icon, "shippingbox.fill")
         XCTAssertEqual(restored.items, ["Eggs", "Bread", "Coffee"])
         XCTAssertEqual(restored.sortOrder, 2)
     }
@@ -61,7 +61,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
     func testCreateUpdateDeleteBundleLocalOnlyPersistsCache() async throws {
         await store.createBundle(
             name: "Weekend breakfast",
-            icon: "cup.and.saucer.fill",
+            icon: "shippingbox.fill",
             items: ["Eggs", "Bread", " "]
         )
 
@@ -77,13 +77,13 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertEqual(cachedBundles.first?.itemsJSON, "[\"Eggs\",\"Bread\"]")
 
         created.name = "Sunday breakfast"
-        created.icon = "cart.fill"
+        created.icon = "archivebox.fill"
         created.items = ["Bagels", "Jam"]
         await store.updateBundle(created)
 
         cachedBundles = try modelContainer.mainContext.fetch(createDescriptor)
         XCTAssertEqual(store.bundles.first?.name, "Sunday breakfast")
-        XCTAssertEqual(store.bundles.first?.icon, "cart.fill")
+        XCTAssertEqual(store.bundles.first?.icon, "archivebox.fill")
         XCTAssertEqual(store.bundles.first?.items, ["Bagels", "Jam"])
         XCTAssertEqual(cachedBundles.first?.itemsJSON, "[\"Bagels\",\"Jam\"]")
 
@@ -103,7 +103,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
             id: pendingID,
             householdId: householdId,
             name: "Local breakfast",
-            icon: "cart.fill",
+            icon: "shippingbox.fill",
             items: ["Milk"],
             updatedAt: baseDate.addingTimeInterval(10)
         )

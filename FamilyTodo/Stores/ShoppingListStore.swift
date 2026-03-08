@@ -14,6 +14,7 @@ final class ShoppingListStore: ObservableObject {
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
     private var isReplayingPendingMutations = false
+    private var shouldReplayPendingMutationsAfterCurrentPass = false
 
     struct PendingSyncSnapshot {
         var pendingUploadByID: [UUID: ShoppingItem]
@@ -166,11 +167,20 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private func replayPendingMutationsInBackground() {
-        guard !isReplayingPendingMutations else { return }
+        if isReplayingPendingMutations {
+            shouldReplayPendingMutationsAfterCurrentPass = true
+            return
+        }
         isReplayingPendingMutations = true
 
         _ = _Concurrency.Task(priority: .utility) { [self] in
-            await flushPendingSync()
+            while true {
+                shouldReplayPendingMutationsAfterCurrentPass = false
+                await flushPendingSync()
+                if !shouldReplayPendingMutationsAfterCurrentPass {
+                    break
+                }
+            }
             isReplayingPendingMutations = false
         }
     }
@@ -190,14 +200,35 @@ final class ShoppingListStore: ObservableObject {
 
         var didMutateCache = false
 
-        for cached in pendingUploads {
+        if !pendingUploads.isEmpty {
+            let pendingItems = pendingUploads.map { $0.toShoppingItem() }
+            let syncedAt = Date()
+
             do {
-                _ = try await cloudKit.saveShoppingItem(cached.toShoppingItem())
-                cached.syncStatusRaw = "synced"
-                cached.lastSyncedAt = Date()
+                if pendingItems.count == 1, let item = pendingItems.first {
+                    _ = try await cloudKit.saveShoppingItem(item)
+                } else {
+                    try await cloudKit.saveShoppingItemsBatch(pendingItems)
+                }
+
+                for cached in pendingUploads {
+                    cached.syncStatusRaw = "synced"
+                    cached.lastSyncedAt = syncedAt
+                }
                 didMutateCache = true
             } catch {
                 self.error = error
+
+                for cached in pendingUploads {
+                    do {
+                        _ = try await cloudKit.saveShoppingItem(cached.toShoppingItem())
+                        cached.syncStatusRaw = "synced"
+                        cached.lastSyncedAt = syncedAt
+                        didMutateCache = true
+                    } catch {
+                        self.error = error
+                    }
+                }
             }
         }
 
@@ -244,46 +275,43 @@ final class ShoppingListStore: ObservableObject {
         if !isCloudSyncEnabled {
             return
         }
-
-        do {
-            _ = try await cloudKit.saveShoppingItem(item)
-
-            // Mark as synced
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedShoppingItem>(
-                    predicate: #Predicate { $0.id == item.id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "synced"
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "mark created shopping item as synced")
-                }
-            }
-        } catch {
-            items.removeAll { $0.id == item.id }
-            // Keep in cache with pending status
-            self.error = error
-        }
+        replayPendingMutationsInBackground()
     }
 
     func createItems(fromTitles titles: [String]) async -> Int {
+        guard let householdId else { return 0 }
+
         let cleanedTitles = titles
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
         guard !cleanedTitles.isEmpty else { return 0 }
 
-        var createdCount = 0
-
-        for title in cleanedTitles {
-            let currentCount = items.count
-            await createItem(title: title)
-            if items.count > currentCount {
-                createdCount += 1
-            }
+        let initialSortOrder = nextToBuySortOrder()
+        let newItems = cleanedTitles.enumerated().map { offset, title in
+            ShoppingItem(
+                householdId: householdId,
+                title: title,
+                isBought: false,
+                sortOrder: initialSortOrder + offset
+            )
         }
 
-        return createdCount
+        withAnimation(WowAnimation.spring) {
+            items.append(contentsOf: newItems)
+        }
+
+        upsertCachedItems(
+            newItems,
+            syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date()
+        )
+
+        if isCloudSyncEnabled {
+            replayPendingMutationsInBackground()
+        }
+
+        return newItems.count
     }
 
     // MARK: - Update Item
@@ -725,5 +753,35 @@ final class ShoppingListStore: ObservableObject {
         }
 
         saveContextOrSetError(context, operation: "upsert shopping cache item")
+    }
+
+    private func upsertCachedItems(
+        _ items: [ShoppingItem],
+        syncStatusRaw: String,
+        lastSyncedAt: Date?
+    ) {
+        guard let context = modelContext, !items.isEmpty else { return }
+
+        let itemIDs = Set(items.map(\.id))
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { itemIDs.contains($0.id) }
+        )
+        let cachedItems = (try? context.fetch(descriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
+
+        for item in items {
+            if let cached = cachedByID[item.id] {
+                cached.update(from: item)
+                cached.syncStatusRaw = syncStatusRaw
+                cached.lastSyncedAt = lastSyncedAt
+            } else {
+                let cached = CachedShoppingItem(from: item)
+                cached.syncStatusRaw = syncStatusRaw
+                cached.lastSyncedAt = lastSyncedAt
+                context.insert(cached)
+            }
+        }
+
+        saveContextOrSetError(context, operation: "upsert shopping cache items")
     }
 }

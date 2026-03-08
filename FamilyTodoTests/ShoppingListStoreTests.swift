@@ -160,7 +160,7 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(cached.first?.isBought, true)
     }
 
-    func testCreateItemsFromTitlesAddsEveryNonEmptyTitle() async {
+    func testCreateItemsFromTitlesAddsEveryNonEmptyTitleInOrderAndCachesThem() async throws {
         let createdCount = await store.createItems(
             fromTitles: ["Milk", "  ", "Bread", "\nEggs\n"]
         )
@@ -168,6 +168,14 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(createdCount, 3)
         XCTAssertEqual(store.toBuyItems.count, 3)
         XCTAssertEqual(store.toBuyItems.map(\.title), ["Milk", "Bread", "Eggs"])
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.sortOrder)]
+        )
+        let cachedItems = try modelContainer.mainContext.fetch(descriptor)
+
+        XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Bread", "Eggs"])
     }
 
     private func createBoughtItem(title: String) async {
