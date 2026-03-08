@@ -7,6 +7,10 @@ import UIKit
 @MainActor
 // swiftlint:disable type_body_length
 class HouseholdStore: ObservableObject {
+    private enum DefaultsKey {
+        static let suppressedHouseholdRecoveries = "suppressedHouseholdRecoveries"
+    }
+
     enum LeaveResolution: Equatable {
         case deleteHousehold
         case requireTransfer
@@ -22,13 +26,21 @@ class HouseholdStore: ObservableObject {
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
     private var syncMode: SyncMode = .cloud
+    private let userDefaults: UserDefaults
+    private let recoverySuppressionDuration: TimeInterval
 
     // Cache for sharing controller
     private var activeShare: CKShare?
     private(set) var activeContainer: CKContainer?
 
-    init(modelContext: ModelContext? = nil) {
+    init(
+        modelContext: ModelContext? = nil,
+        userDefaults: UserDefaults = .standard,
+        recoverySuppressionDuration: TimeInterval = 300
+    ) {
         self.modelContext = modelContext
+        self.userDefaults = userDefaults
+        self.recoverySuppressionDuration = recoverySuppressionDuration
     }
 
     func setModelContext(_ context: ModelContext) {
@@ -115,12 +127,20 @@ class HouseholdStore: ObservableObject {
 
             // Prefer participant scope first.
             await cloudKit.setHouseholdScope(.participantShared)
-            resolvedMember = try await cloudKit.fetchMemberByUserId(userId)
+            if let participantMember = try await cloudKit.fetchMemberByUserId(userId),
+               !isRecoverySuppressed(for: participantMember.householdId)
+            {
+                resolvedMember = participantMember
+            }
 
             // Fallback to owner scope if not found.
             if resolvedMember == nil {
                 await cloudKit.setHouseholdScope(.ownerPrivate)
-                resolvedMember = try await cloudKit.fetchMemberByUserId(userId)
+                if let ownerMember = try await cloudKit.fetchMemberByUserId(userId),
+                   !isRecoverySuppressed(for: ownerMember.householdId)
+                {
+                    resolvedMember = ownerMember
+                }
             }
 
             if let member = resolvedMember {
@@ -483,6 +503,8 @@ class HouseholdStore: ObservableObject {
             )
         }
 
+        suppressRecovery(for: household.id)
+        removeHouseholdFromCache(id: household.id)
         clearCurrentHousehold()
     }
 
@@ -540,6 +562,7 @@ class HouseholdStore: ObservableObject {
             }
         }
 
+        suppressRecovery(for: household.id)
         removeHouseholdFromCache(id: household.id)
         clearCurrentHousehold()
     }
@@ -643,6 +666,11 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    func isRecoverySuppressed(for householdId: UUID) -> Bool {
+        let suppressions = loadSuppressedRecoveries(cleaningExpired: true)
+        return suppressions[householdId.uuidString] != nil
+    }
+
     // MARK: - SwiftData Helpers
 
     private func fetchCachedHousehold(
@@ -655,7 +683,7 @@ class HouseholdStore: ObservableObject {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         do {
-            let cachedHouseholds = try context.fetch(descriptor)
+            let cachedHouseholds = try context.fetch(descriptor).filter { !isRecoverySuppressed(for: $0.id) }
             guard !cachedHouseholds.isEmpty else { return nil }
 
             if let preferredHouseholdId,
@@ -722,6 +750,9 @@ class HouseholdStore: ObservableObject {
         let backlogItemDescriptor = FetchDescriptor<CachedBacklogItem>(
             predicate: #Predicate { $0.householdId == householdId }
         )
+        let recurringChoreDescriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
 
         do {
             if let cachedHousehold = try context.fetch(householdDescriptor).first {
@@ -743,12 +774,44 @@ class HouseholdStore: ObservableObject {
             for item in try context.fetch(backlogItemDescriptor) {
                 context.delete(item)
             }
+            for chore in try context.fetch(recurringChoreDescriptor) {
+                context.delete(chore)
+            }
 
             saveContextOrSetError(context, operation: "remove household cache graph")
         } catch {
             print("Cache household removal error: \(error)")
             self.error = error
         }
+    }
+
+    private func suppressRecovery(for householdId: UUID) {
+        var suppressions = loadSuppressedRecoveries(cleaningExpired: true)
+        suppressions[householdId.uuidString] = Date().addingTimeInterval(recoverySuppressionDuration)
+        userDefaults.set(
+            suppressions.mapValues(\.timeIntervalSince1970),
+            forKey: DefaultsKey.suppressedHouseholdRecoveries
+        )
+    }
+
+    private func loadSuppressedRecoveries(cleaningExpired: Bool) -> [String: Date] {
+        let raw = userDefaults.dictionary(forKey: DefaultsKey.suppressedHouseholdRecoveries) as? [String: TimeInterval] ?? [:]
+        let now = Date()
+        let mapped = raw.reduce(into: [String: Date]()) { partialResult, entry in
+            let date = Date(timeIntervalSince1970: entry.value)
+            if !cleaningExpired || date > now {
+                partialResult[entry.key] = date
+            }
+        }
+
+        if cleaningExpired, mapped.count != raw.count {
+            userDefaults.set(
+                mapped.mapValues(\.timeIntervalSince1970),
+                forKey: DefaultsKey.suppressedHouseholdRecoveries
+            )
+        }
+
+        return mapped
     }
 
     // MARK: - Guest Mode Data Seeding

@@ -292,6 +292,18 @@ struct RootView: View {
         guard onboardingState.currentState == .householdSetup else { return }
         guard userSession.hasActiveSession else { return }
 
+        if let householdId = userSession.currentHouseholdID,
+           householdStore.isRecoverySuppressed(for: householdId)
+        {
+            userSession.clearCurrentHousehold()
+        }
+
+        if let household = householdStore.currentHousehold,
+           householdStore.isRecoverySuppressed(for: household.id)
+        {
+            householdStore.clearCurrentHousehold()
+        }
+
         if userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil {
             onboardingState.completeHouseholdSetup(withHousehold: true)
             return
@@ -304,7 +316,9 @@ struct RootView: View {
             preferredHouseholdId: userSession.currentHouseholdID
         )
 
-        if let household = householdStore.currentHousehold {
+        if let household = householdStore.currentHousehold,
+           !householdStore.isRecoverySuppressed(for: household.id)
+        {
             userSession.setCurrentHousehold(household.id)
             onboardingState.completeHouseholdSetup(withHousehold: true)
         }

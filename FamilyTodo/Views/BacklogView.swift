@@ -443,13 +443,7 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Ideas")
-                .font(themeStore.font(for: .screenHeader))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-
-            Spacer()
-
+        AppScreenHeader(title: "Ideas") {
             Button {
                 newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
@@ -457,6 +451,7 @@ private struct BacklogContent: View {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 20))
                     .foregroundStyle(themeStore.accentTabColor)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
         }
@@ -1283,10 +1278,6 @@ private struct BacklogTaskRow: View {
                     .multilineTextAlignment(.leading)
 
                 HStack(spacing: 8) {
-                    if task.taskType == .recurring {
-                        RecurringIndicatorView()
-                    }
-
                     if let dueDate = task.dueDate {
                         Text(dueDate, style: .date)
                             .font(themeStore.font(for: .chip))
@@ -1298,6 +1289,10 @@ private struct BacklogTaskRow: View {
                             name: assignee.displayName,
                             colorHex: assignee.colorHex
                         )
+                    }
+
+                    if task.taskType == .recurring {
+                        RecurringIndicatorView()
                     }
                 }
             }

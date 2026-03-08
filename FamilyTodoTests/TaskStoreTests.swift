@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 @testable import HousePulse
 import SwiftData
 import XCTest
@@ -921,6 +922,85 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(movedTask.dueDate, dueDate)
     }
 
+    func testRecurringSyncToCachePreservesOptimisticallyVisibleChoreWhenCloudOmitsIt() async throws {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+
+        await recurringStore.addChore(
+            title: "Laundry",
+            recurrenceType: .weekly,
+            recurrenceDay: 2,
+            categoryId: UUID()
+        )
+
+        guard let createdChore = recurringStore.chores.first else {
+            XCTFail("Expected recurring chore after local creation")
+            return
+        }
+
+        recurringStore.syncToCache([])
+        await recurringStore.loadChores()
+
+        XCTAssertEqual(recurringStore.chores.count, 1)
+        XCTAssertEqual(recurringStore.chores.first?.id, createdChore.id)
+
+        let cached = try modelContainer.mainContext.fetch(FetchDescriptor<CachedRecurringChore>())
+        XCTAssertEqual(cached.count, 1)
+        XCTAssertEqual(cached.first?.id, createdChore.id)
+    }
+
+    func testRecurringSyncToCacheDoesNotOverwriteOptimisticallyVisibleChoreWithOlderCloudData() async {
+        let recurringStore = RecurringChoreStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+        recurringStore.setSyncMode(.localOnly)
+
+        await recurringStore.addChore(
+            title: "Plants",
+            recurrenceType: .weekly,
+            recurrenceDay: 5,
+            categoryId: UUID()
+        )
+
+        guard let localChore = recurringStore.chores.first else {
+            XCTFail("Expected recurring chore after local creation")
+            return
+        }
+
+        let olderCloudVersion = RecurringChore(
+            id: localChore.id,
+            householdId: localChore.householdId,
+            title: "Old Plants",
+            recurrenceType: localChore.recurrenceType,
+            recurrenceDay: localChore.recurrenceDay,
+            recurrenceDayOfMonth: localChore.recurrenceDayOfMonth,
+            recurrenceInterval: localChore.recurrenceInterval,
+            defaultAssigneeIds: localChore.defaultAssigneeIds,
+            areaId: localChore.areaId,
+            categoryId: localChore.categoryId,
+            isActive: localChore.isActive,
+            lastGeneratedDate: localChore.lastGeneratedDate,
+            nextScheduledDate: localChore.nextScheduledDate,
+            notes: localChore.notes,
+            createdAt: localChore.createdAt,
+            updatedAt: localChore.updatedAt.addingTimeInterval(-120),
+            frequencyDays: localChore.frequencyDays,
+            assigneeIds: localChore.assigneeIds,
+            rotationEnabled: localChore.rotationEnabled,
+            nextAssigneeIndex: localChore.nextAssigneeIndex
+        )
+
+        recurringStore.syncToCache([olderCloudVersion])
+        await recurringStore.loadChores()
+
+        XCTAssertEqual(recurringStore.chores.first?.title, localChore.title)
+        XCTAssertEqual(recurringStore.chores.first?.updatedAt, localChore.updatedAt)
+    }
+
     // MARK: - TaskStoreError Tests
 
     func testTaskStoreErrorDescription() {
@@ -1120,3 +1200,5 @@ final class WIPLimitLogicTests: XCTestCase {
         XCTAssertEqual(sorted[2].title, "Older")
     }
 }
+
+// swiftlint:enable file_length

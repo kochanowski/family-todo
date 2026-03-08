@@ -5,35 +5,14 @@ import UIKit
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
     @EnvironmentObject private var userSession: UserSession
-    @EnvironmentObject private var householdStore: HouseholdStore
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
                 ShoppingListContent(householdId: householdId, modelContext: modelContext)
-            } else if let household = householdStore.currentHousehold {
-                // Failsafe: Sync session if store has household
-                ProgressView()
-                    .onAppear {
-                        userSession.setCurrentHousehold(household.id)
-                    }
             } else {
                 GuidedEmptyStateView()
-                    .task {
-                        // Recovery: Try to load from cache if session is lost
-                        if userSession.currentHouseholdID == nil, let userId = userSession.userId {
-                            print("DEBUG: Attempting household recovery for user: \(userId)")
-                            await householdStore.loadCurrentHouseholdAndMembership(
-                                userId: userId,
-                                preferredHouseholdId: userSession.currentHouseholdID
-                            )
-                            if let household = householdStore.currentHousehold {
-                                print("DEBUG: Recovered household: \(household.id)")
-                                userSession.setCurrentHousehold(household.id)
-                            }
-                        }
-                    }
             }
         }
     }
@@ -61,6 +40,8 @@ private struct ShoppingListContent: View {
     @State private var editingItemText = ""
     @State private var isKeyboardVisible = false
     @State private var didPerformInitialLoad = false
+    @State private var isScreenVisible = false
+    @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
     @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -253,6 +234,13 @@ private struct ShoppingListContent: View {
                 onPrimary: clearToBuy
             )
         }
+        .onAppear {
+            isScreenVisible = true
+        }
+        .onDisappear {
+            isScreenVisible = false
+            cancelPendingShoppingCompletionCelebration()
+        }
     }
 
     // MARK: - Empty State
@@ -291,20 +279,11 @@ private struct ShoppingListContent: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            HStack(alignment: .center, spacing: 10) {
-                Text("Shopping")
-                    .font(themeStore.font(for: .screenHeader))
-                    .foregroundStyle(themeStore.contentPrimaryColor)
-
-                // Item count badge
-                if !store.toBuyItems.isEmpty {
-                    ShoppingCountBadge(count: store.toBuyItems.count)
-                }
+        AppScreenHeader(title: "Shopping") {
+            if !store.toBuyItems.isEmpty {
+                ShoppingCountBadge(count: store.toBuyItems.count)
             }
-
-            Spacer(minLength: 12)
-
+        } trailing: {
             HStack(alignment: .center, spacing: 14) {
                 // Clear To Buy button
                 if !store.toBuyItems.isEmpty {
@@ -510,6 +489,8 @@ private struct ShoppingListContent: View {
         HapticManager.lightTap()
         let shouldCelebrateCompletion = store.toBuyItems.count == 1 && !item.isBought
 
+        cancelPendingShoppingCompletionCelebration()
+
         // Animate item removal
         withAnimation(WowAnimation.easeOut) {
             itemBeingRemoved = item.id
@@ -526,11 +507,11 @@ private struct ShoppingListContent: View {
             _Concurrency.Task {
                 await store.toggleBought(item)
                 itemBeingRemoved = nil
-                if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
-                    celebrationManager.celebrateShoppingComplete()
-                    celebrationManager.triggerConfetti()
-                }
             }
+        }
+
+        if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
+            scheduleShoppingCompletionCelebration()
         }
     }
 
@@ -560,6 +541,21 @@ private struct ShoppingListContent: View {
             await store.clearToBuy()
         }
         HapticManager.success()
+    }
+
+    private func scheduleShoppingCompletionCelebration() {
+        pendingShoppingCompletionCelebrationTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 320_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            guard isScreenVisible else { return }
+            celebrationManager.celebrateShoppingComplete()
+            pendingShoppingCompletionCelebrationTask = nil
+        }
+    }
+
+    private func cancelPendingShoppingCompletionCelebration() {
+        pendingShoppingCompletionCelebrationTask?.cancel()
+        pendingShoppingCompletionCelebrationTask = nil
     }
 
     private func markShoppingTutorialAsSeenIfNeeded() {

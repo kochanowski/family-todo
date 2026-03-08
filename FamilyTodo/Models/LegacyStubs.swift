@@ -399,6 +399,7 @@ final class RecurringChoreStore: ObservableObject {
     private lazy var cloudKit = CloudKitManager.shared
     private var pendingMutationIDs: Set<UUID> = []
     private var mutationIDsDuringCurrentLoad: Set<UUID> = []
+    private var optimisticallyVisibleChoreIDs: Set<UUID> = []
     private var isReplayingPendingMutations = false
     private var needsReloadAfterCurrentLoad = false
 
@@ -463,6 +464,7 @@ final class RecurringChoreStore: ObservableObject {
             )
             mutationIDsDuringCurrentLoad = []
             syncToCache(fetched)
+            optimisticallyVisibleChoreIDs.subtract(fetched.map(\.id))
             replayPendingMutationsInBackground()
         } catch {
             self.error = error
@@ -506,6 +508,7 @@ final class RecurringChoreStore: ObservableObject {
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
 
         beginMutation(chore.id)
+        protectOptimisticVisibility(for: chore.id)
         defer { endMutation(chore.id) }
 
         chores.append(chore)
@@ -549,6 +552,7 @@ final class RecurringChoreStore: ObservableObject {
         guard let index = chores.firstIndex(where: { $0.id == normalizedChore.id }) else { return }
 
         beginMutation(normalizedChore.id)
+        protectOptimisticVisibility(for: normalizedChore.id)
         defer { endMutation(normalizedChore.id) }
 
         let previous = chores[index]
@@ -587,6 +591,7 @@ final class RecurringChoreStore: ObservableObject {
     }
 
     func deleteChore(_ chore: RecurringChore) async {
+        clearOptimisticVisibility(for: chore.id)
         beginMutation(chore.id)
         defer { endMutation(chore.id) }
 
@@ -623,6 +628,7 @@ final class RecurringChoreStore: ObservableObject {
             }
         }
         updated.updatedAt = Date()
+        protectOptimisticVisibility(for: updated.id)
         await updateChore(updated, reconcilePendingBacklog: false)
     }
 
@@ -664,6 +670,16 @@ final class RecurringChoreStore: ObservableObject {
             } else {
                 mergedByID.removeValue(forKey: id)
             }
+        }
+
+        for id in optimisticallyVisibleChoreIDs {
+            guard let localChore = localByID[id] ?? pendingSnapshot.pendingUploadByID[id] else { continue }
+
+            if let cloudChore = mergedByID[id], cloudChore.updatedAt >= localChore.updatedAt {
+                continue
+            }
+
+            mergedByID[id] = localChore
         }
 
         return mergedByID
@@ -858,7 +874,7 @@ final class RecurringChoreStore: ObservableObject {
         return (assigneeId, nextIndex)
     }
 
-    private func syncToCache(_ chores: [RecurringChore]) {
+    func syncToCache(_ chores: [RecurringChore]) {
         guard let modelContext, let householdId else { return }
         let descriptor = FetchDescriptor<CachedRecurringChore>(
             predicate: #Predicate { $0.householdId == householdId }
@@ -874,6 +890,9 @@ final class RecurringChoreStore: ObservableObject {
                 {
                     continue
                 }
+                if optimisticallyVisibleChoreIDs.contains(chore.id), existing.updatedAt > chore.updatedAt {
+                    continue
+                }
                 existing.update(from: chore)
                 existing.syncStatusRaw = RecurringChoreSyncStatus.synced.rawValue
                 existing.lastSyncedAt = Date()
@@ -887,7 +906,8 @@ final class RecurringChoreStore: ObservableObject {
 
         for cached in cachedChores where
             cached.syncStatusRaw == RecurringChoreSyncStatus.synced.rawValue &&
-            !cloudIDs.contains(cached.id)
+            !cloudIDs.contains(cached.id) &&
+            !optimisticallyVisibleChoreIDs.contains(cached.id)
         {
             modelContext.delete(cached)
         }
@@ -1076,10 +1096,19 @@ final class RecurringChoreStore: ObservableObject {
             await cloudKit.ensureReady()
             try await cloudKit.deleteRecurringChore(id: chore.id, householdId: chore.householdId)
             deleteCachedChore(id: chore.id)
+            clearOptimisticVisibility(for: chore.id)
             await replayPendingTaskMutations()
         } catch {
             self.error = error
         }
+    }
+
+    private func protectOptimisticVisibility(for id: UUID) {
+        optimisticallyVisibleChoreIDs.insert(id)
+    }
+
+    private func clearOptimisticVisibility(for id: UUID) {
+        optimisticallyVisibleChoreIDs.remove(id)
     }
 
     private func replayPendingTaskMutations() async {

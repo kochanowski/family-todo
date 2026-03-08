@@ -11,6 +11,59 @@ enum AppChromeMetrics {
     static let keyboardAccessoryBottomInset: CGFloat = 8
 }
 
+struct AppScreenHeader<Accessory: View, Trailing: View>: View {
+    let title: String
+    let accessory: Accessory
+    let trailing: Trailing
+
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    init(
+        title: String,
+        @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.accessory = accessory()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(title)
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+
+                accessory
+            }
+
+            Spacer(minLength: 12)
+
+            trailing
+        }
+        .frame(minHeight: 44, alignment: .center)
+    }
+}
+
+extension AppScreenHeader where Accessory == EmptyView {
+    init(
+        title: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.init(title: title, accessory: { EmptyView() }, trailing: trailing)
+    }
+}
+
+extension AppScreenHeader where Trailing == EmptyView {
+    init(
+        title: String,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
+        self.init(title: title, accessory: accessory, trailing: { EmptyView() })
+    }
+}
+
 /// App tab identity used by native TabView.
 enum AppTab: String, CaseIterable, Hashable, Identifiable {
     case shopping

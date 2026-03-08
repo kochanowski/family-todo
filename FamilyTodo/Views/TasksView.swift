@@ -533,13 +533,7 @@ private struct TasksContent: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
-            Text("Tasks")
-                .font(themeStore.font(for: .screenHeader))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-
-            Spacer()
-
+        AppScreenHeader(title: "Tasks") {
             if activeFilter == .active {
                 if assigneeFilter == .all {
                     Button(editMode.isEditing ? "Done" : "Reorder") {
@@ -1342,18 +1336,18 @@ struct TaskRow: View {
     }
 
     private var hasSecondaryMetadata: Bool {
-        task.dueDate != nil || task.taskType == .recurring
+        task.dueDate != nil
     }
 
     private var metadataInlineRow: some View {
         HStack(spacing: 6) {
-            if task.taskType == .recurring {
-                RecurringIndicatorView()
-            }
-
             categoryChip
             assigneeChip
             dueDateChip
+
+            if task.taskType == .recurring {
+                RecurringIndicatorView()
+            }
         }
     }
 
@@ -1361,22 +1355,26 @@ struct TaskRow: View {
         VStack(alignment: .leading, spacing: 6) {
             if hasPrimaryMetadata {
                 HStack(spacing: 6) {
-                    if task.taskType == .recurring {
-                        RecurringIndicatorView()
-                    }
-
                     categoryChip
                     assigneeChip
-                }
-            } else if task.taskType == .recurring {
-                HStack(spacing: 6) {
-                    RecurringIndicatorView()
+
+                    if task.taskType == .recurring, !hasSecondaryMetadata {
+                        RecurringIndicatorView()
+                    }
                 }
             }
 
             if hasSecondaryMetadata {
                 HStack(spacing: 6) {
                     dueDateChip
+
+                    if task.taskType == .recurring {
+                        RecurringIndicatorView()
+                    }
+                }
+            } else if task.taskType == .recurring, !hasPrimaryMetadata {
+                HStack(spacing: 6) {
+                    RecurringIndicatorView()
                 }
             }
         }
