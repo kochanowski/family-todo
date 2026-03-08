@@ -1,13 +1,13 @@
 # ROADMAP
 
-Last updated: 2026-02-15
+Last updated: 2026-03-08
 
 ## Release Goal (P0 + P1)
 Ship stable MVP with:
 - backlog-first tasks execution,
 - strict WIP enforcement,
 - complete household/member management basics,
-- recurring chores generating backlog tasks,
+- reliable session/household recovery,
 - reliable bottom chrome behavior on iPhone.
 
 ## Now (P0 stabilization)
@@ -19,16 +19,16 @@ Ship stable MVP with:
 3. End-to-end household join/invite polish and error handling.
 4. On-device validation for tab bar glass transition and hit-testing.
 
-## Next (P1 completion)
-1. Recurring chores polish:
-   - richer recurrence presets UX
-   - regression tests for schedule generation windows.
+## Next (P2.7 focus)
+1. Shopping bundles end-to-end:
+   - domain/cache/store/cloud wiring
+   - quick-add management and feedback polish.
 2. Backlog/Tasks UX refinement:
    - quick assignee chips
-   - better recurring provenance in task detail.
+   - clearer promotion and assignment affordances.
 3. CI/test expansion:
    - promotion atomicity tests
-   - recurring metadata tests
+   - shopping bundle persistence coverage
    - task flow smoke tests.
 
 ## Deferred (Later backlog)

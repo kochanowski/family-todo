@@ -104,9 +104,9 @@ Acceptance Criteria: Completion celebrations use tier priority, weekly surprise 
 Regression Risk: Celebration spam or missing feedback on completion; test milestone (5/10), surprise eligibility window, and disabled-celebrations mode.
 
 - [ ] **P2.6 Round-Robin Recurring Task Rotation** ([Details](TODO_DETAILS.md#p26))
-Description: Build a fully functional recurring engine first (completion -> next task generation by frequency), then apply round-robin assignment with persistent `nextAssigneeIndex` and recurring UI cues.
-Acceptance Criteria: Completing a recurring task immediately creates the next instance as `.backlog` with the next due date; with rotation enabled it assigns the next person (A->B->A...), advances cursor safely, and UI shows multi-assignee rotate controls + rotation indicators.
-Regression Risk: Duplicate generation, schedule drift, or cursor desync; test idempotency, day boundaries, assignee list edits, and offline/cloud merge.
+Description: Parked on `feature/recurring-tasks`; not part of the active `feature/cloudkit-fixes` scope while we move on to P2.7.
+Acceptance Criteria: Resume only from the parked branch if/when recurring work is restarted.
+Regression Risk: Branch drift between parked recurring work and active P2.7 changes; re-evaluate before reviving.
 
 - [ ] **P2.7 Shopping Bundles End-to-End** ([Details](TODO_DETAILS.md#p27))
 Description: Implement ShoppingBundle domain/cache/store/cloud plus polished UX: header bundles icon, long-press quick add, management screens, and feedback toast.

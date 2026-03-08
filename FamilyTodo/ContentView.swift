@@ -13,7 +13,6 @@ struct MainAppView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.modelContext) private var modelContext
 
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
@@ -35,9 +34,6 @@ struct MainAppView: View {
             }
             .task {
                 await bootstrapHouseholdIfNeeded()
-            }
-            .task(id: recurringSchedulerKey) {
-                await runRecurringSchedulerIfNeeded()
             }
     }
 
@@ -93,21 +89,6 @@ struct MainAppView: View {
         {
             userSession.setCurrentHousehold(household.id)
         }
-    }
-
-    private var recurringSchedulerKey: String {
-        [
-            userSession.currentHouseholdID?.uuidString ?? "none",
-            userSession.syncMode == .cloud ? "cloud" : "localOnly",
-        ].joined(separator: "|")
-    }
-
-    private func runRecurringSchedulerIfNeeded() async {
-        await ChoreScheduler.shared.runIfNeeded(
-            householdId: userSession.currentHouseholdID,
-            modelContext: modelContext,
-            syncMode: userSession.syncMode
-        )
     }
 }
 

@@ -77,7 +77,6 @@ private struct TasksContent: View {
     @StateObject private var store: TaskStore
     @StateObject private var memberStore: MemberStore
     @StateObject private var backlogStore: BacklogStore
-    @StateObject private var recurringStore: RecurringChoreStore
 
     @State private var taskBeingCompleted: UUID?
     @State private var selectedTask: Task?
@@ -114,9 +113,6 @@ private struct TasksContent: View {
         )
         _backlogStore = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
-        )
-        _recurringStore = StateObject(
-            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
         )
         _selectedTab = selectedTab
     }
@@ -236,11 +232,6 @@ private struct TasksContent: View {
                 markTasksTutorialAsSeenIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .recurringChoresDidChange)) { _ in
-            _ = _Concurrency.Task {
-                await recurringStore.loadChores()
-            }
-        }
         .sheet(item: $pendingCleanupAction) { action in
             AppConfirmationSheet(
                 title: "Completed Tasks Cleanup",
@@ -256,7 +247,6 @@ private struct TasksContent: View {
             TaskDetailSheet(
                 task: task,
                 members: memberStore.members,
-                nextUpAssigneeName: nextUpAssigneeName(for: task),
                 onSave: { updatedTask in
                     _ = _Concurrency.Task {
                         let validation = await store.updateTask(updatedTask)
@@ -811,28 +801,6 @@ private struct TasksContent: View {
         return memberStore.members.first(where: { $0.id == assigneeId })
     }
 
-    private func recurringChore(for task: Task) -> RecurringChore? {
-        guard let recurringChoreId = task.recurringChoreId else { return nil }
-        return recurringStore.chores.first(where: { $0.id == recurringChoreId })
-    }
-
-    private func nextUpAssigneeName(for task: Task) -> String? {
-        guard let recurringChore = recurringChore(for: task),
-              recurringChore.rotationEnabled
-        else {
-            return nil
-        }
-
-        let assigneeIds = recurringChore.normalizedAssigneeIDs
-        guard assigneeIds.count > 1 else {
-            return nil
-        }
-
-        let nextIndex = recurringChore.normalizedRotationCursor()
-        let nextAssigneeId = assigneeIds[nextIndex]
-        return memberStore.members.first(where: { $0.id == nextAssigneeId })?.displayName
-    }
-
     private func isTaskAssignedToOther(_ task: Task) -> Bool {
         let assignedIDs = Set(task.assigneeIds + (task.assigneeId.map { [$0] } ?? []))
         guard !assignedIDs.isEmpty, let currentMemberId else { return false }
@@ -993,14 +961,12 @@ private struct TasksContent: View {
         store.setSyncMode(userSession.syncMode)
         memberStore.setSyncMode(userSession.syncMode)
         backlogStore.setSyncMode(userSession.syncMode)
-        recurringStore.setSyncMode(userSession.syncMode)
 
         async let loadTasks = store.loadTasks()
         async let loadMembers = memberStore.loadMembers()
         async let loadBacklog = backlogStore.loadData()
-        async let loadRecurringChores = recurringStore.loadChores()
 
-        _ = await (loadTasks, loadMembers, loadBacklog, loadRecurringChores)
+        _ = await (loadTasks, loadMembers, loadBacklog)
         normalizeAssigneeFilterSelection()
     }
 
@@ -1038,20 +1004,6 @@ private struct TasksContent: View {
         }
 
         _ = _Concurrency.Task {
-            if task.taskType == .recurring {
-                let didMove = await store.moveRecurringTaskToBacklog(task)
-                await MainActor.run {
-                    hiddenMovedToIdeasIds.remove(task.id)
-                    if !didMove {
-                        showBanner(.moveToIdeasFailed)
-                    }
-                }
-                if !didMove {
-                    HapticManager.warning()
-                }
-                return
-            }
-
             if userSession.syncMode == .localOnly {
                 do {
                     _ = try await backlogStore.createFromTask(task)
@@ -1260,23 +1212,48 @@ struct TaskRow: View {
             )
 
             Button(action: onOpenDetail) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
                             .font(themeStore.font(for: .listRowTitle))
                             .foregroundStyle(taskTitleColor)
                             .strikethrough(isCompleted)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
 
-                        if hasMetadata {
-                            ViewThatFits(in: .horizontal) {
-                                metadataInlineRow
-                                metadataStackedRows
+                        HStack(spacing: 6) {
+                            if let categoryName, let categoryColor {
+                                HStack(spacing: 0) {
+                                    Text(categoryName)
+                                        .font(themeStore.font(for: .chip))
+                                        .foregroundStyle(categoryColor)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(categoryColor.opacity(0.12)))
+                            }
+
+                            if let assignee {
+                                MemberBadgeView(
+                                    name: assignee.displayName,
+                                    colorHex: assignee.colorHex
+                                )
+                            }
+
+                            if let dueDate = task.dueDate {
+                                dueDateLabel(dueDate)
+                            }
+
+                            if task.taskType == .recurring {
+                                Label("Recurring", systemImage: "repeat")
+                                    .font(themeStore.font(for: .chip))
+                                    .foregroundStyle(.purple)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(Color.purple.opacity(0.12)))
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -1327,92 +1304,7 @@ struct TaskRow: View {
         .clear
     }
 
-    private var hasMetadata: Bool {
-        categoryName != nil || assignee != nil || task.dueDate != nil || task.taskType == .recurring
-    }
-
-    private var hasPrimaryMetadata: Bool {
-        categoryName != nil || assignee != nil
-    }
-
-    private var hasSecondaryMetadata: Bool {
-        task.dueDate != nil
-    }
-
-    private var metadataInlineRow: some View {
-        HStack(spacing: 6) {
-            categoryChip
-            assigneeChip
-            dueDateChip
-
-            if task.taskType == .recurring {
-                RecurringIndicatorView()
-            }
-        }
-    }
-
-    private var metadataStackedRows: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if hasPrimaryMetadata {
-                HStack(spacing: 6) {
-                    categoryChip
-                    assigneeChip
-
-                    if task.taskType == .recurring, !hasSecondaryMetadata {
-                        RecurringIndicatorView()
-                    }
-                }
-            }
-
-            if hasSecondaryMetadata {
-                HStack(spacing: 6) {
-                    dueDateChip
-
-                    if task.taskType == .recurring {
-                        RecurringIndicatorView()
-                    }
-                }
-            } else if task.taskType == .recurring, !hasPrimaryMetadata {
-                HStack(spacing: 6) {
-                    RecurringIndicatorView()
-                }
-            }
-        }
-    }
-
     @ViewBuilder
-    private var categoryChip: some View {
-        if let categoryName, let categoryColor {
-            HStack(spacing: 0) {
-                Text(categoryName)
-                    .font(themeStore.font(for: .chip))
-                    .foregroundStyle(categoryColor)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(categoryColor.opacity(0.12)))
-        }
-    }
-
-    @ViewBuilder
-    private var assigneeChip: some View {
-        if let assignee {
-            MemberBadgeView(
-                name: assignee.displayName,
-                colorHex: assignee.colorHex,
-                displayStyle: .compact
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var dueDateChip: some View {
-        if let dueDate = task.dueDate {
-            dueDateLabel(dueDate)
-        }
-    }
-
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
         let isOverdue = task.isOverdue
@@ -1435,7 +1327,7 @@ struct TaskRow: View {
                 .orange
             }
 
-        return Text(date.formatted(.dateTime.day().month(.abbreviated)))
+        Text(dateFormatter.string(from: date))
             .font(themeStore.font(for: .chip))
             .foregroundStyle(dueColor)
             .padding(.horizontal, 8)
@@ -1445,12 +1337,17 @@ struct TaskRow: View {
                     .fill(dueBackgroundColor.opacity(0.12))
             )
     }
+
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        return formatter
+    }
 }
 
 private struct TaskDetailSheet: View {
     let task: Task
     let members: [Member]
-    let nextUpAssigneeName: String?
     let onSave: (Task) -> Void
     let onDelete: (Task) -> Void
 
@@ -1466,13 +1363,11 @@ private struct TaskDetailSheet: View {
     init(
         task: Task,
         members: [Member],
-        nextUpAssigneeName: String? = nil,
         onSave: @escaping (Task) -> Void,
         onDelete: @escaping (Task) -> Void
     ) {
         self.task = task
         self.members = members
-        self.nextUpAssigneeName = nextUpAssigneeName
         self.onSave = onSave
         self.onDelete = onDelete
 
@@ -1510,12 +1405,6 @@ private struct TaskDetailSheet: View {
                             selection: $dueDate,
                             displayedComponents: [.date]
                         )
-                    }
-
-                    if let nextUpAssigneeName {
-                        Label("Next up: \(nextUpAssigneeName)", systemImage: "arrow.triangle.2.circlepath")
-                            .font(themeStore.font(for: .bodySmall))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
                     }
                 }
 

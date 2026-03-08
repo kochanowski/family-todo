@@ -14,6 +14,7 @@ Here is the complete roadmap. Please read it to understand the context, but **on
 
 ### Part 2: Due Dates & Rotating Repetitive Tasks
 **Goal:** Add deadlines and smart rotation for recurring chores.
+**Current status:** Parked on `feature/recurring-tasks`; not included in the active `feature/cloudkit-fixes` branch while P2.7 moves forward.
 **Requirements:**
 *   **Data Model:** Add an optional `dueDate: Date?` to the `Task` model.
 *   **Repetitive Tasks Logic:** Update the repetitive task generation logic (e.g., `TaskTemplate`). Implement a "Round-Robin" (Alternating) assignment policy. If a repetitive task has multiple assignees (e.g., Wojtek and Natka), the system must track whose turn it is and assign the *next* generated task to the person who didn't do it last time.

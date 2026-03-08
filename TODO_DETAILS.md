@@ -222,6 +222,7 @@ Use it together with the one-task-at-a-time workflow.
   - No celebration toast/confetti appears when `celebrationsEnabled == false`.
 
 ## <a id="p26"></a>P2.6 Round-Robin Recurring Task Rotation
+- Status: parked on `feature/recurring-tasks`; removed from the active `feature/cloudkit-fixes` runtime/UI scope.
 - Objective: deliver a fully working recurring-task engine first, then layer deterministic round-robin assignment.
 - In scope:
   - Core engine first (blocking requirement):

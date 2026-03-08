@@ -54,7 +54,7 @@ struct FamilyTodoApp: App {
         _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
     }
 
-    private func scheduleDeferredStartupTasks(modelContext: ModelContext) {
+    private func scheduleDeferredStartupTasks(modelContext _: ModelContext) {
         guard !hasScheduledDeferredStartupTasks else { return }
         hasScheduledDeferredStartupTasks = true
 
@@ -73,12 +73,6 @@ struct FamilyTodoApp: App {
                 userSession: userSession,
                 householdStore: householdStore,
                 onboardingState: onboardingState
-            )
-
-            await ChoreScheduler.shared.runIfNeeded(
-                householdId: userSession.currentHouseholdID,
-                modelContext: modelContext,
-                syncMode: userSession.syncMode
             )
 
             #if !CI
