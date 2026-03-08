@@ -157,7 +157,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     private func triggerRefresh(for recordType: String?) {
         switch recordType {
-        case "ShoppingItem":
+        case "ShoppingItem", "ShoppingBundle":
             NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
         case "Task", "BacklogItem", "BacklogCategory":
             NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
@@ -183,7 +183,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         guard !isLikelySelfNoise(recordName: recordName) else { return }
 
         // Add to pending notifications for aggregation
-        if recordType == "ShoppingItem" {
+        if recordType == "ShoppingItem" || recordType == "ShoppingBundle" {
             pendingShoppingChanges.append(recordType)
         } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" {
             pendingTaskChanges.append(recordType)

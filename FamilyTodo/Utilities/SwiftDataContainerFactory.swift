@@ -89,6 +89,7 @@ enum SwiftDataContainerFactory {
         .init(name: "CachedTask", makeSchema: { Schema([CachedTask.self]) }),
         .init(name: "CachedMember", makeSchema: { Schema([CachedMember.self]) }),
         .init(name: "CachedShoppingItem", makeSchema: { Schema([CachedShoppingItem.self]) }),
+        .init(name: "CachedShoppingBundle", makeSchema: { Schema([CachedShoppingBundle.self]) }),
         .init(name: "CachedBacklogCategory", makeSchema: { Schema([CachedBacklogCategory.self]) }),
         .init(name: "CachedBacklogItem", makeSchema: { Schema([CachedBacklogItem.self]) }),
         .init(name: "CachedHousehold", makeSchema: { Schema([CachedHousehold.self]) }),

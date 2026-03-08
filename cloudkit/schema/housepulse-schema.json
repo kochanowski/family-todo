@@ -125,6 +125,23 @@
       }
     },
     {
+      "name": "ShoppingBundle",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "name", "type": "String", "queryable": false, "sortable": false },
+        { "name": "icon", "type": "String", "queryable": false, "sortable": false },
+        { "name": "itemsJSON", "type": "String", "queryable": false, "sortable": false },
+        { "name": "sortOrder", "type": "Int64", "queryable": false, "sortable": true },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId"],
+        "sort": ["sortOrder"]
+      }
+    },
+    {
       "name": "BacklogCategory",
       "fields": [
         { "name": "id", "type": "String", "queryable": false, "sortable": false },

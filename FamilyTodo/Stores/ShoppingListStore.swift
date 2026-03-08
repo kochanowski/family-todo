@@ -266,6 +266,26 @@ final class ShoppingListStore: ObservableObject {
         }
     }
 
+    func createItems(fromTitles titles: [String]) async -> Int {
+        let cleanedTitles = titles
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !cleanedTitles.isEmpty else { return 0 }
+
+        var createdCount = 0
+
+        for title in cleanedTitles {
+            let currentCount = items.count
+            await createItem(title: title)
+            if items.count > currentCount {
+                createdCount += 1
+            }
+        }
+
+        return createdCount
+    }
+
     // MARK: - Update Item
 
     func updateItem(_ item: ShoppingItem) async {

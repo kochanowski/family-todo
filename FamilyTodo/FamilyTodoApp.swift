@@ -24,6 +24,7 @@ struct FamilyTodoApp: App {
         CachedTask.self,
         CachedMember.self,
         CachedShoppingItem.self,
+        CachedShoppingBundle.self,
         CachedBacklogCategory.self,
         CachedBacklogItem.self,
         CachedHousehold.self,
@@ -383,6 +384,7 @@ struct UITestHelper {
     private static func clearAllData(context: ModelContext) {
         do {
             try context.delete(model: CachedShoppingItem.self)
+            try context.delete(model: CachedShoppingBundle.self)
             try context.delete(model: CachedTask.self)
             try context.delete(model: CachedBacklogItem.self)
             try context.delete(model: CachedBacklogCategory.self)

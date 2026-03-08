@@ -744,6 +744,9 @@ class HouseholdStore: ObservableObject {
         let shoppingDescriptor = FetchDescriptor<CachedShoppingItem>(
             predicate: #Predicate { $0.householdId == householdId }
         )
+        let shoppingBundleDescriptor = FetchDescriptor<CachedShoppingBundle>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
         let backlogCategoryDescriptor = FetchDescriptor<CachedBacklogCategory>(
             predicate: #Predicate { $0.householdId == householdId }
         )
@@ -767,6 +770,9 @@ class HouseholdStore: ObservableObject {
             }
             for item in try context.fetch(shoppingDescriptor) {
                 context.delete(item)
+            }
+            for bundle in try context.fetch(shoppingBundleDescriptor) {
+                context.delete(bundle)
             }
             for category in try context.fetch(backlogCategoryDescriptor) {
                 context.delete(category)

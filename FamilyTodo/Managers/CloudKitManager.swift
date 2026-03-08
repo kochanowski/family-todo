@@ -1594,6 +1594,38 @@ actor CloudKitManager {
         return try records.map(shoppingItem(from:))
     }
 
+    // MARK: - Shopping Bundle
+
+    func saveShoppingBundle(_ bundle: ShoppingBundle) async throws -> CKRecord {
+        let record = shoppingBundleRecord(from: bundle)
+        return try await saveRecordWithZoneRecovery(record, householdId: bundle.householdId)
+    }
+
+    func fetchShoppingBundle(id: UUID) async throws -> ShoppingBundle {
+        let record = try await fetchRecord(id: id)
+        return try shoppingBundle(from: record)
+    }
+
+    func deleteShoppingBundle(id: UUID) async throws {
+        try await deleteRecord(id: id)
+    }
+
+    func deleteShoppingBundle(id: UUID, householdId: UUID) async throws {
+        try await deleteRecord(id: id, householdId: householdId)
+    }
+
+    func fetchShoppingBundles(householdId: UUID) async throws -> [ShoppingBundle] {
+        let predicate = NSPredicate(
+            format: "householdId == %@",
+            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        )
+        let query = CKQuery(recordType: "ShoppingBundle", predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+
+        let records = try await queryRecords(query, householdId: householdId)
+        return try records.map(shoppingBundle(from:))
+    }
+
     // MARK: - Backlog Category
 
     func saveBacklogCategory(_ category: BacklogCategory) async throws -> CKRecord {

@@ -20,6 +20,7 @@ struct ShoppingListView: View {
 
 private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
+    @StateObject private var bundleStore: ShoppingBundleStore
     @StateObject private var restockPulse = RestockPulseState()
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
@@ -42,11 +43,16 @@ private struct ShoppingListContent: View {
     @State private var didPerformInitialLoad = false
     @State private var isScreenVisible = false
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
+    @State private var quickAddToast: ShoppingBundleQuickAddToast?
+    @State private var quickAddToastDismissTask: _Concurrency.Task<Void, Never>?
     @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
             wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
+        )
+        _bundleStore = StateObject(
+            wrappedValue: ShoppingBundleStore(householdId: householdId, modelContext: modelContext)
         )
     }
 
@@ -151,9 +157,7 @@ private struct ShoppingListContent: View {
                             .padding(.bottom, listBottomInset)
                             .scrollDismissesKeyboard(.interactively)
                             .refreshable {
-                                store.setSyncMode(userSession.syncMode)
-                                await store.loadItems()
-                                markShoppingTutorialAsSeenIfNeeded()
+                                await loadShoppingData()
                             }
                             .onChange(of: rapidEntryFocused) { _, focused in
                                 if focused {
@@ -186,15 +190,13 @@ private struct ShoppingListContent: View {
         .task {
             guard !didPerformInitialLoad else { return }
             didPerformInitialLoad = true
-            store.setSyncMode(userSession.syncMode)
-            await store.loadItems()
-            markShoppingTutorialAsSeenIfNeeded()
+            await loadShoppingData()
         }
         .onChange(of: userSession.syncMode) { _, mode in
             store.setSyncMode(mode)
+            bundleStore.setSyncMode(mode)
             _ = _Concurrency.Task {
-                await store.loadItems()
-                markShoppingTutorialAsSeenIfNeeded()
+                await loadShoppingData()
             }
         }
         .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
@@ -216,8 +218,7 @@ private struct ShoppingListContent: View {
             NotificationCenter.default.publisher(for: .shoppingListDataDidChange)
         ) { _ in
             _ = _Concurrency.Task {
-                await store.loadItems()
-                markShoppingTutorialAsSeenIfNeeded()
+                await loadShoppingData()
             }
         }
         .onReceive(
@@ -234,12 +235,23 @@ private struct ShoppingListContent: View {
                 onPrimary: clearToBuy
             )
         }
+        .overlay(alignment: .bottom) {
+            if let quickAddToast {
+                ToastView(message: quickAddToast.message)
+                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                    .transition(ToastView.AnimationTokens.transition)
+                    .id(quickAddToast.id)
+            }
+        }
+        .animation(ToastView.AnimationTokens.curve, value: quickAddToast?.id)
         .onAppear {
             isScreenVisible = true
         }
         .onDisappear {
             isScreenVisible = false
             cancelPendingShoppingCompletionCelebration()
+            cancelQuickAddToastDismiss()
         }
     }
 
@@ -300,6 +312,17 @@ private struct ShoppingListContent: View {
                     .accessibilityIdentifier("shoppingClearButton")
                 }
 
+                NavigationLink {
+                    BundlesManagementView(store: bundleStore)
+                } label: {
+                    Image(systemName: "archivebox")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("shoppingBundlesButton")
+
                 // Recently purchased
                 Button {
                     HapticManager.lightTap()
@@ -327,7 +350,28 @@ private struct ShoppingListContent: View {
 
     // MARK: - Add Pill Button
 
+    @ViewBuilder
     private var addPillButton: some View {
+        if quickAddBundles.isEmpty {
+            addPillButtonBase
+        } else {
+            addPillButtonBase
+                .contextMenu {
+                    ForEach(quickAddBundles) { bundle in
+                        Button {
+                            handleBundleQuickAdd(bundle)
+                        } label: {
+                            Label(
+                                "\(bundle.name) (\(bundle.itemCount))",
+                                systemImage: bundle.resolvedIcon
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    private var addPillButtonBase: some View {
         let foreground = themeStore.foregroundOnAccent(
             for: themeStore.accentTabColor, colorScheme: colorScheme
         )
@@ -356,6 +400,11 @@ private struct ShoppingListContent: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("shoppingAddItemButton")
+        .accessibilityHint(
+            quickAddBundles.isEmpty
+                ? "Double tap to add a shopping item."
+                : "Double tap to add a shopping item. Long press to quickly add a shopping bundle."
+        )
     }
 
     private var rapidEntryRow: some View {
@@ -543,6 +592,14 @@ private struct ShoppingListContent: View {
         HapticManager.success()
     }
 
+    private func loadShoppingData() async {
+        store.setSyncMode(userSession.syncMode)
+        bundleStore.setSyncMode(userSession.syncMode)
+        await store.loadItems()
+        await bundleStore.loadBundles()
+        markShoppingTutorialAsSeenIfNeeded()
+    }
+
     private func scheduleShoppingCompletionCelebration() {
         pendingShoppingCompletionCelebrationTask = _Concurrency.Task { @MainActor in
             try? await _Concurrency.Task.sleep(nanoseconds: 320_000_000)
@@ -558,6 +615,61 @@ private struct ShoppingListContent: View {
         pendingShoppingCompletionCelebrationTask = nil
     }
 
+    private var quickAddBundles: [ShoppingBundle] {
+        bundleStore.quickAddBundles
+    }
+
+    private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
+        cancelEditingItem()
+        dismissRapidEntry()
+
+        _ = _Concurrency.Task {
+            let addedCount = await store.createItems(fromTitles: bundle.normalizedItems)
+            guard addedCount > 0 else { return }
+
+            await MainActor.run {
+                HapticManager.success()
+                showQuickAddToast(
+                    message: quickAddToastMessage(
+                        for: bundle.name,
+                        itemCount: addedCount
+                    )
+                )
+            }
+        }
+    }
+
+    private func showQuickAddToast(message: String) {
+        cancelQuickAddToastDismiss()
+        let toast = ShoppingBundleQuickAddToast(message: message)
+
+        withAnimation(ToastView.AnimationTokens.curve) {
+            quickAddToast = toast
+        }
+
+        let toastID = toast.id
+        quickAddToastDismissTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 2_000_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            guard quickAddToast?.id == toastID else { return }
+
+            withAnimation(ToastView.AnimationTokens.curve) {
+                quickAddToast = nil
+            }
+            quickAddToastDismissTask = nil
+        }
+    }
+
+    private func cancelQuickAddToastDismiss() {
+        quickAddToastDismissTask?.cancel()
+        quickAddToastDismissTask = nil
+    }
+
+    private func quickAddToastMessage(for bundleName: String, itemCount: Int) -> String {
+        let noun = itemCount == 1 ? "item" : "items"
+        return "Added \(bundleName) (\(itemCount) \(noun))"
+    }
+
     private func markShoppingTutorialAsSeenIfNeeded() {
         guard !store.toBuyItems.isEmpty, !hasSeenShoppingTutorial else { return }
         hasSeenShoppingTutorial = true
@@ -566,6 +678,11 @@ private struct ShoppingListContent: View {
     private var cardBackground: Color {
         themeStore.surfaceColor
     }
+}
+
+private struct ShoppingBundleQuickAddToast: Identifiable, Equatable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Shopping Item Row

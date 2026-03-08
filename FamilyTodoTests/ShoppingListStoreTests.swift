@@ -160,6 +160,16 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(cached.first?.isBought, true)
     }
 
+    func testCreateItemsFromTitlesAddsEveryNonEmptyTitle() async {
+        let createdCount = await store.createItems(
+            fromTitles: ["Milk", "  ", "Bread", "\nEggs\n"]
+        )
+
+        XCTAssertEqual(createdCount, 3)
+        XCTAssertEqual(store.toBuyItems.count, 3)
+        XCTAssertEqual(store.toBuyItems.map(\.title), ["Milk", "Bread", "Eggs"])
+    }
+
     private func createBoughtItem(title: String) async {
         await store.createItem(title: title)
 
