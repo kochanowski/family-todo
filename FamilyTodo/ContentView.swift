@@ -38,9 +38,6 @@ struct MainAppView: View {
             .onChange(of: themeStore.tabTintColor) { _, _ in
                 applyTabBarAppearance()
             }
-            .onChange(of: householdStore.currentHousehold?.iconSymbol) { _, _ in
-                applyTabBarAppearance()
-            }
             .onChange(of: themeStore.retroFontScale) { _, _ in
                 applyTabBarAppearance()
             }
