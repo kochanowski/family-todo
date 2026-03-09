@@ -70,13 +70,13 @@ import SwiftUI
 
             switch launchArguments[argumentIndex + 1] {
             case "shopping":
-                [ShoppingBundleQuickAddTip.self]
+                return [ShoppingBundleQuickAddTip.self]
             case "ideas":
-                [IdeaPromotionTip.self]
+                return [IdeaPromotionTip.self]
             case "tasks":
-                [TaskSwipeActionsTip.self]
+                return [TaskSwipeActionsTip.self]
             default:
-                nil
+                return nil
             }
         }
     }
@@ -148,13 +148,6 @@ import SwiftUI
             Image(systemName: ShoppingBundle.defaultIcon)
         }
 
-        var options: [Option] {
-            [
-                .maxDisplayCount(1),
-                .ignoresDisplayFrequency(true),
-            ]
-        }
-
         var rules: [Rule] {
             [
                 #Rule(AppTipEvents.bundleQuickAddUsed) {
@@ -178,13 +171,6 @@ import SwiftUI
             Image(systemName: "arrow.up.circle.fill")
         }
 
-        var options: [Option] {
-            [
-                .maxDisplayCount(1),
-                .ignoresDisplayFrequency(true),
-            ]
-        }
-
         var rules: [Rule] {
             [
                 #Rule(AppTipEvents.ideaPromoted) {
@@ -206,13 +192,6 @@ import SwiftUI
 
         var image: Image? {
             Image(systemName: "hand.draw.fill")
-        }
-
-        var options: [Option] {
-            [
-                .maxDisplayCount(1),
-                .ignoresDisplayFrequency(true),
-            ]
         }
 
         var rules: [Rule] {
