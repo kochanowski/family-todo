@@ -179,34 +179,15 @@ private struct ShoppingBundleEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    ShoppingBundleIconSelector(selectedIcon: $selectedIcon) {
-                        showIconPicker = true
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        TextField(
-                            "",
-                            text: $name,
-                            prompt: Text("Bundle Name")
-                                .foregroundStyle(themeStore.contentSecondaryColor)
+                VStack(alignment: .leading, spacing: 20) {
+                    BundleSectionCard {
+                        ShoppingBundleHeaderRow(
+                            name: $name,
+                            selectedIcon: $selectedIcon,
+                            focusedField: $focusedField,
+                            onSubmitName: focusNextFieldAfterName,
+                            onChooseIcon: { showIconPicker = true }
                         )
-                        .font(themeStore.font(for: .screenHeader))
-                        .textFieldStyle(.plain)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .submitLabel(itemDrafts.isEmpty ? .done : .next)
-                        .focused($focusedField, equals: .name)
-                        .onSubmit {
-                            focusedField = itemDrafts.first.map {
-                                BundleEditorFocus.existing($0.id)
-                            } ?? .composer
-                        }
-
-                        Rectangle()
-                            .fill(themeStore.borderLightColor.opacity(0.75))
-                            .frame(height: 1)
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -230,13 +211,13 @@ private struct ShoppingBundleEditorSheet: View {
 
                                 if draft.id != itemDrafts.last?.id {
                                     Divider()
-                                        .padding(.leading, 44)
+                                        .padding(.leading, 16)
                                 }
                             }
 
                             if !itemDrafts.isEmpty {
                                 Divider()
-                                    .padding(.leading, 44)
+                                    .padding(.leading, 16)
                             }
 
                             ShoppingBundleComposerRow(
@@ -255,8 +236,8 @@ private struct ShoppingBundleEditorSheet: View {
                     }
                 }
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.top, 24)
-                .padding(.bottom, 32)
+                .padding(.top, 20)
+                .padding(.bottom, 28)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(themeStore.canvasColor.ignoresSafeArea())
@@ -323,9 +304,7 @@ private struct ShoppingBundleEditorSheet: View {
                 .composer
             }
 
-        DispatchQueue.main.async {
-            focusedField = nextFocus
-        }
+        setFocus(nextFocus)
     }
 
     private func saveBundle() async {
@@ -377,54 +356,84 @@ private struct ShoppingBundleEditorSheet: View {
         itemDrafts.append(BundleItemDraft(title: trimmedTitle))
         newItemText = ""
 
-        DispatchQueue.main.async {
-            focusedField = .composer
-        }
+        setFocus(.composer)
     }
 
     private func applyInitialFocusIfNeeded() {
         guard !hasAppliedInitialFocus else { return }
         hasAppliedInitialFocus = true
-        DispatchQueue.main.async {
-            focusedField = .name
+        setFocus(.name)
+    }
+
+    private func focusNextFieldAfterName() {
+        focusedField = itemDrafts.first.map {
+            BundleEditorFocus.existing($0.id)
+        } ?? .composer
+    }
+
+    private func setFocus(_ nextFocus: BundleEditorFocus) {
+        Task { @MainActor in
+            focusedField = nextFocus
         }
     }
 }
 
-private struct ShoppingBundleIconSelector: View {
+private struct ShoppingBundleHeaderRow: View {
+    @Binding var name: String
     @Binding var selectedIcon: String
+    let focusedField: FocusState<BundleEditorFocus?>.Binding
+    let onSubmitName: () -> Void
     let onChooseIcon: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: selectedIcon)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(
-                    themeStore.foregroundOnAccent(
-                        for: themeStore.accentTabColor,
-                        colorScheme: colorScheme
-                    )
-                )
-                .frame(width: 60, height: 60)
-                .background {
-                    Circle()
-                        .fill(themeStore.accentTabColor)
+        HStack(spacing: 14) {
+            TextField(
+                "",
+                text: $name,
+                prompt: Text("Bundle Name")
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+            )
+            .font(themeStore.font(for: .screenHeader))
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.words)
+            .autocorrectionDisabled()
+            .submitLabel(.next)
+            .focused(focusedField, equals: .name)
+            .onSubmit(onSubmitName)
+
+            Button(action: onChooseIcon) {
+                HStack(spacing: 8) {
+                    Image(systemName: selectedIcon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(
+                            themeStore.foregroundOnAccent(
+                                for: themeStore.accentTabColor,
+                                colorScheme: colorScheme
+                            )
+                        )
+                        .frame(width: 38, height: 38)
+                        .background {
+                            Circle()
+                                .fill(themeStore.accentTabColor)
+                        }
+                        .accessibilityHidden(true)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .accessibilityHidden(true)
                 }
-                .accessibilityHidden(true)
-
-            Text(ShoppingBundle.iconLabel(for: selectedIcon))
-                .font(themeStore.font(for: .inlineTitle))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-
-            Button("Change Icon", action: onChooseIcon)
-                .font(themeStore.font(for: .buttonLabel))
-                .buttonStyle(.bordered)
-                .tint(themeStore.accentTabColor)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Change Icon")
+            .accessibilityValue(ShoppingBundle.iconLabel(for: selectedIcon))
         }
-        .accessibilityElement(children: .combine)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 }
 
@@ -565,12 +574,6 @@ private struct ShoppingBundleItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 7))
-                .foregroundStyle(themeStore.contentSecondaryColor.opacity(0.55))
-                .frame(width: 16, height: 16)
-                .accessibilityHidden(true)
-
             TextField("Item", text: $title)
                 .font(themeStore.font(for: .listRowTitle))
                 .textFieldStyle(.plain)
@@ -604,7 +607,7 @@ private struct ShoppingBundleComposerRow: View {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(themeStore.accentTabColor)
-                .frame(width: 16, height: 16)
+                .frame(width: 20, height: 20)
                 .accessibilityHidden(true)
 
             TextField(

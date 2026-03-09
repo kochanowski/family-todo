@@ -176,7 +176,6 @@ private struct TasksContent: View {
                         await refreshData()
                         markTasksTutorialAsSeenIfNeeded()
                     }
-                    .animation(.default, value: visibleTaskAnimationIDs)
                 }
             } else {
                 ProgressView("Loading tasks...")
@@ -375,6 +374,7 @@ private struct TasksContent: View {
                 !hiddenPendingDeleteIds.isEmpty ||
                 !hiddenMovedToIdeasIds.isEmpty
         )
+        .animation(.default, value: activeTaskAnimationIDs)
     }
 
     private var completedTasksContent: some View {
@@ -399,6 +399,7 @@ private struct TasksContent: View {
             .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
             .tasksListRowStyle(taskListRowInsets)
         }
+        .animation(.default, value: completedTaskAnimationIDs)
     }
 
     private var activeTasksEmptyState: some View {
@@ -513,13 +514,12 @@ private struct TasksContent: View {
         store.recentlyDoneTasks.filter(matchesAssigneeFilter)
     }
 
-    private var visibleTaskAnimationIDs: [UUID] {
-        switch activeFilter {
-        case .active:
-            filteredActiveTasks.map(\.id)
-        case .completed:
-            filteredCompletedTasks.map(\.id)
-        }
+    private var activeTaskAnimationIDs: [UUID] {
+        filteredActiveTasks.map(\.id)
+    }
+
+    private var completedTaskAnimationIDs: [UUID] {
+        filteredCompletedTasks.map(\.id)
     }
 
     private var shouldShowAssigneeFilterChips: Bool {

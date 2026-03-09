@@ -17,11 +17,38 @@ class HouseholdStore: ObservableObject {
         case deactivateMembership
     }
 
+    enum SetupResolutionState: Equatable {
+        case idle
+        case loading(key: String)
+        case resolved(key: String, householdCount: Int)
+
+        func matches(key: String) -> Bool {
+            switch self {
+            case let .loading(storedKey):
+                storedKey == key
+            case let .resolved(storedKey, _):
+                storedKey == key
+            case .idle:
+                false
+            }
+        }
+
+        var resolvedHouseholdCount: Int? {
+            switch self {
+            case let .resolved(_, householdCount):
+                householdCount
+            case .idle, .loading:
+                nil
+            }
+        }
+    }
+
     @Published var currentHousehold: Household?
     @Published var isLoading = false
     @Published var error: Error?
     @Published var share: CKShare?
     @Published var activeInviteCode: String?
+    @Published private(set) var setupResolutionState: SetupResolutionState = .idle
 
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
@@ -123,29 +150,9 @@ class HouseholdStore: ObservableObject {
 
             // If checking cloud for the first time on this device
             print("DEBUG: Checking CloudKit for existing household membership...")
-            var resolvedMember: Member?
 
-            // Prefer participant scope first.
-            await cloudKit.setHouseholdScope(.participantShared)
-            if let participantMember = try await cloudKit.fetchMemberByUserId(userId),
-               !isRecoverySuppressed(for: participantMember.householdId)
-            {
-                resolvedMember = participantMember
-            }
-
-            // Fallback to owner scope if not found.
-            if resolvedMember == nil {
-                await cloudKit.setHouseholdScope(.ownerPrivate)
-                if let ownerMember = try await cloudKit.fetchMemberByUserId(userId),
-                   !isRecoverySuppressed(for: ownerMember.householdId)
-                {
-                    resolvedMember = ownerMember
-                }
-            }
-
-            if let member = resolvedMember {
-                print("DEBUG: Found member membership for household: \(member.householdId)")
-                let fresh = try await cloudKit.fetchHousehold(id: member.householdId)
+            if let fresh = try await resolveRecoverableCloudHousehold(userId: userId) {
+                print("DEBUG: Found recoverable household in cloud: \(fresh.id)")
                 await setCloudScope(for: fresh, userId: userId)
                 await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
                 updateCache(with: fresh)
@@ -173,6 +180,8 @@ class HouseholdStore: ObservableObject {
             syncMode == .localOnly || syncMode == .cloud,
             "Invalid sync mode for household creation"
         )
+
+        try await ensureUserCanStartSingleHousehold(userId: userId)
 
         isLoading = true
         defer { isLoading = false }
@@ -321,6 +330,8 @@ class HouseholdStore: ObservableObject {
     }
 
     func joinHousehold(withInviteInput input: String, userId: String, displayName: String) async throws {
+        try await ensureUserCanStartSingleHousehold(userId: userId)
+
         isLoading = true
         defer { isLoading = false }
 
@@ -356,6 +367,8 @@ class HouseholdStore: ObservableObject {
     }
 
     func joinHousehold(metadata: CKShare.Metadata, userId: String, displayName: String) async throws {
+        try await ensureUserCanStartSingleHousehold(userId: userId)
+
         isLoading = true
         defer { isLoading = false }
 
@@ -671,40 +684,127 @@ class HouseholdStore: ObservableObject {
         return suppressions[householdId.uuidString] != nil
     }
 
+    func prepareForSetupResolution(key: String) {
+        guard !setupResolutionState.matches(key: key)
+            || setupResolutionState.resolvedHouseholdCount != nil
+        else {
+            return
+        }
+        setupResolutionState = .loading(key: key)
+    }
+
+    func completeSetupResolution(key: String, householdCount: Int) {
+        setupResolutionState = .resolved(
+            key: key,
+            householdCount: normalizedSingleHouseholdCount(householdCount)
+        )
+    }
+
+    func resetSetupResolution() {
+        setupResolutionState = .idle
+    }
+
+    func cachedRecoverableHouseholdCount(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Int {
+        normalizedSingleHouseholdCount(fetchRecoverableCachedHouseholds(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        ).count)
+    }
+
     // MARK: - SwiftData Helpers
 
     private func fetchCachedHousehold(
         userId: String,
         preferredHouseholdId: UUID?
     ) -> CachedHousehold? {
-        guard let context = modelContext else { return nil }
+        let cachedHouseholds = fetchRecoverableCachedHouseholds(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+        guard !cachedHouseholds.isEmpty else { return nil }
+
+        if let preferredHouseholdId,
+           let preferredMatch = cachedHouseholds.first(where: { $0.id == preferredHouseholdId })
+        {
+            return preferredMatch
+        }
+
+        if let ownerMatch = cachedHouseholds.first(where: { $0.ownerId == userId }) {
+            return ownerMatch
+        }
+
+        return cachedHouseholds.first
+    }
+
+    private func fetchRecoverableCachedHouseholds(
+        userId _: String,
+        preferredHouseholdId _: UUID?
+    ) -> [CachedHousehold] {
+        guard let context = modelContext else { return [] }
 
         let descriptor = FetchDescriptor<CachedHousehold>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
+
         do {
             let cachedHouseholds = try context.fetch(descriptor).filter { !isRecoverySuppressed(for: $0.id) }
-            guard !cachedHouseholds.isEmpty else { return nil }
-
-            if let preferredHouseholdId,
-               let preferredMatch = cachedHouseholds.first(where: { $0.id == preferredHouseholdId })
-            {
-                return preferredMatch
+            if cachedHouseholds.count > 1 {
+                print("DEBUG: Multiple recoverable households found locally; enforcing single-household mode.")
             }
-
-            if let ownerMatch = cachedHouseholds.first(where: { $0.ownerId == userId }) {
-                return ownerMatch
-            }
-
-            if cachedHouseholds.count == 1 {
-                return cachedHouseholds.first
-            }
-
-            return cachedHouseholds.first
+            return cachedHouseholds
         } catch {
             print("Fetch error: \(error)")
-            return nil
+            return []
         }
+    }
+
+    private func ensureUserCanStartSingleHousehold(userId: String) async throws {
+        if let household = currentHousehold,
+           !isRecoverySuppressed(for: household.id)
+        {
+            throw HouseholdError.alreadyInHousehold
+        }
+
+        if let cachedHousehold = fetchCachedHousehold(userId: userId, preferredHouseholdId: nil) {
+            currentHousehold = cachedHousehold.toHousehold()
+            throw HouseholdError.alreadyInHousehold
+        }
+
+        guard syncMode == .cloud else { return }
+
+        await cloudKit.ensureReady()
+        try await cloudKit.checkAvailability()
+
+        if let existingCloudHousehold = try await resolveRecoverableCloudHousehold(userId: userId) {
+            updateCache(with: existingCloudHousehold)
+            currentHousehold = existingCloudHousehold
+            throw HouseholdError.alreadyInHousehold
+        }
+    }
+
+    private func resolveRecoverableCloudHousehold(userId: String) async throws -> Household? {
+        await cloudKit.setHouseholdScope(.participantShared)
+        if let participantMember = try await cloudKit.fetchMemberByUserId(userId),
+           !isRecoverySuppressed(for: participantMember.householdId)
+        {
+            return try await cloudKit.fetchHousehold(id: participantMember.householdId)
+        }
+
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        if let ownerMember = try await cloudKit.fetchMemberByUserId(userId),
+           !isRecoverySuppressed(for: ownerMember.householdId)
+        {
+            return try await cloudKit.fetchHousehold(id: ownerMember.householdId)
+        }
+
+        return nil
+    }
+
+    private func normalizedSingleHouseholdCount(_ count: Int) -> Int {
+        count > 0 ? 1 : 0
     }
 
     private func updateCache(with household: Household) {

@@ -198,9 +198,6 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
-    @State private var isInitializingHouseholdSetup = false
-    @State private var hasResolvedHouseholdSetup = false
-    @State private var resolvedHouseholdCount = 0
 
     var body: some View {
         Group {
@@ -240,18 +237,21 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.3), value: onboardingState.currentState)
         .onChange(of: userSession.hasActiveSession) { _, hasSession in
             if !hasSession, onboardingState.currentState != .onboarding {
+                householdStore.resetSetupResolution()
                 onboardingState.openAuth()
             }
         }
         .onChange(of: onboardingState.currentState) { _, newState in
             if newState == .householdSetup {
-                hasResolvedHouseholdSetup = false
-                resolvedHouseholdCount = 0
+                householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
             } else {
-                isInitializingHouseholdSetup = false
-                hasResolvedHouseholdSetup = false
-                resolvedHouseholdCount = 0
+                householdStore.resetSetupResolution()
             }
+        }
+        .onChange(of: householdSetupResolutionKey) { _, newKey in
+            guard onboardingState.currentState == .householdSetup else { return }
+            guard userSession.hasActiveSession else { return }
+            householdStore.prepareForSetupResolution(key: newKey)
         }
         .task(id: pendingProcessingKey) {
             await shareAcceptanceCoordinator.processPendingIfPossible(
@@ -303,18 +303,37 @@ struct RootView: View {
         ].joined(separator: "|")
     }
 
+    private var householdSetupResolutionKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
     private func recoverHouseholdRouteIfNeeded() async {
         guard onboardingState.currentState == .householdSetup else { return }
         guard userSession.hasActiveSession else { return }
 
-        isInitializingHouseholdSetup = true
-        hasResolvedHouseholdSetup = false
-        resolvedHouseholdCount = 0
+        let resolutionKey = householdSetupResolutionKey
+        householdStore.prepareForSetupResolution(key: resolutionKey)
         defer {
-            isInitializingHouseholdSetup = false
             if onboardingState.currentState == .householdSetup {
-                resolvedHouseholdCount = householdStore.currentHousehold == nil ? 0 : 1
-                hasResolvedHouseholdSetup = true
+                let cachedCount =
+                    if let userId = userSession.userId {
+                        householdStore.cachedRecoverableHouseholdCount(
+                            userId: userId,
+                            preferredHouseholdId: userSession.currentHouseholdID
+                        )
+                    } else {
+                        0
+                    }
+                let resolvedCount = max(cachedCount, householdStore.currentHousehold == nil ? 0 : 1)
+                householdStore.completeSetupResolution(
+                    key: resolutionKey,
+                    householdCount: resolvedCount
+                )
             }
         }
 
@@ -353,10 +372,22 @@ struct RootView: View {
         }
     }
 
+    private var shouldShowCreateHouseholdView: Bool {
+        guard onboardingState.currentState == .householdSetup else { return false }
+        guard userSession.hasActiveSession else { return false }
+
+        switch householdStore.setupResolutionState {
+        case let .resolved(key, householdCount):
+            return key == householdSetupResolutionKey && householdCount == 0
+        case .idle, .loading:
+            return false
+        }
+    }
+
     private var shouldShowHouseholdSetupLoader: Bool {
         onboardingState.currentState == .householdSetup &&
             userSession.hasActiveSession &&
-            (isInitializingHouseholdSetup || !hasResolvedHouseholdSetup || resolvedHouseholdCount > 0)
+            !shouldShowCreateHouseholdView
     }
 }
 

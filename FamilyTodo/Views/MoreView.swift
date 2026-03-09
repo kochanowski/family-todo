@@ -61,7 +61,6 @@ struct MoreView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("Settings")
                     }
-                    .tint(.primary)
                     .background {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(cardBackground)
