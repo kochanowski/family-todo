@@ -372,7 +372,7 @@ private struct ShoppingBundleEditorSheet: View {
     }
 
     private func setFocus(_ nextFocus: BundleEditorFocus) {
-        Task { @MainActor in
+        _ = _Concurrency.Task { @MainActor in
             focusedField = nextFocus
         }
     }
