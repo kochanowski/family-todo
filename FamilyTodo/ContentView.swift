@@ -29,6 +29,9 @@ struct MainAppView: View {
             .onChange(of: themeStore.tabTintColor) { _, _ in
                 TabBarTypographyManager.apply(themeStore: themeStore)
             }
+            .onChange(of: householdStore.currentHousehold?.iconSymbol) { _, _ in
+                TabBarTypographyManager.apply(themeStore: themeStore)
+            }
             .onChange(of: themeStore.retroFontScale) { _, _ in
                 TabBarTypographyManager.apply(themeStore: themeStore)
             }
@@ -85,6 +88,24 @@ struct MainAppView: View {
         }
 
         guard let userId = userSession.userId else { return }
+
+        householdStore.setSyncMode(userSession.syncMode)
+
+        if let restoredHousehold = householdStore.restoreCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        ) {
+            if userSession.currentHouseholdID != restoredHousehold.id {
+                userSession.setCurrentHousehold(restoredHousehold.id)
+            }
+            _ = _Concurrency.Task {
+                await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
+            }
+            return
+        }
 
         await householdStore.loadCurrentHouseholdAndMembership(
             userId: userId,

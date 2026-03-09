@@ -703,15 +703,8 @@ final class BacklogStore: ObservableObject {
             return false
         }
 
-        do {
-            try await cloudKit.deleteBacklogItem(id: item.id, householdId: item.householdId)
-            removeCachedItem(id: item.id)
-            return true
-        } catch {
-            self.error = error
-            replayPendingMutationsInBackground()
-            return true
-        }
+        replayPendingMutationsInBackground()
+        return true
     }
 
     @discardableResult

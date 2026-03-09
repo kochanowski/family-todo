@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 struct ShoppingBundle: Identifiable, Codable, Hashable {
-    static let defaultIcon = "cart.fill"
+    static let defaultIcon = "shippingbox.fill"
     static let foodIcons = [
         "cart.fill",
         "basket.fill",

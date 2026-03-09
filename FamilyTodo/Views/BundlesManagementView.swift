@@ -179,7 +179,7 @@ private struct ShoppingBundleEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 16) {
                     BundleSectionCard {
                         ShoppingBundleHeaderRow(
                             name: $name,
@@ -236,8 +236,8 @@ private struct ShoppingBundleEditorSheet: View {
                     }
                 }
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.top, 20)
-                .padding(.bottom, 28)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(themeStore.canvasColor.ignoresSafeArea())
@@ -389,7 +389,7 @@ private struct ShoppingBundleHeaderRow: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             TextField(
                 "",
                 text: $name,
@@ -407,14 +407,14 @@ private struct ShoppingBundleHeaderRow: View {
             Button(action: onChooseIcon) {
                 HStack(spacing: 8) {
                     Image(systemName: selectedIcon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(
                             themeStore.foregroundOnAccent(
                                 for: themeStore.accentTabColor,
                                 colorScheme: colorScheme
                             )
                         )
-                        .frame(width: 38, height: 38)
+                        .frame(width: 34, height: 34)
                         .background {
                             Circle()
                                 .fill(themeStore.accentTabColor)
@@ -433,7 +433,7 @@ private struct ShoppingBundleHeaderRow: View {
             .accessibilityValue(ShoppingBundle.iconLabel(for: selectedIcon))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -553,11 +553,11 @@ private struct BundleSectionCard<Content: View>: View {
             content
         }
         .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(themeStore.surfaceColor)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(themeStore.borderLightColor.opacity(0.45), lineWidth: 1)
         }
     }
@@ -591,7 +591,7 @@ private struct ShoppingBundleItemRow: View {
             .accessibilityLabel("Remove item")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -604,16 +604,10 @@ private struct ShoppingBundleComposerRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(themeStore.accentTabColor)
-                .frame(width: 20, height: 20)
-                .accessibilityHidden(true)
-
             TextField(
                 "",
                 text: $text,
-                prompt: Text("Add item...")
+                prompt: Text("Add item")
                     .font(themeStore.font(for: .listRowTitle))
                     .foregroundStyle(themeStore.contentSecondaryColor)
             )
@@ -626,6 +620,6 @@ private struct ShoppingBundleComposerRow: View {
             .onSubmit(onSubmit)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 }

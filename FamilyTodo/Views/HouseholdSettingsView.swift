@@ -148,7 +148,7 @@ struct ProfileView: View {
                     HStack(spacing: 12) {
                         Image(systemName: household.iconSymbol)
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .foregroundStyle(themeStore.accentTabColor)
                             .frame(width: 28, height: 28)
                         Text(household.name)
                             .font(themeStore.font(for: .listRowTitle))

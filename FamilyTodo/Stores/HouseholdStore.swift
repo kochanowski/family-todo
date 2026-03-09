@@ -55,6 +55,7 @@ class HouseholdStore: ObservableObject {
     private var syncMode: SyncMode = .cloud
     private let userDefaults: UserDefaults
     private let recoverySuppressionDuration: TimeInterval
+    private var isRefreshingCloudHousehold = false
 
     // Cache for sharing controller
     private var activeShare: CKShare?
@@ -104,65 +105,81 @@ class HouseholdStore: ObservableObject {
         userId: String,
         preferredHouseholdId: UUID? = nil
     ) async {
-        await loadHousehold(userId: userId, preferredHouseholdId: preferredHouseholdId)
-    }
-
-    func loadHousehold(userId: String, preferredHouseholdId: UUID? = nil) async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        // 1. Try to load from cache first
-        if let cached = fetchCachedHousehold(
+        restoreCachedHousehold(userId: userId, preferredHouseholdId: preferredHouseholdId)
+        await refreshCurrentHouseholdAndMembershipFromCloud(
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
-        ) {
-            currentHousehold = cached.toHousehold()
+        )
+    }
+
+    @discardableResult
+    func restoreCachedHousehold(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Household? {
+        guard let cached = fetchCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        ) else {
+            return nil
         }
 
-        guard syncMode == .cloud else { return }
+        let restoredHousehold = cached.toHousehold()
+        currentHousehold = restoredHousehold
+        return restoredHousehold
+    }
 
-        // 2. Load from CloudKit
+    func refreshCurrentHouseholdAndMembershipFromCloud(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) async {
+        guard syncMode == .cloud else { return }
+        guard !isRefreshingCloudHousehold else { return }
+
+        isRefreshingCloudHousehold = true
+        isLoading = true
+        defer {
+            isRefreshingCloudHousehold = false
+            isLoading = false
+        }
+
         do {
-            // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
             try await cloudKit.checkAvailability()
 
-            // In a real app with private DB + sharing, finding the "current" household
-            // often involves querying for the one owned by user or shared with them.
-            // For MVP/HousePulse, we check if we have one locally, otherwise we might look
-            // for the one where we are a member.
+            let localHousehold = currentHousehold
+            var resolvedCloudHousehold: Household?
 
-            if let current = currentHousehold {
+            if let current = localHousehold {
                 do {
                     await setCloudScope(for: current, userId: userId)
                     let fresh = try await cloudKit.fetchHousehold(id: current.id)
                     await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
-                    updateCache(with: fresh)
-                    currentHousehold = fresh
-                    return
+                    resolvedCloudHousehold = fresh
                 } catch {
-                    // Cached household can be stale. Fall through to membership lookup.
                     print("DEBUG: Cached household refresh failed, retrying membership lookup: \(error)")
-                    currentHousehold = nil
                 }
             }
 
-            // If checking cloud for the first time on this device
-            print("DEBUG: Checking CloudKit for existing household membership...")
+            if resolvedCloudHousehold == nil {
+                print("DEBUG: Checking CloudKit for existing household membership...")
+                resolvedCloudHousehold = try await resolveRecoverableCloudHousehold(
+                    userId: userId,
+                    preferredHouseholdId: preferredHouseholdId
+                )
+            }
 
-            if let fresh = try await resolveRecoverableCloudHousehold(userId: userId) {
-                print("DEBUG: Found recoverable household in cloud: \(fresh.id)")
-                await setCloudScope(for: fresh, userId: userId)
-                await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
-                updateCache(with: fresh)
-                currentHousehold = fresh
+            if let resolvedCloudHousehold {
+                print("DEBUG: Found recoverable household in cloud: \(resolvedCloudHousehold.id)")
+                await setCloudScope(for: resolvedCloudHousehold, userId: userId)
+                await cloudKit.migrateMemberColorsIfNeeded(householdId: resolvedCloudHousehold.id)
+                updateCache(with: resolvedCloudHousehold)
+                currentHousehold = resolvedCloudHousehold
             } else {
                 print("DEBUG: No existing membership found in cloud.")
             }
         } catch {
             print("Error loading household: \(error)")
-            // Don't show error to user if we have cached data
             if currentHousehold == nil {
                 self.error = error
             }
@@ -785,7 +802,18 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    private func resolveRecoverableCloudHousehold(userId: String) async throws -> Household? {
+    private func resolveRecoverableCloudHousehold(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) async throws -> Household? {
+        if let preferredHouseholdId, !isRecoverySuppressed(for: preferredHouseholdId) {
+            do {
+                return try await cloudKit.fetchHousehold(id: preferredHouseholdId)
+            } catch {
+                print("DEBUG: Preferred household lookup failed, falling back to membership lookup: \(error)")
+            }
+        }
+
         await cloudKit.setHouseholdScope(.participantShared)
         if let participantMember = try await cloudKit.fetchMemberByUserId(userId),
            !isRecoverySuppressed(for: participantMember.householdId)

@@ -318,24 +318,6 @@ struct RootView: View {
 
         let resolutionKey = householdSetupResolutionKey
         householdStore.prepareForSetupResolution(key: resolutionKey)
-        defer {
-            if onboardingState.currentState == .householdSetup {
-                let cachedCount =
-                    if let userId = userSession.userId {
-                        householdStore.cachedRecoverableHouseholdCount(
-                            userId: userId,
-                            preferredHouseholdId: userSession.currentHouseholdID
-                        )
-                    } else {
-                        0
-                    }
-                let resolvedCount = max(cachedCount, householdStore.currentHousehold == nil ? 0 : 1)
-                householdStore.completeSetupResolution(
-                    key: resolutionKey,
-                    householdCount: resolvedCount
-                )
-            }
-        }
 
         if let householdId = userSession.currentHouseholdID,
            householdStore.isRecoverySuppressed(for: householdId)
@@ -350,16 +332,30 @@ struct RootView: View {
         }
 
         if let household = householdStore.currentHousehold {
-            if userSession.currentHouseholdID != household.id {
-                userSession.setCurrentHousehold(household.id)
-            }
-            onboardingState.completeHouseholdSetup(withHousehold: true)
+            completeRecoveredHouseholdRoute(with: household, resolutionKey: resolutionKey)
             return
         }
 
         guard let userId = userSession.userId else { return }
         householdStore.setSyncMode(userSession.syncMode)
-        await householdStore.loadCurrentHouseholdAndMembership(
+
+        if let cachedHousehold = householdStore.restoreCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        ),
+            !householdStore.isRecoverySuppressed(for: cachedHousehold.id)
+        {
+            completeRecoveredHouseholdRoute(with: cachedHousehold, resolutionKey: resolutionKey)
+            _ = _Concurrency.Task {
+                await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
+            }
+            return
+        }
+
+        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
             userId: userId,
             preferredHouseholdId: userSession.currentHouseholdID
         )
@@ -367,9 +363,25 @@ struct RootView: View {
         if let household = householdStore.currentHousehold,
            !householdStore.isRecoverySuppressed(for: household.id)
         {
-            userSession.setCurrentHousehold(household.id)
-            onboardingState.completeHouseholdSetup(withHousehold: true)
+            completeRecoveredHouseholdRoute(with: household, resolutionKey: resolutionKey)
+            return
         }
+
+        householdStore.completeSetupResolution(
+            key: resolutionKey,
+            householdCount: householdStore.cachedRecoverableHouseholdCount(
+                userId: userId,
+                preferredHouseholdId: userSession.currentHouseholdID
+            )
+        )
+    }
+
+    private func completeRecoveredHouseholdRoute(with household: Household, resolutionKey: String) {
+        householdStore.completeSetupResolution(key: resolutionKey, householdCount: 1)
+        if userSession.currentHouseholdID != household.id {
+            userSession.setCurrentHousehold(household.id)
+        }
+        onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
     private var shouldShowCreateHouseholdView: Bool {

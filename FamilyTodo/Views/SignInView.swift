@@ -241,13 +241,32 @@ struct SignInView: View {
         isResolvingAuthRoute = true
         defer { isResolvingAuthRoute = false }
 
-        if userSession.currentHouseholdID == nil, let userId = userSession.userId {
+        if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
-            await householdStore.loadCurrentHouseholdAndMembership(
+
+            if let restoredHousehold = householdStore.restoreCachedHousehold(
                 userId: userId,
                 preferredHouseholdId: userSession.currentHouseholdID
-            )
-            if let household = householdStore.currentHousehold {
+            ) {
+                if userSession.currentHouseholdID != restoredHousehold.id {
+                    userSession.setCurrentHousehold(restoredHousehold.id)
+                }
+                _ = _Concurrency.Task {
+                    await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                        userId: userId,
+                        preferredHouseholdId: userSession.currentHouseholdID
+                    )
+                }
+            } else {
+                await householdStore.loadCurrentHouseholdAndMembership(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
+            }
+
+            if let household = householdStore.currentHousehold,
+               userSession.currentHouseholdID != household.id
+            {
                 userSession.setCurrentHousehold(household.id)
             }
         }
