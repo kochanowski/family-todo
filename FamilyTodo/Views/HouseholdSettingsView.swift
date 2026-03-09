@@ -516,6 +516,8 @@ private struct EditProfileView: View {
 private struct EditHouseholdView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
@@ -569,18 +571,25 @@ private struct EditHouseholdView: View {
                                 Circle()
                                     .fill(
                                         selectedIconSymbol == icon
-                                            ? Color.accentColor.opacity(0.18)
+                                            ? themeStore.accentTabColor.opacity(0.18)
                                             : Color.secondary.opacity(0.12)
                                     )
                                     .frame(width: 40, height: 40)
                                 Image(systemName: icon)
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(
+                                        selectedIconSymbol == icon
+                                            ? themeStore.foregroundOnAccent(
+                                                for: themeStore.accentTabColor,
+                                                colorScheme: colorScheme
+                                            )
+                                            : .primary
+                                    )
                             }
                             .overlay {
                                 if selectedIconSymbol == icon {
                                     Circle()
-                                        .stroke(Color.accentColor, lineWidth: 2)
+                                        .stroke(themeStore.accentTabColor, lineWidth: 2)
                                         .frame(width: 40, height: 40)
                                 }
                             }

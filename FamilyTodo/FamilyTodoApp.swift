@@ -102,6 +102,7 @@ struct FamilyTodoApp: App {
                         ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
                     diagnostics: startupDiagnostics
                 )
+                .tint(themeStore.resolvedTabTint)
                 .preferredColorScheme(themeStore.colorScheme)
             } else if let sharedModelContainer {
                 RootView()
@@ -114,6 +115,7 @@ struct FamilyTodoApp: App {
                     .environmentObject(shareAcceptanceCoordinator)
                     .environmentObject(cloudKitDiagnostics)
                     .modelContainer(sharedModelContainer)
+                    .tint(themeStore.resolvedTabTint)
                     .preferredColorScheme(themeStore.colorScheme)
                     .overlay {
                         let toastBackground = themeStore.surfaceElevatedColor

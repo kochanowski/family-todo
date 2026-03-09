@@ -1,14 +1,9 @@
 import Foundation
+import UIKit
 
 struct ShoppingBundle: Identifiable, Codable, Hashable {
     static let defaultIcon = "shippingbox.fill"
-    static let curatedIcons = [
-        "shippingbox.fill",
-        "cube.box.fill",
-        "archivebox.fill",
-        "shippingbox",
-        "cube.box",
-        "archivebox",
+    static let foodIcons = [
         "cart.fill",
         "basket.fill",
         "bag.fill",
@@ -18,35 +13,42 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         "wineglass.fill",
         "fish.fill",
         "carrot.fill",
-        "sparkles",
-        "drop.fill",
         "leaf.fill",
+        "snowflake",
+        "flame.fill",
+    ]
+    static let homeIcons = [
         "house.fill",
+        "lightbulb.fill",
+        "drop.fill",
+        "shower.fill",
+        "bed.double.fill",
+        "sun.max.fill",
+        "moon.stars.fill",
         "pawprint.fill",
         "car.fill",
-        "gift.fill",
-        "shower.fill",
         "cross.case.fill",
         "pill.fill",
         "bandage.fill",
+    ]
+    static let genericIcons = [
+        "shippingbox.fill",
+        "archivebox.fill",
+        "sparkles",
+        "gift.fill",
         "heart.fill",
         "star.fill",
-        "moon.stars.fill",
-        "sun.max.fill",
-        "snowflake",
-        "flame.fill",
-        "lightbulb.fill",
         "book.fill",
         "paintpalette.fill",
         "music.note",
     ]
+    static let curatedIcons = foodIcons + homeIcons + genericIcons
+    static let curatedIconGroups = [
+        CuratedIconGroup(title: "Food", icons: foodIcons),
+        CuratedIconGroup(title: "Home", icons: homeIcons),
+        CuratedIconGroup(title: "Generic", icons: genericIcons),
+    ]
     private static let curatedIconLabels = [
-        "shippingbox.fill": "Shipping box",
-        "cube.box.fill": "Packed box",
-        "archivebox.fill": "Archive box",
-        "shippingbox": "Shipping box outline",
-        "cube.box": "Packed box outline",
-        "archivebox": "Archive box outline",
         "cart.fill": "Shopping cart",
         "basket.fill": "Market basket",
         "bag.fill": "Shopping bag",
@@ -56,24 +58,27 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         "wineglass.fill": "Drinks",
         "fish.fill": "Seafood",
         "carrot.fill": "Produce",
-        "sparkles": "Cleaning",
-        "drop.fill": "Bathroom",
         "leaf.fill": "Fresh",
+        "snowflake": "Frozen",
+        "flame.fill": "Cookout",
         "house.fill": "Home",
+        "lightbulb.fill": "Household essentials",
+        "drop.fill": "Bathroom",
+        "shower.fill": "Self care",
+        "bed.double.fill": "Bedroom",
+        "sun.max.fill": "Daytime",
+        "moon.stars.fill": "Evening",
         "pawprint.fill": "Pets",
         "car.fill": "Car",
-        "gift.fill": "Party",
-        "shower.fill": "Self care",
         "cross.case.fill": "Pharmacy",
         "pill.fill": "Medicine",
         "bandage.fill": "First aid",
+        "shippingbox.fill": "Bundle",
+        "archivebox.fill": "Archive box",
+        "sparkles": "Cleaning",
+        "gift.fill": "Party",
         "heart.fill": "Favorites",
         "star.fill": "Special",
-        "moon.stars.fill": "Evening",
-        "sun.max.fill": "Sunny day",
-        "snowflake": "Frozen",
-        "flame.fill": "Grill",
-        "lightbulb.fill": "Household essentials",
         "book.fill": "School",
         "paintpalette.fill": "Crafts",
         "music.note": "Entertainment",
@@ -135,7 +140,7 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
     }
 
     static func resolvedIconName(_ icon: String) -> String {
-        curatedIcons.contains(icon) ? icon : defaultIcon
+        UIImage(systemName: icon) != nil ? icon : defaultIcon
     }
 
     static func encodeItemsJSON(_ items: [String]) -> String {
@@ -159,5 +164,14 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
 
     static func iconLabel(for icon: String) -> String {
         curatedIconLabels[resolvedIconName(icon)] ?? "Bundle"
+    }
+}
+
+struct CuratedIconGroup: Identifiable, Hashable {
+    let title: String
+    let icons: [String]
+
+    var id: String {
+        title
     }
 }

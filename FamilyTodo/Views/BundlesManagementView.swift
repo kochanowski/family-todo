@@ -17,6 +17,16 @@ struct BundlesManagementView: View {
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 0,
+                        leading: 16,
+                        bottom: 0,
+                        trailing: 16
+                    )
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         _ = _Concurrency.Task {
@@ -148,10 +158,11 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var name: String
     @State private var selectedIcon: String
     @State private var itemDrafts: [BundleItemDraft]
-    @State private var newItemDraft: BundleItemDraft
+    @State private var newItemText: String
     @State private var isSaving = false
     @State private var showDeleteConfirmation = false
-    @FocusState private var focusedDraftID: UUID?
+    @State private var showIconPicker = false
+    @FocusState private var focusedField: BundleEditorFocus?
 
     init(store: ShoppingBundleStore, bundle: ShoppingBundle?) {
         self.store = store
@@ -161,7 +172,7 @@ private struct ShoppingBundleEditorSheet: View {
 
         let initialItems = bundle?.normalizedItems ?? []
         _itemDrafts = State(initialValue: initialItems.map { BundleItemDraft(title: $0) })
-        _newItemDraft = State(initialValue: BundleItemDraft())
+        _newItemText = State(initialValue: "")
     }
 
     var body: some View {
@@ -174,7 +185,9 @@ private struct ShoppingBundleEditorSheet: View {
                 }
 
                 Section("Icon") {
-                    ShoppingBundleIconPicker(selectedIcon: $selectedIcon)
+                    ShoppingBundleIconSelector(selectedIcon: $selectedIcon) {
+                        showIconPicker = true
+                    }
                 }
 
                 Section("Items") {
@@ -184,7 +197,7 @@ private struct ShoppingBundleEditorSheet: View {
                                 .textInputAutocapitalization(.words)
                                 .autocorrectionDisabled()
                                 .submitLabel(.next)
-                                .focused($focusedDraftID, equals: draft.id)
+                                .focused($focusedField, equals: .existing(draft.id))
                                 .onSubmit {
                                     handleExistingItemSubmit(forDraftID: draft.id)
                                 }
@@ -201,13 +214,13 @@ private struct ShoppingBundleEditorSheet: View {
                     }
 
                     HStack(spacing: 12) {
-                        TextField(composerPlaceholder, text: $newItemDraft.title)
+                        TextField(composerPlaceholder, text: $newItemText)
                             .textInputAutocapitalization(.words)
                             .autocorrectionDisabled()
-                            .submitLabel(.next)
-                            .focused($focusedDraftID, equals: newItemDraft.id)
+                            .submitLabel(.return)
+                            .focused($focusedField, equals: .composer)
                             .onSubmit {
-                                commitComposerDraft()
+                                commitComposerItem()
                             }
 
                         Color.clear
@@ -261,6 +274,9 @@ private struct ShoppingBundleEditorSheet: View {
                 Text("This removes the bundle, but not any items already added to your shopping list.")
             }
         }
+        .sheet(isPresented: $showIconPicker) {
+            ShoppingBundleIconPickerSheet(selectedIcon: $selectedIcon)
+        }
         .presentationBackground(themeStore.canvasColor)
     }
 
@@ -269,11 +285,17 @@ private struct ShoppingBundleEditorSheet: View {
     }
 
     private var cleanedItems: [String] {
-        ShoppingBundle.sanitizedItems(itemDrafts.map(\.title) + [newItemDraft.title])
+        ShoppingBundle.sanitizedItems(itemDrafts.map(\.title) + [newItemText])
     }
 
     private func removeItemDraft(withID id: UUID) {
         itemDrafts.removeAll { $0.id == id }
+
+        if focusedField == .existing(id) {
+            DispatchQueue.main.async {
+                focusedField = .composer
+            }
+        }
     }
 
     private func saveBundle() async {
@@ -304,7 +326,7 @@ private struct ShoppingBundleEditorSheet: View {
     }
 
     private var composerPlaceholder: String {
-        itemDrafts.isEmpty ? "Milk" : "Add item"
+        itemDrafts.isEmpty ? "Milk" : "Add another item"
     }
 
     private func handleExistingItemSubmit(forDraftID id: UUID) {
@@ -312,146 +334,167 @@ private struct ShoppingBundleEditorSheet: View {
         let nextIndex = itemDrafts.index(after: index)
 
         if nextIndex < itemDrafts.endIndex {
-            focusedDraftID = itemDrafts[nextIndex].id
+            focusedField = .existing(itemDrafts[nextIndex].id)
             return
         }
 
-        focusedDraftID = newItemDraft.id
+        focusedField = .composer
     }
 
-    private func commitComposerDraft() {
-        let trimmedTitle = newItemDraft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func commitComposerItem() {
+        let trimmedTitle = newItemText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else {
-            focusedDraftID = nil
+            focusedField = .composer
             return
         }
 
         itemDrafts.append(BundleItemDraft(title: trimmedTitle))
-        newItemDraft = BundleItemDraft()
-        focusedDraftID = newItemDraft.id
+        newItemText = ""
+
+        DispatchQueue.main.async {
+            focusedField = .composer
+        }
     }
 }
 
-private struct ShoppingBundleIconPicker: View {
+private struct ShoppingBundleIconSelector: View {
     @Binding var selectedIcon: String
-    @State private var currentPage: Int
-
-    @ScaledMetric(relativeTo: .body) private var iconTileMinHeight = 52
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
-    private let gridSpacing: CGFloat = 12
-    private let iconsPerPage = 12
-
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.colorScheme) private var colorScheme
-
-    init(selectedIcon: Binding<String>) {
-        _selectedIcon = selectedIcon
-        _currentPage = State(initialValue: Self.pageIndex(for: selectedIcon.wrappedValue))
-    }
-
-    var body: some View {
-        TabView(selection: $currentPage) {
-            ForEach(Array(iconPages.enumerated()), id: \.offset) { pageIndex, icons in
-                ShoppingBundleIconPage(
-                    icons: icons,
-                    columns: columns,
-                    iconTileMinHeight: iconTileMinHeight,
-                    selectedIcon: $selectedIcon
-                )
-                .tag(pageIndex)
-            }
-        }
-        .frame(height: pickerHeight)
-        .tabViewStyle(.page(indexDisplayMode: .always))
-        .indexViewStyle(.page(backgroundDisplayMode: .interactive))
-        .onChange(of: selectedIcon) { _, icon in
-            syncCurrentPage(with: icon)
-        }
-    }
-
-    private var iconPages: [[String]] {
-        ShoppingBundle.curatedIcons.chunked(into: iconsPerPage)
-    }
-
-    private var pickerHeight: CGFloat {
-        (iconTileMinHeight * 4) + (gridSpacing * 3) + 34
-    }
-
-    private func syncCurrentPage(with icon: String) {
-        let pageIndex = Self.pageIndex(for: icon)
-        guard currentPage != pageIndex else { return }
-        currentPage = pageIndex
-    }
-
-    private static func pageIndex(for icon: String) -> Int {
-        let resolvedIcon = ShoppingBundle.resolvedIconName(icon)
-        guard let iconIndex = ShoppingBundle.curatedIcons.firstIndex(of: resolvedIcon) else {
-            return 0
-        }
-        return iconIndex / 12
-    }
-}
-
-private struct ShoppingBundleIconPage: View {
-    let icons: [String]
-    let columns: [GridItem]
-    let iconTileMinHeight: CGFloat
-    @Binding var selectedIcon: String
+    let onChooseIcon: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(icons, id: \.self) { icon in
-                    Button {
-                        selectedIcon = icon
-                    } label: {
-                        Image(systemName: icon)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(
-                                selectedIcon == icon
-                                    ? themeStore.foregroundOnAccent(
-                                        for: themeStore.accentTabColor,
-                                        colorScheme: colorScheme
-                                    )
-                                    : themeStore.contentPrimaryColor
-                            )
-                            .frame(maxWidth: .infinity, minHeight: iconTileMinHeight)
-                            .background {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(
-                                        selectedIcon == icon
-                                            ? themeStore.accentTabColor
-                                            : themeStore.surfaceElevatedColor
-                                    )
-                            }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                Image(systemName: selectedIcon)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(
+                        themeStore.foregroundOnAccent(
+                            for: themeStore.accentTabColor,
+                            colorScheme: colorScheme
+                        )
+                    )
+                    .frame(width: 68, height: 68)
+                    .background {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(themeStore.accentTabColor)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(ShoppingBundle.iconLabel(for: icon))
-                    .accessibilityAddTraits(selectedIcon == icon ? .isSelected : [])
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ShoppingBundle.iconLabel(for: selectedIcon))
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+
+                    Text("Shown on the bundle and quick-add menu.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                }
+
+                Spacer()
+            }
+
+            Button("Choose Icon", action: onChooseIcon)
+                .font(themeStore.font(for: .buttonLabel))
+                .buttonStyle(.bordered)
+                .tint(themeStore.accentTabColor)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct ShoppingBundleIconPickerSheet: View {
+    @Binding var selectedIcon: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    ForEach(displayedGroups) { group in
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(group.title)
+                                .font(themeStore.font(for: .sectionHeader))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+
+                            LazyVGrid(columns: columns, spacing: 12) {
+                                ForEach(group.icons, id: \.self) { icon in
+                                    Button {
+                                        selectedIcon = icon
+                                        dismiss()
+                                    } label: {
+                                        Image(systemName: icon)
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundStyle(
+                                                selectedIcon == icon
+                                                    ? themeStore.foregroundOnAccent(
+                                                        for: themeStore.accentTabColor,
+                                                        colorScheme: colorScheme
+                                                    )
+                                                    : themeStore.contentPrimaryColor
+                                            )
+                                            .frame(maxWidth: .infinity, minHeight: 54)
+                                            .background {
+                                                RoundedRectangle(
+                                                    cornerRadius: 14,
+                                                    style: .continuous
+                                                )
+                                                .fill(
+                                                    selectedIcon == icon
+                                                        ? themeStore.accentTabColor
+                                                        : themeStore.surfaceElevatedColor
+                                                )
+                                            }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(ShoppingBundle.iconLabel(for: icon))
+                                    .accessibilityAddTraits(selectedIcon == icon ? .isSelected : [])
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.vertical, 20)
+            }
+            .scrollContentBackground(.hidden)
+            .background(themeStore.canvasColor.ignoresSafeArea())
+            .navigationTitle("Choose Icon")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        dismiss()
+                    }
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 2)
-        .padding(.top, 4)
+        .presentationBackground(themeStore.canvasColor)
+    }
+
+    private var displayedGroups: [CuratedIconGroup] {
+        let resolvedSelectedIcon = ShoppingBundle.resolvedIconName(selectedIcon)
+        guard !ShoppingBundle.curatedIcons.contains(resolvedSelectedIcon) else {
+            return ShoppingBundle.curatedIconGroups
+        }
+
+        return [
+            CuratedIconGroup(title: "Current", icons: [resolvedSelectedIcon]),
+        ] + ShoppingBundle.curatedIconGroups
     }
 }
 
-private extension Array {
-    func chunked(into chunkSize: Int) -> [[Element]] {
-        guard chunkSize > 0, !isEmpty else {
-            return isEmpty ? [] : [self]
-        }
-
-        return stride(from: 0, to: count, by: chunkSize).map { startIndex in
-            Array(self[startIndex ..< Swift.min(startIndex + chunkSize, count)])
-        }
-    }
+private enum BundleEditorFocus: Hashable {
+    case existing(UUID)
+    case composer
 }
 
 private struct BundleItemDraft: Identifiable {

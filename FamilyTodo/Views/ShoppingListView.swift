@@ -285,15 +285,11 @@ private struct ShoppingListContent: View {
         }
         .overlay(alignment: .bottom) {
             if let activeToast {
-                ToastView(
-                    message: activeToast.message,
-                    actionTitle: activeToast.actionTitle,
-                    action: toastAction(for: activeToast)
-                )
-                .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
-                .transition(ToastView.AnimationTokens.transition)
-                .id(activeToast.id)
+                ToastView(message: activeToast.message)
+                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                    .transition(ToastView.AnimationTokens.transition)
+                    .id(activeToast.id)
             }
         }
         .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
@@ -387,7 +383,7 @@ private struct ShoppingListContent: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("shoppingRestockButton")
-                .pulseAnimation(restockPulse.isPulsing)
+                .pulseAnimation(trigger: restockPulse.pulseToken)
                 .sheet(isPresented: $showRestock) {
                     RestockSheet(
                         store: store,
@@ -654,7 +650,6 @@ private struct ShoppingListContent: View {
                 await store.toggleBought(item)
                 await MainActor.run {
                     itemBeingRemoved = nil
-                    showBoughtToast(for: item.id)
                 }
             }
         }
@@ -742,21 +737,8 @@ private struct ShoppingListContent: View {
 
     private func showQuickAddToast(message: String) {
         showToast(
-            ShoppingToastState(
-                message: message,
-                kind: .message
-            ),
+            ShoppingToastState(message: message),
             durationNanoseconds: 2_000_000_000
-        )
-    }
-
-    private func showBoughtToast(for itemId: UUID) {
-        showToast(
-            ShoppingToastState(
-                message: "Moved to Recently Purchased",
-                kind: .undoBought(itemId)
-            ),
-            durationNanoseconds: 4_000_000_000
         )
     }
 
@@ -785,32 +767,6 @@ private struct ShoppingListContent: View {
         activeToastDismissTask = nil
     }
 
-    private func toastAction(for toast: ShoppingToastState) -> (() -> Void)? {
-        switch toast.kind {
-        case .message:
-            nil
-        case .undoBought:
-            undoLastBoughtItem
-        }
-    }
-
-    private func undoLastBoughtItem() {
-        guard case let .undoBought(itemId)? = activeToast?.kind else { return }
-        cancelPendingShoppingCompletionCelebration()
-        cancelToastDismiss()
-
-        if let item = store.items.first(where: { $0.id == itemId }) {
-            _ = _Concurrency.Task {
-                await store.toggleBought(item)
-            }
-        }
-
-        withAnimation(ToastView.AnimationTokens.curve) {
-            activeToast = nil
-        }
-        HapticManager.lightTap()
-    }
-
     private func quickAddToastMessage(for bundleName: String, itemCount: Int) -> String {
         let noun = itemCount == 1 ? "item" : "items"
         return "Added \(bundleName) (\(itemCount) \(noun))"
@@ -829,24 +785,8 @@ private struct ShoppingListContent: View {
 // swiftlint:enable type_body_length
 
 private struct ShoppingToastState: Identifiable, Equatable {
-    enum Kind: Equatable {
-        case message
-        case undoBought(UUID)
-    }
-
     let id = UUID()
     let message: String
-
-    let kind: Kind
-
-    var actionTitle: String? {
-        switch kind {
-        case .message:
-            nil
-        case .undoBought:
-            "Undo"
-        }
-    }
 }
 
 // MARK: - Shopping Item Row

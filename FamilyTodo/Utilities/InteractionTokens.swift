@@ -47,10 +47,9 @@ extension View {
         ))
     }
 
-    /// Pulse animation for icons (scale 1.0 -> 1.08 -> 1.0)
-    func pulseAnimation(_ trigger: Bool) -> some View {
-        scaleEffect(trigger ? 1.08 : 1.0)
-            .animation(WowAnimation.quickSpring, value: trigger)
+    /// Pulse animation for icons (scale 1.0 -> 1.08 -> 1.0) that retriggers on every token change.
+    func pulseAnimation(trigger: Int) -> some View {
+        modifier(PulseAnimationModifier(trigger: trigger))
     }
 
     /// Crossfade transition for appearance changes
@@ -64,12 +63,32 @@ extension View {
 /// Observable state for restock icon pulse
 @MainActor
 final class RestockPulseState: ObservableObject {
-    @Published var isPulsing = false
+    @Published private(set) var pulseToken = 0
 
     func pulse() {
-        isPulsing = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.isPulsing = false
-        }
+        pulseToken += 1
+    }
+}
+
+private struct PulseAnimationModifier: ViewModifier {
+    let trigger: Int
+
+    @State private var isPulsing = false
+    @State private var pulseGeneration = 0
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPulsing ? 1.08 : 1.0)
+            .onChange(of: trigger) { _, _ in
+                pulseGeneration += 1
+                let currentGeneration = pulseGeneration
+                isPulsing = true
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + WowAnimation.quick) {
+                    guard pulseGeneration == currentGeneration else { return }
+                    isPulsing = false
+                }
+            }
+            .animation(WowAnimation.quickSpring, value: isPulsing)
     }
 }

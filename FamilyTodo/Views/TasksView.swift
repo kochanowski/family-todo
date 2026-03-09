@@ -146,12 +146,6 @@ private struct TasksContent: View {
                 }
             }
 
-            if activeFilter == .active {
-                unifiedListHeader
-                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                    .padding(.bottom, 8)
-            }
-
             if hasInitialMetadataLoaded {
                 if shouldShowActiveEmptyState {
                     activeTasksEmptyState
@@ -623,15 +617,6 @@ private struct TasksContent: View {
             }
             .padding(.vertical, 1)
         }
-    }
-
-    private var unifiedListHeader: some View {
-        HStack {
-            Text("Remaining")
-                .font(themeStore.font(for: .sectionHeader))
-                .foregroundStyle(themeStore.contentSecondaryColor)
-        }
-        .frame(minHeight: 30, alignment: .bottom)
     }
 
     private func startTaskFromBacklog(_ task: Task) {
