@@ -293,7 +293,53 @@ Use it together with the one-task-at-a-time workflow.
   - Header icon placement is clear and consistent with Shopping actions.
   - Quick add always emits confirmation feedback with correct item count.
 
-## <a id="p28"></a>P2.8 Activity Log End-to-End
+## <a id="p28"></a>P2.8 Contextual Onboarding (TipKit)
+- Objective: guide users to discover advanced features without blocking their workflow.
+- In scope:
+  - Use native iOS TipKit presentation (icon + title + short text + dismiss X), styled to fit app accent color.
+  - Shopping tip: point to main `+` add button with guidance for long-press quick bundles (`Tip: Long-press to quickly add shopping bundles!`).
+  - Rule: show only when bundles/quick-add conditions are relevant and user has not used bundle quick-add yet.
+  - Idea Promotion Tip: popover pointing to the `arrow.up` icon in Ideas.
+  - Rule: show when user adds their first idea.
+  - Tasks contextual tip:
+    - primary: for first recurring task, explain auto-rotation (`This task will automatically rotate to the next person when completed.`)
+    - fallback: if recurring context is unavailable, keep swipe-actions learning tip.
+  - TipKit bootstrap in app startup with safe `Tips.configure()` execution.
+- Likely files: `FamilyTodoApp.swift`, `ShoppingListView.swift`, `BacklogView.swift`, `TasksView.swift`, new `AppTips.swift`.
+- Out of scope: full-screen blocking tutorials.
+- Validation:
+  - Tips render only when matching their state rules.
+  - Tip dismissal is graceful and non-blocking.
+  - Tip placement anchors to intended controls without obscuring primary actions.
+  - Inline tips do not cause disruptive layout shifts.
+  - Startup remains stable with `Tips.configure()`.
+
+## <a id="p29"></a>P2.9 Push Message Enrichment via Activity Log
+- Objective: make notifications contextual and useful.
+- In scope:
+  - Use ActivityLog as primary source for message text in push/in-app update pipeline.
+  - Keep `CKDatabaseSubscription` as shared DB foundation (do not rely on query-only path).
+  - Build personalized templates by activity type for lock screen readability:
+    - "`<Name>` bought: `<item list>`"
+    - "`<Name>` completed task: `<task>`"
+  - Filter out self events (`activity.userId == current user`) and suppress duplicate deliveries.
+  - Add de-dup cache keyed by `activityLog.id` (or equivalent stable identifier).
+  - If app is foregrounded and remote action comes from another household member, show non-invasive in-app top banner (auto-dismiss ~3 seconds).
+  - Keep generic fallback banner/message when no parseable activity event is available.
+- Likely files:
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `FamilyTodo/Services/AppDelegateBridge.swift` (verification of forwarding path)
+  - `FamilyTodo/Stores/ActivityLogStore.swift` (query helpers for latest events)
+  - Optional: `FamilyTodo/Views/SettingsView.swift` (partner-updates toggle)
+- Out of scope: server-side random notification copy generation.
+- Validation:
+  - Notifications are contextual ("who did what") for non-self events.
+  - No duplicate notification storms from repeated sync callbacks.
+  - Foreground/background behavior remains stable on two devices and two accounts.
+  - Foreground in-app banner appears only for remote non-self events and disappears automatically.
+  - Push copy is understandable on lock screen without opening the app.
+
+## <a id="p210"></a>P2.10 Activity Log End-to-End
 - Objective: transparent audit trail for household actions.
 - In scope:
   - Add `ActivityLog` model (`id`, `householdId`, `actionType`, `userId`, `userName`, `itemName`, `timestamp`).
@@ -301,8 +347,8 @@ Use it together with the one-task-at-a-time workflow.
   - Define action mapping contract:
     - `taskCreated` -> `TaskStore.createTask(...)`
     - `taskCompleted` -> `TaskStore.moveTask(_:to: .done)`
-    - `shoppingItemAdded` -> `ShoppingListStore.createItem(...)`
-    - `shoppingItemBought` -> `ShoppingListStore.toggleBought(...)` on transition to bought
+    - `shoppingItemAdded` -> `ShoppingListStore.createItem(...)` - czy będziemy logować każdy item w shopping?
+    - `shoppingItemBought` -> `ShoppingListStore.toggleBought(...)` on transition to bought - czy będziemy logować każdy item w shopping? trzeba to przemyśleć jeszcze raz - za i przeciw
   - Keep logging calls in stores (single source of truth), not view layer callbacks.
   - Add Activity Log entry point in More tab above technical settings using icon `clock.arrow.circlepath`.
   - Implement `ActivityLogView` as timeline/feed:
@@ -332,52 +378,6 @@ Use it together with the one-task-at-a-time workflow.
   - No missing log entries during offline mutations followed by reconnect.
   - Timeline remains readable on narrow screens and long item names.
   - Empty state is shown only when there are zero log entries.
-
-## <a id="p29"></a>P2.9 Push Message Enrichment via Activity Log
-- Objective: make notifications contextual and useful.
-- In scope:
-  - Use ActivityLog as primary source for message text in push/in-app update pipeline.
-  - Keep `CKDatabaseSubscription` as shared DB foundation (do not rely on query-only path).
-  - Build personalized templates by activity type for lock screen readability:
-    - "`<Name>` bought: `<item list>`"
-    - "`<Name>` completed task: `<task>`"
-  - Filter out self events (`activity.userId == current user`) and suppress duplicate deliveries.
-  - Add de-dup cache keyed by `activityLog.id` (or equivalent stable identifier).
-  - If app is foregrounded and remote action comes from another household member, show non-invasive in-app top banner (auto-dismiss ~3 seconds).
-  - Keep generic fallback banner/message when no parseable activity event is available.
-- Likely files:
-  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
-  - `FamilyTodo/Services/AppDelegateBridge.swift` (verification of forwarding path)
-  - `FamilyTodo/Stores/ActivityLogStore.swift` (query helpers for latest events)
-  - Optional: `FamilyTodo/Views/SettingsView.swift` (partner-updates toggle)
-- Out of scope: server-side random notification copy generation.
-- Validation:
-  - Notifications are contextual ("who did what") for non-self events.
-  - No duplicate notification storms from repeated sync callbacks.
-  - Foreground/background behavior remains stable on two devices and two accounts.
-  - Foreground in-app banner appears only for remote non-self events and disappears automatically.
-  - Push copy is understandable on lock screen without opening the app.
-
-## <a id="p210"></a>P2.10 Contextual Onboarding (TipKit)
-- Objective: guide users to discover advanced features without blocking their workflow.
-- In scope:
-  - Use native iOS TipKit presentation (icon + title + short text + dismiss X), styled to fit app accent color.
-  - Shopping tip: point to main `+` add button with guidance for long-press quick bundles (`Tip: Long-press to quickly add shopping bundles!`).
-  - Rule: show only when bundles/quick-add conditions are relevant and user has not used bundle quick-add yet.
-  - Idea Promotion Tip: popover pointing to the `arrow.up` icon in Ideas.
-  - Rule: show when user adds their first idea.
-  - Tasks contextual tip:
-    - primary: for first recurring task, explain auto-rotation (`This task will automatically rotate to the next person when completed.`)
-    - fallback: if recurring context is unavailable, keep swipe-actions learning tip.
-  - TipKit bootstrap in app startup with safe `Tips.configure()` execution.
-- Likely files: `FamilyTodoApp.swift`, `ShoppingListView.swift`, `BacklogView.swift`, `TasksView.swift`, new `AppTips.swift`.
-- Out of scope: full-screen blocking tutorials.
-- Validation:
-  - Tips render only when matching their state rules.
-  - Tip dismissal is graceful and non-blocking.
-  - Tip placement anchors to intended controls without obscuring primary actions.
-  - Inline tips do not cause disruptive layout shifts.
-  - Startup remains stable with `Tips.configure()`.
 
 ## Phase 3 - Polish & Future
 

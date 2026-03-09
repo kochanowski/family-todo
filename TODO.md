@@ -113,20 +113,20 @@ Description: Implement ShoppingBundle domain/cache/store/cloud plus polished UX:
 Acceptance Criteria: Bundle CRUD works with `itemsJSON` persistence, bundles are accessible from Shopping header, long-press on `+ Add Item` opens native bundle picker, and selecting bundle shows confirmation (`Added <Bundle> (<N> items)`).
 Regression Risk: Serialization mismatch, duplicate inserts, or hidden affordances; test repeated quick-add, discoverability, and local/cloud parity.
 
-- [ ] **P2.8 Activity Log End-to-End** ([Details](TODO_DETAILS.md#p28))
-Description: Implement ActivityLog model/cache/store/view with timeline-style UI, clear navigation placement, and store-level action logging.
-Acceptance Criteria: Logs are recorded with required actor fields, More tab shows `Activity Log` above technical settings, timeline rows include actor avatar/initials + readable action + relative time, and empty state is friendly.
-Regression Risk: Missing attribution, noisy duplicates, or unreadable feed layout; test multi-user ordering, relative-time rendering, and empty/logged states.
+- [ ] **P2.8 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p28))
+Description: Implement iOS 17 TipKit using native visuals and contextual tips aligned to bundles, idea promotion, and recurring-task guidance.
+Acceptance Criteria: Tips use native TipKit look, align with app accent color, appear under explicit state rules (Shopping long-press bundles, Ideas promote, Tasks recurring/sweep guidance), dismiss gracefully, and never block primary actions.
+Regression Risk: Layout shifts or tip fatigue; ensure safe `Tips.configure()` startup and precise placement/trigger rules.
 
 - [ ] **P2.9 Push Message Enrichment via Activity Log** ([Details](TODO_DETAILS.md#p29))
 Description: Enrich push/in-app updates from ActivityLog with personalized copy and non-invasive in-app banner behavior.
 Acceptance Criteria: System pushes are explicit and personalized (`<Name> completed...` / `<Name> bought...`), in-app top banner appears for remote partner actions and auto-dismisses in ~3s, and self-noise + dedup rules remain enforced.
 Regression Risk: Duplicate/stale notifications or intrusive in-app UX; test lock-screen copy, foreground banners, and two-device sync storms.
 
-- [ ] **P2.10 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p210))
-Description: Implement iOS 17 TipKit using native visuals and contextual tips aligned to bundles, idea promotion, and recurring-task guidance.
-Acceptance Criteria: Tips use native TipKit look, align with app accent color, appear under explicit state rules (Shopping long-press bundles, Ideas promote, Tasks recurring/sweep guidance), dismiss gracefully, and never block primary actions.
-Regression Risk: Layout shifts or tip fatigue; ensure safe `Tips.configure()` startup and precise placement/trigger rules.
+- [ ] **P2.10 Activity Log End-to-End** ([Details](TODO_DETAILS.md#p210))
+Description: Implement ActivityLog model/cache/store/view with timeline-style UI, clear navigation placement, and store-level action logging.
+Acceptance Criteria: Logs are recorded with required actor fields, More tab shows `Activity Log` above technical settings, timeline rows include actor avatar/initials + readable action + relative time, and empty state is friendly.
+Regression Risk: Missing attribution, noisy duplicates, or unreadable feed layout; test multi-user ordering, relative-time rendering, and empty/logged states.
 
 ## Phase 3: Polish & Future (Low Priority)
 
