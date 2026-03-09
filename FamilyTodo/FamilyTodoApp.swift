@@ -96,97 +96,97 @@ struct FamilyTodoApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if startupBootstrapState == .emergency || sharedModelContainer == nil {
-                StartupRecoveryView(
-                    message: startupRecoveryMessage
-                        ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
-                    diagnostics: startupDiagnostics
-                )
-                .tint(themeStore.resolvedTabTint)
-                .preferredColorScheme(themeStore.colorScheme)
-            } else if let sharedModelContainer {
-                RootView()
-                    .environmentObject(userSession)
-                    .environmentObject(themeStore)
-                    .environmentObject(householdStore)
-                    .environmentObject(onboardingState)
-                    .environmentObject(subscriptionManager)
-                    .environmentObject(celebrationManager)
-                    .environmentObject(shareAcceptanceCoordinator)
-                    .environmentObject(cloudKitDiagnostics)
-                    .modelContainer(sharedModelContainer)
-                    .tint(themeStore.resolvedTabTint)
-                    .preferredColorScheme(themeStore.colorScheme)
-                    .overlay {
-                        let toastBackground = themeStore.surfaceElevatedColor
-                        let toastAppearance = ToastView.Appearance(
-                            backgroundColor: toastBackground,
-                            messageColor: themeStore.inkColor,
-                            strokeColor: themeStore.borderLightColor.opacity(0.55),
-                            shadowColor: themeStore.inkColor.opacity(0.18),
-                            actionColor: themeStore.accentTabColor,
-                            messageFont: themeStore.font(for: .celebrationMessage),
-                            actionFont: themeStore.font(for: .buttonLabel)
-                        )
-
-                        CelebrationOverlay(
-                            manager: celebrationManager,
-                            messageFont: themeStore.font(for: .celebrationMessage),
-                            accentPalette: themeStore.confettiAccentPalette,
-                            toastAppearance: toastAppearance
-                        )
+            Group {
+                if startupBootstrapState == .emergency || sharedModelContainer == nil {
+                    StartupRecoveryView(
+                        message: startupRecoveryMessage
+                            ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
+                        diagnostics: startupDiagnostics
+                    )
+                } else if let sharedModelContainer {
+                    RootView()
+                        .environmentObject(userSession)
                         .environmentObject(themeStore)
-                    }
-                    .task {
-                        appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
-                        appDelegate.flushPendingInviteIfNeeded()
-                        householdStore.setModelContext(sharedModelContainer.mainContext)
-                        householdStore.setSyncMode(userSession.syncMode)
+                        .environmentObject(householdStore)
+                        .environmentObject(onboardingState)
+                        .environmentObject(subscriptionManager)
+                        .environmentObject(celebrationManager)
+                        .environmentObject(shareAcceptanceCoordinator)
+                        .environmentObject(cloudKitDiagnostics)
+                        .modelContainer(sharedModelContainer)
+                        .overlay {
+                            let toastBackground = themeStore.surfaceElevatedColor
+                            let toastAppearance = ToastView.Appearance(
+                                backgroundColor: toastBackground,
+                                messageColor: themeStore.inkColor,
+                                strokeColor: themeStore.borderLightColor.opacity(0.55),
+                                shadowColor: themeStore.inkColor.opacity(0.18),
+                                actionColor: themeStore.accentTabColor,
+                                messageFont: themeStore.font(for: .celebrationMessage),
+                                actionFont: themeStore.font(for: .buttonLabel)
+                            )
 
-                        // Configure for UI Testing if needed
-                        UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+                            CelebrationOverlay(
+                                manager: celebrationManager,
+                                messageFont: themeStore.font(for: .celebrationMessage),
+                                accentPalette: themeStore.confettiAccentPalette,
+                                toastAppearance: toastAppearance
+                            )
+                            .environmentObject(themeStore)
+                        }
+                        .task {
+                            appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                            appDelegate.flushPendingInviteIfNeeded()
+                            householdStore.setModelContext(sharedModelContainer.mainContext)
+                            householdStore.setSyncMode(userSession.syncMode)
 
-                        #if !CI
-                            if userSession.syncMode == .cloud,
-                               let userId = userSession.userId,
-                               let householdId = userSession.currentHouseholdID
+                            // Configure for UI Testing if needed
+                            UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+
+                            #if !CI
+                                if userSession.syncMode == .cloud,
+                                   let userId = userSession.userId,
+                                   let householdId = userSession.currentHouseholdID
+                                {
+                                    subscriptionManager.configure(userId: userId, householdId: householdId)
+                                }
+                            #endif
+                            scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
+                        }
+                        .onOpenURL { url in
+                            if url.scheme?.lowercased() == "housepulse" {
+                                do {
+                                    let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
+                                    shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
+                                } catch {
+                                    shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                                }
+                                return
+                            }
+
+                            if let host = url.host?.lowercased(),
+                               host.contains("icloud.com")
                             {
-                                subscriptionManager.configure(userId: userId, householdId: householdId)
+                                shareAcceptanceCoordinator.enqueue(inviteURL: url)
                             }
-                        #endif
-                        scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
-                    }
-                    .onOpenURL { url in
-                        if url.scheme?.lowercased() == "housepulse" {
-                            do {
-                                let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
-                                shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
-                            } catch {
-                                shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                        }
+                        .alert(
+                            "Recovery Complete",
+                            isPresented: Binding(
+                                get: { startupRecoveryMessage != nil },
+                                set: { if !$0 { startupRecoveryMessage = nil } }
+                            )
+                        ) {
+                            Button("OK", role: .cancel) {
+                                startupRecoveryMessage = nil
                             }
-                            return
+                        } message: {
+                            Text(startupRecoveryMessage ?? "")
                         }
-
-                        if let host = url.host?.lowercased(),
-                           host.contains("icloud.com")
-                        {
-                            shareAcceptanceCoordinator.enqueue(inviteURL: url)
-                        }
-                    }
-                    .alert(
-                        "Recovery Complete",
-                        isPresented: Binding(
-                            get: { startupRecoveryMessage != nil },
-                            set: { if !$0 { startupRecoveryMessage = nil } }
-                        )
-                    ) {
-                        Button("OK", role: .cancel) {
-                            startupRecoveryMessage = nil
-                        }
-                    } message: {
-                        Text(startupRecoveryMessage ?? "")
-                    }
+                }
             }
+            .tint(themeStore.resolvedTabTint)
+            .preferredColorScheme(themeStore.colorScheme)
         }
     }
 }
@@ -198,6 +198,9 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
+    @State private var isInitializingHouseholdSetup = false
+    @State private var hasResolvedHouseholdSetup = false
+    @State private var resolvedHouseholdCount = 0
 
     var body: some View {
         Group {
@@ -212,8 +215,13 @@ struct RootView: View {
 
             case .householdSetup:
                 if userSession.hasActiveSession {
-                    CreateHouseholdView()
-                        .transition(.opacity)
+                    if shouldShowHouseholdSetupLoader {
+                        HouseholdSetupLoadingView()
+                            .transition(.opacity)
+                    } else {
+                        CreateHouseholdView()
+                            .transition(.opacity)
+                    }
                 } else {
                     SignInView()
                         .transition(.opacity)
@@ -233,6 +241,16 @@ struct RootView: View {
         .onChange(of: userSession.hasActiveSession) { _, hasSession in
             if !hasSession, onboardingState.currentState != .onboarding {
                 onboardingState.openAuth()
+            }
+        }
+        .onChange(of: onboardingState.currentState) { _, newState in
+            if newState == .householdSetup {
+                hasResolvedHouseholdSetup = false
+                resolvedHouseholdCount = 0
+            } else {
+                isInitializingHouseholdSetup = false
+                hasResolvedHouseholdSetup = false
+                resolvedHouseholdCount = 0
             }
         }
         .task(id: pendingProcessingKey) {
@@ -289,6 +307,17 @@ struct RootView: View {
         guard onboardingState.currentState == .householdSetup else { return }
         guard userSession.hasActiveSession else { return }
 
+        isInitializingHouseholdSetup = true
+        hasResolvedHouseholdSetup = false
+        resolvedHouseholdCount = 0
+        defer {
+            isInitializingHouseholdSetup = false
+            if onboardingState.currentState == .householdSetup {
+                resolvedHouseholdCount = householdStore.currentHousehold == nil ? 0 : 1
+                hasResolvedHouseholdSetup = true
+            }
+        }
+
         if let householdId = userSession.currentHouseholdID,
            householdStore.isRecoverySuppressed(for: householdId)
         {
@@ -301,7 +330,10 @@ struct RootView: View {
             householdStore.clearCurrentHousehold()
         }
 
-        if userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil {
+        if let household = householdStore.currentHousehold {
+            if userSession.currentHouseholdID != household.id {
+                userSession.setCurrentHousehold(household.id)
+            }
             onboardingState.completeHouseholdSetup(withHousehold: true)
             return
         }
@@ -319,6 +351,26 @@ struct RootView: View {
             userSession.setCurrentHousehold(household.id)
             onboardingState.completeHouseholdSetup(withHousehold: true)
         }
+    }
+
+    private var shouldShowHouseholdSetupLoader: Bool {
+        onboardingState.currentState == .householdSetup &&
+            userSession.hasActiveSession &&
+            (isInitializingHouseholdSetup || !hasResolvedHouseholdSetup || resolvedHouseholdCount > 0)
+    }
+}
+
+private struct HouseholdSetupLoadingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .progressViewStyle(.circular)
+
+            Text("Loading household...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

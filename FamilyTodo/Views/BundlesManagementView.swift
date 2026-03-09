@@ -162,6 +162,7 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var isSaving = false
     @State private var showDeleteConfirmation = false
     @State private var showIconPicker = false
+    @State private var hasAppliedInitialFocus = false
     @FocusState private var focusedField: BundleEditorFocus?
 
     init(store: ShoppingBundleStore, bundle: ShoppingBundle?) {
@@ -177,69 +178,87 @@ private struct ShoppingBundleEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Bundle Name") {
-                    TextField("Weekly breakfast", text: $name)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                }
-
-                Section("Icon") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
                     ShoppingBundleIconSelector(selectedIcon: $selectedIcon) {
                         showIconPicker = true
                     }
-                }
+                    .frame(maxWidth: .infinity)
 
-                Section("Items") {
-                    ForEach($itemDrafts) { $draft in
-                        HStack(spacing: 12) {
-                            TextField("Item", text: $draft.title)
-                                .textInputAutocapitalization(.words)
-                                .autocorrectionDisabled()
-                                .submitLabel(.next)
-                                .focused($focusedField, equals: .existing(draft.id))
-                                .onSubmit {
-                                    handleExistingItemSubmit(forDraftID: draft.id)
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField(
+                            "",
+                            text: $name,
+                            prompt: Text("Bundle Name")
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                        )
+                        .font(themeStore.font(for: .screenHeader))
+                        .textFieldStyle(.plain)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .submitLabel(itemDrafts.isEmpty ? .done : .next)
+                        .focused($focusedField, equals: .name)
+                        .onSubmit {
+                            focusedField = itemDrafts.first.map {
+                                BundleEditorFocus.existing($0.id)
+                            } ?? .composer
+                        }
+
+                        Rectangle()
+                            .fill(themeStore.borderLightColor.opacity(0.75))
+                            .frame(height: 1)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Items")
+                            .font(themeStore.font(for: .sectionHeader))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+
+                        BundleSectionCard {
+                            ForEach($itemDrafts) { $draft in
+                                ShoppingBundleItemRow(
+                                    title: $draft.title,
+                                    focusedField: $focusedField,
+                                    focusID: .existing(draft.id),
+                                    onSubmit: {
+                                        handleExistingItemSubmit(forDraftID: draft.id)
+                                    },
+                                    onRemove: {
+                                        removeItemDraft(withID: draft.id)
+                                    }
+                                )
+
+                                if draft.id != itemDrafts.last?.id {
+                                    Divider()
+                                        .padding(.leading, 44)
                                 }
-
-                            Button(role: .destructive) {
-                                removeItemDraft(withID: draft.id)
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Remove item")
+
+                            if !itemDrafts.isEmpty {
+                                Divider()
+                                    .padding(.leading, 44)
+                            }
+
+                            ShoppingBundleComposerRow(
+                                text: $newItemText,
+                                focusedField: $focusedField,
+                                onSubmit: commitComposerItem
+                            )
                         }
                     }
 
-                    HStack(spacing: 12) {
-                        TextField(composerPlaceholder, text: $newItemText)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-                            .submitLabel(.return)
-                            .focused($focusedField, equals: .composer)
-                            .onSubmit {
-                                commitComposerItem()
-                            }
-
-                        Color.clear
-                            .frame(width: 24, height: 24)
-                            .accessibilityHidden(true)
-                    }
-                }
-
-                if bundle != nil {
-                    Section {
+                    if bundle != nil {
                         Button("Delete Bundle", role: .destructive) {
                             showDeleteConfirmation = true
                         }
+                        .font(themeStore.font(for: .buttonLabel))
                     }
                 }
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.top, 24)
+                .padding(.bottom, 32)
             }
-            .environment(\.defaultMinListRowHeight, 44)
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .background(themeStore.canvasColor.ignoresSafeArea())
             .navigationTitle(bundle == nil ? "New Bundle" : "Edit Bundle")
             .navigationBarTitleDisplayMode(.inline)
@@ -274,6 +293,9 @@ private struct ShoppingBundleEditorSheet: View {
                 Text("This removes the bundle, but not any items already added to your shopping list.")
             }
         }
+        .onAppear {
+            applyInitialFocusIfNeeded()
+        }
         .sheet(isPresented: $showIconPicker) {
             ShoppingBundleIconPickerSheet(selectedIcon: $selectedIcon)
         }
@@ -289,12 +311,20 @@ private struct ShoppingBundleEditorSheet: View {
     }
 
     private func removeItemDraft(withID id: UUID) {
-        itemDrafts.removeAll { $0.id == id }
+        guard let index = itemDrafts.firstIndex(where: { $0.id == id }) else { return }
+        itemDrafts.remove(at: index)
 
-        if focusedField == .existing(id) {
-            DispatchQueue.main.async {
-                focusedField = .composer
+        guard focusedField == .existing(id) else { return }
+
+        let nextFocus: BundleEditorFocus =
+            if index < itemDrafts.count {
+                .existing(itemDrafts[index].id)
+            } else {
+                .composer
             }
+
+        DispatchQueue.main.async {
+            focusedField = nextFocus
         }
     }
 
@@ -325,10 +355,6 @@ private struct ShoppingBundleEditorSheet: View {
         dismiss()
     }
 
-    private var composerPlaceholder: String {
-        itemDrafts.isEmpty ? "Milk" : "Add another item"
-    }
-
     private func handleExistingItemSubmit(forDraftID id: UUID) {
         guard let index = itemDrafts.firstIndex(where: { $0.id == id }) else { return }
         let nextIndex = itemDrafts.index(after: index)
@@ -355,6 +381,14 @@ private struct ShoppingBundleEditorSheet: View {
             focusedField = .composer
         }
     }
+
+    private func applyInitialFocusIfNeeded() {
+        guard !hasAppliedInitialFocus else { return }
+        hasAppliedInitialFocus = true
+        DispatchQueue.main.async {
+            focusedField = .name
+        }
+    }
 }
 
 private struct ShoppingBundleIconSelector: View {
@@ -365,42 +399,31 @@ private struct ShoppingBundleIconSelector: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 16) {
-                Image(systemName: selectedIcon)
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(
-                        themeStore.foregroundOnAccent(
-                            for: themeStore.accentTabColor,
-                            colorScheme: colorScheme
-                        )
+        VStack(spacing: 10) {
+            Image(systemName: selectedIcon)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(
+                    themeStore.foregroundOnAccent(
+                        for: themeStore.accentTabColor,
+                        colorScheme: colorScheme
                     )
-                    .frame(width: 68, height: 68)
-                    .background {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(themeStore.accentTabColor)
-                    }
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(ShoppingBundle.iconLabel(for: selectedIcon))
-                        .font(themeStore.font(for: .inlineTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-
-                    Text("Shown on the bundle and quick-add menu.")
-                        .font(themeStore.font(for: .bodySmall))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
+                )
+                .frame(width: 60, height: 60)
+                .background {
+                    Circle()
+                        .fill(themeStore.accentTabColor)
                 }
+                .accessibilityHidden(true)
 
-                Spacer()
-            }
+            Text(ShoppingBundle.iconLabel(for: selectedIcon))
+                .font(themeStore.font(for: .inlineTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
 
-            Button("Choose Icon", action: onChooseIcon)
+            Button("Change Icon", action: onChooseIcon)
                 .font(themeStore.font(for: .buttonLabel))
                 .buttonStyle(.bordered)
                 .tint(themeStore.accentTabColor)
         }
-        .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
     }
 }
@@ -493,6 +516,7 @@ private struct ShoppingBundleIconPickerSheet: View {
 }
 
 private enum BundleEditorFocus: Hashable {
+    case name
     case existing(UUID)
     case composer
 }
@@ -504,5 +528,101 @@ private struct BundleItemDraft: Identifiable {
     init(id: UUID = UUID(), title: String = "") {
         self.id = id
         self.title = title
+    }
+}
+
+private struct BundleSectionCard<Content: View>: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(themeStore.surfaceColor)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(themeStore.borderLightColor.opacity(0.45), lineWidth: 1)
+        }
+    }
+}
+
+private struct ShoppingBundleItemRow: View {
+    @Binding var title: String
+    let focusedField: FocusState<BundleEditorFocus?>.Binding
+    let focusID: BundleEditorFocus
+    let onSubmit: () -> Void
+    let onRemove: () -> Void
+
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 7))
+                .foregroundStyle(themeStore.contentSecondaryColor.opacity(0.55))
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
+
+            TextField("Item", text: $title)
+                .font(themeStore.font(for: .listRowTitle))
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.next)
+                .focused(focusedField, equals: focusID)
+                .onSubmit(onSubmit)
+
+            Button(role: .destructive, action: onRemove) {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove item")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+}
+
+private struct ShoppingBundleComposerRow: View {
+    @Binding var text: String
+    let focusedField: FocusState<BundleEditorFocus?>.Binding
+    let onSubmit: () -> Void
+
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
+
+            TextField(
+                "",
+                text: $text,
+                prompt: Text("Add item...")
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+            )
+            .font(themeStore.font(for: .listRowTitle))
+            .textFieldStyle(.plain)
+            .textInputAutocapitalization(.words)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+            .focused(focusedField, equals: .composer)
+            .onSubmit(onSubmit)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 }

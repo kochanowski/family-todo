@@ -499,9 +499,7 @@ final class TaskStore: ObservableObject {
 
         // Optimistic UI update
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                tasks[index] = updatedTask
-            }
+            tasks[index] = updatedTask
         }
 
         // Update cache

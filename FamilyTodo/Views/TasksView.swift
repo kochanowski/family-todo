@@ -133,9 +133,11 @@ private struct TasksContent: View {
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.bottom, 10)
 
-            assigneeFilterChips
-                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.bottom, 12)
+            if shouldShowAssigneeFilterChips {
+                assigneeFilterChips
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                    .padding(.bottom, 12)
+            }
 
             if activeFilter == .active {
                 if let activeBanner {
@@ -174,6 +176,7 @@ private struct TasksContent: View {
                         await refreshData()
                         markTasksTutorialAsSeenIfNeeded()
                     }
+                    .animation(.default, value: visibleTaskAnimationIDs)
                 }
             } else {
                 ProgressView("Loading tasks...")
@@ -215,12 +218,14 @@ private struct TasksContent: View {
             normalizeAssigneeFilterSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
+            guard selectedTab == .tasks else { return }
             _ = _Concurrency.Task {
                 await refreshData()
                 markTasksTutorialAsSeenIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+            guard selectedTab == .tasks else { return }
             _ = _Concurrency.Task {
                 await refreshData()
                 markTasksTutorialAsSeenIfNeeded()
@@ -508,12 +513,25 @@ private struct TasksContent: View {
         store.recentlyDoneTasks.filter(matchesAssigneeFilter)
     }
 
+    private var visibleTaskAnimationIDs: [UUID] {
+        switch activeFilter {
+        case .active:
+            filteredActiveTasks.map(\.id)
+        case .completed:
+            filteredCompletedTasks.map(\.id)
+        }
+    }
+
+    private var shouldShowAssigneeFilterChips: Bool {
+        activeMembers.count > 1
+    }
+
     private var shouldShowFilteredActiveEmptyState: Bool {
-        assigneeFilter != .all && !visibleNextTasks.isEmpty
+        shouldShowAssigneeFilterChips && assigneeFilter != .all && !visibleNextTasks.isEmpty
     }
 
     private var shouldShowFilteredCompletedEmptyState: Bool {
-        assigneeFilter != .all && !store.recentlyDoneTasks.isEmpty
+        shouldShowAssigneeFilterChips && assigneeFilter != .all && !store.recentlyDoneTasks.isEmpty
     }
 
     private var header: some View {
@@ -853,6 +871,11 @@ private struct TasksContent: View {
     }
 
     private func normalizeAssigneeFilterSelection() {
+        guard shouldShowAssigneeFilterChips else {
+            assigneeFilter = .all
+            return
+        }
+
         switch assigneeFilter {
         case .all:
             return

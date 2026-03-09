@@ -280,33 +280,27 @@ final class ShoppingBundleStore: ObservableObject {
             predicate: #Predicate { $0.id == bundleId }
         )
 
-        if let context = modelContext,
-           let cached = try? context.fetch(descriptor).first
-        {
-            if isCloudSyncEnabled {
+        if let context = modelContext {
+            if let cached = try? context.fetch(descriptor).first {
+                if isCloudSyncEnabled {
+                    cached.syncStatusRaw = BundleSyncStatus.pendingDelete
+                    cached.lastSyncedAt = nil
+                    saveContextOrSetError(context, operation: "mark shopping bundle pending delete")
+                } else {
+                    context.delete(cached)
+                    saveContextOrSetError(context, operation: "delete shopping bundle from cache")
+                }
+            } else if isCloudSyncEnabled {
+                let cached = CachedShoppingBundle(from: bundle)
                 cached.syncStatusRaw = BundleSyncStatus.pendingDelete
                 cached.lastSyncedAt = nil
-                saveContextOrSetError(context, operation: "mark shopping bundle pending delete")
-            } else {
-                context.delete(cached)
-                saveContextOrSetError(context, operation: "delete shopping bundle from cache")
+                context.insert(cached)
+                saveContextOrSetError(context, operation: "cache shopping bundle pending delete")
             }
         }
 
         guard isCloudSyncEnabled else { return }
-
-        do {
-            try await cloudKit.deleteShoppingBundle(id: bundle.id, householdId: bundle.householdId)
-
-            if let context = modelContext,
-               let cached = try? context.fetch(descriptor).first
-            {
-                context.delete(cached)
-                saveContextOrSetError(context, operation: "remove synced shopping bundle cache")
-            }
-        } catch {
-            self.error = error
-        }
+        replayPendingMutationsInBackground()
     }
 
     func pendingSyncSnapshot(from cachedBundles: [CachedShoppingBundle]) -> PendingSyncSnapshot {

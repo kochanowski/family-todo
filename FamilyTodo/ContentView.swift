@@ -71,12 +71,18 @@ struct MainAppView: View {
             }
             .tag(AppTab.more)
         }
-        .tint(themeStore.resolvedTabTint)
     }
 
     private func bootstrapHouseholdIfNeeded() async {
         guard !hasBootstrappedHousehold else { return }
         hasBootstrappedHousehold = true
+
+        if let household = householdStore.currentHousehold {
+            if userSession.currentHouseholdID != household.id {
+                userSession.setCurrentHousehold(household.id)
+            }
+            return
+        }
 
         guard let userId = userSession.userId else { return }
 
