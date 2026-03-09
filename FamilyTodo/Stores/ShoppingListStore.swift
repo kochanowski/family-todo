@@ -94,7 +94,7 @@ final class ShoppingListStore: ObservableObject {
     // MARK: - Load Items
 
     func loadItems() async {
-        guard let householdId else { return nil }
+        guard let householdId else { return }
 
         isLoading = true
         error = nil
@@ -257,7 +257,7 @@ final class ShoppingListStore: ObservableObject {
         quantityUnit: String? = nil,
         afterItemId: UUID? = nil
     ) async -> ShoppingItem? {
-        guard let householdId else { return }
+        guard let householdId else { return nil }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return nil }
 
