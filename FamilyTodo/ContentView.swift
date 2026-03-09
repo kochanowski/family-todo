@@ -23,8 +23,10 @@ struct MainAppView: View {
         legacyTabView
             .background(
                 TabBarControllerAccessor { controller in
-                    guard tabBarController !== controller else { return }
-                    tabBarController = controller
+                    if tabBarController !== controller {
+                        tabBarController = controller
+                    }
+                    // UIKit can temporarily drop the live tab bar styling after modal save/dismiss flows.
                     applyTabBarAppearance()
                 }
             )
