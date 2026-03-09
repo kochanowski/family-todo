@@ -3,7 +3,11 @@ import UIKit
 
 @MainActor
 enum TabBarTypographyManager {
-    static func apply(themeStore: ThemeStore) {
+    static func apply(
+        themeStore: ThemeStore,
+        tabBarController: UITabBarController? = nil,
+        selectedIndex: Int? = nil
+    ) {
         let normalColor = UIColor.secondaryLabel
         let normalAttributes = makeAttributes(
             font: themeStore.uiFont(for: .tabLabel),
@@ -39,12 +43,16 @@ enum TabBarTypographyManager {
             resolvedScrollEdgeAppearance = scrollEdge
         }
 
-        updateExistingTabBars(
-            standardAppearance: standard,
-            scrollEdgeAppearance: resolvedScrollEdgeAppearance,
-            selectedColor: selectedColor,
-            normalColor: normalColor
-        )
+        if let tabBarController {
+            updateLiveTabBar(
+                tabBarController: tabBarController,
+                standardAppearance: standard,
+                scrollEdgeAppearance: resolvedScrollEdgeAppearance,
+                selectedColor: selectedColor,
+                normalColor: normalColor,
+                selectedIndex: selectedIndex
+            )
+        }
     }
 
     private static func makeAttributes(
@@ -84,36 +92,53 @@ enum TabBarTypographyManager {
         compactInline.selected.iconColor = selectedColor
     }
 
-    private static func updateExistingTabBars(
+    private static func updateLiveTabBar(
+        tabBarController: UITabBarController,
         standardAppearance: UITabBarAppearance,
         scrollEdgeAppearance: UITabBarAppearance?,
         selectedColor: UIColor,
-        normalColor: UIColor
+        normalColor: UIColor,
+        selectedIndex: Int?
     ) {
-        let tabBars = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .flatMap { window in
-                allTabBars(in: window)
-            }
+        let tabBar = tabBarController.tabBar
 
-        for tabBar in tabBars {
-            tabBar.standardAppearance = standardAppearance
-            if #available(iOS 15.0, *), let scrollEdgeAppearance {
-                tabBar.scrollEdgeAppearance = scrollEdgeAppearance
-            }
-            tabBar.tintColor = selectedColor
-            tabBar.unselectedItemTintColor = normalColor
-            tabBar.setNeedsLayout()
-            tabBar.layoutIfNeeded()
+        tabBar.standardAppearance = standardAppearance
+        if #available(iOS 15.0, *), let scrollEdgeAppearance {
+            tabBar.scrollEdgeAppearance = scrollEdgeAppearance
+        }
+        tabBar.tintColor = selectedColor
+        tabBar.unselectedItemTintColor = normalColor
+
+        repairSelection(
+            on: tabBarController,
+            selectedIndex: selectedIndex ?? tabBarController.selectedIndex
+        )
+
+        DispatchQueue.main.async {
+            repairSelection(
+                on: tabBarController,
+                selectedIndex: selectedIndex ?? tabBarController.selectedIndex
+            )
         }
     }
 
-    private static func allTabBars(in view: UIView) -> [UITabBar] {
-        let nestedTabBars = view.subviews.flatMap(allTabBars(in:))
-        if let tabBar = view as? UITabBar {
-            return [tabBar] + nestedTabBars
+    private static func repairSelection(
+        on tabBarController: UITabBarController,
+        selectedIndex: Int
+    ) {
+        guard let viewControllers = tabBarController.viewControllers,
+              let items = tabBarController.tabBar.items,
+              !viewControllers.isEmpty,
+              !items.isEmpty
+        else {
+            return
         }
-        return nestedTabBars
+
+        let boundedIndex = min(max(selectedIndex, 0), min(viewControllers.count, items.count) - 1)
+        tabBarController.selectedIndex = boundedIndex
+        tabBarController.selectedViewController = viewControllers[boundedIndex]
+        tabBarController.tabBar.selectedItem = items[boundedIndex]
+        tabBarController.tabBar.setNeedsLayout()
+        tabBarController.tabBar.layoutIfNeeded()
     }
 }

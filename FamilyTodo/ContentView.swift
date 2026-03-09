@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     var body: some View {
@@ -16,24 +17,35 @@ struct MainAppView: View {
 
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
+    @State private var tabBarController: UITabBarController?
 
     var body: some View {
         legacyTabView
+            .background(
+                TabBarControllerAccessor { controller in
+                    guard tabBarController !== controller else { return }
+                    tabBarController = controller
+                    applyTabBarAppearance()
+                }
+            )
             .background(AppBackgroundView())
             .onAppear {
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
             }
             .onChange(of: themeStore.tabTintColor) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
             }
             .onChange(of: householdStore.currentHousehold?.iconSymbol) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
             }
             .onChange(of: themeStore.retroFontScale) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
+            }
+            .onChange(of: activeTab) { _, _ in
+                applyTabBarAppearance()
             }
             .task {
                 await bootstrapHouseholdIfNeeded()
@@ -116,6 +128,72 @@ struct MainAppView: View {
         {
             userSession.setCurrentHousehold(household.id)
         }
+    }
+
+    private func applyTabBarAppearance() {
+        TabBarTypographyManager.apply(
+            themeStore: themeStore,
+            tabBarController: tabBarController,
+            selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
+        )
+    }
+}
+
+private struct TabBarControllerAccessor: UIViewControllerRepresentable {
+    let onResolve: (UITabBarController) -> Void
+
+    func makeUIViewController(context _: Context) -> TabBarControllerReaderViewController {
+        let viewController = TabBarControllerReaderViewController()
+        viewController.onResolve = onResolve
+        return viewController
+    }
+
+    func updateUIViewController(
+        _ uiViewController: TabBarControllerReaderViewController,
+        context _: Context
+    ) {
+        uiViewController.onResolve = onResolve
+        uiViewController.resolveTabBarControllerIfNeeded()
+    }
+}
+
+private final class TabBarControllerReaderViewController: UIViewController {
+    var onResolve: ((UITabBarController) -> Void)?
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    func resolveTabBarControllerIfNeeded() {
+        guard let tabBarController = resolvedTabBarController else { return }
+        onResolve?(tabBarController)
+    }
+
+    private var resolvedTabBarController: UITabBarController? {
+        if let tabBarController {
+            return tabBarController
+        }
+
+        var currentParent = parent
+        while let currentParent {
+            if let tabBarController = currentParent as? UITabBarController {
+                return tabBarController
+            }
+            currentParent = currentParent.parent
+        }
+
+        return nil
     }
 }
 
