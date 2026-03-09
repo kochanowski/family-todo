@@ -27,6 +27,7 @@ enum TabBarTypographyManager {
         tabBarAppearance.tintColor = selectedColor
         tabBarAppearance.unselectedItemTintColor = normalColor
 
+        var resolvedScrollEdgeAppearance: UITabBarAppearance?
         if #available(iOS 15.0, *) {
             var scrollEdge = tabBarAppearance.scrollEdgeAppearance ?? standard
             apply(
@@ -35,7 +36,15 @@ enum TabBarTypographyManager {
                 to: &scrollEdge
             )
             tabBarAppearance.scrollEdgeAppearance = scrollEdge
+            resolvedScrollEdgeAppearance = scrollEdge
         }
+
+        updateExistingTabBars(
+            standardAppearance: standard,
+            scrollEdgeAppearance: resolvedScrollEdgeAppearance,
+            selectedColor: selectedColor,
+            normalColor: normalColor
+        )
     }
 
     private static func makeAttributes(
@@ -73,5 +82,38 @@ enum TabBarTypographyManager {
         compactInline.selected.titleTextAttributes = selectedAttributes
         compactInline.normal.iconColor = normalColor
         compactInline.selected.iconColor = selectedColor
+    }
+
+    private static func updateExistingTabBars(
+        standardAppearance: UITabBarAppearance,
+        scrollEdgeAppearance: UITabBarAppearance?,
+        selectedColor: UIColor,
+        normalColor: UIColor
+    ) {
+        let tabBars = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .flatMap { window in
+                allTabBars(in: window)
+            }
+
+        for tabBar in tabBars {
+            tabBar.standardAppearance = standardAppearance
+            if #available(iOS 15.0, *), let scrollEdgeAppearance {
+                tabBar.scrollEdgeAppearance = scrollEdgeAppearance
+            }
+            tabBar.tintColor = selectedColor
+            tabBar.unselectedItemTintColor = normalColor
+            tabBar.setNeedsLayout()
+            tabBar.layoutIfNeeded()
+        }
+    }
+
+    private static func allTabBars(in view: UIView) -> [UITabBar] {
+        let nestedTabBars = view.subviews.flatMap(allTabBars(in:))
+        if let tabBar = view as? UITabBar {
+            return [tabBar] + nestedTabBars
+        }
+        return nestedTabBars
     }
 }
