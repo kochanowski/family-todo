@@ -21,7 +21,7 @@ struct OnboardingView: View {
                         .font(.system(size: 60))
                         .foregroundStyle(.blue)
 
-                    Text("Welcome to Family To-Do")
+                    Text("Welcome to HousePulse")
                         .font(.title)
                         .fontWeight(.bold)
 
@@ -202,7 +202,7 @@ struct JoinHouseholdSheet: View {
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                 } footer: {
-                    Text("Ask the household owner for a 5-6 character code or invite link")
+                    Text("Ask the household owner for an 8-character code or invite link")
                 }
 
                 if let errorMessage {

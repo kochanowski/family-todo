@@ -1,12 +1,12 @@
-@testable import HousePulse
 import Foundation
+@testable import HousePulse
 import XCTest
 
 final class InviteCodeFlowTests: XCTestCase {
     func testGenerateInviteCodeUsesExpectedAlphabetAndLength() {
         let allowed = CharacterSet(charactersIn: "ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
 
-        for _ in 0..<100 {
+        for _ in 0 ..< 100 {
             let code = CloudKitManager.generateInviteCode()
             XCTAssertEqual(code.count, 6)
             XCTAssertTrue(code.unicodeScalars.allSatisfy { allowed.contains($0) })

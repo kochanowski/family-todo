@@ -14,6 +14,20 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate {
         }
     }
 
+    func application(
+        _: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard CKNotification(fromRemoteNotificationDictionary: userInfo) != nil else {
+            completionHandler(.noData)
+            return
+        }
+
+        CloudKitSubscriptionManager.shared.handleRemoteNotification(userInfo: userInfo)
+        completionHandler(.newData)
+    }
+
     func flushPendingInviteIfNeeded() {
         guard let pendingMetadata, let shareAcceptanceCoordinator else { return }
         shareAcceptanceCoordinator.enqueue(metadata: pendingMetadata)

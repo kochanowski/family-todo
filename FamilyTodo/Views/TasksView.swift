@@ -52,6 +52,18 @@ private struct TasksContent: View {
         case completed = "Completed"
     }
 
+    private enum AssigneeFilter: Equatable {
+        case all
+        case mine
+        case member(UUID)
+    }
+
+    private struct AssigneeFilterChip: Identifiable {
+        let id: String
+        let title: String
+        let filter: AssigneeFilter
+    }
+
     private enum CompletedCleanupAction: String, Identifiable {
         case clearAll
         case keepLast7Days
@@ -72,6 +84,7 @@ private struct TasksContent: View {
     @State private var selectedAssigneeIdForNext: UUID?
     @State private var activeBanner: InlineBanner?
     @State private var activeFilter: TasksFilter = .active
+    @State private var assigneeFilter: AssigneeFilter = .all
     @State private var pendingCleanupAction: CompletedCleanupAction?
     @State private var pendingDeletedTask: Task?
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
@@ -82,12 +95,14 @@ private struct TasksContent: View {
     @State private var editMode: EditMode = .inactive
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
+    @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         let taskStore = TaskStore(modelContext: modelContext)
@@ -104,6 +119,9 @@ private struct TasksContent: View {
 
     var body: some View {
         let listBottomInset: CGFloat = 16
+        let shouldShowActiveEmptyState = activeFilter == .active && filteredActiveTasks.isEmpty
+        let shouldShowCompletedEmptyState =
+            activeFilter == .completed && filteredCompletedTasks.isEmpty
 
         VStack(spacing: 0) {
             header
@@ -113,7 +131,13 @@ private struct TasksContent: View {
 
             filterToggle
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.bottom, 12)
+                .padding(.bottom, 10)
+
+            if shouldShowAssigneeFilterChips {
+                assigneeFilterChips
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                    .padding(.bottom, 12)
+            }
 
             if activeFilter == .active {
                 if let activeBanner {
@@ -124,27 +148,34 @@ private struct TasksContent: View {
                 }
             }
 
-            if activeFilter == .active {
-                unifiedListHeader
-                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                    .padding(.bottom, 8)
-            }
-
             if hasInitialMetadataLoaded {
-                List {
-                    if activeFilter == .active {
-                        activeTasksContent
-                    } else {
-                        completedTasksContent
+                if shouldShowActiveEmptyState {
+                    activeTasksEmptyState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else if shouldShowCompletedEmptyState {
+                    completedTasksEmptyState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else {
+                    List {
+                        if activeFilter == .active {
+                            activeTasksContent
+                        } else {
+                            completedTasksContent
+                        }
                     }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
-                .padding(.bottom, listBottomInset)
-                .environment(\.editMode, $editMode)
-                .refreshable {
-                    await refreshData()
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .padding(.bottom, listBottomInset)
+                    .environment(\.editMode, $editMode)
+                    .refreshable {
+                        await refreshData()
+                        markTasksTutorialAsSeenIfNeeded()
+                    }
                 }
             } else {
                 ProgressView("Loading tasks...")
@@ -156,23 +187,47 @@ private struct TasksContent: View {
         .task {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
-            await refreshData()
             hasInitialMetadataLoaded = true
+            await refreshData()
+            markTasksTutorialAsSeenIfNeeded()
         }
         .onChange(of: selectedTab) { _, newTab in
             guard newTab == .tasks else { return }
             _ = _Concurrency.Task {
                 await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
             }
         }
+        .onChange(of: store.nextTasks.isEmpty) { _, isEmpty in
+            if !isEmpty {
+                markTasksTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: activeFilter) { _, newFilter in
+            if newFilter != .active, editMode.isEditing {
+                editMode = .inactive
+            }
+        }
+        .onChange(of: assigneeFilter) { _, newFilter in
+            if newFilter != .all, editMode.isEditing {
+                editMode = .inactive
+            }
+        }
+        .onChange(of: activeMembers.map(\.id)) { _, _ in
+            normalizeAssigneeFilterSelection()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
+            guard selectedTab == .tasks else { return }
             _ = _Concurrency.Task {
                 await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+            guard selectedTab == .tasks else { return }
             _ = _Concurrency.Task {
                 await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
             }
         }
         .sheet(item: $pendingCleanupAction) { action in
@@ -200,9 +255,6 @@ private struct TasksContent: View {
                     _ = _Concurrency.Task {
                         await store.deleteTask(taskToDelete)
                     }
-                },
-                onDemoteToBacklog: { taskToDemote in
-                    demoteTaskToBacklog(taskToDemote)
                 }
             )
         }
@@ -259,86 +311,160 @@ private struct TasksContent: View {
 
     @ViewBuilder
     private var activeTasksContent: some View {
-        let displayedTasks = visibleNextTasks
-        if !displayedTasks.isEmpty {
-            ForEach(displayedTasks) { task in
-                if taskBeingCompleted != task.id {
-                    let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
-                    if index == normalizedWipLimit, visibleNextTasks.count > normalizedWipLimit {
-                        overLimitSeparator
-                            .tasksListRowStyle(taskListRowInsets)
-                    }
-
-                    TaskRow(
-                        task: task,
-                        assignee: assignee(for: task),
-                        categoryName: categoryName(for: task),
-                        categoryColor: categoryColor(for: task),
-                        wipZone: wipZone(for: index),
-                        onToggle: { toggleTask(task) },
-                        onOpenDetail: { selectedTask = task }
-                    )
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button {
-                            HapticManager.lightTap()
-                            demoteTaskToBacklog(task)
-                        } label: {
-                            Label("Move to Ideas", systemImage: "archivebox.fill")
-                        }
-                        .tint(.indigo)
-
-                        Button(role: .destructive) {
-                            queueDeleteTask(task)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .accessibilityIdentifier("taskRow_\(task.title)")
-                    .tasksListRowStyle(taskListRowInsets)
+        let displayedTasks = filteredActiveTasks
+        ForEach(displayedTasks) { task in
+            if taskBeingCompleted != task.id {
+                let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
+                if index == normalizedWipLimit, displayedTasks.count > normalizedWipLimit {
+                    overLimitSeparator
+                        .tasksListRowStyle(taskListRowInsets)
                 }
-            }
-            .onMove(perform: moveActiveTasks)
-            .moveDisabled(
-                taskBeingCompleted != nil ||
-                    !hiddenPendingDeleteIds.isEmpty ||
-                    !hiddenMovedToIdeasIds.isEmpty
-            )
-        }
-    }
 
-    @ViewBuilder
-    private var completedTasksContent: some View {
-        if store.doneTasks.isEmpty {
-            ContentUnavailableView {
-                Label("No Completed Tasks", systemImage: "checkmark.circle")
-            } description: {
-                Text("Complete some tasks to see them here.")
-            }
-            .padding(.top, 40)
-            .tasksListRowStyle(taskListRowInsets)
-        } else {
-            ForEach(store.doneTasks) { task in
                 TaskRow(
                     task: task,
                     assignee: assignee(for: task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
-                    wipZone: .normal,
+                    wipZone: wipZone(for: index),
                     onToggle: { toggleTask(task) },
                     onOpenDetail: { selectedTask = task }
                 )
-                .swipeActions(edge: .trailing) {
-                    Button {
-                        archiveTask(task)
-                    } label: {
-                        Label("Archive", systemImage: "archivebox")
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    if isTaskAssignedToOther(task) {
+                        let isPokeInFlight = store.pendingTaskMutations.contains(task.id)
+                        let isPokeAvailable = store.canPoke(task: task)
+                        Button {
+                            sendPoke(task)
+                        } label: {
+                            if isPokeInFlight {
+                                Label("Sending...", systemImage: "hourglass")
+                            } else {
+                                Label(
+                                    isPokeAvailable ? "Poke" : "Poked today",
+                                    systemImage: isPokeAvailable ? "hand.wave.fill" : "moon.zzz.fill"
+                                )
+                            }
+                        }
+                        .tint(isPokeInFlight ? .gray : (isPokeAvailable ? .orange : .gray))
+                        .disabled(isPokeInFlight || !isPokeAvailable)
                     }
-                    .tint(.orange)
                 }
-                .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button {
+                        HapticManager.lightTap()
+                        demoteTaskToBacklog(task)
+                    } label: {
+                        Label("Move to Ideas", systemImage: "archivebox.fill")
+                    }
+                    .tint(.indigo)
+
+                    Button(role: .destructive) {
+                        queueDeleteTask(task)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .accessibilityIdentifier("taskRow_\(task.title)")
                 .tasksListRowStyle(taskListRowInsets)
             }
         }
+        .onMove(perform: moveActiveTasks)
+        .moveDisabled(
+            taskBeingCompleted != nil ||
+                !hiddenPendingDeleteIds.isEmpty ||
+                !hiddenMovedToIdeasIds.isEmpty
+        )
+        .animation(.default, value: activeTaskAnimationIDs)
+    }
+
+    private var completedTasksContent: some View {
+        ForEach(filteredCompletedTasks) { task in
+            TaskRow(
+                task: task,
+                assignee: assignee(for: task),
+                categoryName: categoryName(for: task),
+                categoryColor: categoryColor(for: task),
+                wipZone: .normal,
+                onToggle: { toggleTask(task) },
+                onOpenDetail: { selectedTask = task }
+            )
+            .swipeActions(edge: .trailing) {
+                Button {
+                    archiveTask(task)
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+                .tint(.orange)
+            }
+            .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+            .tasksListRowStyle(taskListRowInsets)
+        }
+        .animation(.default, value: completedTaskAnimationIDs)
+    }
+
+    private var activeTasksEmptyState: some View {
+        Group {
+            if shouldShowFilteredActiveEmptyState {
+                ContentUnavailableView(
+                    "No Matching Active Tasks",
+                    systemImage: "line.3.horizontal.decrease.circle",
+                    description: Text("Try a different filter or create a new task.")
+                )
+            } else if hasSeenTasksTutorial {
+                if store.doneTasks.isEmpty {
+                    ContentUnavailableView(
+                        "No Tasks Yet",
+                        systemImage: "checklist",
+                        description: Text("Ready to get organized? Create your first task.")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "All Caught Up!",
+                        systemImage: "sparkles",
+                        description: Text(
+                            "The house is looking great. Enjoy your free time or create a new task."
+                        )
+                    )
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("Master Your Chores", systemImage: "checkmark.square.fill")
+                } description: {
+                    Text(
+                        "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
+                    )
+                } actions: {
+                    Button("Let's Go!") {
+                        HapticManager.lightTap()
+                        hasSeenTasksTutorial = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
+    }
+
+    private var completedTasksEmptyState: some View {
+        Group {
+            if shouldShowFilteredCompletedEmptyState {
+                ContentUnavailableView(
+                    "No Matching Completed Tasks",
+                    systemImage: "line.3.horizontal.decrease.circle",
+                    description: Text("Try another filter to see completed items.")
+                )
+            } else {
+                ContentUnavailableView(
+                    "No Completed Tasks",
+                    systemImage: "checkmark.circle",
+                    description: Text("Tasks you finish will appear here.")
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
     }
 
     private var activeMembers: [Member] {
@@ -354,21 +480,75 @@ private struct TasksContent: View {
         return activeMembers.first { $0.userId == userId }
     }
 
+    private var currentMemberId: UUID? {
+        currentMember?.id ?? userSession.userId.flatMap(UUID.init(uuidString:))
+    }
+
+    private var assigneeFilterOptions: [AssigneeFilterChip] {
+        var options: [AssigneeFilterChip] = [
+            AssigneeFilterChip(id: "all", title: "All tasks", filter: .all),
+        ]
+
+        if currentMemberId != nil {
+            options.append(AssigneeFilterChip(id: "mine", title: "My tasks", filter: .mine))
+        }
+
+        for member in activeMembers where member.id != currentMemberId {
+            options.append(
+                AssigneeFilterChip(
+                    id: "member-\(member.id.uuidString)",
+                    title: "\(member.displayName)'s tasks",
+                    filter: .member(member.id)
+                )
+            )
+        }
+
+        return options
+    }
+
+    private var filteredActiveTasks: [Task] {
+        visibleNextTasks.filter(matchesAssigneeFilter)
+    }
+
+    private var filteredCompletedTasks: [Task] {
+        store.recentlyDoneTasks.filter(matchesAssigneeFilter)
+    }
+
+    private var activeTaskAnimationIDs: [UUID] {
+        filteredActiveTasks.map(\.id)
+    }
+
+    private var completedTaskAnimationIDs: [UUID] {
+        filteredCompletedTasks.map(\.id)
+    }
+
+    private var shouldShowAssigneeFilterChips: Bool {
+        activeMembers.count > 1
+    }
+
+    private var shouldShowFilteredActiveEmptyState: Bool {
+        shouldShowAssigneeFilterChips && assigneeFilter != .all && !visibleNextTasks.isEmpty
+    }
+
+    private var shouldShowFilteredCompletedEmptyState: Bool {
+        shouldShowAssigneeFilterChips && assigneeFilter != .all && !store.recentlyDoneTasks.isEmpty
+    }
+
     private var header: some View {
-        HStack(alignment: .center) {
-            Text("Tasks")
-                .font(themeStore.font(for: .screenHeader))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-
-            Spacer()
-
+        AppScreenHeader(title: "Tasks") {
             if activeFilter == .active {
-                Button(editMode.isEditing ? "Done" : "Reorder") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        editMode = editMode.isEditing ? .inactive : .active
+                TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+            }
+        } trailing: {
+            if activeFilter == .active {
+                if assigneeFilter == .all {
+                    Button(editMode.isEditing ? "Done" : "Reorder") {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            editMode = editMode.isEditing ? .inactive : .active
+                        }
                     }
+                    .disabled(visibleNextTasks.isEmpty)
                 }
-                .disabled(visibleNextTasks.isEmpty)
             } else {
                 completedCleanupMenu
             }
@@ -413,25 +593,48 @@ private struct TasksContent: View {
         }
     }
 
-    private var unifiedListHeader: some View {
-        HStack {
-            Text("Remaining")
-                .font(themeStore.font(for: .sectionHeader))
-                .foregroundStyle(themeStore.contentSecondaryColor)
+    private var assigneeFilterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(assigneeFilterOptions) { option in
+                    let isSelected = assigneeFilter == option.filter
+                    let foreground =
+                        isSelected
+                            ? themeStore.foregroundOnAccent(
+                                for: themeStore.accentTabColor,
+                                colorScheme: colorScheme
+                            ) : themeStore.contentSecondaryColor
 
-            Spacer()
-
-            let count = visibleNextTasks.count
-            let limit = normalizedWipLimit
-            let overLimit = count > limit
-
-            Text("\(count) / \(limit)")
-                .font(themeStore.font(for: .bodySmall))
-                .fontWeight(overLimit ? .bold : .regular)
-                .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
-                .monospacedDigit()
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            assigneeFilter = option.filter
+                        }
+                    } label: {
+                        Text(option.title)
+                            .font(themeStore.font(for: .chip))
+                            .foregroundStyle(foreground)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background {
+                                Capsule()
+                                    .fill(isSelected ? themeStore.accentTabColor : Color(.systemGray6))
+                            }
+                            .overlay {
+                                Capsule()
+                                    .stroke(
+                                        isSelected
+                                            ? themeStore.accentTabColor.opacity(0.5)
+                                            : themeStore.borderLightColor.opacity(0.5),
+                                        lineWidth: 0.9
+                                    )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
         }
-        .frame(minHeight: 30, alignment: .bottom)
     }
 
     private func startTaskFromBacklog(_ task: Task) {
@@ -527,7 +730,6 @@ private struct TasksContent: View {
                         HapticManager.success()
                         if themeStore.celebrationsEnabled {
                             celebrationManager.celebrateAllTasksComplete()
-                            celebrationManager.triggerConfetti()
                             if activeMembers.count > 1, let name = currentMember?.displayName {
                                 celebrationManager.notifyPartner(
                                     completedBy: name,
@@ -538,7 +740,11 @@ private struct TasksContent: View {
                     } else {
                         HapticManager.mediumTap()
                         if themeStore.celebrationsEnabled {
-                            celebrationManager.celebrateTaskCompletion(taskTitle: task.title)
+                            let weeklyCompletedCount = store.completedTaskCountThisWeek()
+                            celebrationManager.celebrateTaskCompletion(
+                                taskTitle: task.title,
+                                weeklyCompletedCount: weeklyCompletedCount
+                            )
                             if activeMembers.count > 1, let name = currentMember?.displayName {
                                 celebrationManager.notifyPartner(
                                     completedBy: name,
@@ -588,6 +794,12 @@ private struct TasksContent: View {
     private func assignee(for task: Task) -> Member? {
         guard let assigneeId = task.assigneeId else { return nil }
         return memberStore.members.first(where: { $0.id == assigneeId })
+    }
+
+    private func isTaskAssignedToOther(_ task: Task) -> Bool {
+        let assignedIDs = Set(task.assigneeIds + (task.assigneeId.map { [$0] } ?? []))
+        guard !assignedIDs.isEmpty, let currentMemberId else { return false }
+        return !assignedIDs.contains(currentMemberId)
     }
 
     private func categoryName(for task: Task) -> String? {
@@ -643,6 +855,38 @@ private struct TasksContent: View {
     private var visibleNextTasks: [Task] {
         store.nextTasks.filter {
             !hiddenPendingDeleteIds.contains($0.id) && !hiddenMovedToIdeasIds.contains($0.id)
+        }
+    }
+
+    private func matchesAssigneeFilter(_ task: Task) -> Bool {
+        switch assigneeFilter {
+        case .all:
+            return true
+        case .mine:
+            guard let currentMemberId else { return false }
+            return task.assigneeId == currentMemberId
+        case let .member(memberId):
+            return task.assigneeId == memberId
+        }
+    }
+
+    private func normalizeAssigneeFilterSelection() {
+        guard shouldShowAssigneeFilterChips else {
+            assigneeFilter = .all
+            return
+        }
+
+        switch assigneeFilter {
+        case .all:
+            return
+        case .mine:
+            if currentMemberId == nil {
+                assigneeFilter = .all
+            }
+        case let .member(memberId):
+            if !activeMembers.contains(where: { $0.id == memberId }) {
+                assigneeFilter = .all
+            }
         }
     }
 
@@ -723,13 +967,34 @@ private struct TasksContent: View {
         async let loadBacklog = backlogStore.loadData()
 
         _ = await (loadTasks, loadMembers, loadBacklog)
+        normalizeAssigneeFilterSelection()
+    }
+
+    private func markTasksTutorialAsSeenIfNeeded() {
+        guard !store.nextTasks.isEmpty, !hasSeenTasksTutorial else { return }
+        hasSeenTasksTutorial = true
     }
 
     private func archiveTask(_ task: Task) {
-        var updatedTask = task
-        updatedTask.completedAt = Date().addingTimeInterval(-86401)
         _ = _Concurrency.Task {
-            _ = await store.updateTask(updatedTask)
+            await store.archiveTask(task)
+        }
+    }
+
+    private func sendPoke(_ task: Task) {
+        guard isTaskAssignedToOther(task) else { return }
+        guard store.canPoke(task: task), !store.pendingTaskMutations.contains(task.id) else {
+            HapticManager.warning()
+            return
+        }
+
+        _ = _Concurrency.Task {
+            let didPoke = await store.pokeTask(task)
+            if didPoke {
+                HapticManager.selection()
+            } else {
+                HapticManager.warning()
+            }
         }
     }
 
@@ -1085,13 +1350,11 @@ private struct TaskDetailSheet: View {
     let members: [Member]
     let onSave: (Task) -> Void
     let onDelete: (Task) -> Void
-    let onDemoteToBacklog: (Task) -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
-    @State private var status: Task.TaskStatus
     @State private var assigneeId: UUID?
     @State private var hasDueDate: Bool
     @State private var dueDate: Date
@@ -1101,17 +1364,14 @@ private struct TaskDetailSheet: View {
         task: Task,
         members: [Member],
         onSave: @escaping (Task) -> Void,
-        onDelete: @escaping (Task) -> Void,
-        onDemoteToBacklog: @escaping (Task) -> Void
+        onDelete: @escaping (Task) -> Void
     ) {
         self.task = task
         self.members = members
         self.onSave = onSave
         self.onDelete = onDelete
-        self.onDemoteToBacklog = onDemoteToBacklog
 
         _title = State(initialValue: task.title)
-        _status = State(initialValue: task.status)
         _assigneeId = State(initialValue: task.assigneeId)
         _hasDueDate = State(initialValue: task.dueDate != nil)
         _dueDate = State(initialValue: task.dueDate ?? Date())
@@ -1121,48 +1381,51 @@ private struct TaskDetailSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Task") {
-                    TextField("Title", text: $title)
-                        .font(themeStore.font(for: .listRowTitle))
-                    Picker("Status", selection: $status) {
-                        Text("Ideas").tag(Task.TaskStatus.backlog)
-                        Text("Next").tag(Task.TaskStatus.next)
-                        Text("Done").tag(Task.TaskStatus.done)
-                    }
+                Section {
+                    TextField("Task title", text: $title)
+                        .font(.headline)
                 }
 
-                Section("Assignee") {
-                    Picker("Who", selection: $assigneeId) {
+                Section("Details") {
+                    Picker(selection: $assigneeId) {
                         Text("Unassigned").tag(UUID?.none)
                         ForEach(members.filter(\.isActive)) { member in
                             Text(member.displayName).tag(Optional(member.id))
                         }
+                    } label: {
+                        Label("Assigned To", systemImage: "person.fill")
                     }
-                }
 
-                Section("Due Date") {
-                    Toggle("Set due date", isOn: $hasDueDate)
+                    Toggle(isOn: $hasDueDate) {
+                        Label("Due Date", systemImage: "calendar")
+                    }
                     if hasDueDate {
                         DatePicker(
-                            "Due",
+                            "Choose Date",
                             selection: $dueDate,
                             displayedComponents: [.date]
                         )
                     }
                 }
 
-                Section("Notes") {
+                Section {
                     TextEditor(text: $notes)
                         .font(themeStore.font(for: .listRowTitle))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
+                } header: {
+                    Label("Notes", systemImage: "note.text")
                 }
 
                 Section {
-                    Button("Delete Task", role: .destructive) {
+                    Button(role: .destructive) {
                         onDelete(task)
                         dismiss()
+                    } label: {
+                        Text("Delete Task")
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
+                    .foregroundStyle(.red)
                 }
             }
             .navigationTitle("Task")
@@ -1187,18 +1450,13 @@ private struct TaskDetailSheet: View {
     private func save() {
         var updatedTask = task
         updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedTask.status = status
         updatedTask.assigneeId = assigneeId
         updatedTask.assigneeIds = assigneeId.map { [$0] } ?? []
         updatedTask.dueDate = hasDueDate ? dueDate : nil
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedTask.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
 
-        if status == .backlog {
-            onDemoteToBacklog(updatedTask)
-        } else {
-            onSave(updatedTask)
-        }
+        onSave(updatedTask)
         dismiss()
     }
 }

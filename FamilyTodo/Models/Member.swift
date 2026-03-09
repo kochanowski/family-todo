@@ -92,11 +92,10 @@ struct Member: Identifiable, Codable {
         colorHex: String? = nil
     ) {
         let normalizedColor = MemberColorToken.normalize(hex: colorHex)
-        let resolvedColorHex: String
-        if let normalizedColor, MemberColorToken.isAllowed(hex: normalizedColor) {
-            resolvedColorHex = normalizedColor
+        let resolvedColorHex: String = if let normalizedColor, MemberColorToken.isAllowed(hex: normalizedColor) {
+            normalizedColor
         } else {
-            resolvedColorHex = MemberColorToken.migratedHex(for: id)
+            MemberColorToken.migratedHex(for: id)
         }
         self.id = id
         self.householdId = householdId

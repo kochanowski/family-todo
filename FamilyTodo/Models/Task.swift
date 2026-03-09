@@ -10,6 +10,7 @@ struct Task: Identifiable, Codable {
     var backlogCategoryId: UUID?
     var areaId: UUID?
     var dueDate: Date?
+    var lastPokedAt: Date?
     var completedAt: Date?
     var completedById: String?
     let taskType: TaskType
@@ -40,6 +41,7 @@ struct Task: Identifiable, Codable {
         backlogCategoryId: UUID? = nil,
         areaId: UUID? = nil,
         dueDate: Date? = nil,
+        lastPokedAt: Date? = nil,
         completedAt: Date? = nil,
         completedById: String? = nil,
         taskType: TaskType,
@@ -58,6 +60,7 @@ struct Task: Identifiable, Codable {
         self.backlogCategoryId = backlogCategoryId
         self.areaId = areaId
         self.dueDate = dueDate
+        self.lastPokedAt = lastPokedAt
         self.completedAt = completedAt
         self.completedById = completedById
         self.taskType = taskType

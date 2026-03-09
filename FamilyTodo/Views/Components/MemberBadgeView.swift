@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct MemberBadgeView: View {
-    @EnvironmentObject private var themeStore: ThemeStore
-
     let name: String
     let colorHex: String
 
@@ -19,20 +17,12 @@ struct MemberBadgeView: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            Text(initial)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(foregroundColor)
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(badgeColor))
-
-            Text(name)
-                .font(themeStore.font(for: .bodySmall))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-        }
-        .padding(.leading, 2)
-        .padding(.trailing, 8)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(badgeColor.opacity(0.16)))
+        Text(initial)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(foregroundColor)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(badgeColor))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(name)
     }
 }

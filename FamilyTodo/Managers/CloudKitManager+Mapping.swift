@@ -173,6 +173,9 @@ extension CloudKitManager {
         if let dueDate = task.dueDate {
             record["dueDate"] = dueDate as CKRecordValue
         }
+        if let lastPokedAt = task.lastPokedAt {
+            record["lastPokedAt"] = lastPokedAt as CKRecordValue
+        }
         if let completedAt = task.completedAt {
             record["completedAt"] = completedAt as CKRecordValue
         }
@@ -219,6 +222,7 @@ extension CloudKitManager {
             backlogCategoryId: uuid(from: record["backlogCategoryId"] as? CKRecord.Reference),
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             dueDate: record["dueDate"] as? Date,
+            lastPokedAt: record["lastPokedAt"] as? Date,
             completedAt: record["completedAt"] as? Date,
             completedById: record["completedById"] as? String,
             taskType: taskType,
@@ -385,6 +389,53 @@ extension CloudKitManager {
         )
     }
 
+    // MARK: - ShoppingBundle Mapping
+
+    func shoppingBundleRecord(from bundle: ShoppingBundle) -> CKRecord {
+        let record = CKRecord(recordType: "ShoppingBundle", recordID: recordID(for: bundle.id))
+        record["id"] = bundle.id.uuidString as CKRecordValue
+        record["householdId"] = reference(for: bundle.householdId)
+        record["name"] = bundle.normalizedName as CKRecordValue
+        record["icon"] = bundle.resolvedIcon as CKRecordValue
+        record["itemsJSON"] = ShoppingBundle.encodeItemsJSON(bundle.normalizedItems) as CKRecordValue
+        record["sortOrder"] = bundle.sortOrder as CKRecordValue
+        record["createdAt"] = bundle.createdAt as CKRecordValue
+        record["updatedAt"] = bundle.updatedAt as CKRecordValue
+        return record
+    }
+
+    func shoppingBundle(from record: CKRecord) throws -> ShoppingBundle {
+        guard
+            let idString = record["id"] as? String,
+            let id = UUID(uuidString: idString),
+            let householdReference = record["householdId"] as? CKRecord.Reference,
+            let householdId = UUID(uuidString: householdReference.recordID.recordName),
+            let name = record["name"] as? String,
+            let icon = record["icon"] as? String,
+            let itemsJSON = record["itemsJSON"] as? String,
+            let createdAt = record["createdAt"] as? Date,
+            let updatedAt = record["updatedAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        let sortOrderValue =
+            record["sortOrder"] as? Int
+                ?? (record["sortOrder"] as? Int64).map(Int.init)
+                ?? 0
+
+        return ShoppingBundle(
+            id: id,
+            householdId: householdId,
+            name: name,
+            icon: icon,
+            items: ShoppingBundle.decodeItemsJSON(itemsJSON),
+            sortOrder: sortOrderValue,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
     // MARK: - BacklogCategory Mapping
 
     func backlogCategoryRecord(from category: BacklogCategory) -> CKRecord {
@@ -488,6 +539,10 @@ extension CloudKitManager {
         record["expiresAt"] = token.expiresAt as CKRecordValue
         record["isRevoked"] = (token.isRevoked ? 1 : 0) as CKRecordValue
         record["usesCount"] = Int64(token.usesCount) as CKRecordValue
+        record["failedAttempts"] = Int64(token.failedAttempts) as CKRecordValue
+        if let lastAttemptAt = token.lastAttemptAt {
+            record["lastAttemptAt"] = lastAttemptAt as CKRecordValue
+        }
         if let lastRedeemedAt = token.lastRedeemedAt {
             record["lastRedeemedAt"] = lastRedeemedAt as CKRecordValue
         }
@@ -512,6 +567,9 @@ extension CloudKitManager {
         let usesCountRaw =
             record["usesCount"] as? Int64
                 ?? Int64(record["usesCount"] as? Int ?? 0)
+        let failedAttemptsRaw =
+            record["failedAttempts"] as? Int64
+                ?? Int64(record["failedAttempts"] as? Int ?? 0)
 
         return InviteToken(
             id: record.recordID.recordName,
@@ -522,6 +580,8 @@ extension CloudKitManager {
             expiresAt: expiresAt,
             isRevoked: isRevokedRaw == 1,
             usesCount: max(Int(usesCountRaw), 0),
+            failedAttempts: max(Int(failedAttemptsRaw), 0),
+            lastAttemptAt: record["lastAttemptAt"] as? Date,
             lastRedeemedAt: record["lastRedeemedAt"] as? Date
         )
     }

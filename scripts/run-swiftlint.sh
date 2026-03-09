@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 
-if ! command -v swiftlint >/dev/null 2>&1; then
-  echo "swiftlint not found, skipping"
+set -euo pipefail
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker not found, cannot run swiftlint container" >&2
+  exit 1
+fi
+
+# pre-commit can pass many file types in some flows; only keep Swift files.
+swift_files=()
+for file in "$@"; do
+  if [[ "$file" == *.swift ]]; then
+    swift_files+=("$file")
+  fi
+done
+
+# Nothing to lint in this invocation.
+if [ "${#swift_files[@]}" -eq 0 ]; then
   exit 0
 fi
 
-output=$(swiftlint lint --quiet --force-exclude 2>&1)
-status=$?
-
-if [ "$status" -eq 0 ]; then
-  exit 0
-fi
-
-if [ "$status" -eq 132 ] || printf '%s' "$output" | grep -q "libsourcekitdInProc"; then
-  printf '%s\n' "$output"
-  echo "swiftlint failed to load SourceKit, skipping"
-  exit 0
-fi
-
-printf '%s\n' "$output" >&2
-exit "$status"
+docker run --rm \
+  -v "$PWD":"$PWD" \
+  -w "$PWD" \
+  ghcr.io/realm/swiftlint:latest \
+  lint --quiet --force-exclude "${swift_files[@]}"

@@ -130,3 +130,6 @@ docs/**/*.tmp
 
 # TestFlight crash logs / feedback
 testflight_feedback/
+
+# Local media captured during manual app testing
+/media/

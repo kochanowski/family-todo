@@ -85,6 +85,11 @@
 		F0B100000000000000000005 /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000005 /* QRCodeScannerView.swift */; };
 		NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000017 /* BacklogCategory.swift */; };
 		NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000018 /* LegacyStubs.swift */; };
+		SHOPB1000000000000000001 /* ShoppingBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA1000000000000000001 /* ShoppingBundle.swift */; };
+		SHOPB1000000000000000002 /* CachedShoppingBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA1000000000000000002 /* CachedShoppingBundle.swift */; };
+		SHOPB1000000000000000003 /* ShoppingBundleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA1000000000000000003 /* ShoppingBundleStore.swift */; };
+		SHOPB1000000000000000004 /* BundlesManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA1000000000000000004 /* BundlesManagementView.swift */; };
+		SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
 		TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABTYPO0000000000000002 /* TabBarTypographyManager.swift */; };
 			CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
@@ -195,6 +200,11 @@
 		F0A100000000000000000005 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000017 /* BacklogCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogCategory.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000018 /* LegacyStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyStubs.swift; sourceTree = "<group>"; };
+		SHOPA1000000000000000001 /* ShoppingBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingBundle.swift; sourceTree = "<group>"; };
+		SHOPA1000000000000000002 /* CachedShoppingBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedShoppingBundle.swift; sourceTree = "<group>"; };
+		SHOPA1000000000000000003 /* ShoppingBundleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingBundleStore.swift; sourceTree = "<group>"; };
+		SHOPA1000000000000000004 /* BundlesManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundlesManagementView.swift; sourceTree = "<group>"; };
+		SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingBundleStoreTests.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
 		TABTYPO0000000000000002 /* TabBarTypographyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarTypographyManager.swift; sourceTree = "<group>"; };
 			CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
@@ -284,11 +294,13 @@
 				1590E14261EB4996992A7F56 /* CachedBacklogItem.swift */,
 				D5698A6FED3C457788B6A60C /* CachedMember.swift */,
 				1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */,
+				SHOPA1000000000000000002 /* CachedShoppingBundle.swift */,
 				86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */,
 				F0A100000000000000000007 /* StartupSentinel.swift */,
 				A1B2C3D4E5F60718293A4B96 /* Member.swift */,
 				A1B2C3D4E5F60718293A4B98 /* Task.swift */,
 				B2A1C9E97C3F4E6D9A0F1B2C /* ShoppingItem.swift */,
+				SHOPA1000000000000000001 /* ShoppingBundle.swift */,
 				F1A2B3C4D5E6F708192A3B4E /* InviteToken.swift */,
 				NEWFILE0000000000000017 /* BacklogCategory.swift */,
 				NEWFILE0000000000000018 /* LegacyStubs.swift */,
@@ -324,6 +336,7 @@
 				29641B06528147179F25068D /* TaskStoreTests.swift */,
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
+				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
 					F0A200000000000000000001 /* InviteInputNormalizerTests.swift */,
 				F2A3B4C5D6E7F8091A2B3C4E /* InviteCodeFlowTests.swift */,
 					F0A200000000000000000002 /* OnboardingStateTests.swift */,
@@ -399,6 +412,7 @@
 				50B205078C7F49B9A7FDD4A3 /* Onboarding */,
 				87B61353E03D4281BE68CF00 /* ShareInviteView.swift */,
 				NEWFILE0000000000000011 /* ShoppingListView.swift */,
+				SHOPA1000000000000000004 /* BundlesManagementView.swift */,
 				NEWFILE0000000000000012 /* TasksView.swift */,
 				NEWFILE0000000000000013 /* BacklogView.swift */,
 				NEWFILE0000000000000014 /* MoreView.swift */,
@@ -442,6 +456,7 @@
 				E94A7266F9D14F8D946AEF56 /* MemberStore.swift */,
 				59CD19CBC26F4EA28F7461BB /* BacklogStore.swift */,
 				C9D7A1E4F2B64C77B8A9C0D1 /* ShoppingListStore.swift */,
+				SHOPA1000000000000000003 /* ShoppingBundleStore.swift */,
 				F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */,
 			);
 			path = Stores;
@@ -635,6 +650,10 @@
 				F0B100000000000000000005 /* QRCodeScannerView.swift in Sources */,
 				NEWFILE0000000000000007 /* BacklogCategory.swift in Sources */,
 				NEWFILE0000000000000008 /* LegacyStubs.swift in Sources */,
+				SHOPB1000000000000000001 /* ShoppingBundle.swift in Sources */,
+				SHOPB1000000000000000002 /* CachedShoppingBundle.swift in Sources */,
+				SHOPB1000000000000000003 /* ShoppingBundleStore.swift in Sources */,
+				SHOPB1000000000000000004 /* BundlesManagementView.swift in Sources */,
 				GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */,
 				TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */,
 );
@@ -649,6 +668,7 @@
 				138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */,
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
+				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
 					F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */,
 				F2A3B4C5D6E7F8091A2B3C4D /* InviteCodeFlowTests.swift in Sources */,
 					F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */,

@@ -92,7 +92,7 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertTrue(store.recentItems.isEmpty)
     }
 
-    func testMergeCloudSnapshot_PendingUploadWinsAndPendingDeleteRemoved() async {
+    func testMergeCloudSnapshot_PendingUploadWinsAndPendingDeleteRemoved() {
         let baseDate = Date()
         let pendingID = UUID()
         let deleteID = UUID()
@@ -158,6 +158,46 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(cached.count, 1)
         XCTAssertEqual(cached.first?.title, "Upsert check")
         XCTAssertEqual(cached.first?.isBought, true)
+    }
+
+    func testCreateItemsFromTitlesAddsEveryNonEmptyTitleInOrderAndCachesThem() async throws {
+        let createdCount = await store.createItems(
+            fromTitles: ["Milk", "  ", "Bread", "\nEggs\n"]
+        )
+
+        XCTAssertEqual(createdCount, 3)
+        XCTAssertEqual(store.toBuyItems.count, 3)
+        XCTAssertEqual(store.toBuyItems.map(\.title), ["Milk", "Bread", "Eggs"])
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.sortOrder)]
+        )
+        let cachedItems = try modelContainer.mainContext.fetch(descriptor)
+
+        XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Bread", "Eggs"])
+    }
+
+    func testCreateItemAfterAnchorInsertsDirectlyBelowAndUpdatesCacheOrder() async throws {
+        _ = await store.createItem(title: "Milk")
+        _ = await store.createItem(title: "Bread")
+
+        guard let milk = store.toBuyItems.first(where: { normalized($0.title) == "milk" }) else {
+            XCTFail("Expected Milk item")
+            return
+        }
+
+        _ = await store.createItem(title: "Eggs", afterItemId: milk.id)
+
+        XCTAssertEqual(store.toBuyItems.map(\.title), ["Milk", "Eggs", "Bread"])
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.sortOrder)]
+        )
+        let cachedItems = try modelContainer.mainContext.fetch(descriptor)
+
+        XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Eggs", "Bread"])
     }
 
     private func createBoughtItem(title: String) async {

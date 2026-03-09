@@ -54,20 +54,6 @@ struct MoreView: View {
                             .padding(.leading, 52)
 
                         NavigationLink {
-                            if let householdId = userSession.currentHouseholdID {
-                                RepetitiveTasksView(householdId: householdId, modelContext: modelContext)
-                            } else {
-                                GuidedEmptyStateView()
-                            }
-                        } label: {
-                            MoreRow(icon: "repeat", title: "Repetitive Tasks")
-                        }
-                        .buttonStyle(.plain)
-
-                        Divider()
-                            .padding(.leading, 52)
-
-                        NavigationLink {
                             SettingsView()
                         } label: {
                             MoreRow(icon: "gear", title: "Settings")
@@ -75,7 +61,6 @@ struct MoreView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("Settings")
                     }
-                    .tint(.primary)
                     .background {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(cardBackground)
@@ -305,7 +290,7 @@ struct CategoriesManagementView: View {
                     newCategoryColorHex = MemberColorToken.randomHex()
                     isAddingCategory = true
                 } label: {
-                    Label("(+) New category", systemImage: "plus.circle")
+                    Label("New category", systemImage: "plus.circle")
                 }
             }
         }
@@ -356,156 +341,6 @@ struct CategoriesManagementView: View {
                 }
             )
         }
-    }
-}
-
-struct RepetitiveTasksView: View {
-    @StateObject private var store: RecurringChoreStore
-    @StateObject private var backlogStore: BacklogStore
-    @EnvironmentObject private var userSession: UserSession
-    @EnvironmentObject private var themeStore: ThemeStore
-
-    @State private var newTitle = ""
-    @State private var recurrenceType: RecurringChore.RecurrenceType = .weekly
-    @State private var recurrenceDay = 2
-    @State private var recurrenceDayOfMonth = 1
-    @State private var recurrenceInterval = 1
-    @State private var selectedCategoryId: UUID?
-
-    init(householdId: UUID, modelContext: ModelContext) {
-        _store = StateObject(
-            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
-        )
-        _backlogStore = StateObject(
-            wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
-        )
-    }
-
-    var body: some View {
-        List {
-            Section("Active recurring tasks") {
-                if store.chores.isEmpty {
-                    Text("No repetitive tasks yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(store.chores) { chore in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(chore.title)
-                                    .font(themeStore.font(for: .inlineTitle))
-                                Spacer()
-                                Toggle("", isOn: Binding(
-                                    get: { chore.isActive },
-                                    set: { newValue in
-                                        var updated = chore
-                                        updated.isActive = newValue
-                                        _ = _Concurrency.Task {
-                                            await store.updateChore(updated)
-                                        }
-                                    }
-                                ))
-                                .labelsHidden()
-                            }
-
-                            Text(chore.recurrenceType.rawValue.capitalized)
-                                .font(themeStore.font(for: .chip))
-                                .foregroundStyle(.secondary)
-
-                            if let categoryId = chore.categoryId,
-                               let category = backlogStore.categories.first(where: { $0.id == categoryId })
-                            {
-                                Text(category.title)
-                                    .font(themeStore.font(for: .chip))
-                                    .foregroundStyle(category.color)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(category.color.opacity(0.12)))
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                _ = _Concurrency.Task {
-                                    await store.deleteChore(chore)
-                                }
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section("Add repetitive task") {
-                TextField("Task title", text: $newTitle)
-                Picker("Frequency", selection: $recurrenceType) {
-                    ForEach(RecurringChore.RecurrenceType.allCases, id: \.self) { type in
-                        Text(type.rawValue.capitalized).tag(type)
-                    }
-                }
-
-                switch recurrenceType {
-                case .daily:
-                    EmptyView()
-                case .weekly:
-                    Picker("Day of week", selection: $recurrenceDay) {
-                        ForEach(Array(weekdayOptions.enumerated()), id: \.offset) { offset, day in
-                            Text(day).tag(offset + 1)
-                        }
-                    }
-                case .monthly:
-                    Stepper(value: $recurrenceDayOfMonth, in: 1 ... 28) {
-                        Text("Day of month: \(recurrenceDayOfMonth)")
-                    }
-                case .custom:
-                    Stepper(value: $recurrenceInterval, in: 1 ... 365) {
-                        Text("Every \(recurrenceInterval) day\(recurrenceInterval == 1 ? "" : "s")")
-                    }
-                }
-
-                Picker("Category", selection: $selectedCategoryId) {
-                    Text("None").tag(UUID?.none)
-                    ForEach(backlogStore.categories) { category in
-                        Text(category.title).tag(UUID?.some(category.id))
-                    }
-                }
-
-                Button {
-                    let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !title.isEmpty else { return }
-                    _ = _Concurrency.Task {
-                        await store.addChore(
-                            title: title,
-                            recurrenceType: recurrenceType,
-                            recurrenceInterval: recurrenceType == .custom ? recurrenceInterval : 1,
-                            recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
-                            recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
-                            categoryId: selectedCategoryId
-                        )
-                    }
-                    newTitle = ""
-                    recurrenceInterval = 1
-                    selectedCategoryId = nil
-                } label: {
-                    Label("Add repetitive task", systemImage: "plus.circle.fill")
-                }
-                .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .environment(\.font, themeStore.font(for: .inlineTitle))
-        .navigationTitle("Repetitive Tasks")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            store.setSyncMode(userSession.syncMode)
-            backlogStore.setSyncMode(userSession.syncMode)
-            await store.loadChores()
-            await backlogStore.loadData()
-        }
-    }
-
-    private var weekdayOptions: [String] {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        return formatter.weekdaySymbols
     }
 }
 

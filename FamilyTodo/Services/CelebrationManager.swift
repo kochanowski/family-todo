@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 #if !targetEnvironment(simulator) && !CI
@@ -11,6 +12,17 @@ final class CelebrationManager: ObservableObject {
 
     @Published var activeCelebration: Celebration?
     @Published var confettiTrigger: Int = 0
+
+    enum TaskCompletionTier {
+        case milestone
+        case surprise
+        case fallback
+    }
+
+    struct TaskCompletionDecision {
+        let celebration: Celebration
+        let tier: TaskCompletionTier
+    }
 
     struct Celebration: Identifiable, Equatable {
         let id = UUID()
@@ -28,18 +40,96 @@ final class CelebrationManager: ObservableObject {
         }
     }
 
-    private init() {}
+    private enum DefaultsKey {
+        static let lastSurpriseAt = "celebrations.lastSurpriseAt"
+    }
+
+    private let userDefaults: UserDefaults
+    private let nowProvider: () -> Date
+    private let randomInt: (ClosedRange<Int>) -> Int
+
+    private static let milestoneMessages: [(emoji: String, message: String)] = [
+        ("🎉", "Weekly milestone hit! Home is glowing."),
+        ("🏡", "Big win this week. HousePulse is strong."),
+        ("✨", "Milestone unlocked. Nice household teamwork!"),
+    ]
+
+    private static let surpriseMessages: [(emoji: String, message: String)] = [
+        ("🎈", "Surprise boost! You are making home life smoother."),
+        ("💫", "Tiny celebration moment. Keep that flow going!"),
+        ("🌟", "Unexpected cheer: your consistency shows."),
+    ]
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        nowProvider: @escaping () -> Date = Date.init,
+        randomInt: @escaping (ClosedRange<Int>) -> Int = { Int.random(in: $0) }
+    ) {
+        self.userDefaults = userDefaults
+        self.nowProvider = nowProvider
+        self.randomInt = randomInt
+    }
 
     /// Celebrate a single task completion.
-    func celebrateTaskCompletion(taskTitle: String) {
-        let messages = [
-            ("✨", "Done! \(taskTitle)"),
-            ("👏", "Nice one!"),
-            ("✅", "\(taskTitle) — sorted!"),
-            ("💪", "Crushed it!"),
-        ]
-        guard let pick = messages.randomElement() else { return }
-        show(Celebration(emoji: pick.0, message: pick.1, style: .normal))
+    func celebrateTaskCompletion(taskTitle: String, weeklyCompletedCount: Int) {
+        let now = nowProvider()
+        let decision = decideTaskCompletion(
+            taskTitle: taskTitle,
+            weeklyCompletedCount: weeklyCompletedCount,
+            now: now
+        )
+        show(decision.celebration)
+    }
+
+    func decideTaskCompletion(
+        taskTitle: String,
+        weeklyCompletedCount: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> TaskCompletionDecision {
+        if isMilestoneCount(weeklyCompletedCount) {
+            let message = pickMessage(
+                from: Self.milestoneMessages,
+                fallback: ("🎉", "All tasks done! Time to relax")
+            )
+            return TaskCompletionDecision(
+                celebration: Celebration(
+                    emoji: message.emoji,
+                    message: message.message,
+                    style: .milestone
+                ),
+                tier: .milestone
+            )
+        }
+
+        if canTriggerSurprise(now: now, calendar: calendar), randomInt(1 ... 10) == 1 {
+            userDefaults.set(now, forKey: DefaultsKey.lastSurpriseAt)
+            let message = pickMessage(
+                from: Self.surpriseMessages,
+                fallback: ("🎈", "Surprise boost. Great energy today!")
+            )
+            return TaskCompletionDecision(
+                celebration: Celebration(
+                    emoji: message.emoji,
+                    message: message.message,
+                    style: .normal
+                ),
+                tier: .surprise
+            )
+        }
+
+        let fallbackMessage = pickMessage(
+            from: fallbackMessages(for: taskTitle),
+            fallback: ("✨", "Done! \(taskTitle)")
+        )
+        return TaskCompletionDecision(
+            celebration: Celebration(
+                emoji: fallbackMessage.emoji,
+                message: fallbackMessage.message,
+                style: .normal
+            ),
+            tier: .fallback
+        )
     }
 
     /// Celebrate all tasks cleared from Next.
@@ -94,5 +184,42 @@ final class CelebrationManager: ObservableObject {
                 self?.activeCelebration = nil
             }
         }
+    }
+
+    private func isMilestoneCount(_ weeklyCompletedCount: Int) -> Bool {
+        weeklyCompletedCount == 5 || weeklyCompletedCount == 10
+    }
+
+    private func canTriggerSurprise(
+        now: Date,
+        calendar: Calendar
+    ) -> Bool {
+        guard let lastSurpriseAt = userDefaults.object(forKey: DefaultsKey.lastSurpriseAt) as? Date else {
+            return true
+        }
+        guard let nextEligibleDate = calendar.date(byAdding: .day, value: 7, to: lastSurpriseAt) else {
+            return true
+        }
+        return now >= nextEligibleDate
+    }
+
+    private func fallbackMessages(for taskTitle: String) -> [(emoji: String, message: String)] {
+        [
+            ("✨", "Done! \(taskTitle)"),
+            ("👏", "Nice one!"),
+            ("✅", "\(taskTitle) - sorted!"),
+            ("💪", "Crushed it!"),
+            ("🧹", "Another task off the board."),
+            ("🏠", "Home is looking better already."),
+        ]
+    }
+
+    private func pickMessage(
+        from messages: [(emoji: String, message: String)],
+        fallback: (emoji: String, message: String)
+    ) -> (emoji: String, message: String) {
+        guard !messages.isEmpty else { return fallback }
+        let index = randomInt(0 ... (messages.count - 1))
+        return messages[index]
     }
 }

@@ -2,42 +2,27 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+// swiftlint:disable file_length
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
     @EnvironmentObject private var userSession: UserSession
-    @EnvironmentObject private var householdStore: HouseholdStore
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
                 ShoppingListContent(householdId: householdId, modelContext: modelContext)
-            } else if let household = householdStore.currentHousehold {
-                // Failsafe: Sync session if store has household
-                ProgressView()
-                    .onAppear {
-                        userSession.setCurrentHousehold(household.id)
-                    }
             } else {
                 GuidedEmptyStateView()
-                    .task {
-                        // Recovery: Try to load from cache if session is lost
-                        if userSession.currentHouseholdID == nil, let userId = userSession.userId {
-                            print("DEBUG: Attempting household recovery for user: \(userId)")
-                            await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
-                            if let household = householdStore.currentHousehold {
-                                print("DEBUG: Recovered household: \(household.id)")
-                                userSession.setCurrentHousehold(household.id)
-                            }
-                        }
-                    }
             }
         }
     }
 }
 
+// swiftlint:disable type_body_length
 private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
+    @StateObject private var bundleStore: ShoppingBundleStore
     @StateObject private var restockPulse = RestockPulseState()
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
@@ -56,12 +41,23 @@ private struct ShoppingListContent: View {
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
+    @State private var inlineInsertAfterItemId: UUID?
+    @State private var inlineInsertText = ""
+    @State private var inlineInsertRowToken = UUID()
     @State private var isKeyboardVisible = false
     @State private var didPerformInitialLoad = false
+    @State private var isScreenVisible = false
+    @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
+    @State private var activeToast: ShoppingToastState?
+    @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
+    @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
             wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
+        )
+        _bundleStore = StateObject(
+            wrappedValue: ShoppingBundleStore(householdId: householdId, modelContext: modelContext)
         )
     }
 
@@ -73,6 +69,7 @@ private struct ShoppingListContent: View {
                     : AppChromeMetrics.compactCTAHeight + 28
             let floatingButtonInset: CGFloat = 16
             let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
+            let shouldShowEmptyState = store.toBuyItems.isEmpty && !isRapidEntryActive
 
             ZStack(alignment: .bottomTrailing) {
                 if isRapidEntryActive {
@@ -91,55 +88,53 @@ private struct ShoppingListContent: View {
                         .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
                         .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
-                    // Items list with rapid entry
-                    ScrollViewReader { proxy in
-                        List {
-                            ForEach(store.toBuyItems) { item in
-                                Group {
-                                    if itemBeingRemoved != item.id {
-                                        if editingItemId == item.id {
-                                            ShoppingItemInlineEditRow(
-                                                text: $editingItemText,
-                                                isBought: item.isBought,
-                                                onToggle: {
-                                                    cancelEditingItem()
-                                                    toggleItem(item)
-                                                },
-                                                onSubmit: { commitEditingItem(item) },
-                                                onCancel: cancelEditingItem
-                                            )
-                                            .accessibilityIdentifier(
-                                                "shoppingItemEdit_\(item.title)"
-                                            )
-                                        } else {
-                                            ShoppingItemRow(
-                                                item: item,
-                                                onToggle: { toggleItem(item) },
-                                                onEdit: { startEditingItem(item) }
-                                            )
-                                            .accessibilityIdentifier(
-                                                "shoppingItem_\(item.title)"
-                                            )
+                    if shouldShowEmptyState {
+                        shoppingEmptyState
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                            .padding(.bottom, listBottomInset)
+                    } else {
+                        // Items list with rapid entry
+                        ScrollViewReader { proxy in
+                            List {
+                                ForEach(store.toBuyItems) { item in
+                                    Group {
+                                        if itemBeingRemoved != item.id {
+                                            if editingItemId == item.id {
+                                                ShoppingItemInlineEditRow(
+                                                    text: $editingItemText,
+                                                    isBought: item.isBought,
+                                                    onToggle: {
+                                                        cancelEditingItem()
+                                                        dismissInlineInsert()
+                                                        toggleItem(item)
+                                                    },
+                                                    onSubmit: {
+                                                        commitEditingItem(
+                                                            item,
+                                                            openInlineComposer: true
+                                                        )
+                                                    },
+                                                    onFocusLossCommit: {
+                                                        commitEditingItem(item)
+                                                    },
+                                                    onCancel: cancelEditingItem
+                                                )
+                                                .accessibilityIdentifier(
+                                                    "shoppingItemEdit_\(item.title)"
+                                                )
+                                            } else {
+                                                ShoppingItemRow(
+                                                    item: item,
+                                                    onToggle: { toggleItem(item) },
+                                                    onEdit: { startEditingItem(item) }
+                                                )
+                                                .accessibilityIdentifier(
+                                                    "shoppingItem_\(item.title)"
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                                .listRowInsets(
-                                    EdgeInsets(
-                                        top: 0,
-                                        leading: 16,
-                                        bottom: 0,
-                                        trailing: 16
-                                    )
-                                )
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                            }
-                            .onMove(perform: moveToBuyItems)
-
-                            // Rapid entry row (stable at bottom, no insert animation)
-                            if isRapidEntryActive {
-                                rapidEntryRow
-                                    .id("rapidEntry")
                                     .listRowInsets(
                                         EdgeInsets(
                                             top: 0,
@@ -150,30 +145,77 @@ private struct ShoppingListContent: View {
                                     )
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
-                            }
-                        }
-                        .environment(\.defaultMinListRowHeight, 10)
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        .background(Color.clear)
-                        .padding(.bottom, listBottomInset)
-                        .scrollDismissesKeyboard(.interactively)
-                        .refreshable {
-                            store.setSyncMode(userSession.syncMode)
-                            await store.loadItems()
-                        }
-                        .onChange(of: rapidEntryFocused) { _, focused in
-                            if focused {
-                                withAnimation(WowAnimation.spring) {
-                                    proxy.scrollTo("rapidEntry", anchor: .bottom)
+
+                                    if inlineInsertAfterItemId == item.id {
+                                        ShoppingItemInlineComposerRow(
+                                            text: $inlineInsertText,
+                                            onSubmit: { commitInlineInsertedItem(after: item.id) },
+                                            onCancel: dismissInlineInsert
+                                        )
+                                        .id(inlineInsertRowToken)
+                                        .listRowInsets(
+                                            EdgeInsets(
+                                                top: 0,
+                                                leading: 16,
+                                                bottom: 0,
+                                                trailing: 16
+                                            )
+                                        )
+                                        .listRowSeparator(.hidden)
+                                        .listRowBackground(Color.clear)
+                                        .accessibilityIdentifier("shoppingInlineInsertRow")
+                                    }
+                                }
+                                .onMove(perform: moveToBuyItems)
+
+                                // Rapid entry row (stable at bottom, no insert animation)
+                                if isRapidEntryActive {
+                                    rapidEntryRow
+                                        .id("rapidEntry")
+                                        .listRowInsets(
+                                            EdgeInsets(
+                                                top: 0,
+                                                leading: 16,
+                                                bottom: 0,
+                                                trailing: 16
+                                            )
+                                        )
+                                        .listRowSeparator(.hidden)
+                                        .listRowBackground(Color.clear)
                                 }
                             }
-                        }
-                        .onChange(of: store.toBuyItems.count) { _, _ in
-                            // Scroll to keep draft row visible after each insert
-                            guard isRapidEntryActive else { return }
-                            withAnimation(WowAnimation.spring) {
-                                proxy.scrollTo("rapidEntry", anchor: .bottom)
+                            .environment(\.defaultMinListRowHeight, 10)
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .padding(.bottom, listBottomInset)
+                            .scrollDismissesKeyboard(.interactively)
+                            .refreshable {
+                                await loadShoppingData()
+                            }
+                            .onChange(of: rapidEntryFocused) { _, focused in
+                                if focused {
+                                    withAnimation(WowAnimation.spring) {
+                                        proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                    }
+                                }
+                            }
+                            .onChange(of: inlineInsertRowToken) { _, _ in
+                                guard inlineInsertAfterItemId != nil else { return }
+                                withAnimation(WowAnimation.spring) {
+                                    proxy.scrollTo(inlineInsertRowToken, anchor: .center)
+                                }
+                            }
+                            .onChange(of: store.toBuyItems.count) { _, _ in
+                                if isRapidEntryActive {
+                                    withAnimation(WowAnimation.spring) {
+                                        proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                    }
+                                } else if inlineInsertAfterItemId != nil {
+                                    withAnimation(WowAnimation.spring) {
+                                        proxy.scrollTo(inlineInsertRowToken, anchor: .center)
+                                    }
+                                }
                             }
                         }
                     }
@@ -192,24 +234,40 @@ private struct ShoppingListContent: View {
         .task {
             guard !didPerformInitialLoad else { return }
             didPerformInitialLoad = true
-            store.setSyncMode(userSession.syncMode)
-            await store.loadItems()
+            await loadShoppingData()
         }
         .onChange(of: userSession.syncMode) { _, mode in
             store.setSyncMode(mode)
+            bundleStore.setSyncMode(mode)
             _ = _Concurrency.Task {
-                await store.loadItems()
+                await loadShoppingData()
+            }
+        }
+        .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
+            if !isEmpty {
+                markShoppingTutorialAsSeenIfNeeded()
             }
         }
         .newItemsBanner(manager: subscriptionManager)
         .onChange(of: isKeyboardVisible) { _, visible in
-            guard !visible, let editingItem = currentEditingItem else { return }
-            commitEditingItem(editingItem)
+            guard !visible else { return }
+            if let editingItem = currentEditingItem {
+                commitEditingItem(editingItem)
+            } else if inlineInsertAfterItemId != nil, inlineInsertText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                dismissInlineInsert()
+            }
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
         ) { _ in
             isKeyboardVisible = true
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .shoppingListDataDidChange)
+        ) { _ in
+            _ = _Concurrency.Task {
+                await loadShoppingData()
+            }
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
@@ -225,26 +283,68 @@ private struct ShoppingListContent: View {
                 onPrimary: clearToBuy
             )
         }
+        .overlay(alignment: .bottom) {
+            if let activeToast {
+                ToastView(message: activeToast.message)
+                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                    .transition(ToastView.AnimationTokens.transition)
+                    .id(activeToast.id)
+            }
+        }
+        .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
+        .onAppear {
+            isScreenVisible = true
+        }
+        .onDisappear {
+            isScreenVisible = false
+            cancelPendingShoppingCompletionCelebration()
+            cancelToastDismiss()
+        }
+    }
+
+    // MARK: - Empty State
+
+    private var shoppingEmptyState: some View {
+        Group {
+            if hasSeenShoppingTutorial {
+                ContentUnavailableView(
+                    "Your List is Empty",
+                    systemImage: "cart.badge.plus",
+                    description: Text(
+                        "Time to restock! Add groceries or household items you need to buy."
+                    )
+                )
+            } else {
+                ContentUnavailableView {
+                    Label("Welcome to Shopping!", systemImage: "cart.fill.badge.plus")
+                } description: {
+                    Text(
+                        "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
+                    )
+                } actions: {
+                    Button("Got it!") {
+                        HapticManager.lightTap()
+                        hasSeenShoppingTutorial = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            HStack(alignment: .center, spacing: 10) {
-                Text("Shopping")
-                    .font(themeStore.font(for: .screenHeader))
-                    .foregroundStyle(themeStore.contentPrimaryColor)
-
-                // Item count badge
-                if !store.toBuyItems.isEmpty {
-                    ShoppingCountBadge(count: store.toBuyItems.count)
-                }
+        AppScreenHeader(title: "Shopping") {
+            if !store.toBuyItems.isEmpty {
+                ShoppingCountBadge(count: store.toBuyItems.count)
             }
-
-            Spacer(minLength: 12)
-
-            HStack(alignment: .center, spacing: 14) {
+        } trailing: {
+            HStack(alignment: .center, spacing: 8) {
                 // Clear To Buy button
                 if !store.toBuyItems.isEmpty {
                     Button {
@@ -260,6 +360,17 @@ private struct ShoppingListContent: View {
                     .accessibilityIdentifier("shoppingClearButton")
                 }
 
+                NavigationLink {
+                    BundlesManagementView(store: bundleStore)
+                } label: {
+                    Image(systemName: ShoppingBundle.defaultIcon)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("shoppingBundlesButton")
+
                 // Recently purchased
                 Button {
                     HapticManager.lightTap()
@@ -272,7 +383,7 @@ private struct ShoppingListContent: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("shoppingRestockButton")
-                .pulseAnimation(restockPulse.isPulsing)
+                .pulseAnimation(trigger: restockPulse.pulseToken)
                 .sheet(isPresented: $showRestock) {
                     RestockSheet(
                         store: store,
@@ -287,7 +398,28 @@ private struct ShoppingListContent: View {
 
     // MARK: - Add Pill Button
 
+    @ViewBuilder
     private var addPillButton: some View {
+        if quickAddBundles.isEmpty {
+            addPillButtonBase
+        } else {
+            addPillButtonBase
+                .contextMenu {
+                    ForEach(quickAddBundles) { bundle in
+                        Button {
+                            handleBundleQuickAdd(bundle)
+                        } label: {
+                            Label(
+                                "\(bundle.name) (\(bundle.itemCount))",
+                                systemImage: bundle.resolvedIcon
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    private var addPillButtonBase: some View {
         let foreground = themeStore.foregroundOnAccent(
             for: themeStore.accentTabColor, colorScheme: colorScheme
         )
@@ -316,11 +448,23 @@ private struct ShoppingListContent: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("shoppingAddItemButton")
+        .accessibilityHint(
+            quickAddBundles.isEmpty
+                ? "Double tap to add a shopping item."
+                : "Double tap to add a shopping item. Long press to quickly add a shopping bundle."
+        )
     }
 
     private var rapidEntryRow: some View {
-        HStack(spacing: 10) {
-            rapidEntryPlaceholderIcon
+        HStack(spacing: ShoppingRowLayout.spacing) {
+            ThemedCheckbox(
+                isChecked: false,
+                onToggle: {},
+                size: 20,
+                style: .circle
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
 
             RapidEntryTextField(
                 text: $rapidEntryText,
@@ -337,35 +481,21 @@ private struct ShoppingListContent: View {
                 themeStore: themeStore
             )
             .accessibilityIdentifier("shoppingRapidEntryField")
-        }
-        .padding(.vertical, 2)
-        .background(cardBackground.opacity(0.01)) // Tap target
-    }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-    @ViewBuilder
-    private var rapidEntryPlaceholderIcon: some View {
-        if themeStore.preset == .retro {
-            Rectangle()
-                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
-                .frame(width: 20, height: 20)
-                .overlay {
-                    Rectangle()
-                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
-                        .padding(0.8)
-                }
-                .frame(width: 44)
-        } else {
-            Circle()
-                .stroke(themeStore.checkboxEmptyColor, lineWidth: 1.5)
-                .frame(width: 20, height: 20)
-                .frame(width: 44)
+            Color.clear
+                .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
         }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
+        .padding(.vertical, ShoppingRowLayout.verticalPadding)
+        .background(cardBackground.opacity(0.01)) // Tap target
     }
 
     // MARK: - Rapid Entry Logic
 
     private func startRapidEntry() {
         cancelEditingItem()
+        dismissInlineInsert()
         HapticManager.lightTap()
         withAnimation(WowAnimation.spring) {
             isRapidEntryActive = true
@@ -423,6 +553,7 @@ private struct ShoppingListContent: View {
 
     private func startEditingItem(_ item: ShoppingItem) {
         dismissRapidEntry()
+        dismissInlineInsert()
         editingItemId = item.id
         editingItemText = item.title
     }
@@ -432,17 +563,58 @@ private struct ShoppingListContent: View {
         editingItemText = ""
     }
 
-    private func commitEditingItem(_ item: ShoppingItem) {
+    private func commitEditingItem(_ item: ShoppingItem, openInlineComposer: Bool = false) {
         guard editingItemId == item.id else { return }
         let trimmed = editingItemText.trimmingCharacters(in: .whitespacesAndNewlines)
         defer { cancelEditingItem() }
 
-        guard !trimmed.isEmpty, trimmed != item.title else { return }
+        guard !trimmed.isEmpty else { return }
 
-        var updatedItem = item
-        updatedItem.title = trimmed
+        if trimmed != item.title {
+            var updatedItem = item
+            updatedItem.title = trimmed
+            _ = _Concurrency.Task {
+                await store.updateItem(updatedItem)
+            }
+        }
+
+        guard openInlineComposer else { return }
+        startInlineInsert(after: item.id)
+    }
+
+    private func startInlineInsert(after itemId: UUID) {
+        dismissRapidEntry()
+        cancelEditingItem()
+        inlineInsertAfterItemId = itemId
+        inlineInsertText = ""
+        inlineInsertRowToken = UUID()
+    }
+
+    private func dismissInlineInsert() {
+        inlineInsertAfterItemId = nil
+        inlineInsertText = ""
+    }
+
+    private func commitInlineInsertedItem(after itemId: UUID) {
+        let trimmed = inlineInsertText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            dismissInlineInsert()
+            return
+        }
+
+        let anchorId = itemId
+        let title = trimmed
+        inlineInsertText = ""
+
         _ = _Concurrency.Task {
-            await store.updateItem(updatedItem)
+            let createdItem = await store.createItem(title: title, afterItemId: anchorId)
+            guard let createdItem else { return }
+
+            await MainActor.run {
+                inlineInsertAfterItemId = createdItem.id
+                inlineInsertRowToken = UUID()
+                HapticManager.selection()
+            }
         }
     }
 
@@ -456,6 +628,10 @@ private struct ShoppingListContent: View {
     private func toggleItem(_ item: ShoppingItem) {
         HapticManager.lightTap()
         let shouldCelebrateCompletion = store.toBuyItems.count == 1 && !item.isBought
+
+        cancelPendingShoppingCompletionCelebration()
+        cancelEditingItem()
+        dismissInlineInsert()
 
         // Animate item removal
         withAnimation(WowAnimation.easeOut) {
@@ -472,12 +648,14 @@ private struct ShoppingListContent: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             _Concurrency.Task {
                 await store.toggleBought(item)
-                itemBeingRemoved = nil
-                if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
-                    celebrationManager.celebrateShoppingComplete()
-                    celebrationManager.triggerConfetti()
+                await MainActor.run {
+                    itemBeingRemoved = nil
                 }
             }
+        }
+
+        if shouldCelebrateCompletion, themeStore.celebrationsEnabled {
+            scheduleShoppingCompletionCelebration()
         }
     }
 
@@ -509,9 +687,106 @@ private struct ShoppingListContent: View {
         HapticManager.success()
     }
 
+    private func loadShoppingData() async {
+        store.setSyncMode(userSession.syncMode)
+        bundleStore.setSyncMode(userSession.syncMode)
+        await store.loadItems()
+        await bundleStore.loadBundles()
+        markShoppingTutorialAsSeenIfNeeded()
+    }
+
+    private func scheduleShoppingCompletionCelebration() {
+        pendingShoppingCompletionCelebrationTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 320_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            guard isScreenVisible else { return }
+            celebrationManager.celebrateShoppingComplete()
+            pendingShoppingCompletionCelebrationTask = nil
+        }
+    }
+
+    private func cancelPendingShoppingCompletionCelebration() {
+        pendingShoppingCompletionCelebrationTask?.cancel()
+        pendingShoppingCompletionCelebrationTask = nil
+    }
+
+    private var quickAddBundles: [ShoppingBundle] {
+        bundleStore.quickAddBundles
+    }
+
+    private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
+        cancelEditingItem()
+        dismissRapidEntry()
+        dismissInlineInsert()
+
+        _ = _Concurrency.Task {
+            let addedCount = await store.createItems(fromTitles: bundle.normalizedItems)
+            guard addedCount > 0 else { return }
+
+            await MainActor.run {
+                HapticManager.success()
+                showQuickAddToast(
+                    message: quickAddToastMessage(
+                        for: bundle.name,
+                        itemCount: addedCount
+                    )
+                )
+            }
+        }
+    }
+
+    private func showQuickAddToast(message: String) {
+        showToast(
+            ShoppingToastState(message: message),
+            durationNanoseconds: 2_000_000_000
+        )
+    }
+
+    private func showToast(_ toast: ShoppingToastState, durationNanoseconds: UInt64) {
+        cancelToastDismiss()
+
+        withAnimation(ToastView.AnimationTokens.curve) {
+            activeToast = toast
+        }
+
+        let toastID = toast.id
+        activeToastDismissTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: durationNanoseconds)
+            guard !_Concurrency.Task.isCancelled else { return }
+            guard activeToast?.id == toastID else { return }
+
+            withAnimation(ToastView.AnimationTokens.curve) {
+                activeToast = nil
+            }
+            activeToastDismissTask = nil
+        }
+    }
+
+    private func cancelToastDismiss() {
+        activeToastDismissTask?.cancel()
+        activeToastDismissTask = nil
+    }
+
+    private func quickAddToastMessage(for bundleName: String, itemCount: Int) -> String {
+        let noun = itemCount == 1 ? "item" : "items"
+        return "Added \(bundleName) (\(itemCount) \(noun))"
+    }
+
+    private func markShoppingTutorialAsSeenIfNeeded() {
+        guard !store.toBuyItems.isEmpty, !hasSeenShoppingTutorial else { return }
+        hasSeenShoppingTutorial = true
+    }
+
     private var cardBackground: Color {
         themeStore.surfaceColor
     }
+}
+
+// swiftlint:enable type_body_length
+
+private struct ShoppingToastState: Identifiable, Equatable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Shopping Item Row
@@ -568,6 +843,7 @@ private struct ShoppingItemInlineEditRow: View {
     let isBought: Bool
     let onToggle: () -> Void
     let onSubmit: () -> Void
+    let onFocusLossCommit: () -> Void
     let onCancel: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
@@ -586,11 +862,65 @@ private struct ShoppingItemInlineEditRow: View {
 
             TextField("Item name", text: $text)
                 .font(themeStore.font(for: .listRowTitle))
-                .submitLabel(.done)
+                .submitLabel(.next)
                 .focused($isFocused)
                 .onSubmit(onSubmit)
                 .onChange(of: isFocused) { _, focused in
                     if !focused, !isCancelling {
+                        onFocusLossCommit()
+                    }
+                }
+                .autocorrectionDisabled()
+
+            Button {
+                isCancelling = true
+                onCancel()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
+        }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
+        .contentShape(Rectangle())
+        .padding(.vertical, ShoppingRowLayout.verticalPadding)
+        .onAppear {
+            isCancelling = false
+            DispatchQueue.main.async {
+                isFocused = true
+            }
+        }
+    }
+}
+
+private struct ShoppingItemInlineComposerRow: View {
+    @Binding var text: String
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @FocusState private var isFocused: Bool
+    @State private var isCancelling = false
+
+    var body: some View {
+        HStack(spacing: ShoppingRowLayout.spacing) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+
+            TextField("Add item", text: $text)
+                .font(themeStore.font(for: .listRowTitle))
+                .submitLabel(.next)
+                .focused($isFocused)
+                .onSubmit(onSubmit)
+                .onChange(of: isFocused) { _, focused in
+                    guard !focused, !isCancelling else { return }
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        onCancel()
+                    } else {
                         onSubmit()
                     }
                 }

@@ -14,6 +14,7 @@ final class CachedTask {
     var backlogCategoryId: UUID?
     var areaId: UUID?
     var dueDate: Date?
+    var lastPokedAt: Date?
     var completedAt: Date?
     var completedById: String?
     var taskTypeRaw: String
@@ -39,6 +40,7 @@ final class CachedTask {
         backlogCategoryId = task.backlogCategoryId
         areaId = task.areaId
         dueDate = task.dueDate
+        lastPokedAt = task.lastPokedAt
         completedAt = task.completedAt
         completedById = task.completedById
         taskTypeRaw = task.taskType.rawValue
@@ -59,6 +61,7 @@ final class CachedTask {
         backlogCategoryId = task.backlogCategoryId
         areaId = task.areaId
         dueDate = task.dueDate
+        lastPokedAt = task.lastPokedAt
         completedAt = task.completedAt
         completedById = task.completedById
         notes = task.notes
@@ -78,6 +81,7 @@ final class CachedTask {
             backlogCategoryId: backlogCategoryId,
             areaId: areaId,
             dueDate: dueDate,
+            lastPokedAt: lastPokedAt,
             completedAt: completedAt,
             completedById: completedById,
             taskType: Task.TaskType(rawValue: taskTypeRaw) ?? .oneOff,

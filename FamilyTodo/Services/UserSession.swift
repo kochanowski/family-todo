@@ -167,6 +167,7 @@ final class UserSession: ObservableObject {
         // Observe authentication state changes
         setupAuthObserver()
         restoreGuestSessionIfNeeded()
+        restoreSignedInSessionIfNeeded()
     }
 
     // MARK: - Public Methods
@@ -199,6 +200,7 @@ final class UserSession: ObservableObject {
     func startGuestSession(displayName: String = "Guest") {
         let guestId = userDefaults.string(forKey: StorageKeys.guestUserId) ?? UUID().uuidString
 
+        clearSignedInSessionDefaults()
         userDefaults.set(true, forKey: StorageKeys.guestSessionEnabled)
         userDefaults.set(guestId, forKey: StorageKeys.guestUserId)
         userDefaults.set(displayName, forKey: StorageKeys.guestDisplayName)
@@ -303,6 +305,7 @@ final class UserSession: ObservableObject {
             user = authService.currentUser
             guestDisplayName = nil
             clearGuestSessionDefaults()
+            persistSignedInSession(userID: userID)
             restorePreferredDisplayName(for: userID)
 
             // Restore household selection if exists
@@ -328,6 +331,7 @@ final class UserSession: ObservableObject {
         preferredDisplayName = nil
         hasConfirmedDisplayName = false
         userDefaults.removeObject(forKey: StorageKeys.currentHouseholdId)
+        clearSignedInSessionDefaults()
     }
 
     private func restoreHouseholdSelection() {
@@ -357,6 +361,24 @@ final class UserSession: ObservableObject {
         restoreHouseholdSelection()
     }
 
+    private func restoreSignedInSessionIfNeeded() {
+        guard !isGuest else { return }
+        guard userDefaults.bool(forKey: StorageKeys.signedInSessionEnabled) else { return }
+        guard let userId = userDefaults.string(forKey: StorageKeys.lastSignedInUserId),
+              !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            clearSignedInSessionDefaults()
+            return
+        }
+
+        sessionMode = .signedIn
+        currentUserID = userId
+        user = authService.currentUser
+        guestDisplayName = nil
+        restorePreferredDisplayName(for: userId)
+        restoreHouseholdSelection()
+    }
+
     private func restorePreferredDisplayName(for userId: String) {
         let values = userDefaults.dictionary(forKey: StorageKeys.preferredDisplayNameByUserId) as? [String: String] ?? [:]
         if let name = values[userId], !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -374,11 +396,23 @@ final class UserSession: ObservableObject {
         userDefaults.removeObject(forKey: StorageKeys.guestDisplayName)
     }
 
+    private func persistSignedInSession(userID: String) {
+        userDefaults.set(true, forKey: StorageKeys.signedInSessionEnabled)
+        userDefaults.set(userID, forKey: StorageKeys.lastSignedInUserId)
+    }
+
+    private func clearSignedInSessionDefaults() {
+        userDefaults.removeObject(forKey: StorageKeys.signedInSessionEnabled)
+        userDefaults.removeObject(forKey: StorageKeys.lastSignedInUserId)
+    }
+
     private enum StorageKeys {
         static let currentHouseholdId = "currentHouseholdID"
         static let guestSessionEnabled = "guestSessionEnabled"
         static let guestUserId = "guestUserId"
         static let guestDisplayName = "guestDisplayName"
+        static let signedInSessionEnabled = "signedInSessionEnabled"
+        static let lastSignedInUserId = "lastSignedInUserId"
         static let preferredDisplayNameByUserId = "preferredDisplayNameByUserId"
     }
 }

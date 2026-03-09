@@ -262,8 +262,10 @@ final class HouseholdStoreTests: XCTestCase {
             CachedMember.self,
             CachedTask.self,
             CachedShoppingItem.self,
+            CachedShoppingBundle.self,
             CachedBacklogCategory.self,
             CachedBacklogItem.self,
+            CachedRecurringChore.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -321,6 +323,59 @@ final class HouseholdStoreTests: XCTestCase {
         // ✅ Verify 5 backlog items
         let backlogItems = try container.mainContext.fetch(FetchDescriptor<CachedBacklogItem>())
         XCTAssertEqual(backlogItems.count, 5)
+    }
+
+    func testLeaveCurrentHouseholdLocalOnlyRemovesRecurringCacheAndSuppressesRecovery() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+            CachedTask.self,
+            CachedShoppingItem.self,
+            CachedShoppingBundle.self,
+            CachedBacklogCategory.self,
+            CachedBacklogItem.self,
+            CachedRecurringChore.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(
+            modelContext: container.mainContext,
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+        localStore.setSyncMode(.localOnly)
+
+        let household = try await localStore.createHousehold(
+            name: "Leave Me",
+            userId: "guest-user",
+            displayName: "Guest"
+        )
+        let recurring = RecurringChore(
+            householdId: household.id,
+            title: "Water plants",
+            recurrenceType: .weekly,
+            categoryId: UUID()
+        )
+        container.mainContext.insert(CachedRecurringChore(from: recurring))
+        try container.mainContext.save()
+
+        try await localStore.leaveCurrentHousehold(userId: household.ownerId)
+
+        XCTAssertNil(localStore.currentHousehold)
+        XCTAssertTrue(localStore.isRecoverySuppressed(for: household.id))
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).isEmpty)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedRecurringChore>()).isEmpty)
+
+        await localStore.loadCurrentHouseholdAndMembership(userId: household.ownerId)
+        XCTAssertNil(localStore.currentHousehold)
     }
 
     // MARK: - HouseholdError Tests

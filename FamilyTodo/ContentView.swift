@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     var body: some View {
@@ -16,21 +17,40 @@ struct MainAppView: View {
 
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
+    @State private var tabBarController: UITabBarController?
 
     var body: some View {
         legacyTabView
+            .background(
+                TabBarControllerAccessor { controller in
+                    if tabBarController !== controller {
+                        tabBarController = controller
+                    }
+                    // UIKit can temporarily drop the live tab bar styling after modal save/dismiss flows.
+                    applyTabBarAppearance()
+                }
+            )
             .background(AppBackgroundView())
             .onAppear {
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
             }
             .onChange(of: themeStore.tabTintColor) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
+            }
+            .onChange(of: householdStore.currentHousehold?.updatedAt) { _, _ in
+                applyTabBarAppearance()
             }
             .onChange(of: themeStore.retroFontScale) { _, _ in
-                TabBarTypographyManager.apply(themeStore: themeStore)
+                applyTabBarAppearance()
+            }
+            .onChange(of: activeTab) { _, _ in
+                applyTabBarAppearance()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
+                refreshTabBarAppearanceAfterDismiss()
             }
             .task {
                 await bootstrapHouseholdIfNeeded()
@@ -71,21 +91,125 @@ struct MainAppView: View {
             }
             .tag(AppTab.more)
         }
-        .tint(themeStore.resolvedTabTint)
     }
 
     private func bootstrapHouseholdIfNeeded() async {
         guard !hasBootstrappedHousehold else { return }
         hasBootstrappedHousehold = true
 
+        if let household = householdStore.currentHousehold {
+            if userSession.currentHouseholdID != household.id {
+                userSession.setCurrentHousehold(household.id)
+            }
+            return
+        }
+
         guard let userId = userSession.userId else { return }
 
-        await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
+        householdStore.setSyncMode(userSession.syncMode)
+
+        if let restoredHousehold = householdStore.restoreCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        ) {
+            if userSession.currentHouseholdID != restoredHousehold.id {
+                userSession.setCurrentHousehold(restoredHousehold.id)
+            }
+            _ = _Concurrency.Task {
+                await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
+            }
+            return
+        }
+
+        await householdStore.loadCurrentHouseholdAndMembership(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        )
         if let household = householdStore.currentHousehold,
            userSession.currentHouseholdID != household.id
         {
             userSession.setCurrentHousehold(household.id)
         }
+    }
+
+    private func applyTabBarAppearance() {
+        TabBarTypographyManager.apply(
+            themeStore: themeStore,
+            tabBarController: tabBarController,
+            selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
+        )
+    }
+
+    private func refreshTabBarAppearanceAfterDismiss() {
+        applyTabBarAppearance()
+        DispatchQueue.main.async {
+            applyTabBarAppearance()
+        }
+        // Modal dismissal can finish after the underlying household model update.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            applyTabBarAppearance()
+        }
+    }
+}
+
+private struct TabBarControllerAccessor: UIViewControllerRepresentable {
+    let onResolve: (UITabBarController) -> Void
+
+    func makeUIViewController(context _: Context) -> TabBarControllerReaderViewController {
+        let viewController = TabBarControllerReaderViewController()
+        viewController.onResolve = onResolve
+        return viewController
+    }
+
+    func updateUIViewController(
+        _ uiViewController: TabBarControllerReaderViewController,
+        context _: Context
+    ) {
+        uiViewController.onResolve = onResolve
+        uiViewController.resolveTabBarControllerIfNeeded()
+    }
+}
+
+private final class TabBarControllerReaderViewController: UIViewController {
+    var onResolve: ((UITabBarController) -> Void)?
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    func resolveTabBarControllerIfNeeded() {
+        guard let tabBarController = resolvedTabBarController else { return }
+        onResolve?(tabBarController)
+    }
+
+    private var resolvedTabBarController: UITabBarController? {
+        if let tabBarController {
+            return tabBarController
+        }
+
+        var currentParent: UIViewController? = parent
+        while let candidate = currentParent {
+            if let tabBarController = candidate as? UITabBarController {
+                return tabBarController
+            }
+            currentParent = candidate.parent
+        }
+
+        return nil
     }
 }
 

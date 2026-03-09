@@ -22,6 +22,7 @@ final class TaskTests: XCTestCase {
         XCTAssertTrue(task.assigneeIds.isEmpty)
         XCTAssertNil(task.areaId)
         XCTAssertNil(task.dueDate)
+        XCTAssertNil(task.lastPokedAt)
         XCTAssertNil(task.completedAt)
     }
 
@@ -29,6 +30,7 @@ final class TaskTests: XCTestCase {
         let assigneeId = UUID()
         let areaId = UUID()
         let dueDate = Date()
+        let lastPokedAt = Date().addingTimeInterval(-300)
 
         let task = Task(
             householdId: householdId,
@@ -38,6 +40,7 @@ final class TaskTests: XCTestCase {
             assigneeIds: [assigneeId],
             areaId: areaId,
             dueDate: dueDate,
+            lastPokedAt: lastPokedAt,
             taskType: .recurring,
             notes: "Test notes"
         )
@@ -46,6 +49,7 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(task.assigneeIds, [assigneeId])
         XCTAssertEqual(task.areaId, areaId)
         XCTAssertEqual(task.dueDate, dueDate)
+        XCTAssertEqual(task.lastPokedAt, lastPokedAt)
         XCTAssertEqual(task.notes, "Test notes")
         XCTAssertEqual(task.taskType, .recurring)
     }
@@ -131,11 +135,13 @@ final class TaskTests: XCTestCase {
     // MARK: - Codable Tests
 
     func testTaskEncodingDecoding() throws {
+        let pokeDate = Date(timeIntervalSince1970: 1_736_000_000)
         let originalTask = Task(
             householdId: householdId,
             title: "Codable Test",
             status: .next,
             dueDate: Date(),
+            lastPokedAt: pokeDate,
             taskType: .oneOff,
             notes: "Test encoding"
         )
@@ -150,5 +156,56 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(originalTask.title, decodedTask.title)
         XCTAssertEqual(originalTask.status, decodedTask.status)
         XCTAssertEqual(originalTask.notes, decodedTask.notes)
+        XCTAssertEqual(originalTask.lastPokedAt, decodedTask.lastPokedAt)
+    }
+
+    func testCachedTaskRoundTripPreservesLastPokedAt() {
+        let pokeDate = Date(timeIntervalSince1970: 1_736_111_000)
+        let originalTask = Task(
+            householdId: householdId,
+            title: "Cache Roundtrip",
+            status: .next,
+            lastPokedAt: pokeDate,
+            taskType: .oneOff
+        )
+
+        let cached = CachedTask(from: originalTask)
+        let roundTrip = cached.toTask()
+
+        XCTAssertEqual(roundTrip.lastPokedAt, pokeDate)
+    }
+
+    func testCloudKitMappingRoundTripPreservesLastPokedAt() async throws {
+        let pokeDate = Date(timeIntervalSince1970: 1_736_222_000)
+        let originalTask = Task(
+            householdId: householdId,
+            title: "Cloud Roundtrip",
+            status: .next,
+            lastPokedAt: pokeDate,
+            taskType: .oneOff
+        )
+
+        let manager = CloudKitManager.shared
+        let record = await manager.taskRecord(from: originalTask)
+        let roundTrip = try await manager.task(from: record)
+
+        XCTAssertEqual(roundTrip.lastPokedAt, pokeDate)
+    }
+
+    func testCloudKitMappingKeepsLastPokedAtNilWhenMissing() async throws {
+        let originalTask = Task(
+            householdId: householdId,
+            title: "Cloud Nil",
+            status: .next,
+            lastPokedAt: nil,
+            taskType: .oneOff
+        )
+
+        let manager = CloudKitManager.shared
+        let record = await manager.taskRecord(from: originalTask)
+        let roundTrip = try await manager.task(from: record)
+
+        XCTAssertNil(record["lastPokedAt"])
+        XCTAssertNil(roundTrip.lastPokedAt)
     }
 }

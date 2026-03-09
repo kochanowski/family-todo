@@ -112,81 +112,272 @@ Use it together with the one-task-at-a-time workflow.
 ## Phase 2 - Core Features & UX
 
 ## <a id="p21"></a>P2.1 Engaging Empty States
-- Objective: complete empty-state UX in key tabs.
+- Objective: deliver first-run-friendly and returning-user empty states across core tabs.
 - In scope:
-  - Add/align `ContentUnavailableView` in Shopping, Tasks Active, Ideas.
-  - Ensure CTA behavior is actionable.
-- Likely files: `ShoppingListView.swift`, `TasksView.swift`, `BacklogView.swift`.
-- Validation: empty/non-empty transitions work without layout regressions.
+  - Implement two-tier empty states in Shopping, Tasks Active, and Ideas:
+    - Tutorial state for first-time empty list.
+    - Standard `ContentUnavailableView` after tutorial dismissal/learning.
+  - Persist tutorial visibility with `@AppStorage` flags:
+    - `hasSeenShoppingTutorial`
+    - `hasSeenTasksTutorial`
+    - `hasSeenIdeasTutorial`
+  - Tutorial CTA buttons mark the respective tutorial as seen.
+  - Auto-mark tutorial as seen when list becomes non-empty (user discovered the flow naturally).
+  - Keep Tasks empty-state branching:
+    - Active + no completed -> "No Tasks Yet".
+    - Active empty + completed exists -> "All Caught Up!".
+    - Completed empty tab -> "No Completed Tasks".
+  - Keep all empty states centered with consistent optical positioning.
+- Likely files:
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Views/TasksView.swift`
+  - `FamilyTodo/Views/BacklogView.swift`
+- Out of scope: full-screen coach marks/overlays and data-layer changes.
+- Validation:
+  - First launch shows tutorial states when lists are empty.
+  - Tapping tutorial CTA permanently switches that tab to standard empty state.
+  - Adding first item/task/idea auto-sets tutorial flag.
+  - Empty/non-empty transitions do not break list rendering or tab layout.
 
 ## <a id="p22"></a>P2.2 Conversational Task Filter Chips
 - Objective: improve assignee filtering UX with language-first chips.
 - In scope:
-  - Add `All tasks`, `My tasks`, `[Name]'s tasks` chips.
-  - Keep filter type ID-based (`.member(UUID)`).
-  - Apply to Active and Completed.
-- Likely files: `TasksView.swift`.
+  - Introduce conversational filter chips:
+    - `All tasks`
+    - `My tasks`
+    - `[Name]'s tasks`
+  - Keep filter state ID-based (`.all`, `.mine`, `.member(UUID)`), independent from display names.
+  - Apply filtering consistently to both Active and Completed task tabs.
+  - Hide `My tasks` when current member cannot be resolved from session/member list.
+  - Prevent duplicate representation of the current user in chip list.
+  - Show filtered empty states only when base dataset is non-empty.
+- Likely files:
+  - `FamilyTodo/Views/TasksView.swift`
 - Out of scope: avatar-based filter UI.
-- Validation: no duplicate current-user chip; filters toggle reliably.
+- Validation:
+  - Chips render in horizontal scroll and update selection state reliably.
+  - Task subsets for Active/Completed match selected chip.
+  - Current user never appears as both `My tasks` and `[Name]'s tasks`.
+  - Filter selection normalizes safely when household membership/session changes.
 
 ## <a id="p23"></a>P2.3 Poke Data Model & Mapping
 - Objective: introduce `lastPokedAt` end-to-end.
 - In scope:
-  - Add field to domain model, cache model, CloudKit mapping.
-  - Update schema JSON and validator contract.
-- Likely files: `Task.swift`, `CachedTask.swift`, `CloudKitManager+Mapping.swift`, schema files.
-- Validation: round-trip `Task -> cache -> cloud -> Task` preserves value.
+  - Add `lastPokedAt: Date?` to domain `Task`.
+  - Add `lastPokedAt` to `CachedTask` with full conversion chain (`init/update/toTask`).
+  - Add CloudKit record read/write mapping for `Task.lastPokedAt`.
+  - Update CloudKit schema and schema validator required map.
+- Likely files:
+  - `FamilyTodo/Models/Task.swift`
+  - `FamilyTodo/Models/CachedTask.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope: poke UI and cooldown interaction logic.
+- Validation:
+  - `Task -> CachedTask -> CloudKit -> Task` preserves `lastPokedAt`.
+  - Missing/`nil` `lastPokedAt` is handled gracefully in mapping.
+  - CI schema validation passes with the new field contract.
 
 ## <a id="p24"></a>P2.4 Poke Logic & Cooldown UX
 - Objective: add poke action with one-per-day cooldown and robust UX.
 - In scope:
-  - Implement `canPoke` and `pokeTask` with optimistic update + sync.
-  - Add leading swipe action for non-self assigned tasks.
-  - Add anti-multitap guard and disabled cooldown state.
-- Likely files: `TaskStore.swift`, `TasksView.swift`.
-- Validation: same-day repeat poke blocked, cross-day poke allowed.
+  - Implement `TaskStore.canPoke(task:)` with calendar-based same-day cooldown.
+  - Implement `TaskStore.pokeTask(_:)` optimistic update flow:
+    - Update in-memory task.
+    - Update cached task sync status.
+    - Sync mutation to CloudKit through existing task save path.
+  - Add leading swipe action in Tasks Active rows:
+    - Visible only for tasks assigned to someone else.
+    - Enabled poke state (`hand.wave.fill`) vs cooldown disabled state.
+  - Add anti-multitap safeguards (pending mutation guard at UI/store boundary).
+- Likely files:
+  - `FamilyTodo/Stores/TaskStore.swift`
+  - `FamilyTodo/Views/TasksView.swift`
+- Out of scope: new push-notification strategy for poke events.
+- Validation:
+  - Same-day second poke is blocked; next-day poke is allowed.
+  - Self-assigned/unassigned tasks do not expose poke action.
+  - Rapid taps do not create duplicate poke writes.
+  - Local cache reflects poke timestamp immediately and stays consistent after sync.
 
 ## <a id="p25"></a>P2.5 Gentle Rewards Expansion
 - Objective: enrich celebration messaging logic without gamification.
 - In scope:
-  - Extend message pools and priority (milestone > surprise > fallback).
-  - Enforce surprise cap (max once/week).
-  - Keep UI trigger decision in view layer.
-- Likely files: `CelebrationManager.swift`, `TaskStore.swift`, `TasksView.swift`.
+  - Extend `CelebrationManager` decision engine with explicit tiers:
+    - `milestone` > `surprise` > `fallback`.
+  - Add milestone and surprise message pools with deterministic fallback behavior.
+  - Enforce surprise cap at most once per 7 days (persisted in `UserDefaults`).
+  - Keep completion-trigger wiring in Tasks flow with weekly completion count input.
+  - Respect `ThemeStore.celebrationsEnabled` toggle for all user-facing celebration output.
+- Likely files:
+  - `FamilyTodo/Services/CelebrationManager.swift`
+  - `FamilyTodo/Stores/TaskStore.swift`
+  - `FamilyTodo/Views/TasksView.swift`
 - Out of scope: points/ranking system.
-- Validation: message priority and toggle behavior (`celebrationsEnabled`) are correct.
+- Validation:
+  - Milestone tier overrides surprise/fallback when threshold is met.
+  - Surprise messages never appear more than once per 7 days.
+  - Fallback messages are used when milestone/surprise criteria are not met.
+  - No celebration toast/confetti appears when `celebrationsEnabled == false`.
 
 ## <a id="p26"></a>P2.6 Round-Robin Recurring Task Rotation
-- Objective: deterministic rotation for recurring chores.
+- Status: parked on `feature/recurring-tasks`; removed from the active `feature/cloudkit-fixes` runtime/UI scope.
+- Objective: deliver a fully working recurring-task engine first, then layer deterministic round-robin assignment.
 - In scope:
-  - Add persistent rotation cursor and generation updates.
-  - Normalize cursor when assignee set changes.
-- Likely files: recurring chore model/store/scheduler and CloudKit mapping/schema.
-- Validation: A->B->A assignment pattern over repeated generations.
+  - Core engine first (blocking requirement):
+    - When a recurring task is marked `.done`, immediately generate/schedule the next instance from recurrence rules (`daily/weekly/monthly/custom`).
+    - Next instance must be created as `.backlog` (not `.next`) to avoid active-list clutter.
+    - Update recurring metadata (`lastGeneratedDate`, `nextScheduledDate`) after successful generation.
+    - Add idempotency guard (`recurringChoreId + dueDate`) so completion retries never create duplicates.
+  - Keep startup scheduler as catch-up/repair path, but do not rely on app launch as the primary generation trigger.
+  - Round-robin phase (after core generation is stable):
+    - Add persistent cursor `nextAssigneeIndex` to recurring chore domain/cache/cloud mapping.
+    - Assign new instance by cursor when rotation is enabled, then advance cursor (`(idx + 1) % count`).
+    - Normalize cursor on assignee-list edits: `nextAssigneeIndex = min(cursor, max(0, count - 1))`.
+  - UI/UX requirements:
+    - Create/edit recurring task UI supports multi-assignee selection (checkmarks / multi-select list).
+    - Add `Toggle("Rotate between assignees")`.
+    - Task row shows `arrow.triangle.2.circlepath` indicator near assignee for rotating recurring tasks.
+    - Task detail shows helper line: `Next up: <Member Name>`.
+- Likely files:
+  - `FamilyTodo/Models/LegacyStubs.swift` (RecurringChore / CachedRecurringChore / ChoreScheduler / RecurringChoreStore)
+  - `FamilyTodo/Stores/TaskStore.swift` (completion hook to generation engine)
+  - `FamilyTodo/Views/MoreView.swift` (RepetitiveTasksView multi-assignee + rotate toggle)
+  - `FamilyTodo/Views/TasksView.swift` (TaskRow indicator + detail annotation)
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope:
+  - Creating successor recurring tasks directly in `.next`.
+  - Full redesign of recurring screens beyond required controls and indicators.
+- Validation:
+  - Completing recurring task generates exactly one successor task immediately in `.backlog`.
+  - Successor due date follows recurrence settings and remains stable across restart/retry.
+  - Rotation sequence is deterministic (A->B->A...) and survives app restart + cloud sync.
+  - Cursor remains valid after assignee reorder/remove.
+  - UI controls are discoverable and reflect data correctly (multi-assignee, toggle, row icon, next-up hint).
 
 ## <a id="p27"></a>P2.7 Shopping Bundles End-to-End
 - Objective: reusable shopping bundles with quick add.
 - In scope:
-  - Bundle model/cache/store/cloud mapping.
-  - Bundles management UI and long-press quick add from Shopping.
-- Likely files: new bundle model/store/view files + shopping/cloud integration.
-- Validation: bundle CRUD + one-tap add all items works locally and via cloud sync.
+  - Add `ShoppingBundle` model (`id`, `householdId`, `name`, `icon`, `items`, `createdAt`, `updatedAt`, optional `sortOrder`).
+  - Persist bundle items in CloudKit-safe serialized form (`itemsJSON`) to keep schema/validator stable.
+  - Add `CachedShoppingBundle` with full conversion chain (`init/update/toModel`) and sync metadata.
+  - Add `ShoppingBundleStore` with offline-first load/merge and CRUD operations.
+  - Add bundle CloudKit CRUD + mapping + schema/validator entries.
+  - Shopping header UX: add bundles icon (`archivebox` or `square.grid.3x3.fill`) in top-right action cluster, between Trash and Recently Purchased, opening `BundlesManagementView`.
+  - Quick add UX: long-press on main `+ Add Item` opens native context menu (or sheet fallback) with available bundles; tap adds all bundle items instantly.
+  - Post-add feedback: show short success feedback (`Added <Bundle Name> (<N> items)`).
+  - `BundlesManagementView`: simple list of bundles; tapping bundle opens detail editor with bundle name field + add/remove item flow similar to regular shopping list ergonomics.
+  - Ensure quick add reuses existing shopping create path (normalization/dedup/sync behavior parity).
+- Likely files:
+  - New: `FamilyTodo/Models/ShoppingBundle.swift`
+  - New: `FamilyTodo/Models/CachedShoppingBundle.swift`
+  - New: `FamilyTodo/Stores/ShoppingBundleStore.swift`
+  - New: `FamilyTodo/Views/BundlesManagementView.swift`
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Stores/ShoppingListStore.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `FamilyTodo/FamilyTodoApp.swift`
+  - `FamilyTodo/Utilities/SwiftDataContainerFactory.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope: recipe import and automatic bundle generation.
+- Validation:
+  - Bundle CRUD works in local-only and cloud mode.
+  - `itemsJSON` encode/decode round-trip is stable (including empty and multi-item bundles).
+  - Quick add inserts every bundle item exactly once per tap.
+  - Long-press discovery flow is responsive and does not block regular add-item flow.
+  - Header icon placement is clear and consistent with Shopping actions.
+  - Quick add always emits confirmation feedback with correct item count.
 
-## <a id="p28"></a>P2.8 Activity Log End-to-End
-- Objective: transparent audit trail for household actions.
+## <a id="p28"></a>P2.8 Contextual Onboarding (TipKit)
+- Objective: guide users to discover advanced features without blocking their workflow.
 - In scope:
-  - ActivityLog model/cache/store/view.
-  - Integrate logging in task/shopping actions with required `userId`.
-- Likely files: activity log files + `TaskStore.swift` + `ShoppingListStore.swift` + `MoreView.swift`.
-- Validation: correct actor/action entries across devices.
+  - Use native iOS TipKit presentation (icon + title + short text + dismiss X), styled to fit app accent color.
+  - Shopping tip: point to main `+` add button with guidance for long-press quick bundles (`Tip: Long-press to quickly add shopping bundles!`).
+  - Rule: show only when bundles/quick-add conditions are relevant and user has not used bundle quick-add yet.
+  - Idea Promotion Tip: popover pointing to the `arrow.up` icon in Ideas.
+  - Rule: show when user adds their first idea.
+  - Tasks contextual tip:
+    - primary: for first recurring task, explain auto-rotation (`This task will automatically rotate to the next person when completed.`)
+    - fallback: if recurring context is unavailable, keep swipe-actions learning tip.
+  - TipKit bootstrap in app startup with safe `Tips.configure()` execution.
+- Likely files: `FamilyTodoApp.swift`, `ShoppingListView.swift`, `BacklogView.swift`, `TasksView.swift`, new `AppTips.swift`.
+- Out of scope: full-screen blocking tutorials.
+- Validation:
+  - Tips render only when matching their state rules.
+  - Tip dismissal is graceful and non-blocking.
+  - Tip placement anchors to intended controls without obscuring primary actions.
+  - Inline tips do not cause disruptive layout shifts.
+  - Startup remains stable with `Tips.configure()`.
 
 ## <a id="p29"></a>P2.9 Push Message Enrichment via Activity Log
 - Objective: make notifications contextual and useful.
 - In scope:
-  - Use activity events for user-facing push/in-app messages.
-  - Keep de-dup and self-noise suppression.
-- Likely files: `CloudKitSubscriptionManager.swift` plus activity log integration points.
-- Validation: notifications show "who did what" without duplicate spam.
+  - Use ActivityLog as primary source for message text in push/in-app update pipeline.
+  - Keep `CKDatabaseSubscription` as shared DB foundation (do not rely on query-only path).
+  - Build personalized templates by activity type for lock screen readability:
+    - "`<Name>` bought: `<item list>`"
+    - "`<Name>` completed task: `<task>`"
+  - Filter out self events (`activity.userId == current user`) and suppress duplicate deliveries.
+  - Add de-dup cache keyed by `activityLog.id` (or equivalent stable identifier).
+  - If app is foregrounded and remote action comes from another household member, show non-invasive in-app top banner (auto-dismiss ~3 seconds).
+  - Keep generic fallback banner/message when no parseable activity event is available.
+- Likely files:
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `FamilyTodo/Services/AppDelegateBridge.swift` (verification of forwarding path)
+  - `FamilyTodo/Stores/ActivityLogStore.swift` (query helpers for latest events)
+  - Optional: `FamilyTodo/Views/SettingsView.swift` (partner-updates toggle)
+- Out of scope: server-side random notification copy generation.
+- Validation:
+  - Notifications are contextual ("who did what") for non-self events.
+  - No duplicate notification storms from repeated sync callbacks.
+  - Foreground/background behavior remains stable on two devices and two accounts.
+  - Foreground in-app banner appears only for remote non-self events and disappears automatically.
+  - Push copy is understandable on lock screen without opening the app.
+
+## <a id="p210"></a>P2.10 Activity Log End-to-End
+- Objective: transparent audit trail for household actions.
+- In scope:
+  - Add `ActivityLog` model (`id`, `householdId`, `actionType`, `userId`, `userName`, `itemName`, `timestamp`).
+  - Add `CachedActivityLog` and offline-first `ActivityLogStore` (`load`, `sync`, `logAction`).
+  - Define action mapping contract:
+    - `taskCreated` -> `TaskStore.createTask(...)`
+    - `taskCompleted` -> `TaskStore.moveTask(_:to: .done)`
+    - `shoppingItemAdded` -> `ShoppingListStore.createItem(...)` - czy będziemy logować każdy item w shopping?
+    - `shoppingItemBought` -> `ShoppingListStore.toggleBought(...)` on transition to bought - czy będziemy logować każdy item w shopping? trzeba to przemyśleć jeszcze raz - za i przeciw
+  - Keep logging calls in stores (single source of truth), not view layer callbacks.
+  - Add Activity Log entry point in More tab above technical settings using icon `clock.arrow.circlepath`.
+  - Implement `ActivityLogView` as timeline/feed:
+    - left: avatar or initials in circle
+    - center: readable sentence (actor + action + item)
+    - trailing/bottom: relative time (`2h ago`, `Yesterday`)
+  - Add friendly empty state with large SF Symbol and text equivalent to "Nothing happened yet".
+  - Add CloudKit record type + mapping + schema contract (query by `householdId`, sort by `timestamp`).
+- Likely files:
+  - New: `FamilyTodo/Models/ActivityLog.swift`
+  - New: `FamilyTodo/Models/CachedActivityLog.swift`
+  - New: `FamilyTodo/Stores/ActivityLogStore.swift`
+  - New: `FamilyTodo/Views/ActivityLogView.swift`
+  - `FamilyTodo/Stores/TaskStore.swift`
+  - `FamilyTodo/Stores/ShoppingListStore.swift`
+  - `FamilyTodo/Views/MoreView.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `FamilyTodo/FamilyTodoApp.swift`
+  - `FamilyTodo/Utilities/SwiftDataContainerFactory.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope: moderation/admin role permissions for log visibility.
+- Validation:
+  - Correct action type + actor attribution for defined events.
+  - Newest-first ordering in UI and cloud-synced data.
+  - No missing log entries during offline mutations followed by reconnect.
+  - Timeline remains readable on narrow screens and long item names.
+  - Empty state is shown only when there are zero log entries.
 
 ## Phase 3 - Polish & Future
 
@@ -209,10 +400,21 @@ Use it together with the one-task-at-a-time workflow.
 - Validation: explicit technical decision with constraints and migration plan.
 
 ## <a id="p34"></a>P3.4 Sharing Role UX Enhancements
-- Objective: improve share-role operations (owner transfer / read-only option).
-- In scope: product and UX spec, then implementation if approved.
-- Out of scope: permission model overhaul not backed by product decision.
-- Validation: role flows do not break leave/delete/member actions.
+- Objective: make household roles visible and safely manageable from UI.
+- In scope:
+  - Household member list shows subtle gray role badge under each name (`Owner`, `Member`, `Read-only`).
+  - Owner-only member actions on tap via action sheet:
+    - `Change Role`
+    - `Transfer Ownership`
+    - `Remove from Household`
+  - Destructive actions (`Transfer Ownership`, `Remove`) must be red and require explicit confirmation alert.
+  - Non-owner users cannot access privileged role-management actions.
+- Out of scope: full RBAC/permission-system redesign.
+- Validation:
+  - Role badges render correctly for all members.
+  - Owner-only action sheet visibility is permission-correct.
+  - Destructive confirmations prevent accidental ownership transfer/removal.
+  - Membership flows (leave/delete/invite) remain stable after role changes.
 
 ## <a id="p35"></a>P3.5 Guest Data Protection Hardening
 - Objective: improve data-at-rest protection in guest/local mode.
@@ -221,7 +423,17 @@ Use it together with the one-task-at-a-time workflow.
 - Validation: protection policy is documented and verified on supported devices.
 
 ## <a id="p36"></a>P3.6 Remaining UX Polish
-- Objective: finish deferred UX consistency tasks.
-- In scope: WIP hard-enforcement consistency, sign-out overlap fixes, theme polish.
-- Out of scope: unrelated feature work.
-- Validation: no regressions across tabs/themes and key flows.
+- Objective: close remaining visual consistency and tactile-feedback gaps.
+- In scope:
+  - Empty-state quality pass: each empty tab/screen uses polished icon + supportive copy (no blank white states).
+  - Haptics consistency pass:
+    - task completion -> success feedback
+    - adding shopping item -> light impact
+    - deleting item -> rigid impact
+  - Dark-mode/theme contrast verification for tags/categories so they neither glow nor blend into background.
+  - Preserve existing WIP/sign-out/theme polish tasks where already planned.
+- Out of scope: new feature additions unrelated to UX consistency.
+- Validation:
+  - Empty states are visually complete across Shopping/Tasks/Ideas/Activity Log surfaces.
+  - Haptic mapping is consistent across repeated interactions.
+  - Dark mode and alternate themes pass readability checks for chips/tags/categories.

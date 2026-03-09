@@ -1,7 +1,7 @@
 Act as an expert iOS Developer and UX Designer. I have thoroughly tested the app and found a few UI/UX areas that need refinement, a regression bug, and a critical CloudKit database error. Please implement the following 6 fixes:
 
 ### 1. Fix CloudKit SharedDB Error (CRITICAL)
-In the screenshots, there is an error: "Action failed: SharedDB does not support Zone Wide queries". 
+In the screenshots, there is an error: "Action failed: SharedDB does not support Zone Wide queries".
 - **Fix:** You are likely performing a `CKQueryOperation` on the `sharedCloudDatabase` without specifying a `zoneID`. Shared databases require queries to be scoped to a specific `CKRecordZone.ID`. Please update the CloudKit manager/service to properly scope queries in the shared database to the correct zone.
 
 ### 2. User Profile & "Guest" Logic

@@ -63,6 +63,7 @@
         { "name": "backlogCategoryId", "type": "Reference", "queryable": false, "sortable": false },
         { "name": "areaId", "type": "Reference", "queryable": false, "sortable": false },
         { "name": "dueDate", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "lastPokedAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "completedAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "completedById", "type": "String", "queryable": false, "sortable": false },
         { "name": "taskType", "type": "String", "queryable": false, "sortable": false },
@@ -124,6 +125,23 @@
       }
     },
     {
+      "name": "ShoppingBundle",
+      "fields": [
+        { "name": "id", "type": "String", "queryable": false, "sortable": false },
+        { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
+        { "name": "name", "type": "String", "queryable": false, "sortable": false },
+        { "name": "icon", "type": "String", "queryable": false, "sortable": false },
+        { "name": "itemsJSON", "type": "String", "queryable": false, "sortable": false },
+        { "name": "sortOrder", "type": "Int64", "queryable": false, "sortable": true },
+        { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
+      ],
+      "indexes": {
+        "query": ["householdId"],
+        "sort": ["sortOrder"]
+      }
+    },
+    {
       "name": "BacklogCategory",
       "fields": [
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
@@ -166,6 +184,8 @@
         { "name": "expiresAt", "type": "Date", "queryable": true, "sortable": false },
         { "name": "isRevoked", "type": "Int64", "queryable": true, "sortable": false },
         { "name": "usesCount", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "failedAttempts", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "lastAttemptAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "lastRedeemedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {

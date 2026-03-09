@@ -11,6 +11,8 @@ struct InviteToken: Equatable, Codable, Sendable {
     let expiresAt: Date
     var isRevoked: Bool
     var usesCount: Int
+    var failedAttempts: Int
+    var lastAttemptAt: Date?
     var lastRedeemedAt: Date?
 
     init(
@@ -22,6 +24,8 @@ struct InviteToken: Equatable, Codable, Sendable {
         expiresAt: Date? = nil,
         isRevoked: Bool = false,
         usesCount: Int = 0,
+        failedAttempts: Int = 0,
+        lastAttemptAt: Date? = nil,
         lastRedeemedAt: Date? = nil
     ) {
         self.id = id
@@ -32,6 +36,8 @@ struct InviteToken: Equatable, Codable, Sendable {
         self.expiresAt = expiresAt ?? createdAt.addingTimeInterval(Self.ttl)
         self.isRevoked = isRevoked
         self.usesCount = usesCount
+        self.failedAttempts = failedAttempts
+        self.lastAttemptAt = lastAttemptAt
         self.lastRedeemedAt = lastRedeemedAt
     }
 

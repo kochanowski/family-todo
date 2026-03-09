@@ -11,6 +11,12 @@ final class TaskStoreTests: XCTestCase {
     private let householdId = UUID()
     private let assigneeId = UUID()
 
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar
+    }
+
     override func setUp() async throws {
         try await super.setUp()
 
@@ -181,6 +187,283 @@ final class TaskStoreTests: XCTestCase {
         await store.loadTasks()
 
         XCTAssertTrue(store.tasks.isEmpty)
+    }
+
+    func testArchiveTaskMovesTaskFromRecentlyDoneToArchivedDone() async {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Archive me",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: Date().addingTimeInterval(-60),
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try? modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        XCTAssertTrue(store.recentlyDoneTasks.contains(where: { $0.id == task.id }))
+        XCTAssertFalse(store.archivedDoneTasks.contains(where: { $0.id == task.id }))
+
+        await store.archiveTask(task)
+
+        XCTAssertFalse(store.recentlyDoneTasks.contains(where: { $0.id == task.id }))
+        XCTAssertTrue(store.archivedDoneTasks.contains(where: { $0.id == task.id }))
+    }
+
+    func testArchiveTaskPersistsArchivedCompletedAtToCache() async throws {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Persist archive date",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: Date(),
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        await store.archiveTask(task)
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == task.id }
+        )
+        guard let cachedTask = try modelContainer.mainContext.fetch(descriptor).first else {
+            XCTFail("Expected cached task to exist after archiving")
+            return
+        }
+        guard let completedAt = cachedTask.completedAt else {
+            XCTFail("Expected archived task to have completedAt")
+            return
+        }
+
+        XCTAssertLessThanOrEqual(completedAt, Date().addingTimeInterval(-86400))
+        XCTAssertEqual(cachedTask.statusRaw, Task.TaskStatus.done.rawValue)
+    }
+
+    func testCanPokeReturnsTrueWhenTaskNeverPoked() {
+        let task = Task(
+            householdId: householdId,
+            title: "Never poked",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        XCTAssertTrue(store.canPoke(task: task, now: Date(), calendar: utcCalendar))
+    }
+
+    func testCanPokeReturnsFalseWhenTaskWasPokedToday() {
+        let now = Date(timeIntervalSince1970: 1_736_500_000)
+        let task = Task(
+            householdId: householdId,
+            title: "Poked today",
+            status: .next,
+            assigneeId: assigneeId,
+            lastPokedAt: now.addingTimeInterval(-600),
+            taskType: .oneOff
+        )
+
+        XCTAssertFalse(store.canPoke(task: task, now: now, calendar: utcCalendar))
+    }
+
+    func testCanPokeReturnsTrueWhenTaskWasPokedOnPreviousDay() {
+        let now = Date(timeIntervalSince1970: 1_736_500_000)
+        let task = Task(
+            householdId: householdId,
+            title: "Poked yesterday",
+            status: .next,
+            assigneeId: assigneeId,
+            lastPokedAt: now.addingTimeInterval(-86400),
+            taskType: .oneOff
+        )
+
+        XCTAssertTrue(store.canPoke(task: task, now: now, calendar: utcCalendar))
+    }
+
+    func testPokeTaskUpdatesLastPokedAtAndCacheInLocalMode() async throws {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Poke me",
+            status: .next,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
+            taskType: .oneOff
+        )
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let pokeDate = Date(timeIntervalSince1970: 1_736_600_000)
+        let didPoke = await store.pokeTask(task, now: pokeDate, calendar: utcCalendar)
+        XCTAssertTrue(didPoke)
+
+        guard let updatedTask = store.tasks.first(where: { $0.id == task.id }) else {
+            XCTFail("Expected poked task to exist in memory")
+            return
+        }
+        XCTAssertEqual(updatedTask.lastPokedAt, pokeDate)
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == task.id }
+        )
+        guard let cachedTask = try modelContainer.mainContext.fetch(descriptor).first else {
+            XCTFail("Expected cached task to exist after poke")
+            return
+        }
+        XCTAssertEqual(cachedTask.lastPokedAt, pokeDate)
+        XCTAssertEqual(cachedTask.syncStatusRaw, "synced")
+    }
+
+    func testPokeTaskBlocksSecondPokeOnSameDay() async throws {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Poke once",
+            status: .next,
+            assigneeId: assigneeId,
+            assigneeIds: [assigneeId],
+            taskType: .oneOff
+        )
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let firstPokeAt = Date(timeIntervalSince1970: 1_736_700_000)
+        let secondPokeAt = firstPokeAt.addingTimeInterval(1200)
+
+        let firstPokeResult = await store.pokeTask(task, now: firstPokeAt, calendar: utcCalendar)
+        let secondPokeResult = await store.pokeTask(task, now: secondPokeAt, calendar: utcCalendar)
+
+        XCTAssertTrue(firstPokeResult)
+        XCTAssertFalse(secondPokeResult)
+
+        guard let updatedTask = store.tasks.first(where: { $0.id == task.id }) else {
+            XCTFail("Expected task to still exist in memory")
+            return
+        }
+        XCTAssertEqual(updatedTask.lastPokedAt, firstPokeAt)
+    }
+
+    func testCompletedTaskCountThisWeekCountsOnlyDoneTasksInReferenceWeek() async throws {
+        let referenceDate = Date(timeIntervalSince1970: 1_736_800_000)
+        guard
+            let thisWeekDate = utcCalendar.date(byAdding: .day, value: -1, to: referenceDate),
+            let previousWeekDate = utcCalendar.date(byAdding: .day, value: -8, to: referenceDate)
+        else {
+            XCTFail("Failed to create reference dates")
+            return
+        }
+
+        let doneThisWeekA = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done this week A",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: thisWeekDate,
+            taskType: .oneOff
+        )
+        let doneThisWeekB = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done this week B",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: referenceDate,
+            taskType: .oneOff
+        )
+        let donePreviousWeek = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done previous week",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: previousWeekDate,
+            taskType: .oneOff
+        )
+        let activeTask = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Still active",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        [doneThisWeekA, doneThisWeekB, donePreviousWeek, activeTask]
+            .map(CachedTask.init(from:))
+            .forEach(modelContainer.mainContext.insert)
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let count = store.completedTaskCountThisWeek(
+            referenceDate: referenceDate,
+            calendar: utcCalendar
+        )
+        XCTAssertEqual(count, 2)
+    }
+
+    func testCompletedTaskCountThisWeekUsesUpdatedAtWhenCompletedAtMissing() async throws {
+        let referenceDate = Date(timeIntervalSince1970: 1_736_850_000)
+        guard
+            let thisWeekUpdatedAt = utcCalendar.date(byAdding: .day, value: -2, to: referenceDate),
+            let previousWeekUpdatedAt = utcCalendar.date(byAdding: .day, value: -9, to: referenceDate)
+        else {
+            XCTFail("Failed to create fallback dates")
+            return
+        }
+
+        let doneWithoutCompletedAtInWeek = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done fallback this week",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: nil,
+            taskType: .oneOff,
+            updatedAt: thisWeekUpdatedAt
+        )
+        let doneWithoutCompletedAtOld = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Done fallback old",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: nil,
+            taskType: .oneOff,
+            updatedAt: previousWeekUpdatedAt
+        )
+
+        [doneWithoutCompletedAtInWeek, doneWithoutCompletedAtOld]
+            .map(CachedTask.init(from:))
+            .forEach(modelContainer.mainContext.insert)
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let count = store.completedTaskCountThisWeek(
+            referenceDate: referenceDate,
+            calendar: utcCalendar
+        )
+        XCTAssertEqual(count, 1)
     }
 
     // MARK: - TaskStoreError Tests

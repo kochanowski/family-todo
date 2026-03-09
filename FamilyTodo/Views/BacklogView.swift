@@ -58,6 +58,7 @@ private struct BacklogContent: View {
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
     @State private var processingPromotionItemIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
+    @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -86,12 +87,9 @@ private struct BacklogContent: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if store.isLoading, store.categories.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.bottom, listBottomInset)
-            } else if store.categories.isEmpty {
+            if store.categories.isEmpty {
                 emptyState
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.bottom, listBottomInset)
             } else {
                 ScrollViewReader { scrollProxy in
@@ -165,6 +163,7 @@ private struct BacklogContent: View {
                     memberStore.setSyncMode(userSession.syncMode)
                     await store.loadData()
                     await memberStore.loadMembers()
+                    markIdeasTutorialAsSeenIfNeeded()
                 }
             }
 
@@ -176,6 +175,18 @@ private struct BacklogContent: View {
             memberStore.setSyncMode(userSession.syncMode)
             await store.loadData()
             await memberStore.loadMembers()
+            markIdeasTutorialAsSeenIfNeeded()
+        }
+        .onChange(of: store.categories.isEmpty) { _, isEmpty in
+            if !isEmpty {
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await store.loadData()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
         }
         .sheet(isPresented: $isAddingCategory) {
             CategoryEditorSheet(
@@ -334,13 +345,7 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Ideas")
-                .font(themeStore.font(for: .screenHeader))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-
-            Spacer()
-
+        AppScreenHeader(title: "Ideas", trailing: {
             Button {
                 newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
@@ -348,25 +353,46 @@ private struct BacklogContent: View {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 20))
                     .foregroundStyle(themeStore.accentTabColor)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
-        }
+        })
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Ideas Yet", systemImage: "archivebox")
-        } description: {
-            Text("Create a category to start organizing your ideas.")
-        } actions: {
-            Button("Create Category") {
-                newCategoryColorHex = MemberColorToken.randomHex()
-                isAddingCategory = true
+        Group {
+            if hasSeenIdeasTutorial {
+                ContentUnavailableView(
+                    "No Ideas Yet",
+                    systemImage: "lightbulb",
+                    description: Text(
+                        "Capture home improvement projects, wishlists, or future plans here."
+                    )
+                )
+            } else {
+                ContentUnavailableView {
+                    Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
+                } description: {
+                    Text(
+                        "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
+                    )
+                } actions: {
+                    Button("Start Dreaming") {
+                        HapticManager.lightTap()
+                        hasSeenIdeasTutorial = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(themeStore.accentColor)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .offset(y: -40)
+    }
+
+    private func markIdeasTutorialAsSeenIfNeeded() {
+        guard !store.categories.isEmpty, !hasSeenIdeasTutorial else { return }
+        hasSeenIdeasTutorial = true
     }
 
     private func promoteItem(_ item: BacklogItem) {
@@ -768,7 +794,7 @@ struct CategoryCard: View {
             AppConfirmationSheet(
                 title: "Delete \"\(category.title)\"?",
                 message: "This will permanently delete the category and all its items.",
-                primaryTitle: "Delete Category and \(items.count) Items",
+                primaryTitle: deleteCategoryPrimaryTitle,
                 primaryStyle: .destructive,
                 onPrimary: {
                     withAnimation(WowAnimation.easeOut) {
@@ -777,6 +803,11 @@ struct CategoryCard: View {
                 }
             )
         }
+    }
+
+    private var deleteCategoryPrimaryTitle: String {
+        let itemLabel = items.count == 1 ? "Item" : "Items"
+        return "Delete Category and \(items.count) \(itemLabel)"
     }
 
     private var cardBackground: Color {

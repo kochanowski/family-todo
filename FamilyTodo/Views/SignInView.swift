@@ -22,11 +22,9 @@ struct SignInView: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
+                housePulseLogo
 
-                Text("Family To-Do")
+                Text("HousePulse")
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
@@ -110,6 +108,24 @@ struct SignInView: View {
         .task(id: authRoutingKey) {
             await handleAuthRoutingIfNeeded()
         }
+    }
+
+    private var housePulseLogo: some View {
+        ZStack {
+            Circle()
+                .fill(Color.accentColor.opacity(0.14))
+                .frame(width: 116, height: 116)
+
+            Image(systemName: "house.fill")
+                .font(.system(size: 66, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(Color(uiColor: .systemBackground))
+                .offset(y: 8)
+        }
+        .accessibilityHidden(true)
     }
 
     private var defaultAuthActions: some View {
@@ -225,10 +241,32 @@ struct SignInView: View {
         isResolvingAuthRoute = true
         defer { isResolvingAuthRoute = false }
 
-        if userSession.currentHouseholdID == nil, let userId = userSession.userId {
+        if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
-            await householdStore.loadCurrentHouseholdAndMembership(userId: userId)
-            if let household = householdStore.currentHousehold {
+
+            if let restoredHousehold = householdStore.restoreCachedHousehold(
+                userId: userId,
+                preferredHouseholdId: userSession.currentHouseholdID
+            ) {
+                if userSession.currentHouseholdID != restoredHousehold.id {
+                    userSession.setCurrentHousehold(restoredHousehold.id)
+                }
+                _ = _Concurrency.Task {
+                    await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                        userId: userId,
+                        preferredHouseholdId: userSession.currentHouseholdID
+                    )
+                }
+            } else {
+                await householdStore.loadCurrentHouseholdAndMembership(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
+            }
+
+            if let household = householdStore.currentHousehold,
+               userSession.currentHouseholdID != household.id
+            {
                 userSession.setCurrentHousehold(household.id)
             }
         }

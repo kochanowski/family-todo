@@ -40,6 +40,7 @@ struct ProfileView: View {
     @State private var showDeleteMemberConfirmation = false
     @State private var memberToDelete: Member?
     @State private var actionErrorMessage: String?
+    @State private var shouldRefreshTabBarAfterHouseholdEdit = false
 
     var body: some View {
         List {
@@ -59,10 +60,18 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(isPresented: $showEditHousehold) {
+        .sheet(
+            isPresented: $showEditHousehold,
+            onDismiss: handleEditHouseholdDismiss
+        ) {
             if let household = householdStore.currentHousehold {
                 NavigationStack {
-                    EditHouseholdView(household: household)
+                    EditHouseholdView(
+                        household: household,
+                        onSave: {
+                            shouldRefreshTabBarAfterHouseholdEdit = true
+                        }
+                    )
                 }
             }
         }
@@ -148,7 +157,7 @@ struct ProfileView: View {
                     HStack(spacing: 12) {
                         Image(systemName: household.iconSymbol)
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .foregroundStyle(themeStore.accentTabColor)
                             .frame(width: 28, height: 28)
                         Text(household.name)
                             .font(themeStore.font(for: .listRowTitle))
@@ -170,7 +179,6 @@ struct ProfileView: View {
         }
     }
 
-    @ViewBuilder
     private var membersSection: some View {
         Section("Members") {
             if activeMembers.isEmpty {
@@ -384,6 +392,12 @@ struct ProfileView: View {
             }
         }
     }
+
+    private func handleEditHouseholdDismiss() {
+        guard shouldRefreshTabBarAfterHouseholdEdit else { return }
+        shouldRefreshTabBarAfterHouseholdEdit = false
+        NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
+    }
 }
 
 private struct EditProfileView: View {
@@ -396,7 +410,6 @@ private struct EditProfileView: View {
     @State private var displayName = ""
     @State private var selectedColorHex = MemberColorToken.fallbackHex
     @State private var hasLoaded = false
-    @State private var isSaving = false
     @State private var errorMessage: String?
 
     private let modelContext: ModelContext
@@ -450,13 +463,9 @@ private struct EditProfileView: View {
                 Button {
                     saveProfile()
                 } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text("Save")
-                    }
+                    Text("Save")
                 }
-                .disabled(isSaving || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -492,21 +501,28 @@ private struct EditProfileView: View {
     private func saveProfile() {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        do {
+            _ = try DisplayNameValidator.validate(trimmedName)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        guard let currentUserId = userSession.userId else {
+            errorMessage = "Session expired. Sign in again."
+            return
+        }
 
-        isSaving = true
+        dismiss()
         _ = _Concurrency.Task {
             do {
                 try await memberStore.updateCurrentUserProfile(
                     displayName: trimmedName,
                     colorHex: selectedColorHex,
-                    currentUserId: userSession.userId
+                    currentUserId: currentUserId
                 )
                 userSession.applyProfileUpdate(displayName: trimmedName)
-                isSaving = false
-                dismiss()
             } catch {
-                isSaving = false
-                errorMessage = error.localizedDescription
+                memberStore.error = error
             }
         }
     }
@@ -515,13 +531,15 @@ private struct EditProfileView: View {
 private struct EditHouseholdView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
+    let onSave: () -> Void
 
     @State private var name: String
     @State private var selectedIconSymbol: String
-    @State private var isSaving = false
     @State private var errorMessage: String?
 
     private let iconOptions = [
@@ -542,8 +560,12 @@ private struct EditHouseholdView: View {
         "bolt.heart.fill",
     ]
 
-    init(household: Household) {
+    init(
+        household: Household,
+        onSave: @escaping () -> Void = {}
+    ) {
         self.household = household
+        self.onSave = onSave
         _name = State(initialValue: household.name)
         _selectedIconSymbol = State(initialValue: household.iconSymbol)
     }
@@ -569,18 +591,25 @@ private struct EditHouseholdView: View {
                                 Circle()
                                     .fill(
                                         selectedIconSymbol == icon
-                                            ? Color.accentColor.opacity(0.18)
+                                            ? themeStore.accentTabColor.opacity(0.18)
                                             : Color.secondary.opacity(0.12)
                                     )
                                     .frame(width: 40, height: 40)
                                 Image(systemName: icon)
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(
+                                        selectedIconSymbol == icon
+                                            ? themeStore.foregroundOnAccent(
+                                                for: themeStore.accentTabColor,
+                                                colorScheme: colorScheme
+                                            )
+                                            : .primary
+                                    )
                             }
                             .overlay {
                                 if selectedIconSymbol == icon {
                                     Circle()
-                                        .stroke(Color.accentColor, lineWidth: 2)
+                                        .stroke(themeStore.accentTabColor, lineWidth: 2)
                                         .frame(width: 40, height: 40)
                                 }
                             }
@@ -601,13 +630,9 @@ private struct EditHouseholdView: View {
                 Button {
                     saveHousehold()
                 } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text("Save")
-                    }
+                    Text("Save")
                 }
-                .disabled(isSaving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -628,7 +653,8 @@ private struct EditHouseholdView: View {
             return
         }
 
-        isSaving = true
+        onSave()
+        dismiss()
         _ = _Concurrency.Task {
             do {
                 try await householdStore.updateCurrentHousehold(
@@ -636,11 +662,8 @@ private struct EditHouseholdView: View {
                     userId: userId,
                     iconSymbol: selectedIconSymbol
                 )
-                isSaving = false
-                dismiss()
             } catch {
-                isSaving = false
-                errorMessage = error.localizedDescription
+                householdStore.error = error
             }
         }
     }

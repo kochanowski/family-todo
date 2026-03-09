@@ -106,4 +106,61 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertNotNil(reloadedCached)
         XCTAssertEqual(reloadedCached?.assigneeId, assigneeId)
     }
+
+    func testSyncToCacheSkipsCloudRecordWhenItemIsPendingDelete() throws {
+        let categoryId = UUID()
+        let itemId = UUID()
+        let localCreatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let localUpdatedAt = localCreatedAt.addingTimeInterval(5)
+        let cloudUpdatedAt = localUpdatedAt.addingTimeInterval(120)
+
+        let category = BacklogCategory(
+            id: categoryId,
+            householdId: householdId,
+            title: "Home",
+            sortOrder: 0,
+            createdAt: localCreatedAt,
+            updatedAt: localUpdatedAt
+        )
+        let cachedCategory = CachedBacklogCategory(from: category)
+        modelContainer.mainContext.insert(cachedCategory)
+
+        let localItem = BacklogItem(
+            id: itemId,
+            categoryId: categoryId,
+            householdId: householdId,
+            title: "Local tombstone title",
+            createdAt: localCreatedAt,
+            updatedAt: localUpdatedAt
+        )
+        let tombstone = CachedBacklogItem(from: localItem)
+        tombstone.syncStatusRaw = "pendingDelete"
+        tombstone.lastSyncedAt = nil
+        modelContainer.mainContext.insert(tombstone)
+        try modelContainer.mainContext.save()
+
+        let staleCloudItem = BacklogItem(
+            id: itemId,
+            categoryId: categoryId,
+            householdId: householdId,
+            title: "Stale cloud title",
+            createdAt: localCreatedAt,
+            updatedAt: cloudUpdatedAt
+        )
+
+        store.syncToCache(
+            categories: [category],
+            items: [staleCloudItem],
+            cloudCategoryIDs: [categoryId],
+            cloudItemIDs: [itemId]
+        )
+
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == itemId }
+        )
+        let cachedItems = try modelContainer.mainContext.fetch(descriptor)
+        XCTAssertEqual(cachedItems.count, 1)
+        XCTAssertEqual(cachedItems.first?.syncStatusRaw, "pendingDelete")
+        XCTAssertEqual(cachedItems.first?.title, "Local tombstone title")
+    }
 }

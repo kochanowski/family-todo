@@ -47,3 +47,32 @@ struct ShoppingCountBadge: View {
         .frame(width: 22, height: 22)
     }
 }
+
+struct TasksWIPBadge: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    let count: Int
+    let limit: Int
+
+    private var isOverLimit: Bool {
+        count > limit
+    }
+
+    private var fillColor: Color {
+        isOverLimit ? .red : themeStore.accentTabColor
+    }
+
+    var body: some View {
+        Text("\(count)/\(limit)")
+            .font(themeStore.font(for: .chip))
+            .fontWeight(isOverLimit ? .bold : .semibold)
+            .monospacedDigit()
+            .foregroundStyle(themeStore.foregroundOnAccent(for: fillColor, colorScheme: colorScheme))
+            .padding(.horizontal, 10)
+            .frame(minHeight: 24, alignment: .center)
+            .background(Capsule().fill(fillColor))
+            .fixedSize(horizontal: true, vertical: true)
+            .accessibilityLabel("WIP \(count) of \(limit)")
+    }
+}

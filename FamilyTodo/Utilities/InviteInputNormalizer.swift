@@ -70,7 +70,7 @@ enum InviteInputNormalizer {
 
     static func normalizeInviteCodeToken(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard trimmed.count >= 5, trimmed.count <= 6 else { return nil }
+        guard trimmed.count >= 6, trimmed.count <= 8 else { return nil }
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
         return trimmed

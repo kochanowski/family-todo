@@ -93,7 +93,7 @@ final class ShareAcceptanceCoordinator: ObservableObject {
     func restorePending() {
         guard
             let storedInviteCode = userDefaults.string(forKey: StorageKeys.pendingInviteCode)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            .trimmingCharacters(in: .whitespacesAndNewlines),
             !storedInviteCode.isEmpty
         else {
             return
