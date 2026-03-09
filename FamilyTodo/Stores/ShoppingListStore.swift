@@ -94,7 +94,7 @@ final class ShoppingListStore: ObservableObject {
     // MARK: - Load Items
 
     func loadItems() async {
-        guard let householdId else { return }
+        guard let householdId else { return nil }
 
         isLoading = true
         error = nil
@@ -250,32 +250,55 @@ final class ShoppingListStore: ObservableObject {
 
     // MARK: - Create Item
 
-    func createItem(title: String, quantityValue: String? = nil, quantityUnit: String? = nil) async {
+    @discardableResult
+    func createItem(
+        title: String,
+        quantityValue: String? = nil,
+        quantityUnit: String? = nil,
+        afterItemId: UUID? = nil
+    ) async -> ShoppingItem? {
         guard let householdId else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return nil }
 
-        let item = ShoppingItem(
+        var item = ShoppingItem(
             householdId: householdId,
-            title: title,
+            title: trimmedTitle,
             quantityValue: quantityValue,
             quantityUnit: quantityUnit,
             isBought: false,
             sortOrder: nextToBuySortOrder()
         )
 
-        // Optimistic UI update (view handles animation)
+        let syncStatusRaw = isCloudSyncEnabled ? "pendingUpload" : "synced"
+        let lastSyncedAt = isCloudSyncEnabled ? nil : Date()
+
         items.append(item)
 
-        // Save to cache with pending status
-        upsertCachedItem(
-            item,
-            syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
-            lastSyncedAt: isCloudSyncEnabled ? nil : Date()
-        )
+        if let afterItemId {
+            let reorderedItems = reorderedToBuyItems(inserting: item.id, after: afterItemId)
+            applyToBuyOrder(reorderedItems)
+            if let updatedItem = items.first(where: { $0.id == item.id }) {
+                item = updatedItem
+            }
+            upsertCachedItems(
+                reorderedItems,
+                syncStatusRaw: syncStatusRaw,
+                lastSyncedAt: lastSyncedAt
+            )
+        } else {
+            upsertCachedItem(
+                item,
+                syncStatusRaw: syncStatusRaw,
+                lastSyncedAt: lastSyncedAt
+            )
+        }
 
         if !isCloudSyncEnabled {
-            return
+            return item
         }
         replayPendingMutationsInBackground()
+        return item
     }
 
     func createItems(fromTitles titles: [String]) async -> Int {
@@ -312,6 +335,23 @@ final class ShoppingListStore: ObservableObject {
         }
 
         return newItems.count
+    }
+
+    private func reorderedToBuyItems(inserting insertedItemId: UUID, after afterItemId: UUID) -> [ShoppingItem] {
+        var orderedItems = toBuyItems
+        guard let insertedIndex = orderedItems.firstIndex(where: { $0.id == insertedItemId }) else {
+            return orderedItems
+        }
+
+        let insertedItem = orderedItems.remove(at: insertedIndex)
+
+        if let anchorIndex = orderedItems.firstIndex(where: { $0.id == afterItemId }) {
+            orderedItems.insert(insertedItem, at: anchorIndex + 1)
+        } else {
+            orderedItems.append(insertedItem)
+        }
+
+        return orderedItems
     }
 
     // MARK: - Update Item

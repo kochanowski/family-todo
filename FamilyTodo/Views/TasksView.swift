@@ -523,7 +523,11 @@ private struct TasksContent: View {
     }
 
     private var header: some View {
-        AppScreenHeader(title: "Tasks", trailing: {
+        AppScreenHeader(title: "Tasks") {
+            if activeFilter == .active {
+                TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+            }
+        } trailing: {
             if activeFilter == .active {
                 if assigneeFilter == .all {
                     Button(editMode.isEditing ? "Done" : "Reorder") {
@@ -536,7 +540,7 @@ private struct TasksContent: View {
             } else {
                 completedCleanupMenu
             }
-        })
+        }
     }
 
     private var filterToggle: some View {
@@ -626,18 +630,6 @@ private struct TasksContent: View {
             Text("Remaining")
                 .font(themeStore.font(for: .sectionHeader))
                 .foregroundStyle(themeStore.contentSecondaryColor)
-
-            Spacer()
-
-            let count = filteredActiveTasks.count
-            let limit = normalizedWipLimit
-            let overLimit = count > limit
-
-            Text("\(count) / \(limit)")
-                .font(themeStore.font(for: .bodySmall))
-                .fontWeight(overLimit ? .bold : .regular)
-                .foregroundStyle(overLimit ? .red : themeStore.contentSecondaryColor)
-                .monospacedDigit()
         }
         .frame(minHeight: 30, alignment: .bottom)
     }

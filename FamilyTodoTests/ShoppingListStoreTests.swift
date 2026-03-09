@@ -178,6 +178,28 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Bread", "Eggs"])
     }
 
+    func testCreateItemAfterAnchorInsertsDirectlyBelowAndUpdatesCacheOrder() async throws {
+        _ = await store.createItem(title: "Milk")
+        _ = await store.createItem(title: "Bread")
+
+        guard let milk = store.toBuyItems.first(where: { normalized($0.title) == "milk" }) else {
+            XCTFail("Expected Milk item")
+            return
+        }
+
+        _ = await store.createItem(title: "Eggs", afterItemId: milk.id)
+
+        XCTAssertEqual(store.toBuyItems.map(\.title), ["Milk", "Eggs", "Bread"])
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.sortOrder)]
+        )
+        let cachedItems = try modelContainer.mainContext.fetch(descriptor)
+
+        XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Eggs", "Bread"])
+    }
+
     private func createBoughtItem(title: String) async {
         await store.createItem(title: title)
 

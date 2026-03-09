@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+// swiftlint:disable file_length
 /// Shopping List screen - quick capture and management of groceries
 struct ShoppingListView: View {
     @EnvironmentObject private var userSession: UserSession
@@ -18,6 +19,7 @@ struct ShoppingListView: View {
     }
 }
 
+// swiftlint:disable type_body_length
 private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
     @StateObject private var bundleStore: ShoppingBundleStore
@@ -39,12 +41,15 @@ private struct ShoppingListContent: View {
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
+    @State private var inlineInsertAfterItemId: UUID?
+    @State private var inlineInsertText = ""
+    @State private var inlineInsertRowToken = UUID()
     @State private var isKeyboardVisible = false
     @State private var didPerformInitialLoad = false
     @State private var isScreenVisible = false
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
-    @State private var quickAddToast: ShoppingBundleQuickAddToast?
-    @State private var quickAddToastDismissTask: _Concurrency.Task<Void, Never>?
+    @State private var activeToast: ShoppingToastState?
+    @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
     @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
 
     init(householdId: UUID, modelContext: ModelContext) {
@@ -101,9 +106,18 @@ private struct ShoppingListContent: View {
                                                     isBought: item.isBought,
                                                     onToggle: {
                                                         cancelEditingItem()
+                                                        dismissInlineInsert()
                                                         toggleItem(item)
                                                     },
-                                                    onSubmit: { commitEditingItem(item) },
+                                                    onSubmit: {
+                                                        commitEditingItem(
+                                                            item,
+                                                            openInlineComposer: true
+                                                        )
+                                                    },
+                                                    onFocusLossCommit: {
+                                                        commitEditingItem(item)
+                                                    },
                                                     onCancel: cancelEditingItem
                                                 )
                                                 .accessibilityIdentifier(
@@ -131,6 +145,26 @@ private struct ShoppingListContent: View {
                                     )
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
+
+                                    if inlineInsertAfterItemId == item.id {
+                                        ShoppingItemInlineComposerRow(
+                                            text: $inlineInsertText,
+                                            onSubmit: { commitInlineInsertedItem(after: item.id) },
+                                            onCancel: dismissInlineInsert
+                                        )
+                                        .id(inlineInsertRowToken)
+                                        .listRowInsets(
+                                            EdgeInsets(
+                                                top: 0,
+                                                leading: 16,
+                                                bottom: 0,
+                                                trailing: 16
+                                            )
+                                        )
+                                        .listRowSeparator(.hidden)
+                                        .listRowBackground(Color.clear)
+                                        .accessibilityIdentifier("shoppingInlineInsertRow")
+                                    }
                                 }
                                 .onMove(perform: moveToBuyItems)
 
@@ -166,11 +200,21 @@ private struct ShoppingListContent: View {
                                     }
                                 }
                             }
-                            .onChange(of: store.toBuyItems.count) { _, _ in
-                                // Scroll to keep draft row visible after each insert
-                                guard isRapidEntryActive else { return }
+                            .onChange(of: inlineInsertRowToken) { _, _ in
+                                guard inlineInsertAfterItemId != nil else { return }
                                 withAnimation(WowAnimation.spring) {
-                                    proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                    proxy.scrollTo(inlineInsertRowToken, anchor: .center)
+                                }
+                            }
+                            .onChange(of: store.toBuyItems.count) { _, _ in
+                                if isRapidEntryActive {
+                                    withAnimation(WowAnimation.spring) {
+                                        proxy.scrollTo("rapidEntry", anchor: .bottom)
+                                    }
+                                } else if inlineInsertAfterItemId != nil {
+                                    withAnimation(WowAnimation.spring) {
+                                        proxy.scrollTo(inlineInsertRowToken, anchor: .center)
+                                    }
                                 }
                             }
                         }
@@ -206,8 +250,12 @@ private struct ShoppingListContent: View {
         }
         .newItemsBanner(manager: subscriptionManager)
         .onChange(of: isKeyboardVisible) { _, visible in
-            guard !visible, let editingItem = currentEditingItem else { return }
-            commitEditingItem(editingItem)
+            guard !visible else { return }
+            if let editingItem = currentEditingItem {
+                commitEditingItem(editingItem)
+            } else if inlineInsertAfterItemId != nil, inlineInsertText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                dismissInlineInsert()
+            }
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
@@ -236,22 +284,26 @@ private struct ShoppingListContent: View {
             )
         }
         .overlay(alignment: .bottom) {
-            if let quickAddToast {
-                ToastView(message: quickAddToast.message)
-                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
-                    .transition(ToastView.AnimationTokens.transition)
-                    .id(quickAddToast.id)
+            if let activeToast {
+                ToastView(
+                    message: activeToast.message,
+                    actionTitle: activeToast.actionTitle,
+                    action: toastAction(for: activeToast)
+                )
+                .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                .transition(ToastView.AnimationTokens.transition)
+                .id(activeToast.id)
             }
         }
-        .animation(ToastView.AnimationTokens.curve, value: quickAddToast?.id)
+        .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
         .onAppear {
             isScreenVisible = true
         }
         .onDisappear {
             isScreenVisible = false
             cancelPendingShoppingCompletionCelebration()
-            cancelQuickAddToastDismiss()
+            cancelToastDismiss()
         }
     }
 
@@ -447,6 +499,7 @@ private struct ShoppingListContent: View {
 
     private func startRapidEntry() {
         cancelEditingItem()
+        dismissInlineInsert()
         HapticManager.lightTap()
         withAnimation(WowAnimation.spring) {
             isRapidEntryActive = true
@@ -504,6 +557,7 @@ private struct ShoppingListContent: View {
 
     private func startEditingItem(_ item: ShoppingItem) {
         dismissRapidEntry()
+        dismissInlineInsert()
         editingItemId = item.id
         editingItemText = item.title
     }
@@ -513,17 +567,58 @@ private struct ShoppingListContent: View {
         editingItemText = ""
     }
 
-    private func commitEditingItem(_ item: ShoppingItem) {
+    private func commitEditingItem(_ item: ShoppingItem, openInlineComposer: Bool = false) {
         guard editingItemId == item.id else { return }
         let trimmed = editingItemText.trimmingCharacters(in: .whitespacesAndNewlines)
         defer { cancelEditingItem() }
 
-        guard !trimmed.isEmpty, trimmed != item.title else { return }
+        guard !trimmed.isEmpty else { return }
 
-        var updatedItem = item
-        updatedItem.title = trimmed
+        if trimmed != item.title {
+            var updatedItem = item
+            updatedItem.title = trimmed
+            _ = _Concurrency.Task {
+                await store.updateItem(updatedItem)
+            }
+        }
+
+        guard openInlineComposer else { return }
+        startInlineInsert(after: item.id)
+    }
+
+    private func startInlineInsert(after itemId: UUID) {
+        dismissRapidEntry()
+        cancelEditingItem()
+        inlineInsertAfterItemId = itemId
+        inlineInsertText = ""
+        inlineInsertRowToken = UUID()
+    }
+
+    private func dismissInlineInsert() {
+        inlineInsertAfterItemId = nil
+        inlineInsertText = ""
+    }
+
+    private func commitInlineInsertedItem(after itemId: UUID) {
+        let trimmed = inlineInsertText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            dismissInlineInsert()
+            return
+        }
+
+        let anchorId = itemId
+        let title = trimmed
+        inlineInsertText = ""
+
         _ = _Concurrency.Task {
-            await store.updateItem(updatedItem)
+            let createdItem = await store.createItem(title: title, afterItemId: anchorId)
+            guard let createdItem else { return }
+
+            await MainActor.run {
+                inlineInsertAfterItemId = createdItem.id
+                inlineInsertRowToken = UUID()
+                HapticManager.selection()
+            }
         }
     }
 
@@ -539,6 +634,8 @@ private struct ShoppingListContent: View {
         let shouldCelebrateCompletion = store.toBuyItems.count == 1 && !item.isBought
 
         cancelPendingShoppingCompletionCelebration()
+        cancelEditingItem()
+        dismissInlineInsert()
 
         // Animate item removal
         withAnimation(WowAnimation.easeOut) {
@@ -555,7 +652,10 @@ private struct ShoppingListContent: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             _Concurrency.Task {
                 await store.toggleBought(item)
-                itemBeingRemoved = nil
+                await MainActor.run {
+                    itemBeingRemoved = nil
+                    showBoughtToast(for: item.id)
+                }
             }
         }
 
@@ -622,6 +722,7 @@ private struct ShoppingListContent: View {
     private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
         cancelEditingItem()
         dismissRapidEntry()
+        dismissInlineInsert()
 
         _ = _Concurrency.Task {
             let addedCount = await store.createItems(fromTitles: bundle.normalizedItems)
@@ -640,29 +741,74 @@ private struct ShoppingListContent: View {
     }
 
     private func showQuickAddToast(message: String) {
-        cancelQuickAddToastDismiss()
-        let toast = ShoppingBundleQuickAddToast(message: message)
+        showToast(
+            ShoppingToastState(
+                message: message,
+                kind: .message
+            ),
+            durationNanoseconds: 2_000_000_000
+        )
+    }
+
+    private func showBoughtToast(for itemId: UUID) {
+        showToast(
+            ShoppingToastState(
+                message: "Moved to Recently Purchased",
+                kind: .undoBought(itemId)
+            ),
+            durationNanoseconds: 4_000_000_000
+        )
+    }
+
+    private func showToast(_ toast: ShoppingToastState, durationNanoseconds: UInt64) {
+        cancelToastDismiss()
 
         withAnimation(ToastView.AnimationTokens.curve) {
-            quickAddToast = toast
+            activeToast = toast
         }
 
         let toastID = toast.id
-        quickAddToastDismissTask = _Concurrency.Task { @MainActor in
-            try? await _Concurrency.Task.sleep(nanoseconds: 2_000_000_000)
+        activeToastDismissTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: durationNanoseconds)
             guard !_Concurrency.Task.isCancelled else { return }
-            guard quickAddToast?.id == toastID else { return }
+            guard activeToast?.id == toastID else { return }
 
             withAnimation(ToastView.AnimationTokens.curve) {
-                quickAddToast = nil
+                activeToast = nil
             }
-            quickAddToastDismissTask = nil
+            activeToastDismissTask = nil
         }
     }
 
-    private func cancelQuickAddToastDismiss() {
-        quickAddToastDismissTask?.cancel()
-        quickAddToastDismissTask = nil
+    private func cancelToastDismiss() {
+        activeToastDismissTask?.cancel()
+        activeToastDismissTask = nil
+    }
+
+    private func toastAction(for toast: ShoppingToastState) -> (() -> Void)? {
+        switch toast.kind {
+        case .message:
+            nil
+        case .undoBought:
+            undoLastBoughtItem
+        }
+    }
+
+    private func undoLastBoughtItem() {
+        guard case let .undoBought(itemId)? = activeToast?.kind else { return }
+        cancelPendingShoppingCompletionCelebration()
+        cancelToastDismiss()
+
+        if let item = store.items.first(where: { $0.id == itemId }) {
+            _ = _Concurrency.Task {
+                await store.toggleBought(item)
+            }
+        }
+
+        withAnimation(ToastView.AnimationTokens.curve) {
+            activeToast = nil
+        }
+        HapticManager.lightTap()
     }
 
     private func quickAddToastMessage(for bundleName: String, itemCount: Int) -> String {
@@ -680,9 +826,27 @@ private struct ShoppingListContent: View {
     }
 }
 
-private struct ShoppingBundleQuickAddToast: Identifiable, Equatable {
+// swiftlint:enable type_body_length
+
+private struct ShoppingToastState: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case message
+        case undoBought(UUID)
+    }
+
     let id = UUID()
     let message: String
+
+    let kind: Kind
+
+    var actionTitle: String? {
+        switch kind {
+        case .message:
+            nil
+        case .undoBought:
+            "Undo"
+        }
+    }
 }
 
 // MARK: - Shopping Item Row
@@ -739,6 +903,7 @@ private struct ShoppingItemInlineEditRow: View {
     let isBought: Bool
     let onToggle: () -> Void
     let onSubmit: () -> Void
+    let onFocusLossCommit: () -> Void
     let onCancel: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
@@ -757,11 +922,65 @@ private struct ShoppingItemInlineEditRow: View {
 
             TextField("Item name", text: $text)
                 .font(themeStore.font(for: .listRowTitle))
-                .submitLabel(.done)
+                .submitLabel(.next)
                 .focused($isFocused)
                 .onSubmit(onSubmit)
                 .onChange(of: isFocused) { _, focused in
                     if !focused, !isCancelling {
+                        onFocusLossCommit()
+                    }
+                }
+                .autocorrectionDisabled()
+
+            Button {
+                isCancelling = true
+                onCancel()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .frame(width: ShoppingRowLayout.trailingSlotWidth, height: 24)
+        }
+        .frame(minHeight: ShoppingRowLayout.minRowHeight)
+        .contentShape(Rectangle())
+        .padding(.vertical, ShoppingRowLayout.verticalPadding)
+        .onAppear {
+            isCancelling = false
+            DispatchQueue.main.async {
+                isFocused = true
+            }
+        }
+    }
+}
+
+private struct ShoppingItemInlineComposerRow: View {
+    @Binding var text: String
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @FocusState private var isFocused: Bool
+    @State private var isCancelling = false
+
+    var body: some View {
+        HStack(spacing: ShoppingRowLayout.spacing) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+
+            TextField("Add item", text: $text)
+                .font(themeStore.font(for: .listRowTitle))
+                .submitLabel(.next)
+                .focused($isFocused)
+                .onSubmit(onSubmit)
+                .onChange(of: isFocused) { _, focused in
+                    guard !focused, !isCancelling else { return }
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        onCancel()
+                    } else {
                         onSubmit()
                     }
                 }

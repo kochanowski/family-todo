@@ -148,6 +148,7 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var name: String
     @State private var selectedIcon: String
     @State private var itemDrafts: [BundleItemDraft]
+    @State private var newItemDraft: BundleItemDraft
     @State private var isSaving = false
     @State private var showDeleteConfirmation = false
     @FocusState private var focusedDraftID: UUID?
@@ -159,10 +160,8 @@ private struct ShoppingBundleEditorSheet: View {
         _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.defaultIcon)
 
         let initialItems = bundle?.normalizedItems ?? []
-        let drafts = initialItems.isEmpty
-            ? [BundleItemDraft()]
-            : initialItems.map { BundleItemDraft(title: $0) }
-        _itemDrafts = State(initialValue: drafts)
+        _itemDrafts = State(initialValue: initialItems.map { BundleItemDraft(title: $0) })
+        _newItemDraft = State(initialValue: BundleItemDraft())
     }
 
     var body: some View {
@@ -181,13 +180,13 @@ private struct ShoppingBundleEditorSheet: View {
                 Section("Items") {
                     ForEach($itemDrafts) { $draft in
                         HStack(spacing: 12) {
-                            TextField(itemPlaceholder(forDraftID: draft.id), text: $draft.title)
+                            TextField("Item", text: $draft.title)
                                 .textInputAutocapitalization(.words)
                                 .autocorrectionDisabled()
                                 .submitLabel(.next)
                                 .focused($focusedDraftID, equals: draft.id)
                                 .onSubmit {
-                                    handleItemSubmit(forDraftID: draft.id)
+                                    handleExistingItemSubmit(forDraftID: draft.id)
                                 }
 
                             Button(role: .destructive) {
@@ -201,13 +200,20 @@ private struct ShoppingBundleEditorSheet: View {
                         }
                     }
 
-                    Button {
-                        appendItemDraft(shouldFocus: true)
-                    } label: {
-                        Label("Add item", systemImage: "plus.circle")
+                    HStack(spacing: 12) {
+                        TextField(composerPlaceholder, text: $newItemDraft.title)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .submitLabel(.next)
+                            .focused($focusedDraftID, equals: newItemDraft.id)
+                            .onSubmit {
+                                commitComposerDraft()
+                            }
+
+                        Color.clear
+                            .frame(width: 24, height: 24)
+                            .accessibilityHidden(true)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(themeStore.accentTabColor)
                 }
 
                 if bundle != nil {
@@ -263,15 +269,11 @@ private struct ShoppingBundleEditorSheet: View {
     }
 
     private var cleanedItems: [String] {
-        ShoppingBundle.sanitizedItems(itemDrafts.map(\.title))
+        ShoppingBundle.sanitizedItems(itemDrafts.map(\.title) + [newItemDraft.title])
     }
 
     private func removeItemDraft(withID id: UUID) {
         itemDrafts.removeAll { $0.id == id }
-
-        if itemDrafts.isEmpty {
-            appendItemDraft(shouldFocus: false)
-        }
     }
 
     private func saveBundle() async {
@@ -301,22 +303,12 @@ private struct ShoppingBundleEditorSheet: View {
         dismiss()
     }
 
-    private func appendItemDraft(shouldFocus: Bool) {
-        let draft = BundleItemDraft()
-        itemDrafts.append(draft)
-
-        guard shouldFocus else { return }
-        focusedDraftID = draft.id
+    private var composerPlaceholder: String {
+        itemDrafts.isEmpty ? "Milk" : "Add item"
     }
 
-    private func itemPlaceholder(forDraftID id: UUID) -> String {
-        itemDrafts.first?.id == id ? "Milk" : "Item"
-    }
-
-    private func handleItemSubmit(forDraftID id: UUID) {
+    private func handleExistingItemSubmit(forDraftID id: UUID) {
         guard let index = itemDrafts.firstIndex(where: { $0.id == id }) else { return }
-
-        let trimmedTitle = itemDrafts[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
         let nextIndex = itemDrafts.index(after: index)
 
         if nextIndex < itemDrafts.endIndex {
@@ -324,12 +316,19 @@ private struct ShoppingBundleEditorSheet: View {
             return
         }
 
+        focusedDraftID = newItemDraft.id
+    }
+
+    private func commitComposerDraft() {
+        let trimmedTitle = newItemDraft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else {
-            focusedDraftID = id
+            focusedDraftID = nil
             return
         }
 
-        appendItemDraft(shouldFocus: true)
+        itemDrafts.append(BundleItemDraft(title: trimmedTitle))
+        newItemDraft = BundleItemDraft()
+        focusedDraftID = newItemDraft.id
     }
 }
 
