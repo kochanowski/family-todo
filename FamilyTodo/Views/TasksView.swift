@@ -326,6 +326,8 @@ private struct TasksContent: View {
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     wipZone: wipZone(for: index),
+                    showsSwipeActionsTip: shouldShowTaskSwipeActionsTip &&
+                        task.id == taskSwipeActionsTipTaskID,
                     onToggle: { toggleTask(task) },
                     onOpenDetail: { selectedTask = task }
                 )
@@ -385,6 +387,7 @@ private struct TasksContent: View {
                 categoryName: categoryName(for: task),
                 categoryColor: categoryColor(for: task),
                 wipZone: .normal,
+                showsSwipeActionsTip: false,
                 onToggle: { toggleTask(task) },
                 onOpenDetail: { selectedTask = task }
             )
@@ -858,6 +861,23 @@ private struct TasksContent: View {
         }
     }
 
+    private var shouldShowTaskSwipeActionsTip: Bool {
+        AppTipVisibility.shouldShowTaskSwipeActionsTip(
+            isTasksTabSelected: selectedTab == .tasks,
+            isShowingActiveFilter: activeFilter == .active,
+            hasVisibleActiveTasks: !filteredActiveTasks.isEmpty,
+            isReordering: editMode.isEditing,
+            hasInlineBanner: activeBanner != nil,
+            hasPresentedSheet: selectedTask != nil || pendingNextTask != nil,
+            hasPendingDeleteToast: pendingDeletedTask != nil,
+            isTaskCompletionAnimating: taskBeingCompleted != nil
+        )
+    }
+
+    private var taskSwipeActionsTipTaskID: UUID? {
+        filteredActiveTasks.first?.id
+    }
+
     private func matchesAssigneeFilter(_ task: Task) -> Bool {
         switch assigneeFilter {
         case .all:
@@ -988,6 +1008,7 @@ private struct TasksContent: View {
             return
         }
 
+        AppTips.donateTaskSwipeActionUsed()
         _ = _Concurrency.Task {
             let didPoke = await store.pokeTask(task)
             if didPoke {
@@ -999,6 +1020,7 @@ private struct TasksContent: View {
     }
 
     private func demoteTaskToBacklog(_ task: Task) {
+        AppTips.donateTaskSwipeActionUsed()
         withAnimation(.easeInOut(duration: 0.18)) {
             hiddenMovedToIdeasIds.insert(task.id)
         }
@@ -1059,6 +1081,7 @@ private struct TasksContent: View {
     }
 
     private func queueDeleteTask(_ task: Task) {
+        AppTips.donateTaskSwipeActionUsed()
         if let previous = pendingDeletedTask {
             pendingDeleteWork?.cancel()
             pendingDeleteWork = nil
@@ -1197,6 +1220,7 @@ struct TaskRow: View {
     let categoryName: String?
     let categoryColor: Color?
     let wipZone: WipZone
+    let showsSwipeActionsTip: Bool
     let onToggle: () -> Void
     let onOpenDetail: () -> Void
 
@@ -1264,6 +1288,11 @@ struct TaskRow: View {
             }
             .buttonStyle(.plain)
             .opacity(isDimmedOverLimit ? 0.72 : 1.0)
+            .contextualPopoverTip(
+                showsSwipeActionsTip,
+                TaskSwipeActionsTip(),
+                arrowEdge: .top
+            )
         }
         .padding(.vertical, 2)
         .background {

@@ -100,6 +100,8 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
+                                    ideaPromotionTipItemID: shouldShowIdeaPromotionTip
+                                        ? ideaPromotionTipItemID : nil,
                                     isPromotingItem: { processingPromotionItemIds.contains($0) },
                                     assigneeFor: { assigneeId in
                                         assignee(for: assigneeId)
@@ -459,6 +461,7 @@ private struct BacklogContent: View {
         switch result {
         case .success:
             activeBanner = nil
+            AppTips.donateIdeaPromoted()
             HapticManager.success()
         case .assigneeRequired:
             HapticManager.warning()
@@ -545,6 +548,37 @@ private struct BacklogContent: View {
             }
     }
 
+    private var shouldShowIdeaPromotionTip: Bool {
+        AppTipVisibility.shouldShowIdeaPromotionTip(
+            hasPromotableVisibleItem: ideaPromotionTipItemID != nil,
+            hasActiveBanner: activeBanner != nil,
+            hasPresentedSheet: isAddingCategory ||
+                editingCategory != nil ||
+                editingItem != nil ||
+                pendingPromotionItem != nil ||
+                pendingAssignmentItem != nil,
+            hasPendingDeletionToast: pendingDeletionItem != nil
+        )
+    }
+
+    private var ideaPromotionTipItemID: UUID? {
+        guard shouldShowIdeaPromotionTipCandidate else { return nil }
+
+        for category in store.categories {
+            if let promotableItem = visibleItems(for: category.id).first(where: { $0.assigneeId != nil }) {
+                return promotableItem.id
+            }
+        }
+
+        return nil
+    }
+
+    private var shouldShowIdeaPromotionTipCandidate: Bool {
+        store.categories.contains { category in
+            visibleItems(for: category.id).contains(where: { $0.assigneeId != nil })
+        }
+    }
+
     private func queueDeleteItem(_ item: BacklogItem) {
         if let previous = pendingDeletionItem {
             deletionTask?.cancel()
@@ -623,6 +657,7 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let ideaPromotionTipItemID: UUID?
     let isPromotingItem: (UUID) -> Bool
     let assigneeFor: (UUID?) -> Member?
     let isAddingItem: Bool
@@ -695,6 +730,7 @@ struct CategoryCard: View {
                         assignee: assigneeFor(item.assigneeId),
                         canPromote: canPromote,
                         isPromotionDisabled: isPromoting,
+                        showsIdeaPromotionTip: item.id == ideaPromotionTipItemID,
                         onTap: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
                         onPromote: { onPromoteItem(item) },
@@ -869,6 +905,7 @@ struct BacklogItemRow: View {
     let assignee: Member?
     let canPromote: Bool
     let isPromotionDisabled: Bool
+    let showsIdeaPromotionTip: Bool
     let onTap: () -> Void
     let onAssign: () -> Void
     let onPromote: () -> Void
@@ -912,6 +949,12 @@ struct BacklogItemRow: View {
                     .buttonStyle(.plain)
                     .disabled(isPromotionDisabled)
                     .opacity(isPromotionDisabled ? 0.45 : 1)
+                    .accessibilityIdentifier("backlogPromoteButton_\(item.id.uuidString)")
+                    .contextualPopoverTip(
+                        showsIdeaPromotionTip,
+                        IdeaPromotionTip(),
+                        arrowEdge: .trailing
+                    )
                     .transition(.opacity.combined(with: .scale))
                 }
 

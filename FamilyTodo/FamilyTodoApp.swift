@@ -53,6 +53,10 @@ struct FamilyTodoApp: App {
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
         _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
         _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
+
+        let launchArguments = ProcessInfo.processInfo.arguments
+        UITestHelper.prepareForLaunch(arguments: launchArguments)
+        AppTips.configureIfNeeded(launchArguments: launchArguments)
     }
 
     private func scheduleDeferredStartupTasks(modelContext _: ModelContext) {
@@ -420,6 +424,11 @@ private struct HouseholdSetupLoadingView: View {
 /// Helper to configure the app state for UI Testing based on launch arguments
 @MainActor
 struct UITestHelper {
+    static func prepareForLaunch(arguments: [String] = ProcessInfo.processInfo.arguments) {
+        guard arguments.contains("-uiTestMode") else { return }
+        AppTips.resetDatastoreForTestingIfNeeded(launchArguments: arguments)
+    }
+
     static func configure(modelContext: ModelContext) {
         let args = ProcessInfo.processInfo.arguments
 
@@ -468,6 +477,13 @@ struct UITestHelper {
             seedShoppingList(context: context, household: household)
             seedTasks(context: context, household: household)
             seedBacklog(context: context, household: household)
+
+        case "contextual_onboarding":
+            let household = seedHousehold(context: context)
+            seedShoppingList(context: context, household: household)
+            seedShoppingBundles(context: context, household: household)
+            seedTasks(context: context, household: household)
+            seedPromotableBacklog(context: context, household: household)
 
         case "heavy_data":
             let household = seedHousehold(context: context)
@@ -533,6 +549,21 @@ struct UITestHelper {
         }
     }
 
+    private static func seedShoppingBundles(context: ModelContext, household: CachedHousehold? = nil) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed shopping bundles: no household available")
+            return
+        }
+
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Weekend Reset",
+            icon: "sparkles",
+            items: ["Dish soap", "Paper towels", "Coffee beans"]
+        )
+        context.insert(CachedShoppingBundle(from: bundle))
+    }
+
     private static func seedTasks(context: ModelContext, household: CachedHousehold? = nil) {
         guard let householdId = household?.id ?? getCurrentHouseholdId() else {
             print("Cannot seed tasks: no household available")
@@ -562,6 +593,28 @@ struct UITestHelper {
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
+    }
+
+    private static func seedPromotableBacklog(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed promotable backlog: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Projects")
+        let cachedCategory = CachedBacklogCategory(from: category)
+        context.insert(cachedCategory)
+
+        let assignedIdea = BacklogItem(
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Paint guest room",
+            assigneeId: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")
+        )
+        context.insert(CachedBacklogItem(from: assignedIdea))
     }
 
     private static func seedHeavyData(context: ModelContext, household: CachedHousehold) {

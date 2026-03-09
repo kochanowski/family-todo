@@ -453,6 +453,11 @@ private struct ShoppingListContent: View {
                 ? "Double tap to add a shopping item."
                 : "Double tap to add a shopping item. Long press to quickly add a shopping bundle."
         )
+        .contextualPopoverTip(
+            shouldShowShoppingBundleQuickAddTip,
+            ShoppingBundleQuickAddTip(),
+            arrowEdge: .bottom
+        )
     }
 
     private var rapidEntryRow: some View {
@@ -724,6 +729,7 @@ private struct ShoppingListContent: View {
             guard addedCount > 0 else { return }
 
             await MainActor.run {
+                AppTips.donateBundleQuickAddUsed()
                 HapticManager.success()
                 showQuickAddToast(
                     message: quickAddToastMessage(
@@ -775,6 +781,15 @@ private struct ShoppingListContent: View {
     private func markShoppingTutorialAsSeenIfNeeded() {
         guard !store.toBuyItems.isEmpty, !hasSeenShoppingTutorial else { return }
         hasSeenShoppingTutorial = true
+    }
+
+    private var shouldShowShoppingBundleQuickAddTip: Bool {
+        AppTipVisibility.shouldShowShoppingBundleQuickAddTip(
+            hasQuickAddBundles: !quickAddBundles.isEmpty,
+            isRapidEntryActive: isRapidEntryActive,
+            isKeyboardVisible: isKeyboardVisible,
+            hasActiveToast: activeToast != nil
+        )
     }
 
     private var cardBackground: Color {

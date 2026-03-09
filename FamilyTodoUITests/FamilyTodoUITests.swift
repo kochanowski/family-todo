@@ -138,6 +138,20 @@ final class FamilyTodoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Milk"].exists)
     }
 
+    func testShoppingContextualTipAppearsWhenBundleQuickAddIsAnchored() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "shopping",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Long-press Add item to quickly add one of your saved bundles."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
     // MARK: - C) Tasks Regression
 
     func testTasksCompleteMovesToCompleted() {
@@ -194,6 +208,22 @@ final class FamilyTodoUITests: XCTestCase {
         XCTAssertTrue(app3.staticTexts["PersistMe"].waitForExistence(timeout: 5.0))
     }
 
+    func testTasksContextualTipAppearsForSwipeActions() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "tasks",
+            ]
+        )
+
+        app.buttons["tabButton_tasks"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Swipe a task row for shortcuts like Poke, Move to Ideas, or Delete."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
     // MARK: - D) Backlog Regression
 
     func testBacklogAddCategory() {
@@ -223,6 +253,22 @@ final class FamilyTodoUITests: XCTestCase {
          // "Groceries" has items. Try to delete.
          // Needs to tap ellipses menu first?
          */
+    }
+
+    func testBacklogContextualTipAppearsWhenPromoteButtonExists() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "ideas",
+            ]
+        )
+
+        app.buttons["tabButton_backlog"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Once an idea has an owner, tap the arrow to move it into Tasks."]
+                .waitForExistence(timeout: 5.0)
+        )
     }
 
     // MARK: - E) Settings Regression
