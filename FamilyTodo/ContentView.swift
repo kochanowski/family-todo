@@ -185,12 +185,12 @@ private final class TabBarControllerReaderViewController: UIViewController {
             return tabBarController
         }
 
-        var currentParent = parent
-        while let currentParent {
-            if let tabBarController = currentParent as? UITabBarController {
+        var currentParent: UIViewController? = parent
+        while let candidate = currentParent {
+            if let tabBarController = candidate as? UITabBarController {
                 return tabBarController
             }
-            currentParent = currentParent.parent
+            currentParent = candidate.parent
         }
 
         return nil
