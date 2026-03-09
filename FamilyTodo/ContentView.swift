@@ -49,6 +49,9 @@ struct MainAppView: View {
             .onChange(of: activeTab) { _, _ in
                 applyTabBarAppearance()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
+                refreshTabBarAppearanceAfterDismiss()
+            }
             .task {
                 await bootstrapHouseholdIfNeeded()
             }
@@ -138,6 +141,17 @@ struct MainAppView: View {
             tabBarController: tabBarController,
             selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
         )
+    }
+
+    private func refreshTabBarAppearanceAfterDismiss() {
+        applyTabBarAppearance()
+        DispatchQueue.main.async {
+            applyTabBarAppearance()
+        }
+        // Modal dismissal can finish after the underlying household model update.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            applyTabBarAppearance()
+        }
     }
 }
 

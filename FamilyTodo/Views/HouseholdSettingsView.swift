@@ -40,6 +40,7 @@ struct ProfileView: View {
     @State private var showDeleteMemberConfirmation = false
     @State private var memberToDelete: Member?
     @State private var actionErrorMessage: String?
+    @State private var shouldRefreshTabBarAfterHouseholdEdit = false
 
     var body: some View {
         List {
@@ -59,10 +60,18 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(isPresented: $showEditHousehold) {
+        .sheet(
+            isPresented: $showEditHousehold,
+            onDismiss: handleEditHouseholdDismiss
+        ) {
             if let household = householdStore.currentHousehold {
                 NavigationStack {
-                    EditHouseholdView(household: household)
+                    EditHouseholdView(
+                        household: household,
+                        onSave: {
+                            shouldRefreshTabBarAfterHouseholdEdit = true
+                        }
+                    )
                 }
             }
         }
@@ -383,6 +392,12 @@ struct ProfileView: View {
             }
         }
     }
+
+    private func handleEditHouseholdDismiss() {
+        guard shouldRefreshTabBarAfterHouseholdEdit else { return }
+        shouldRefreshTabBarAfterHouseholdEdit = false
+        NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
+    }
 }
 
 private struct EditProfileView: View {
@@ -521,6 +536,7 @@ private struct EditHouseholdView: View {
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
+    let onSave: () -> Void
 
     @State private var name: String
     @State private var selectedIconSymbol: String
@@ -544,8 +560,12 @@ private struct EditHouseholdView: View {
         "bolt.heart.fill",
     ]
 
-    init(household: Household) {
+    init(
+        household: Household,
+        onSave: @escaping () -> Void = {}
+    ) {
         self.household = household
+        self.onSave = onSave
         _name = State(initialValue: household.name)
         _selectedIconSymbol = State(initialValue: household.iconSymbol)
     }
@@ -633,6 +653,7 @@ private struct EditHouseholdView: View {
             return
         }
 
+        onSave()
         dismiss()
         _ = _Concurrency.Task {
             do {
