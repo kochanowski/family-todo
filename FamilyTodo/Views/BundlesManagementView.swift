@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BundlesManagementView: View {
     @ObservedObject var store: ShoppingBundleStore
+    let shoppingStore: ShoppingListStore?
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
@@ -55,6 +56,11 @@ struct BundlesManagementView: View {
         .navigationTitle("Shopping Bundles")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Shopping Bundles")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     presentedEditor = .create
@@ -81,6 +87,7 @@ struct BundlesManagementView: View {
         .sheet(item: $presentedEditor) { destination in
             ShoppingBundleEditorSheet(
                 store: store,
+                shoppingStore: shoppingStore,
                 bundle: destination.bundle
             )
         }
@@ -148,6 +155,7 @@ private struct ShoppingBundleRow: View {
 
 private struct ShoppingBundleEditorSheet: View {
     @ObservedObject var store: ShoppingBundleStore
+    let shoppingStore: ShoppingListStore?
     let bundle: ShoppingBundle?
 
     @Environment(\.dismiss) private var dismiss
@@ -163,8 +171,9 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var hasAppliedInitialFocus = false
     @FocusState private var focusedField: BundleEditorFocus?
 
-    init(store: ShoppingBundleStore, bundle: ShoppingBundle?) {
+    init(store: ShoppingBundleStore, shoppingStore: ShoppingListStore?, bundle: ShoppingBundle?) {
         self.store = store
+        self.shoppingStore = shoppingStore
         self.bundle = bundle
         _name = State(initialValue: bundle?.name ?? "")
         _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.defaultIcon)
@@ -256,10 +265,23 @@ private struct ShoppingBundleEditorSheet: View {
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
 
+                ToolbarItem(placement: .topBarTrailing) {
+                    if bundle == nil {
+                        Button {
+                            _ = _Concurrency.Task {
+                                await saveBundle(andAddToShoppingList: true)
+                            }
+                        } label: {
+                            Text(isSaving ? "Saving..." : "Save & Add to List")
+                                .font(themeStore.font(for: .buttonLabel))
+                        }
+                        .disabled(!canSave || isSaving)
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         _ = _Concurrency.Task {
-                            await saveBundle()
+                            await saveBundle(andAddToShoppingList: false)
                         }
                     } label: {
                         Text(isSaving ? "Saving..." : "Save")
@@ -316,7 +338,7 @@ private struct ShoppingBundleEditorSheet: View {
         setFocus(nextFocus)
     }
 
-    private func saveBundle() async {
+    private func saveBundle(andAddToShoppingList: Bool) async {
         guard canSave else { return }
         isSaving = true
         defer { isSaving = false }
@@ -332,6 +354,10 @@ private struct ShoppingBundleEditorSheet: View {
                 icon: selectedIcon,
                 items: cleanedItems
             )
+
+            if andAddToShoppingList {
+                _ = await shoppingStore?.createItems(fromTitles: cleanedItems)
+            }
         }
 
         dismiss()
@@ -402,11 +428,14 @@ private struct ShoppingBundleHeaderRow: View {
             TextField(
                 "",
                 text: $name,
+                axis: .vertical,
                 prompt: Text("Bundle Name")
                     .foregroundStyle(themeStore.contentSecondaryColor)
             )
-            .font(themeStore.font(for: .screenHeader))
+            .font(themeStore.font(for: .listRowTitle))
             .textFieldStyle(.plain)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
             .textInputAutocapitalization(.words)
             .autocorrectionDisabled()
             .submitLabel(.next)

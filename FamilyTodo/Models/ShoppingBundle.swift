@@ -4,18 +4,18 @@ import UIKit
 struct ShoppingBundle: Identifiable, Codable, Hashable {
     static let defaultIcon = "shippingbox.fill"
     static let foodIcons = [
-        "cart.fill",
-        "basket.fill",
-        "bag.fill",
         "fork.knife",
+        "fork.knife.circle.fill",
+        "takeoutbag.and.cup.and.straw.fill",
         "cup.and.saucer.fill",
+        "mug.fill",
         "birthday.cake.fill",
         "wineglass.fill",
         "fish.fill",
         "carrot.fill",
-        "leaf.fill",
-        "snowflake",
-        "flame.fill",
+        "popcorn.fill",
+        "refrigerator.fill",
+        "waterbottle.fill",
     ]
     static let homeIcons = [
         "house.fill",
@@ -41,6 +41,9 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         "book.fill",
         "paintpalette.fill",
         "music.note",
+        "bell.fill",
+        "tag.fill",
+        "hammer.fill",
     ]
     static let curatedIcons = foodIcons + homeIcons + genericIcons
     static let curatedIconGroups = [
@@ -49,18 +52,18 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         CuratedIconGroup(title: "Generic", icons: genericIcons),
     ]
     private static let curatedIconLabels = [
-        "cart.fill": "Shopping cart",
-        "basket.fill": "Market basket",
-        "bag.fill": "Shopping bag",
-        "fork.knife": "Meal plan",
+        "fork.knife": "Meal",
+        "fork.knife.circle.fill": "Dinner",
+        "takeoutbag.and.cup.and.straw.fill": "Takeout",
         "cup.and.saucer.fill": "Breakfast",
+        "mug.fill": "Coffee",
         "birthday.cake.fill": "Celebration",
         "wineglass.fill": "Drinks",
         "fish.fill": "Seafood",
         "carrot.fill": "Produce",
-        "leaf.fill": "Fresh",
-        "snowflake": "Frozen",
-        "flame.fill": "Cookout",
+        "popcorn.fill": "Snacks",
+        "refrigerator.fill": "Fridge",
+        "waterbottle.fill": "Beverages",
         "house.fill": "Home",
         "lightbulb.fill": "Household essentials",
         "drop.fill": "Bathroom",
@@ -82,6 +85,9 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         "book.fill": "School",
         "paintpalette.fill": "Crafts",
         "music.note": "Entertainment",
+        "bell.fill": "Reminder",
+        "tag.fill": "Tagged",
+        "hammer.fill": "Tools",
     ]
 
     let id: UUID

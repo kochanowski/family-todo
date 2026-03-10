@@ -26,3 +26,33 @@ struct MemberBadgeView: View {
             .accessibilityLabel(name)
     }
 }
+
+struct MemberNameChipView: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    let name: String
+    let colorHex: String
+
+    private var chipColor: Color {
+        Color(hex: colorHex)
+    }
+
+    private var foregroundColor: Color {
+        MemberColorToken.foregroundForBadge(hex: colorHex)
+    }
+
+    var body: some View {
+        Text(name)
+            .font(themeStore.font(for: .bodySmall))
+            .foregroundStyle(foregroundColor)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background {
+                Capsule()
+                    .fill(chipColor)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(name)
+    }
+}

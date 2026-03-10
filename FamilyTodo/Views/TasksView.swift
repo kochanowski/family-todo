@@ -358,14 +358,24 @@ private struct TasksContent: View {
                         HapticManager.lightTap()
                         demoteTaskToBacklog(task)
                     } label: {
-                        Label("Move to Ideas", systemImage: "archivebox.fill")
+                        Label {
+                            Text("Move to Ideas")
+                                .font(themeStore.font(for: .buttonLabel))
+                        } icon: {
+                            Image(systemName: "archivebox.fill")
+                        }
                     }
                     .tint(.indigo)
 
                     Button(role: .destructive) {
                         queueDeleteTask(task)
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label {
+                            Text("Delete")
+                                .font(themeStore.font(for: .buttonLabel))
+                        } icon: {
+                            Image(systemName: "trash")
+                        }
                     }
                 }
                 .accessibilityIdentifier("taskRow_\(task.title)")
@@ -397,7 +407,12 @@ private struct TasksContent: View {
                 Button {
                     archiveTask(task)
                 } label: {
-                    Label("Archive", systemImage: "archivebox")
+                    Label {
+                        Text("Archive")
+                            .font(themeStore.font(for: .buttonLabel))
+                    } icon: {
+                        Image(systemName: "archivebox")
+                    }
                 }
                 .tint(.orange)
             }
@@ -914,14 +929,23 @@ private struct TasksContent: View {
 
     private var completedCleanupMenu: some View {
         Menu {
-            Button("Clear All", role: .destructive) {
+            Button(role: .destructive) {
                 pendingCleanupAction = .clearAll
+            } label: {
+                Text("Clear All")
+                    .font(themeStore.font(for: .buttonLabel))
             }
-            Button("Keep Last 7 Days") {
+            Button {
                 pendingCleanupAction = .keepLast7Days
+            } label: {
+                Text("Keep Last 7 Days")
+                    .font(themeStore.font(for: .buttonLabel))
             }
-            Button("Keep Last 30 Days") {
+            Button {
                 pendingCleanupAction = .keepLast30Days
+            } label: {
+                Text("Keep Last 30 Days")
+                    .font(themeStore.font(for: .buttonLabel))
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -1249,7 +1273,7 @@ struct TaskRow: View {
                             }
 
                             if let assignee {
-                                MemberBadgeView(
+                                MemberNameChipView(
                                     name: assignee.displayName,
                                     colorHex: assignee.colorHex
                                 )
@@ -1406,20 +1430,30 @@ private struct TaskDetailSheet: View {
                 Section {
                     TextField("Task title", text: $title)
                         .font(themeStore.font(for: .bodyStrong))
+                } header: {
+                    Text("Task title")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
-                Section("Details") {
+                Section {
                     Picker(selection: $assigneeId) {
-                        Text("Unassigned").tag(UUID?.none)
+                        Text("Unassigned")
+                            .font(themeStore.font(for: .bodyStrong))
+                            .tag(UUID?.none)
                         ForEach(members.filter(\.isActive)) { member in
-                            Text(member.displayName).tag(Optional(member.id))
+                            Text(member.displayName)
+                                .font(themeStore.font(for: .bodyStrong))
+                                .tag(Optional(member.id))
                         }
                     } label: {
                         Label("Assigned To", systemImage: "person.fill")
+                            .font(themeStore.font(for: .bodyStrong))
                     }
 
                     Toggle(isOn: $hasDueDate) {
                         Label("Due Date", systemImage: "calendar")
+                            .font(themeStore.font(for: .bodyStrong))
                     }
                     if hasDueDate {
                         DatePicker(
@@ -1427,7 +1461,12 @@ private struct TaskDetailSheet: View {
                             selection: $dueDate,
                             displayedComponents: [.date]
                         )
+                        .font(themeStore.font(for: .bodyStrong))
                     }
+                } header: {
+                    Text("Details")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
                 Section {
@@ -1437,6 +1476,8 @@ private struct TaskDetailSheet: View {
                         .frame(minHeight: 120)
                 } header: {
                     Label("Notes", systemImage: "note.text")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
                 Section {
@@ -1445,6 +1486,7 @@ private struct TaskDetailSheet: View {
                         dismiss()
                     } label: {
                         Text("Delete Task")
+                            .font(themeStore.font(for: .buttonLabel))
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                     .foregroundStyle(.red)
@@ -1457,12 +1499,18 @@ private struct TaskDetailSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Task")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
                         save()
                     }
-                    .fontWeight(.semibold)
+                    .font(themeStore.font(for: .buttonLabel))
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

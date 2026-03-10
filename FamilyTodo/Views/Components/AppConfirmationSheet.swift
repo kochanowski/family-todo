@@ -8,6 +8,8 @@ struct AppConfirmationSheet: View {
     let message: String?
     let secondaryTitle: String
     let primaryTitle: String
+    let titleFontToken: ThemeFontToken
+    let messageFontToken: ThemeFontToken
     let primaryStyle: AppModalPrimaryStyle
     let onSecondary: (() -> Void)?
     let onPrimary: () -> Void
@@ -17,6 +19,8 @@ struct AppConfirmationSheet: View {
         message: String? = nil,
         secondaryTitle: String = "Cancel",
         primaryTitle: String,
+        titleFontToken: ThemeFontToken = .inlineTitle,
+        messageFontToken: ThemeFontToken = .bodySmall,
         primaryStyle: AppModalPrimaryStyle = .accent,
         onSecondary: (() -> Void)? = nil,
         onPrimary: @escaping () -> Void
@@ -25,6 +29,8 @@ struct AppConfirmationSheet: View {
         self.message = message
         self.secondaryTitle = secondaryTitle
         self.primaryTitle = primaryTitle
+        self.titleFontToken = titleFontToken
+        self.messageFontToken = messageFontToken
         self.primaryStyle = primaryStyle
         self.onSecondary = onSecondary
         self.onPrimary = onPrimary
@@ -33,12 +39,12 @@ struct AppConfirmationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(themeStore.font(for: .inlineTitle))
+                .font(themeStore.font(for: titleFontToken))
                 .foregroundStyle(.primary)
 
             if let message {
                 Text(message)
-                    .font(themeStore.font(for: .bodySmall))
+                    .font(themeStore.font(for: messageFontToken))
                     .foregroundStyle(.secondary)
             }
 

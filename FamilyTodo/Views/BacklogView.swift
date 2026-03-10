@@ -60,6 +60,7 @@ private struct BacklogContent: View {
     @State private var activeComposerCategoryId: UUID?
     @State private var composerText = ""
     @State private var pendingDeleteConfirmationTarget: DeleteConfirmationTarget?
+    @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
@@ -390,6 +391,22 @@ private struct BacklogContent: View {
             }
         } message: { target in
             Text(deleteConfirmationMessage(for: target))
+        }
+        .background {
+            Color.clear
+                .alert(
+                    "Cannot delete category.",
+                    isPresented: Binding(
+                        get: { categoryDeletionBlockReason != nil },
+                        set: { if !$0 { categoryDeletionBlockReason = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        categoryDeletionBlockReason = nil
+                    }
+                } message: {
+                    Text(categoryDeletionBlockReason?.alertDetail ?? "")
+                }
         }
         .overlay(alignment: .bottom) {
             if let pendingDeletionItem {
@@ -771,6 +788,11 @@ private struct BacklogContent: View {
 
     private func requestDeleteCategory(withID categoryID: UUID) {
         guard latestCategory(withID: categoryID) != nil else { return }
+        if let blockReason = store.categoryDeletionBlockReason(for: categoryID) {
+            HapticManager.warning()
+            categoryDeletionBlockReason = blockReason
+            return
+        }
         HapticManager.warning()
         pendingDeleteConfirmationTarget = .category(categoryID)
     }
@@ -780,10 +802,8 @@ private struct BacklogContent: View {
         case .item:
             return "Delete"
         case let .category(categoryID):
-            let ideaCount = store.items(for: categoryID).count
-            guard ideaCount > 0 else { return "Delete Category" }
-            let noun = ideaCount == 1 ? "Idea" : "Ideas"
-            return "Delete Category and \(ideaCount) \(noun)"
+            _ = categoryID
+            return "Delete Category"
         }
     }
 
@@ -795,13 +815,8 @@ private struct BacklogContent: View {
             }
             return "This idea will be removed from Ideas."
         case let .category(categoryID):
-            let ideaCount = store.items(for: categoryID).count
             if let category = latestCategory(withID: categoryID) {
-                if ideaCount == 0 {
-                    return "\"\(category.title)\" will be permanently deleted."
-                }
-                let noun = ideaCount == 1 ? "idea" : "ideas"
-                return "\"\(category.title)\" and its \(ideaCount) \(noun) will be permanently deleted."
+                return "\"\(category.title)\" will be permanently deleted."
             }
             return "This category will be permanently deleted."
         }
@@ -816,7 +831,12 @@ private struct BacklogContent: View {
         case let .category(categoryID):
             guard let category = latestCategory(withID: categoryID) else { return }
             _ = _Concurrency.Task {
-                await store.deleteCategory(category)
+                let result = await store.deleteCategory(category)
+                if case let .blocked(reason) = result {
+                    await MainActor.run {
+                        categoryDeletionBlockReason = reason
+                    }
+                }
             }
         }
     }
@@ -1216,14 +1236,10 @@ struct BacklogItemRow: View {
         Button(action: onAssign) {
             HStack(spacing: 8) {
                 if let assignee {
-                    MemberBadgeView(
+                    MemberNameChipView(
                         name: assignee.displayName,
                         colorHex: assignee.colorHex
                     )
-                    Text(assignee.displayName)
-                        .font(themeStore.font(for: .bodySmall))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-                        .lineLimit(1)
                 } else {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 14, weight: .semibold))
@@ -1236,7 +1252,6 @@ struct BacklogItemRow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .frame(minWidth: 124, alignment: .leading)
             .background {
                 Capsule()
                     .fill(themeStore.surfaceElevatedColor)
@@ -1246,6 +1261,7 @@ struct BacklogItemRow: View {
                     }
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
         .buttonStyle(.plain)
         .accessibilityIdentifier("backlogAssignButton_\(item.title)")
         .contextualPopoverTip(

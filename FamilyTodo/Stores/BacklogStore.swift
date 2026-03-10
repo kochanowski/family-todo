@@ -19,6 +19,28 @@ final class BacklogStore: ObservableObject {
         case failed(String)
     }
 
+    enum CategoryDeletionBlockReason: Equatable {
+        case ideas(count: Int)
+        case tasks(count: Int)
+        case ideasAndTasks(ideaCount: Int, taskCount: Int)
+
+        var alertDetail: String {
+            switch self {
+            case .ideas:
+                "There are ideas assigned to it."
+            case .tasks:
+                "There are active or completed tasks assigned to it."
+            case .ideasAndTasks:
+                "There are ideas, active tasks, or completed tasks assigned to it."
+            }
+        }
+    }
+
+    enum CategoryDeletionResult: Equatable {
+        case deleted
+        case blocked(CategoryDeletionBlockReason)
+    }
+
     private struct PendingSyncSnapshot {
         var pendingUploadItemsByID: [UUID: BacklogItem]
         var pendingDeleteItemIDs: Set<UUID>
@@ -369,7 +391,12 @@ final class BacklogStore: ObservableObject {
         }
     }
 
-    func deleteCategory(_ category: BacklogCategory) async {
+    @discardableResult
+    func deleteCategory(_ category: BacklogCategory) async -> CategoryDeletionResult {
+        if let reason = categoryDeletionBlockReason(for: category.id) {
+            return .blocked(reason)
+        }
+
         // Optimistic UI
         withAnimation {
             categories.removeAll { $0.id == category.id }
@@ -400,7 +427,7 @@ final class BacklogStore: ObservableObject {
             saveContextOrSetError(context, operation: "persist backlog cache")
         }
 
-        if !isCloudSyncEnabled { return }
+        if !isCloudSyncEnabled { return .deleted }
 
         do {
             try await cloudKit.deleteBacklogCategory(id: category.id, householdId: category.householdId)
@@ -413,6 +440,25 @@ final class BacklogStore: ObservableObject {
             self.error = error
             await loadData() // Reload on error
         }
+
+        return .deleted
+    }
+
+    func categoryDeletionBlockReason(for categoryId: UUID) -> CategoryDeletionBlockReason? {
+        let ideaCount = items.filter { $0.categoryId == categoryId }.count
+        let linkedTaskCount = activeOrCompletedTaskCount(for: categoryId)
+
+        if ideaCount > 0, linkedTaskCount > 0 {
+            return .ideasAndTasks(ideaCount: ideaCount, taskCount: linkedTaskCount)
+        }
+        if ideaCount > 0 {
+            return .ideas(count: ideaCount)
+        }
+        if linkedTaskCount > 0 {
+            return .tasks(count: linkedTaskCount)
+        }
+
+        return nil
     }
 
     func renameCategory(_ category: BacklogCategory, newTitle: String) async {
@@ -960,5 +1006,17 @@ final class BacklogStore: ObservableObject {
             }
             return lhs.id.uuidString < rhs.id.uuidString
         }
+    }
+
+    private func activeOrCompletedTaskCount(for categoryId: UUID) -> Int {
+        guard let context = modelContext, let householdId else { return 0 }
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate {
+                $0.householdId == householdId && $0.backlogCategoryId == categoryId
+            }
+        )
+        let cachedTasks = (try? context.fetch(descriptor)) ?? []
+        return cachedTasks.filter { $0.syncStatusRaw != SyncStatus.pendingDelete.rawValue }.count
     }
 }

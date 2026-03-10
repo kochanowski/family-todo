@@ -245,6 +245,8 @@ struct CategoriesManagementView: View {
     @State private var selectedCategory: BacklogCategory?
     @State private var isAddingCategory = false
     @State private var newCategoryColorHex = MemberColorToken.randomHex()
+    @State private var editMode: EditMode = .inactive
+    @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
@@ -269,7 +271,12 @@ struct CategoriesManagementView: View {
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         _ = _Concurrency.Task {
-                            await store.deleteCategory(category)
+                            let result = await store.deleteCategory(category)
+                            if case let .blocked(reason) = result {
+                                await MainActor.run {
+                                    categoryDeletionBlockReason = reason
+                                }
+                            }
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -295,12 +302,36 @@ struct CategoriesManagementView: View {
             }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
+        .environment(\.editMode, $editMode)
         .navigationTitle("Idea Categories")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                EditButton()
+            ToolbarItem(placement: .principal) {
+                Text("Idea Categories")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(editMode.isEditing ? "Done" : "Edit") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        editMode = editMode.isEditing ? .inactive : .active
+                    }
+                }
+                .font(themeStore.font(for: .buttonLabel))
+            }
+        }
+        .alert(
+            "Cannot delete category.",
+            isPresented: Binding(
+                get: { categoryDeletionBlockReason != nil },
+                set: { if !$0 { categoryDeletionBlockReason = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                categoryDeletionBlockReason = nil
+            }
+        } message: {
+            Text(categoryDeletionBlockReason?.alertDetail ?? "")
         }
         .task {
             store.setSyncMode(userSession.syncMode)

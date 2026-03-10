@@ -259,6 +259,12 @@ struct BacklogAssigneePickerSheet: View {
                     Button("Cancel") {
                         onCancel()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+                ToolbarItem(placement: .principal) {
+                    Text(title)
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     if !autoConfirmOnSelection {

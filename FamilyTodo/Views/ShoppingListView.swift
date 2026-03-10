@@ -38,6 +38,8 @@ private struct ShoppingListContent: View {
 
     @State private var showRestock = false
     @State private var showClearToBuyConfirmation = false
+    @State private var showQuickAddBundleChooser = false
+    @State private var didTriggerQuickAddGesture = false
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
@@ -288,7 +290,18 @@ private struct ShoppingListContent: View {
                 message: "This removes current To Buy items. Recently Purchased stays unchanged.",
                 primaryTitle: "Clear",
                 primaryStyle: .destructive,
+                titleFontToken: .profileName,
+                messageFontToken: .bodyStrong,
                 onPrimary: clearToBuy
+            )
+        }
+        .sheet(isPresented: $showQuickAddBundleChooser) {
+            ShoppingQuickAddBundleSheet(
+                bundles: quickAddBundles,
+                onSelectBundle: { bundle in
+                    showQuickAddBundleChooser = false
+                    handleBundleQuickAdd(bundle)
+                }
             )
         }
         .overlay(alignment: .bottom) {
@@ -308,6 +321,11 @@ private struct ShoppingListContent: View {
             isScreenVisible = false
             cancelPendingShoppingCompletionCelebration()
             cancelToastDismiss()
+        }
+        .onChange(of: showQuickAddBundleChooser) { _, isPresented in
+            if !isPresented {
+                didTriggerQuickAddGesture = false
+            }
         }
     }
 
@@ -358,7 +376,7 @@ private struct ShoppingListContent: View {
                 }
 
                 NavigationLink {
-                    BundlesManagementView(store: bundleStore)
+                    BundlesManagementView(store: bundleStore, shoppingStore: store)
                 } label: {
                     Image(systemName: ShoppingBundle.defaultIcon)
                         .font(.system(size: 19, weight: .semibold))
@@ -410,25 +428,17 @@ private struct ShoppingListContent: View {
 
     // MARK: - Add Pill Button
 
-    @ViewBuilder
     private var addPillButton: some View {
-        if quickAddBundles.isEmpty {
-            addPillButtonBase
-        } else {
-            addPillButtonBase
-                .contextMenu {
-                    ForEach(quickAddBundles) { bundle in
-                        Button {
-                            handleBundleQuickAdd(bundle)
-                        } label: {
-                            Label(
-                                "\(bundle.name) (\(bundle.itemCount))",
-                                systemImage: bundle.resolvedIcon
-                            )
-                        }
+        addPillButtonBase
+            .highPriorityGesture(
+                LongPressGesture(minimumDuration: 0.45)
+                    .onEnded { _ in
+                        guard !quickAddBundles.isEmpty else { return }
+                        didTriggerQuickAddGesture = true
+                        HapticManager.lightTap()
+                        showQuickAddBundleChooser = true
                     }
-                }
-        }
+            )
     }
 
     private var addPillButtonBase: some View {
@@ -437,6 +447,10 @@ private struct ShoppingListContent: View {
         )
 
         return Button {
+            if didTriggerQuickAddGesture {
+                didTriggerQuickAddGesture = false
+                return
+            }
             startRapidEntry()
         } label: {
             HStack(spacing: 0) {
@@ -1093,9 +1107,16 @@ private struct RapidEntryTextField: UIViewRepresentable {
         func updateAccessoryAppearance() {
             guard let button = accessoryButton else { return }
 
-            button.setTitleColor(parent.actionForegroundColor, for: .normal)
+            let title = NSAttributedString(
+                string: "Done",
+                attributes: [
+                    .font: parent.themeStore.uiFont(for: .buttonLabel),
+                    .foregroundColor: parent.actionForegroundColor,
+                ]
+            )
+            button.setAttributedTitle(title, for: .normal)
+            button.setAttributedTitle(title, for: .highlighted)
             button.backgroundColor = parent.actionColor
-            button.titleLabel?.font = parent.themeStore.uiFont(for: .buttonLabel)
             button.layer.shadowColor = parent.actionColor.withAlphaComponent(0.3).cgColor
             button.layer.borderWidth = shouldShowAccessoryBorder ? 1.2 : 0
             button.layer.borderColor = accessoryBorderColor?.cgColor
@@ -1191,11 +1212,11 @@ struct RestockSheet: View {
                                 .foregroundStyle(themeStore.contentSecondaryColor)
 
                             Text("No Recent Purchases")
-                                .font(themeStore.font(for: .sectionHeader))
+                                .font(themeStore.font(for: .inlineTitle))
                                 .foregroundStyle(themeStore.contentPrimaryColor)
 
                             Text("Items marked as bought appear here for one-tap restore.")
-                                .font(themeStore.font(for: .bodySmall))
+                                .font(themeStore.font(for: .bodyStrong))
                                 .foregroundStyle(themeStore.contentSecondaryColor)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 32)
@@ -1276,6 +1297,66 @@ struct RestockSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 24)
         .padding(.bottom, 16)
+    }
+}
+
+private struct ShoppingQuickAddBundleSheet: View {
+    let bundles: [ShoppingBundle]
+    let onSelectBundle: (ShoppingBundle) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    var body: some View {
+        NavigationStack {
+            List(bundles) { bundle in
+                Button {
+                    onSelectBundle(bundle)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: bundle.resolvedIcon)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(themeStore.accentTabColor)
+                            .frame(width: 28, height: 28)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(bundle.name)
+                                .font(themeStore.font(for: .inlineTitle))
+                                .foregroundStyle(themeStore.contentPrimaryColor)
+                                .lineLimit(2)
+
+                            Text(bundle.itemCount == 1 ? "1 item" : "\(bundle.itemCount) items")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+            .scrollContentBackground(.hidden)
+            .background(themeStore.canvasColor.ignoresSafeArea())
+            .navigationTitle("Quick Add Bundle")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Quick Add Bundle")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(themeStore.canvasColor)
     }
 }
 
