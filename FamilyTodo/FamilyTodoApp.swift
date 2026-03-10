@@ -275,6 +275,13 @@ struct RootView: View {
                 onboardingState: onboardingState
             )
         }
+        .task(id: tipContextKey) {
+            AppTips.syncContextIfNeeded(
+                sessionMode: userSession.sessionMode,
+                userId: userSession.userId,
+                householdId: userSession.currentHouseholdID
+            )
+        }
         .task(id: householdRecoveryKey) {
             await recoverHouseholdRouteIfNeeded()
         }
@@ -315,6 +322,14 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.id.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private var tipContextKey: String {
+        [
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
     }
 
@@ -499,6 +514,18 @@ struct UITestHelper {
             _ = seedHousehold(context: context)
             markTutorialsSeen()
 
+        case "shopping_single_item":
+            let household = seedHousehold(context: context)
+            seedShoppingSingleActiveItem(context: context, household: household)
+
+        case "ideas_single_category":
+            let household = seedHousehold(context: context)
+            seedSingleBacklogCategory(context: context, household: household)
+
+        case "ideas_unassigned":
+            let household = seedHousehold(context: context)
+            seedUnassignedBacklog(context: context, household: household)
+
         case "contextual_onboarding":
             let household = seedHousehold(context: context)
             seedShoppingList(context: context, household: household)
@@ -623,6 +650,19 @@ struct UITestHelper {
         context.insert(CachedShoppingBundle(from: bundle))
     }
 
+    private static func seedShoppingSingleActiveItem(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed single shopping item: no household available")
+            return
+        }
+
+        let item = ShoppingItem(householdId: householdId, title: "Coffee", isBought: false)
+        context.insert(CachedShoppingItem(from: item))
+    }
+
     private static func seedTasks(context: ModelContext, household: CachedHousehold? = nil) {
         guard let householdId = household?.id ?? getCurrentHouseholdId() else {
             print("Cannot seed tasks: no household available")
@@ -674,6 +714,39 @@ struct UITestHelper {
             assigneeId: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")
         )
         context.insert(CachedBacklogItem(from: assignedIdea))
+    }
+
+    private static func seedSingleBacklogCategory(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed single backlog category: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Projects")
+        context.insert(CachedBacklogCategory(from: category))
+    }
+
+    private static func seedUnassignedBacklog(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed unassigned backlog: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Projects")
+        context.insert(CachedBacklogCategory(from: category))
+
+        let idea = BacklogItem(
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Replace hallway lamp"
+        )
+        context.insert(CachedBacklogItem(from: idea))
     }
 
     private static func seedHeavyData(context: ModelContext, household: CachedHousehold) {

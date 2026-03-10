@@ -1,6 +1,8 @@
 import SwiftData
 import SwiftUI
 
+// swiftlint:disable file_length type_body_length
+
 /// Backlog screen - long-term storage for ideas and projects, organized by categories
 struct BacklogView: View {
     @EnvironmentObject private var userSession: UserSession
@@ -59,6 +61,14 @@ private struct BacklogContent: View {
     @State private var processingPromotionItemIds: Set<UUID> = []
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
+    @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
+    private var hasCompletedIdeasCreateCategoryTip = false
+    @AppStorage(AppTipProgressKey.ideasAddIdeaCompleted)
+    private var hasCompletedIdeasAddIdeaTip = false
+    @AppStorage(AppTipProgressKey.ideasAssignOwnerCompleted)
+    private var hasCompletedIdeasAssignOwnerTip = false
+    @AppStorage(AppTipProgressKey.ideasPromoteCompleted)
+    private var hasCompletedIdeasPromoteTip = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -100,8 +110,9 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
-                                    ideaPromotionTipItemID: shouldShowIdeaPromotionTip
-                                        ? ideaPromotionTipItemID : nil,
+                                    addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
+                                    ideaAssignTipItemID: ideaAssignTipAnchorItemID,
+                                    ideaPromotionTipItemID: ideaPromotionTipItemID,
                                     isPromotingItem: { processingPromotionItemIds.contains($0) },
                                     assigneeFor: { assigneeId in
                                         assignee(for: assigneeId)
@@ -204,7 +215,15 @@ private struct BacklogContent: View {
                     newCategoryName = ""
                     newCategoryColorHex = MemberColorToken.randomHex()
                     HapticManager.lightTap()
-                    _ = _Concurrency.Task { await store.addCategory(name, colorHex: colorHex) }
+                    _ = _Concurrency.Task {
+                        let previousCategoryCount = store.categories.count
+                        await store.addCategory(name, colorHex: colorHex)
+                        await MainActor.run {
+                            if store.categories.count > previousCategoryCount {
+                                AppTips.donateIdeasCategoryCreated()
+                            }
+                        }
+                    }
                 }
             )
         }
@@ -280,6 +299,8 @@ private struct BacklogContent: View {
                 onConfirm: {
                     guard let item = pendingAssignmentItem else { return }
                     guard let selectedAssignee = selectedAssigneeIdForAssignment else { return }
+                    let hadAssignee = item.assigneeId != nil
+                    let pendingItemID = item.id
                     pendingAssignmentItem = nil
                     selectedAssigneeIdForAssignment = nil
                     _ = _Concurrency.Task {
@@ -289,6 +310,14 @@ private struct BacklogContent: View {
                             notes: item.notes,
                             assigneeId: selectedAssignee
                         )
+                        await MainActor.run {
+                            guard !hadAssignee else { return }
+                            if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
+                               updatedItem.assigneeId != nil
+                            {
+                                AppTips.donateIdeasOwnerAssigned()
+                            }
+                        }
                     }
                 }
             )
@@ -358,6 +387,11 @@ private struct BacklogContent: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityIdentifier("backlogAddCategoryButton")
+            .contextualPopoverTip(
+                activeIdeasTip == .createCategory,
+                IdeasCreateCategoryTip(),
+                arrowEdge: .top
+            )
         })
     }
 
@@ -374,15 +408,7 @@ private struct BacklogContent: View {
                     title: "Your Home's Brainstorming Hub",
                     systemImage: "lightbulb.fill",
                     description: "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
-                ) {
-                    Button("Start Dreaming") {
-                        HapticManager.lightTap()
-                        hasSeenIdeasTutorial = true
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .buttonStyle(.borderedProminent)
-                    .tint(themeStore.accentTabColor)
-                }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -509,7 +535,13 @@ private struct BacklogContent: View {
 
         HapticManager.lightTap()
         _ = _Concurrency.Task {
+            let previousCount = visibleItems(for: categoryId).count
             await store.addItem(to: categoryId, title: trimmedText)
+            await MainActor.run {
+                if visibleItems(for: categoryId).count > previousCount {
+                    AppTips.donateIdeasFirstIdeaAdded()
+                }
+            }
         }
         clearComposerState()
     }
@@ -545,22 +577,49 @@ private struct BacklogContent: View {
             }
     }
 
-    private var shouldShowIdeaPromotionTip: Bool {
-        AppTipVisibility.shouldShowIdeaPromotionTip(
-            hasPromotableVisibleItem: ideaPromotionTipItemID != nil,
+    private var activeIdeasTip: IdeasOnboardingTip? {
+        AppTipVisibility.ideasTip(
+            hasCategories: !store.categories.isEmpty,
+            hasVisibleIdeas: hasVisibleIdeas,
+            hasVisibleUnassignedIdea: ideaAssignTipItemID != nil,
+            hasVisibleAssignedIdea: promoteTipItemID != nil,
             hasActiveBanner: activeBanner != nil,
-            hasPresentedSheet: isAddingCategory ||
-                editingCategory != nil ||
-                editingItem != nil ||
-                pendingPromotionItem != nil ||
-                pendingAssignmentItem != nil,
-            hasPendingDeletionToast: pendingDeletionItem != nil
+            hasPresentedSheet: hasPresentedIdeasSheet,
+            hasPendingDeletionToast: pendingDeletionItem != nil,
+            hasCompletedCreateCategory: hasCompletedIdeasCreateCategoryTip,
+            hasCompletedAddIdea: hasCompletedIdeasAddIdeaTip,
+            hasCompletedAssignOwner: hasCompletedIdeasAssignOwnerTip,
+            hasCompletedPromote: hasCompletedIdeasPromoteTip
         )
     }
 
-    private var ideaPromotionTipItemID: UUID? {
-        guard shouldShowIdeaPromotionTipCandidate else { return nil }
+    private var hasVisibleIdeas: Bool {
+        store.categories.contains { !visibleItems(for: $0.id).isEmpty }
+    }
 
+    private var addIdeaTipCategoryID: UUID? {
+        for category in store.categories {
+            if visibleItems(for: category.id).isEmpty {
+                return category.id
+            }
+        }
+
+        return nil
+    }
+
+    private var ideaAssignTipItemID: UUID? {
+        guard !activeMembers.isEmpty else { return nil }
+
+        for category in store.categories {
+            if let unassignedItem = visibleItems(for: category.id).first(where: { $0.assigneeId == nil }) {
+                return unassignedItem.id
+            }
+        }
+
+        return nil
+    }
+
+    private var promoteTipItemID: UUID? {
         for category in store.categories {
             if let promotableItem = visibleItems(for: category.id).first(where: { $0.assigneeId != nil }) {
                 return promotableItem.id
@@ -570,10 +629,27 @@ private struct BacklogContent: View {
         return nil
     }
 
-    private var shouldShowIdeaPromotionTipCandidate: Bool {
-        store.categories.contains { category in
-            visibleItems(for: category.id).contains(where: { $0.assigneeId != nil })
-        }
+    private var hasPresentedIdeasSheet: Bool {
+        isAddingCategory ||
+            editingCategory != nil ||
+            editingItem != nil ||
+            pendingPromotionItem != nil ||
+            pendingAssignmentItem != nil
+    }
+
+    private var addIdeaTipAnchorCategoryID: UUID? {
+        guard activeIdeasTip == .addIdea else { return nil }
+        return addIdeaTipCategoryID
+    }
+
+    private var ideaAssignTipAnchorItemID: UUID? {
+        guard activeIdeasTip == .assignOwner else { return nil }
+        return ideaAssignTipItemID
+    }
+
+    private var ideaPromotionTipItemID: UUID? {
+        guard activeIdeasTip == .promote else { return nil }
+        return promoteTipItemID
     }
 
     private func queueDeleteItem(_ item: BacklogItem) {
@@ -654,6 +730,8 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let addIdeaTipCategoryID: UUID?
+    let ideaAssignTipItemID: UUID?
     let ideaPromotionTipItemID: UUID?
     let isPromotingItem: (UUID) -> Bool
     let assigneeFor: (UUID?) -> Member?
@@ -727,6 +805,7 @@ struct CategoryCard: View {
                         assignee: assigneeFor(item.assigneeId),
                         canPromote: canPromote,
                         isPromotionDisabled: isPromoting,
+                        showsAssignOwnerTip: item.id == ideaAssignTipItemID,
                         showsIdeaPromotionTip: item.id == ideaPromotionTipItemID,
                         onTap: { onEditItem(item) },
                         onAssign: { onAssignItem(item) },
@@ -763,7 +842,7 @@ struct CategoryCard: View {
                     TextField(
                         "",
                         text: $newItemText,
-                        prompt: Text("Add item").font(themeStore.font(for: .listRowTitle))
+                        prompt: Text("Add an idea...").font(themeStore.font(for: .listRowTitle))
                     )
                     .font(themeStore.font(for: .listRowTitle))
                     .foregroundStyle(themeStore.contentPrimaryColor)
@@ -795,7 +874,7 @@ struct CategoryCard: View {
                     HStack(spacing: 10) {
                         addItemPlaceholderIcon
 
-                        Text("Add item")
+                        Text("Add idea")
                             .font(themeStore.font(for: .buttonLabel))
                             .foregroundStyle(themeStore.accentTabColor)
 
@@ -805,7 +884,13 @@ struct CategoryCard: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("backlogAddItemButton_\(category.title)")
+                .accessibilityIdentifier("backlogAddIdeaButton_\(category.id.uuidString)")
+                .accessibilityHint("Tap to add an idea to this category.")
+                .contextualPopoverTip(
+                    addIdeaTipCategoryID == category.id,
+                    IdeasAddIdeaTip(),
+                    arrowEdge: .top
+                )
             }
         }
         .background {
@@ -918,6 +1003,7 @@ struct BacklogItemRow: View {
     let assignee: Member?
     let canPromote: Bool
     let isPromotionDisabled: Bool
+    let showsAssignOwnerTip: Bool
     let showsIdeaPromotionTip: Bool
     let onTap: () -> Void
     let onAssign: () -> Void
@@ -927,30 +1013,14 @@ struct BacklogItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(themeStore.font(for: .listRowTitle))
-                    .foregroundStyle(themeStore.contentPrimaryColor)
-                    .strikethrough(false)
+            Text(item.title)
+                .font(themeStore.font(for: .listRowTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .strikethrough(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let assignee {
-                    MemberBadgeView(
-                        name: assignee.displayName,
-                        colorHex: assignee.colorHex
-                    )
-                }
-            }
-
-            Spacer()
-
-            HStack(spacing: 16) {
-                Button(action: onAssign) {
-                    Image(systemName: "person.badge.plus")
-                        .font(.system(size: 14))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
+            HStack(spacing: 10) {
+                assignButton
 
                 if canPromote {
                     Button(action: onPromote) {
@@ -992,6 +1062,49 @@ struct BacklogItemRow: View {
         }
         .animation(.easeInOut(duration: 0.2), value: canPromote)
     }
+
+    private var assignButton: some View {
+        Button(action: onAssign) {
+            HStack(spacing: 8) {
+                if let assignee {
+                    MemberBadgeView(
+                        name: assignee.displayName,
+                        colorHex: assignee.colorHex
+                    )
+                    Text(assignee.displayName)
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                        .lineLimit(1)
+                } else {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+
+                    Text("Assign")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minWidth: 124, alignment: .leading)
+            .background {
+                Capsule()
+                    .fill(themeStore.surfaceElevatedColor)
+                    .overlay {
+                        Capsule()
+                            .stroke(themeStore.borderLightColor.opacity(0.35), lineWidth: 1)
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("backlogAssignButton_\(item.id.uuidString)")
+        .contextualPopoverTip(
+            showsAssignOwnerTip,
+            IdeasAssignOwnerTip(),
+            arrowEdge: .trailing
+        )
+    }
 }
 
 #Preview {
@@ -999,3 +1112,5 @@ struct BacklogItemRow: View {
         .environmentObject(UserSession.shared)
         .environmentObject(ThemeStore())
 }
+
+// swiftlint:enable file_length type_body_length

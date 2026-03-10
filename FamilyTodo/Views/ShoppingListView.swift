@@ -51,6 +51,14 @@ private struct ShoppingListContent: View {
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
     @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
+    @AppStorage(AppTipProgressKey.shoppingFirstAddCompleted)
+    private var hasCompletedShoppingFirstAddTip = false
+    @AppStorage(AppTipProgressKey.shoppingRecentPurchasesCompleted)
+    private var hasCompletedShoppingRecentPurchasesTip = false
+    @AppStorage(AppTipProgressKey.shoppingBundlesLocationCompleted)
+    private var hasCompletedShoppingBundlesLocationTip = false
+    @AppStorage(AppTipProgressKey.shoppingBundleQuickAddCompleted)
+    private var hasCompletedShoppingBundleQuickAddTip = false
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -318,15 +326,7 @@ private struct ShoppingListContent: View {
                     title: "Welcome to Shopping!",
                     systemImage: "cart.fill.badge.plus",
                     description: "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
-                ) {
-                    Button("Got it!") {
-                        HapticManager.lightTap()
-                        hasSeenShoppingTutorial = true
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .buttonStyle(.borderedProminent)
-                    .tint(themeStore.accentTabColor)
-                }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -367,10 +367,20 @@ private struct ShoppingListContent: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("shoppingBundlesButton")
+                .simultaneousGesture(TapGesture().onEnded {
+                    HapticManager.lightTap()
+                    AppTips.donateShoppingBundlesVisited()
+                })
+                .contextualPopoverTip(
+                    activeShoppingTip == .bundlesLocation,
+                    ShoppingBundlesLocationTip(),
+                    arrowEdge: .top
+                )
 
                 // Recently purchased
                 Button {
                     HapticManager.lightTap()
+                    AppTips.donateShoppingRecentPurchasesOpened()
                     showRestock = true
                 } label: {
                     Image(systemName: "clock.badge.checkmark")
@@ -381,6 +391,11 @@ private struct ShoppingListContent: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("shoppingRestockButton")
                 .pulseAnimation(trigger: restockPulse.pulseToken)
+                .contextualPopoverTip(
+                    activeShoppingTip == .recentPurchases,
+                    ShoppingRecentlyPurchasedTip(),
+                    arrowEdge: .top
+                )
                 .sheet(isPresented: $showRestock) {
                     RestockSheet(
                         store: store,
@@ -445,7 +460,12 @@ private struct ShoppingListContent: View {
                 : "Double tap to add a shopping item. Long press to quickly add a shopping bundle."
         )
         .contextualPopoverTip(
-            shouldShowShoppingBundleQuickAddTip,
+            activeShoppingTip == .firstAdd,
+            ShoppingFirstAddTip(),
+            arrowEdge: .bottom
+        )
+        .contextualPopoverTip(
+            activeShoppingTip == .bundleQuickAdd,
             ShoppingBundleQuickAddTip(),
             arrowEdge: .bottom
         )
@@ -530,7 +550,16 @@ private struct ShoppingListContent: View {
 
     private func commitRapidEntryItem(_ text: String) {
         _Concurrency.Task {
-            await store.createItem(title: text)
+            let shouldDonateFirstAdd = store.toBuyItems.isEmpty && store.recentItems.isEmpty
+            let createdItem = await store.createItem(title: text)
+
+            guard createdItem != nil else { return }
+
+            if shouldDonateFirstAdd {
+                await MainActor.run {
+                    AppTips.donateShoppingFirstItemCreated()
+                }
+            }
         }
     }
 
@@ -774,12 +803,20 @@ private struct ShoppingListContent: View {
         hasSeenShoppingTutorial = true
     }
 
-    private var shouldShowShoppingBundleQuickAddTip: Bool {
-        AppTipVisibility.shouldShowShoppingBundleQuickAddTip(
+    private var activeShoppingTip: ShoppingOnboardingTip? {
+        AppTipVisibility.shoppingTip(
+            hasActiveItems: !store.toBuyItems.isEmpty,
+            hasRecentItems: !store.recentItems.isEmpty,
+            hasBundles: !bundleStore.bundles.isEmpty,
             hasQuickAddBundles: !quickAddBundles.isEmpty,
             isRapidEntryActive: isRapidEntryActive,
             isKeyboardVisible: isKeyboardVisible,
-            hasActiveToast: activeToast != nil
+            hasActiveToast: activeToast != nil,
+            hasPresentedSheet: showRestock || showClearToBuyConfirmation,
+            hasCompletedFirstAdd: hasCompletedShoppingFirstAddTip,
+            hasCompletedRecentPurchases: hasCompletedShoppingRecentPurchasesTip,
+            hasCompletedBundlesLocation: hasCompletedShoppingBundlesLocationTip,
+            hasCompletedBundleQuickAdd: hasCompletedShoppingBundleQuickAddTip
         )
     }
 

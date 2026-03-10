@@ -96,6 +96,8 @@ private struct TasksContent: View {
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
     @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
+    @AppStorage(AppTipProgressKey.tasksSwipeActionsCompleted)
+    private var hasCompletedTaskSwipeActionsTip = false
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
@@ -413,34 +415,26 @@ private struct TasksContent: View {
                     systemImage: "line.3.horizontal.decrease.circle",
                     description: "Try a different filter or create a new task."
                 )
-            } else if hasSeenTasksTutorial {
-                if store.doneTasks.isEmpty {
-                    ThemedEmptyStateView(
-                        title: "No Tasks Yet",
-                        systemImage: "checklist",
-                        description: "Ready to get organized? Create your first task."
-                    )
-                } else {
-                    ThemedEmptyStateView(
-                        title: "All Caught Up!",
-                        systemImage: "sparkles",
-                        description: "The house is looking great. Enjoy your free time or create a new task."
-                    )
-                }
-            } else {
+            } else if store.doneTasks.isEmpty {
                 ThemedEmptyStateView(
-                    title: "Master Your Chores",
-                    systemImage: "checkmark.square.fill",
-                    description: "Keep your home organized. Add daily chores, assign them, or convert your big Ideas into actionable tasks."
+                    title: "No Tasks Yet. Ready to get organized?",
+                    systemImage: "checklist",
+                    description: "Start in Ideas, then promote the task when you're ready to work on it."
                 ) {
-                    Button("Let's Go!") {
+                    Button("Create your first task") {
                         HapticManager.lightTap()
-                        hasSeenTasksTutorial = true
+                        selectedTab = .backlog
                     }
                     .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.borderedProminent)
                     .tint(themeStore.accentTabColor)
                 }
+            } else {
+                ThemedEmptyStateView(
+                    title: "All Caught Up!",
+                    systemImage: "sparkles",
+                    description: "The house is looking great. Enjoy your free time or create a new task."
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -868,7 +862,8 @@ private struct TasksContent: View {
             hasInlineBanner: activeBanner != nil,
             hasPresentedSheet: selectedTask != nil || pendingNextTask != nil,
             hasPendingDeleteToast: pendingDeletedTask != nil,
-            isTaskCompletionAnimating: taskBeingCompleted != nil
+            isTaskCompletionAnimating: taskBeingCompleted != nil,
+            hasCompletedSwipeActionsTip: hasCompletedTaskSwipeActionsTip
         )
     }
 
