@@ -210,25 +210,25 @@ private enum AppTipStorageKey {
 
             switch launchArguments[argumentIndex + 1] {
             case "shopping", "shopping_quick_add":
-                [ShoppingBundleQuickAddTip.self]
+                return [ShoppingBundleQuickAddTip.self]
             case "shopping_first_add":
-                [ShoppingFirstAddTip.self]
+                return [ShoppingFirstAddTip.self]
             case "shopping_recent":
-                [ShoppingRecentlyPurchasedTip.self]
+                return [ShoppingRecentlyPurchasedTip.self]
             case "shopping_bundles":
-                [ShoppingBundlesLocationTip.self]
+                return [ShoppingBundlesLocationTip.self]
             case "ideas", "ideas_promote":
-                [IdeaPromotionTip.self]
+                return [IdeaPromotionTip.self]
             case "ideas_category":
-                [IdeasCreateCategoryTip.self]
+                return [IdeasCreateCategoryTip.self]
             case "ideas_add":
-                [IdeasAddIdeaTip.self]
+                return [IdeasAddIdeaTip.self]
             case "ideas_assign":
-                [IdeasAssignOwnerTip.self]
+                return [IdeasAssignOwnerTip.self]
             case "tasks":
-                [TaskSwipeActionsTip.self]
+                return [TaskSwipeActionsTip.self]
             default:
-                nil
+                return nil
             }
         }
     }
