@@ -121,9 +121,9 @@ private struct ShoppingListContent: View {
                     title: "Clear shopping list?",
                     message: "This removes current To Buy items. Recently Purchased stays unchanged.",
                     primaryTitle: "Clear",
-                    primaryStyle: .destructive,
                     titleFontToken: .profileName,
                     messageFontToken: .bodyStrong,
+                    primaryStyle: .destructive,
                     onPrimary: clearToBuy
                 )
             }
