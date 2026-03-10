@@ -95,7 +95,7 @@ actor CloudKitManager {
     ) -> Bool {
         switch scope {
         case .ownerPrivate:
-            true
+            return true
         case .participantShared:
             let defaultZone = CKRecordZone.default().zoneID
             guard zoneID != defaultZone else { return false }
@@ -1379,8 +1379,11 @@ actor CloudKitManager {
     func leaveSharedHousehold(householdId: UUID) async throws {
         guard householdScope == .participantShared else { return }
 
-        let resolvedZone = try await resolveCachedZone(for: householdId)
-            ?? resolveHouseholdZone(for: householdId)
+        let resolvedZone: CKRecordZone.ID? = if let cachedZone = resolveCachedZone(for: householdId) {
+            cachedZone
+        } else {
+            try await resolveHouseholdZone(for: householdId)
+        }
 
         do {
             try await deleteRecord(id: householdId, householdId: householdId)
