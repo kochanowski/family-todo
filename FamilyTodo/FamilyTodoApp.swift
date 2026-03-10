@@ -550,8 +550,10 @@ struct UITestHelper {
         defaults.set(FontSizeScale.regular.rawValue, forKey: "systemFontScale")
 
         switch arguments[themeIndex + 1].lowercased() {
-        case "retro":
-            defaults.set(ThemePreset.retro.rawValue, forKey: "themePreset")
+        case "retro", "retrodark", "retro-dark":
+            defaults.set(ThemePreset.retroDark.rawValue, forKey: "themePreset")
+        case "retrolight", "retro-light":
+            defaults.set(ThemePreset.retroLight.rawValue, forKey: "themePreset")
         case "paper":
             defaults.set(ThemePreset.paper.rawValue, forKey: "themePreset")
         case "light":

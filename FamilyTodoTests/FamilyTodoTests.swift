@@ -1,6 +1,8 @@
 import CloudKit
 import Combine
 @testable import HousePulse
+import SwiftUI
+import UIKit
 import XCTest
 
 /// Base test file - specific tests are in dedicated test files:
@@ -13,6 +15,132 @@ final class FamilyTodoTests: XCTestCase {
     func testAppImportsCorrectly() {
         // Verify the app module can be imported
         XCTAssertTrue(true, "HousePulse module imported successfully")
+    }
+}
+
+@MainActor
+final class ThemeStoreTests: XCTestCase {
+    private let managedKeys = [
+        "themePreset",
+        "appearanceMode",
+        "tabTintColor",
+        "retroFontScale",
+        "paperFontScale",
+        "systemFontScale",
+    ]
+
+    private var storedDefaults: [String: Any] = [:]
+
+    override func setUp() {
+        super.setUp()
+
+        let defaults = UserDefaults.standard
+        storedDefaults = [:]
+
+        for key in managedKeys {
+            if let value = defaults.object(forKey: key) {
+                storedDefaults[key] = value
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    override func tearDown() {
+        let defaults = UserDefaults.standard
+        for key in managedKeys {
+            if let value = storedDefaults[key] {
+                defaults.set(value, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+        storedDefaults = [:]
+        super.tearDown()
+    }
+
+    func testLegacyRetroRawValueMapsToRetroDark() {
+        XCTAssertEqual(ThemePreset(rawValue: "retro"), .retroDark)
+    }
+
+    func testRetroLightRawValueMapsToRetroLight() {
+        XCTAssertEqual(ThemePreset(rawValue: "retroLight"), .retroLight)
+    }
+
+    func testRetroThemesShareTypographyAndForceExpectedColorSchemes() {
+        let store = ThemeStore()
+        store.retroFontScale = .large
+
+        store.preset = .retroDark
+        let darkFont = store.uiFont(for: .buttonLabel)
+
+        XCTAssertTrue(store.isRetroFamily)
+        XCTAssertEqual(store.colorScheme, .dark)
+
+        store.preset = .retroLight
+        let lightFont = store.uiFont(for: .buttonLabel)
+
+        XCTAssertTrue(store.isRetroFamily)
+        XCTAssertEqual(store.colorScheme, .light)
+        XCTAssertEqual(lightFont.fontName, darkFont.fontName)
+        XCTAssertEqual(lightFont.pointSize, darkFont.pointSize, accuracy: 0.01)
+    }
+
+    func testRetroThemesUseBuiltInAccentInsteadOfSelectedTabTint() {
+        let store = ThemeStore()
+        store.tabTintColor = .pink
+
+        store.preset = .retroDark
+        assertColor(
+            UIColor(store.resolvedTabTint),
+            matches: UIColor(AppColors.palette(for: .retroDark).accent)
+        )
+
+        store.preset = .retroLight
+        assertColor(
+            UIColor(store.resolvedTabTint),
+            matches: UIColor(AppColors.palette(for: .retroLight).accent)
+        )
+
+        let foreground = UIColor(
+            store.foregroundOnAccent(
+                for: store.resolvedTabTint,
+                colorScheme: store.colorScheme
+            )
+        )
+        assertColor(foreground, matches: .black)
+    }
+
+    private func assertColor(
+        _ actual: UIColor,
+        matches expected: UIColor,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let actualComponents = rgbaComponents(for: actual)
+        let expectedComponents = rgbaComponents(for: expected)
+
+        XCTAssertEqual(actualComponents.red, expectedComponents.red, accuracy: 0.01, file: file, line: line)
+        XCTAssertEqual(actualComponents.green, expectedComponents.green, accuracy: 0.01, file: file, line: line)
+        XCTAssertEqual(actualComponents.blue, expectedComponents.blue, accuracy: 0.01, file: file, line: line)
+        XCTAssertEqual(actualComponents.alpha, expectedComponents.alpha, accuracy: 0.01, file: file, line: line)
+    }
+
+    private struct RGBAComponents {
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+    }
+
+    private func rgbaComponents(for color: UIColor) -> RGBAComponents {
+        var red = CGFloat.zero
+        var green = CGFloat.zero
+        var blue = CGFloat.zero
+        var alpha = CGFloat.zero
+        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return RGBAComponents(red: red, green: green, blue: blue, alpha: alpha)
     }
 }
 

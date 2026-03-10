@@ -853,13 +853,20 @@ struct CategoryCard: View {
 
     @ViewBuilder
     private var composerPlaceholderIcon: some View {
-        if themeStore.preset == .retro {
+        if themeStore.usesRetroChrome {
             Rectangle()
-                .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                .stroke(
+                    themeStore.isRetroLight ? themeStore.borderLightColor : Color(hex: "F7D51D"),
+                    lineWidth: 2.2
+                )
                 .frame(width: 20, height: 20)
                 .overlay {
                     Rectangle()
-                        .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                        .stroke(
+                            (themeStore.isRetroLight ? themeStore.borderLightColor : Color.black)
+                                .opacity(themeStore.isRetroLight ? 0.72 : 0.75),
+                            lineWidth: 1
+                        )
                         .padding(0.8)
                 }
         } else {
@@ -871,10 +878,19 @@ struct CategoryCard: View {
 
     @ViewBuilder
     private var addItemPlaceholderIcon: some View {
-        if themeStore.preset == .retro {
+        if themeStore.usesRetroChrome {
             Rectangle()
                 .stroke(themeStore.accentTabColor.opacity(0.9), lineWidth: 2.2)
                 .frame(width: 20, height: 20)
+                .overlay {
+                    Rectangle()
+                        .stroke(
+                            (themeStore.isRetroLight ? themeStore.borderLightColor : Color.black)
+                                .opacity(themeStore.isRetroLight ? 0.7 : 0),
+                            lineWidth: themeStore.isRetroLight ? 1 : 0
+                        )
+                        .padding(0.9)
+                }
                 .overlay {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .bold))

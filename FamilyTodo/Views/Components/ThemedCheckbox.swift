@@ -17,7 +17,7 @@ struct ThemedCheckbox: View {
 
     var body: some View {
         Button(action: onToggle) {
-            if themeStore.preset == .retro {
+            if themeStore.usesRetroChrome {
                 retroCheckbox
             } else {
                 defaultCheckbox
@@ -52,23 +52,36 @@ struct ThemedCheckbox: View {
     }
 
     private var retroCheckbox: some View {
+        let accentColor = themeStore.accentTabColor
+        let outerBorderColor = themeStore.isRetroLight ? themeStore.borderLightColor : Color.black
+        let innerBorderColor = outerBorderColor.opacity(themeStore.isRetroLight ? 0.78 : 0.75)
+        let symbolColor = themeStore.foregroundOnAccent(
+            for: accentColor,
+            colorScheme: themeStore.colorScheme
+        )
+
         Group {
             if isChecked {
                 ZStack {
                     Rectangle()
-                        .fill(Color(hex: "F7D51D"))
+                        .fill(accentColor)
                         .frame(width: size + 2, height: size + 2)
                         .overlay {
                             Rectangle()
-                                .stroke(Color.black, lineWidth: 3)
+                                .stroke(outerBorderColor, lineWidth: 3)
                         }
-                        .shadow(color: .black, radius: 0, x: 3, y: 3)
+                        .shadow(
+                            color: outerBorderColor.opacity(themeStore.isRetroLight ? 0.22 : 1),
+                            radius: 0,
+                            x: 3,
+                            y: 3
+                        )
 
                     Image(systemName: "star.fill")
                         .resizable()
                         .scaledToFit()
                         .frame(width: size * 0.52, height: size * 0.52)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(symbolColor)
                 }
             } else {
                 Rectangle()
@@ -76,11 +89,11 @@ struct ThemedCheckbox: View {
                     .frame(width: size + 2, height: size + 2)
                     .overlay {
                         Rectangle()
-                            .stroke(Color(hex: "F7D51D"), lineWidth: 2.2)
+                            .stroke(accentColor, lineWidth: 2.2)
                     }
                     .overlay {
                         Rectangle()
-                            .stroke(Color.black.opacity(0.75), lineWidth: 1)
+                            .stroke(innerBorderColor, lineWidth: 1)
                             .padding(0.8)
                     }
             }

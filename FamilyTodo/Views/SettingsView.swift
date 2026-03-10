@@ -43,58 +43,60 @@ struct SettingsView: View {
             } header: {
                 Text("System Font Size")
             } footer: {
-                if themeStore.preset == .retro {
+                if themeStore.isRetroFamily {
                     Text("Regular is the default font size.")
                 }
             }
 
             // MARK: - Tab Color Section
 
-            Section {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible()),
-                        GridItem(.flexible()),
-                    ],
-                    spacing: 12
-                ) {
-                    ForEach(TabTintColor.allCases) { tint in
-                        Button {
-                            HapticManager.selection()
-                            themeStore.tabTintColor = tint
-                        } label: {
-                            VStack(spacing: 6) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(tint.color)
-                                    .frame(height: 34)
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(
-                                                themeStore.tabTintColor == tint ? Color.primary : Color.secondary.opacity(0.2),
-                                                lineWidth: themeStore.tabTintColor == tint ? 2.5 : 1
-                                            )
-                                    }
-                                    .shadow(
-                                        color: tint.color.opacity(0.28),
-                                        radius: 4,
-                                        x: 0,
-                                        y: 2
-                                    )
-                                Text(tint.displayName)
-                                    .font(themeStore.font(for: .tabLabel))
-                                    .foregroundStyle(
-                                        themeStore.tabTintColor == tint ? .primary : .secondary
-                                    )
+            if !themeStore.isRetroFamily {
+                Section {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                        ],
+                        spacing: 12
+                    ) {
+                        ForEach(TabTintColor.allCases) { tint in
+                            Button {
+                                HapticManager.selection()
+                                themeStore.tabTintColor = tint
+                            } label: {
+                                VStack(spacing: 6) {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(tint.color)
+                                        .frame(height: 34)
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(
+                                                    themeStore.tabTintColor == tint ? Color.primary : Color.secondary.opacity(0.2),
+                                                    lineWidth: themeStore.tabTintColor == tint ? 2.5 : 1
+                                                )
+                                        }
+                                        .shadow(
+                                            color: tint.color.opacity(0.28),
+                                            radius: 4,
+                                            x: 0,
+                                            y: 2
+                                        )
+                                    Text(tint.displayName)
+                                        .font(themeStore.font(for: .tabLabel))
+                                        .foregroundStyle(
+                                            themeStore.tabTintColor == tint ? .primary : .secondary
+                                        )
+                                }
+                                .frame(maxWidth: .infinity)
                             }
-                            .frame(maxWidth: .infinity)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                } header: {
+                    Text("Accent Color")
                 }
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-            } header: {
-                Text("Accent Color")
             }
 
             // MARK: - Toggles Section
@@ -221,7 +223,7 @@ struct SettingsView: View {
                 get: { themeStore.paperFontScale },
                 set: { HapticManager.selection(); themeStore.paperFontScale = $0 }
             )
-        case .retro:
+        case .retroDark, .retroLight:
             Binding(
                 get: { themeStore.retroFontScale },
                 set: { HapticManager.selection(); themeStore.retroFontScale = $0 }
@@ -329,8 +331,10 @@ private struct ThemeMiniatureContent: View {
                 AutoMiniatureHalfShape(isLeading: false)
                     .fill(Color.black)
             }
-        case .retro:
+        case .retroDark:
             Color(hex: "090A0E")
+        case .retroLight:
+            Color(hex: "E7DFC9")
         case .paper:
             Color(hex: "F6EEDC")
         }
@@ -363,10 +367,15 @@ private struct ThemeMiniatureContent: View {
                 )
                 .mask(AutoMiniatureHalfShape(isLeading: false))
             }
-        case .retro:
+        case .retroDark:
             skeletonRows(
                 headerColor: Color(hex: "1D223A"),
                 lineColor: Color(hex: "1E9E58")
+            )
+        case .retroLight:
+            skeletonRows(
+                headerColor: Color(hex: "FFF6E5"),
+                lineColor: Color(hex: "4B4338")
             )
         case .paper:
             skeletonRows(
@@ -397,17 +406,26 @@ private struct ThemeMiniatureContent: View {
     }
 
     private var accentDot: some View {
+        let previewAccentColor: Color = switch theme {
+        case .retroDark:
+            AppColors.palette(for: .retroDark).accent
+        case .retroLight:
+            AppColors.palette(for: .retroLight).accent
+        case .light, .dark, .auto, .paper:
+            themeStore.tabTintColor.color
+        }
+
         VStack {
             Spacer()
             HStack {
                 Spacer()
                 Circle()
-                    .fill(themeStore.accentTabColor)
+                    .fill(previewAccentColor)
                     .frame(width: 9, height: 9)
                     .overlay {
                         Circle()
                             .stroke(
-                                Color.black.opacity(theme == .dark ? 0.35 : 0.22),
+                                Color.black.opacity(theme == .dark || theme == .retroDark ? 0.35 : 0.22),
                                 lineWidth: 0.6
                             )
                     }

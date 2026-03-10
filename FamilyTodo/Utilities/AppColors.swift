@@ -40,7 +40,7 @@ enum AppColors {
         })
     )
 
-    static let retro = AppColorPalette(
+    static let retroDark = AppColorPalette(
         canvas: Color(hex: "0A0A1A"),
         surface: Color(hex: "1A1A2E"),
         surfaceElevated: Color(hex: "232345"),
@@ -53,6 +53,21 @@ enum AppColors {
         tabBarActivePill: Color(hex: "1A1A3E"),
         tabBarShadow: Color.black.opacity(0.6),
         cardShadow: Color.black.opacity(0.5)
+    )
+
+    static let retroLight = AppColorPalette(
+        canvas: Color(hex: "E7DFC9"),
+        surface: Color(hex: "F4EBD7"),
+        surfaceElevated: Color(hex: "FFF6E5"),
+        ink: Color(hex: "141414"),
+        inkMuted: Color(hex: "4B4338"),
+        borderLight: Color(hex: "2E2A24"),
+        accent: Color(hex: "57E35F"),
+        accentSoft: Color(hex: "CDEFA8"),
+        tabBarBackground: Color(hex: "DDD4BE"),
+        tabBarActivePill: Color(hex: "F0E6D1"),
+        tabBarShadow: Color.black.opacity(0.12),
+        cardShadow: Color.black.opacity(0.07)
     )
 
     static let paper = AppColorPalette(
@@ -72,8 +87,10 @@ enum AppColors {
 
     static func palette(for preset: ThemePreset) -> AppColorPalette {
         switch preset {
-        case .retro:
-            retro
+        case .retroDark:
+            retroDark
+        case .retroLight:
+            retroLight
         case .paper:
             paper
         case .system:

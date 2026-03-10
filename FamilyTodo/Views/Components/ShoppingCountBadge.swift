@@ -7,7 +7,7 @@ struct ShoppingCountBadge: View {
     let count: Int
 
     var body: some View {
-        if themeStore.preset == .retro {
+        if themeStore.usesRetroChrome {
             retroCoin
         } else {
             standardBadge
@@ -27,13 +27,14 @@ struct ShoppingCountBadge: View {
     private var retroCoin: some View {
         let label = "\(count)"
         let fillColor = themeStore.accentTabColor
+        let borderColor = themeStore.isRetroLight ? themeStore.borderLightColor : Color.black
 
         return ZStack {
             Circle()
                 .fill(fillColor)
                 .overlay {
                     Circle()
-                        .strokeBorder(Color.black, lineWidth: 1.7)
+                        .strokeBorder(borderColor, lineWidth: 1.7)
                 }
 
             Text(label)

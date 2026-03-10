@@ -1,6 +1,8 @@
 import SwiftUI
 import UIKit
 
+// swiftlint:disable file_length
+
 enum ThemeFontRole {
     case display
     case title
@@ -200,7 +202,8 @@ enum FontSizeScale: String, CaseIterable, Identifiable {
 
 enum ThemePreset: String, CaseIterable, Identifiable {
     case system
-    case retro
+    case retroDark = "retro"
+    case retroLight
     case paper
 
     var id: String {
@@ -211,8 +214,10 @@ enum ThemePreset: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             "Default"
-        case .retro:
-            "Retro"
+        case .retroDark:
+            "Retro Dark"
+        case .retroLight:
+            "Retro Light"
         case .paper:
             "Paper"
         }
@@ -222,10 +227,21 @@ enum ThemePreset: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             "iphone"
-        case .retro:
+        case .retroDark:
             "floppy.disk"
+        case .retroLight:
+            "sun.max"
         case .paper:
             "newspaper.fill"
+        }
+    }
+
+    var isRetroFamily: Bool {
+        switch self {
+        case .retroDark, .retroLight:
+            true
+        case .system, .paper:
+            false
         }
     }
 
@@ -233,7 +249,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
     /// Use `uiFontName` for built-in fonts like Georgia.
     var fontName: String? {
         switch self {
-        case .retro:
+        case .retroDark, .retroLight:
             "PressStart2P-Regular" // Default lookup
         case .paper, .system:
             nil
@@ -245,7 +261,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
         switch self {
         case .paper:
             "Georgia"
-        case .retro:
+        case .retroDark, .retroLight:
             "PressStart2P-Regular"
         case .system:
             nil
@@ -299,7 +315,7 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     secondaryTextColor: Color(hex: "6E655E")
                 ),
             ])
-        case .retro:
+        case .retroDark:
             ThemePalette(cardThemes: [
                 .shoppingList: CardTheme(
                     gradientColors: [Color(hex: "1A1A2E"), Color(hex: "16213E")],
@@ -342,6 +358,51 @@ enum ThemePreset: String, CaseIterable, Identifiable {
                     accentColor: Color(hex: "F78166"),
                     primaryTextColor: Color(hex: "E6EDF3"),
                     secondaryTextColor: Color(hex: "8B949E")
+                ),
+            ])
+        case .retroLight:
+            ThemePalette(cardThemes: [
+                .shoppingList: CardTheme(
+                    gradientColors: [Color(hex: "FFF6E5"), Color(hex: "F1E5C4")],
+                    accentColor: Color(hex: "57E35F"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "4B4338")
+                ),
+                .todo: CardTheme(
+                    gradientColors: [Color(hex: "FFF3CC"), Color(hex: "EADCA7")],
+                    accentColor: Color(hex: "F3B73E"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "5A4A34")
+                ),
+                .backlog: CardTheme(
+                    gradientColors: [Color(hex: "FCE6D5"), Color(hex: "EDC8B3")],
+                    accentColor: Color(hex: "E85D75"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "5E473D")
+                ),
+                .recurring: CardTheme(
+                    gradientColors: [Color(hex: "E5F4EA"), Color(hex: "CFE7D7")],
+                    accentColor: Color(hex: "2DBF9F"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "41594A")
+                ),
+                .household: CardTheme(
+                    gradientColors: [Color(hex: "EEE8FA"), Color(hex: "DDD4F2")],
+                    accentColor: Color(hex: "6C63D9"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "504860")
+                ),
+                .areas: CardTheme(
+                    gradientColors: [Color(hex: "E3F0F5"), Color(hex: "D2E2E9")],
+                    accentColor: Color(hex: "4BA3C7"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "42515A")
+                ),
+                .settings: CardTheme(
+                    gradientColors: [Color(hex: "F4EBD7"), Color(hex: "E4D8BE")],
+                    accentColor: Color(hex: "C9832C"),
+                    primaryTextColor: Color(hex: "141414"),
+                    secondaryTextColor: Color(hex: "544B3E")
                 ),
             ])
         case .paper:
@@ -488,7 +549,7 @@ enum TabTintColor: String, CaseIterable, Identifiable {
 // MARK: - Unified Theme (Settings UI)
 
 enum UnifiedTheme: String, CaseIterable, Identifiable {
-    case light, dark, auto, retro, paper
+    case light, dark, auto, retroDark, retroLight, paper
 
     var id: String {
         rawValue
@@ -499,7 +560,8 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         case .light: "Light"
         case .dark: "Dark"
         case .auto: "Auto"
-        case .retro: "Retro"
+        case .retroDark: "Retro Dark"
+        case .retroLight: "Retro Light"
         case .paper: "Paper"
         }
     }
@@ -509,7 +571,8 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         case .light: "sun.max.fill"
         case .dark: "moon.fill"
         case .auto: "circle.lefthalf.filled"
-        case .retro: "gamecontroller.fill"
+        case .retroDark: "gamecontroller.fill"
+        case .retroLight: "sun.max.circle.fill"
         case .paper: "newspaper.fill"
         }
     }
@@ -621,7 +684,8 @@ final class ThemeStore: ObservableObject {
     var unifiedTheme: UnifiedTheme {
         get {
             switch preset {
-            case .retro: .retro
+            case .retroDark: .retroDark
+            case .retroLight: .retroLight
             case .paper: .paper
             case .system:
                 switch appearanceMode {
@@ -642,16 +706,37 @@ final class ThemeStore: ObservableObject {
             case .auto:
                 preset = .system
                 appearanceMode = .system
-            case .retro:
-                preset = .retro
+            case .retroDark:
+                preset = .retroDark
+            case .retroLight:
+                preset = .retroLight
             case .paper:
                 preset = .paper
             }
         }
     }
 
+    var isRetroFamily: Bool {
+        preset.isRetroFamily
+    }
+
+    var isRetroDark: Bool {
+        preset == .retroDark
+    }
+
+    var isRetroLight: Bool {
+        preset == .retroLight
+    }
+
+    var usesRetroChrome: Bool {
+        isRetroFamily
+    }
+
     var resolvedTabTint: Color {
-        tabTintColor.color
+        if isRetroFamily {
+            return AppColors.palette(for: preset).accent
+        }
+        return tabTintColor.color
     }
 
     var selectedTabColor: Color {
@@ -674,14 +759,14 @@ final class ThemeStore: ObservableObject {
     }
 
     func appearanceSymbolName(for theme: UnifiedTheme) -> String {
-        if theme == .retro {
+        if theme == .retroDark || theme == .retroLight {
             return retroAppearanceSymbolName
         }
         return theme.iconName
     }
 
     func foregroundOnAccent(for accent: Color, colorScheme: ColorScheme? = nil) -> Color {
-        if tabTintColor == .monochrome, let colorScheme {
+        if !isRetroFamily, tabTintColor == .monochrome, let colorScheme {
             return colorScheme == .dark ? .black : .white
         }
 
@@ -700,17 +785,22 @@ final class ThemeStore: ObservableObject {
     }
 
     func settingsToggleTint(for colorScheme: ColorScheme) -> Color {
+        if isRetroFamily {
+            return resolvedTabTint
+        }
         if tabTintColor == .monochrome, colorScheme == .dark {
             return Color(uiColor: .systemGray3)
         }
         return resolvedTabTint
     }
 
-    /// Retro always stays dark. Paper stays light.
+    /// Retro Dark stays dark. Retro Light and Paper stay light.
     var colorScheme: ColorScheme? {
         switch preset {
-        case .retro:
+        case .retroDark:
             .dark
+        case .retroLight:
+            .light
         case .paper:
             .light
         case .system:
@@ -779,6 +869,9 @@ final class ThemeStore: ObservableObject {
     }
 
     var contentPrimaryColor: Color {
+        if isRetroLight {
+            return inkColor
+        }
         if preset == .paper {
             return Color(red: 0.17, green: 0.14, blue: 0.11)
         }
@@ -786,6 +879,9 @@ final class ThemeStore: ObservableObject {
     }
 
     var contentSecondaryColor: Color {
+        if isRetroLight {
+            return inkMutedColor
+        }
         if preset == .paper {
             return Color(red: 0.42, green: 0.34, blue: 0.27)
         }
@@ -793,6 +889,9 @@ final class ThemeStore: ObservableObject {
     }
 
     var separatorColor: Color {
+        if isRetroLight {
+            return borderLightColor.opacity(0.3)
+        }
         if preset == .paper {
             return Color(red: 0.85, green: 0.80, blue: 0.72)
         }
@@ -800,6 +899,9 @@ final class ThemeStore: ObservableObject {
     }
 
     var checkboxEmptyColor: Color {
+        if isRetroLight {
+            return borderLightColor.opacity(0.7)
+        }
         if preset == .paper {
             return Color(red: 0.85, green: 0.80, blue: 0.72)
         }
@@ -810,12 +912,19 @@ final class ThemeStore: ObservableObject {
         switch preset {
         case .system:
             nil
-        case .retro:
+        case .retroDark:
             [
                 Color(hex: "00FF41"),
                 Color(hex: "FFDD57"),
                 Color(hex: "FF6B9D"),
                 Color(hex: "00D4FF"),
+            ]
+        case .retroLight:
+            [
+                Color(hex: "57E35F"),
+                Color(hex: "F3B73E"),
+                Color(hex: "E85D75"),
+                Color(hex: "4BA3C7"),
             ]
         case .paper:
             [
@@ -841,7 +950,7 @@ final class ThemeStore: ObservableObject {
         let baseSize = size
 
         switch preset {
-        case .retro:
+        case .retroDark, .retroLight:
             let variant = retroVariant
             let scaledCustomSize = scaledRetroSize(baseSize, role: role) * retroFontScale.multiplier
             return customFont(
@@ -883,7 +992,7 @@ final class ThemeStore: ObservableObject {
         let baseSize = size
 
         switch preset {
-        case .retro:
+        case .retroDark, .retroLight:
             let variant = retroVariant
             let scaledCustomSize = scaledRetroSize(baseSize, role: role) * retroFontScale.multiplier
             if let resolvedName = resolveCustomFontName(
@@ -1057,3 +1166,5 @@ final class ThemeStore: ObservableObject {
         return base * scale
     }
 }
+
+// swiftlint:enable file_length

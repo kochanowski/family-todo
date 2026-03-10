@@ -175,6 +175,49 @@ final class FamilyTodoUITests: XCTestCase {
         XCTAssertEqual(addButton.label, "Add item")
     }
 
+    func testRetroLightThemeCoreEmptyStatesLoad() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_empty_seen_tutorials",
+            "-themeOverride", "retroLight",
+        ])
+
+        XCTAssertTrue(app.staticTexts["Your List is Empty"].waitForExistence(timeout: 5.0))
+
+        app.buttons["tabButton_tasks"].tap()
+        XCTAssertTrue(app.staticTexts["No Tasks Yet"].waitForExistence(timeout: 2.0))
+
+        app.buttons["tabButton_backlog"].tap()
+        XCTAssertTrue(app.staticTexts["No Ideas Yet"].waitForExistence(timeout: 2.0))
+    }
+
+    func testSettingsShowsRetroDarkAndRetroLightThemeCards() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+
+        app.buttons["tabButton_more"].tap()
+        app.buttons["Settings"].tap()
+
+        XCTAssertTrue(app.buttons["themeMiniatureCard_retroDark"].waitForExistence(timeout: 2.0))
+        XCTAssertTrue(app.buttons["themeMiniatureCard_retroLight"].exists)
+    }
+
+    func testRetroLightThemeHidesAccentColorSectionInSettings() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+
+        app.buttons["tabButton_more"].tap()
+        app.buttons["Settings"].tap()
+
+        let accentHeader = app.staticTexts["Accent Color"]
+        XCTAssertTrue(accentHeader.waitForExistence(timeout: 2.0))
+
+        let retroLightCard = app.buttons["themeMiniatureCard_retroLight"]
+        XCTAssertTrue(retroLightCard.exists)
+        retroLightCard.tap()
+
+        let disappears = NSPredicate(format: "exists == false")
+        expectation(for: disappears, evaluatedWith: accentHeader)
+        waitForExpectations(timeout: 2.0)
+    }
+
     func testPaperThemeCoreEmptyStatesLoad() {
         let app = launchApp(arguments: [
             "-seedScenario", "household_empty_seen_tutorials",
