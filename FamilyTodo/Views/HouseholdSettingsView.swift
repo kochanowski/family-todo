@@ -2,6 +2,7 @@ import CloudKit
 import SwiftData
 import SwiftUI
 
+// swiftlint:disable file_length
 @MainActor
 final class HouseholdSettingsUIState: ObservableObject {
     enum Route: Identifiable {
@@ -267,7 +268,7 @@ struct ProfileView: View {
             Button("Leave Household", role: .destructive) {
                 showLeaveConfirmation = true
             }
-            .disabled(householdStore.currentHousehold == nil || userSession.userId == nil)
+            .disabled(!canLeaveHousehold)
 
             if currentUserIsOwner {
                 Button("Delete Household", role: .destructive) {
@@ -291,6 +292,16 @@ struct ProfileView: View {
 
     private var currentUserIsOwner: Bool {
         currentMember?.role == .owner
+    }
+
+    private var canLeaveHousehold: Bool {
+        guard householdStore.currentHousehold != nil, userSession.userId != nil else {
+            return false
+        }
+        if userSession.syncMode == .cloud {
+            return !memberStore.isLoading && currentMember != nil
+        }
+        return true
     }
 
     private func memberRowContent(
@@ -368,7 +379,10 @@ struct ProfileView: View {
         }
         _ = _Concurrency.Task {
             do {
-                try await householdStore.leaveCurrentHousehold(userId: userId)
+                try await householdStore.leaveCurrentHousehold(
+                    userId: userId,
+                    activeMembersSnapshot: activeMembers
+                )
                 userSession.clearCurrentHousehold()
                 onboardingState.openHouseholdSetup()
             } catch {
@@ -668,3 +682,5 @@ private struct EditHouseholdView: View {
         }
     }
 }
+
+// swiftlint:enable file_length
