@@ -415,7 +415,7 @@ private struct ThemeMiniatureContent: View {
             themeStore.tabTintColor.color
         }
 
-        VStack {
+        return VStack {
             Spacer()
             HStack {
                 Spacer()
