@@ -57,6 +57,11 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    enum RecoverableMembershipSource: String {
+        case participantShared
+        case ownerPrivate
+    }
+
     @Published var currentHousehold: Household?
     @Published var isLoading = false
     @Published var error: Error?
@@ -1046,20 +1051,79 @@ class HouseholdStore: ObservableObject {
         }
 
         await cloudKit.setHouseholdScope(.participantShared)
-        if let participantMember = try await cloudKit.fetchMemberByUserId(userId),
-           !isRecoverySuppressed(for: participantMember.householdId)
-        {
-            return try await cloudKit.fetchHousehold(id: participantMember.householdId)
+        if let participantHousehold = try await recoverableHousehold(
+            from: cloudKit.fetchMemberByUserId(userId),
+            source: .participantShared
+        ) {
+            return participantHousehold
         }
 
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        if let ownerMember = try await cloudKit.fetchMemberByUserId(userId),
-           !isRecoverySuppressed(for: ownerMember.householdId)
-        {
-            return try await cloudKit.fetchHousehold(id: ownerMember.householdId)
+        if let ownerHousehold = try await recoverableHousehold(
+            from: cloudKit.fetchMemberByUserId(userId),
+            source: .ownerPrivate
+        ) {
+            return ownerHousehold
         }
 
         return nil
+    }
+
+    func recoverableHousehold(
+        from member: Member?,
+        source: RecoverableMembershipSource,
+        fetchHousehold: ((UUID) async throws -> Household)? = nil,
+        onMissingHousehold: ((Member, RecoverableMembershipSource) async -> Void)? = nil
+    ) async throws -> Household? {
+        guard let member, !isRecoverySuppressed(for: member.householdId) else {
+            return nil
+        }
+
+        let fetchHousehold = fetchHousehold ?? { [cloudKit] householdId in
+            try await cloudKit.fetchHousehold(id: householdId)
+        }
+
+        do {
+            return try await fetchHousehold(member.householdId)
+        } catch {
+            guard isRecordMissingError(error) else {
+                throw error
+            }
+
+            print(
+                "DEBUG: Ignoring stale \(source.rawValue) membership for missing household \(member.householdId)"
+            )
+            suppressRecovery(for: member.householdId)
+            if let onMissingHousehold {
+                await onMissingHousehold(member, source)
+            } else {
+                await cleanupStaleRecoverableMembership(member, source: source)
+            }
+            return nil
+        }
+    }
+
+    private func cleanupStaleRecoverableMembership(
+        _ member: Member,
+        source: RecoverableMembershipSource
+    ) async {
+        await cloudKit.clearAllCachedZones(for: member.householdId)
+
+        do {
+            _ = try await cloudKit.updateMemberState(
+                memberId: member.id,
+                householdId: member.householdId,
+                newDisplayName: member.displayName,
+                newRole: member.role,
+                isActive: false,
+                colorHex: member.colorHex
+            )
+        } catch {
+            guard !isRecordMissingError(error) else { return }
+            print(
+                "DEBUG: Failed to deactivate stale \(source.rawValue) membership for household \(member.householdId): \(error)"
+            )
+        }
     }
 
     private func normalizedSingleHouseholdCount(_ count: Int) -> Int {

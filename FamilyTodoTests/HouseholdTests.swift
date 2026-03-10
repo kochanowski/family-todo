@@ -418,6 +418,74 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNil(localStore.currentHousehold)
     }
 
+    func testRecoverableHouseholdIgnoresMissingCloudRootAndSuppressesRecovery() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let localStore = HouseholdStore(
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+
+        let householdId = UUID()
+        let member = Member(
+            householdId: householdId,
+            userId: "cloud-user",
+            displayName: "Wojtek",
+            role: .member
+        )
+
+        let resolved = try await localStore.recoverableHousehold(
+            from: member,
+            source: .participantShared,
+            fetchHousehold: { _ in throw CKError(.unknownItem) },
+            onMissingHousehold: { _, _ in }
+        )
+
+        XCTAssertNil(resolved)
+        XCTAssertTrue(localStore.isRecoverySuppressed(for: householdId))
+    }
+
+    func testRecoverableHouseholdPropagatesNonMissingCloudErrors() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let localStore = HouseholdStore(
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+
+        let householdId = UUID()
+        let member = Member(
+            householdId: householdId,
+            userId: "cloud-user",
+            displayName: "Wojtek",
+            role: .member
+        )
+
+        do {
+            _ = try await localStore.recoverableHousehold(
+                from: member,
+                source: .participantShared,
+                fetchHousehold: { _ in throw CKError(.permissionFailure) },
+                onMissingHousehold: { _, _ in }
+            )
+            XCTFail("Expected permission failure to propagate")
+        } catch let error as CKError {
+            XCTAssertEqual(error.code, .permissionFailure)
+        }
+
+        XCTAssertFalse(localStore.isRecoverySuppressed(for: householdId))
+    }
+
     // MARK: - HouseholdError Tests
 
     func testHouseholdErrorCases() {
