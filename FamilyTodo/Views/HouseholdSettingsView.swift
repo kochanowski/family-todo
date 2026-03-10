@@ -41,7 +41,6 @@ struct ProfileView: View {
     @State private var showDeleteMemberConfirmation = false
     @State private var memberToDelete: Member?
     @State private var actionErrorMessage: String?
-    @State private var shouldRefreshTabBarAfterHouseholdEdit = false
 
     var body: some View {
         List {
@@ -61,18 +60,10 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(
-            isPresented: $showEditHousehold,
-            onDismiss: handleEditHouseholdDismiss
-        ) {
+        .sheet(isPresented: $showEditHousehold) {
             if let household = householdStore.currentHousehold {
                 NavigationStack {
-                    EditHouseholdView(
-                        household: household,
-                        onSave: {
-                            shouldRefreshTabBarAfterHouseholdEdit = true
-                        }
-                    )
+                    EditHouseholdView(household: household)
                 }
             }
         }
@@ -406,12 +397,6 @@ struct ProfileView: View {
             }
         }
     }
-
-    private func handleEditHouseholdDismiss() {
-        guard shouldRefreshTabBarAfterHouseholdEdit else { return }
-        shouldRefreshTabBarAfterHouseholdEdit = false
-        NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
-    }
 }
 
 private struct EditProfileView: View {
@@ -550,11 +535,11 @@ private struct EditHouseholdView: View {
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
-    let onSave: () -> Void
 
     @State private var name: String
     @State private var selectedIconSymbol: String
     @State private var errorMessage: String?
+    @State private var isSaving = false
 
     private let iconOptions = [
         "house.fill",
@@ -575,11 +560,9 @@ private struct EditHouseholdView: View {
     ]
 
     init(
-        household: Household,
-        onSave: @escaping () -> Void = {}
+        household: Household
     ) {
         self.household = household
-        self.onSave = onSave
         _name = State(initialValue: household.name)
         _selectedIconSymbol = State(initialValue: household.iconSymbol)
     }
@@ -646,7 +629,10 @@ private struct EditHouseholdView: View {
                 } label: {
                     Text("Save")
                 }
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        isSaving
+                )
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -662,22 +648,30 @@ private struct EditHouseholdView: View {
     private func saveHousehold() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        guard !isSaving else { return }
         guard let userId = userSession.userId else {
             errorMessage = "Session expired. Sign in again."
             return
         }
 
-        onSave()
-        dismiss()
-        _ = _Concurrency.Task {
+        isSaving = true
+        _ = _Concurrency.Task { @MainActor in
             do {
                 try await householdStore.updateCurrentHousehold(
                     name: trimmedName,
                     userId: userId,
                     iconSymbol: selectedIconSymbol
                 )
+                dismiss()
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .tabBarAppearanceRefreshRequested,
+                        object: nil
+                    )
+                }
             } catch {
-                householdStore.error = error
+                errorMessage = error.localizedDescription
+                isSaving = false
             }
         }
     }

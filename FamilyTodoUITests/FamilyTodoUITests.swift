@@ -152,6 +152,44 @@ final class FamilyTodoUITests: XCTestCase {
         )
     }
 
+    func testRetroThemeRestockHeaderUsesClearLabel() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_basic",
+            "-themeOverride", "retro",
+        ])
+
+        app.buttons["shoppingRestockButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["Recently Purchased"].waitForExistence(timeout: 2.0))
+        XCTAssertTrue(app.buttons["Clear"].exists)
+    }
+
+    func testRetroThemeAddButtonUsesTextOnlyLabel() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_basic",
+            "-themeOverride", "retro",
+        ])
+
+        let addButton = app.buttons["shoppingAddItemButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5.0))
+        XCTAssertEqual(addButton.label, "Add item")
+    }
+
+    func testPaperThemeCoreEmptyStatesLoad() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_empty_seen_tutorials",
+            "-themeOverride", "paper",
+        ])
+
+        XCTAssertTrue(app.staticTexts["Your List is Empty"].waitForExistence(timeout: 5.0))
+
+        app.buttons["tabButton_tasks"].tap()
+        XCTAssertTrue(app.staticTexts["No Tasks Yet"].waitForExistence(timeout: 2.0))
+
+        app.buttons["tabButton_backlog"].tap()
+        XCTAssertTrue(app.staticTexts["No Ideas Yet"].waitForExistence(timeout: 2.0))
+    }
+
     // MARK: - C) Tasks Regression
 
     func testTasksCompleteMovesToCompleted() {

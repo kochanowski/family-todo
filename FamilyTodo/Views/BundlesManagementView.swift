@@ -40,12 +40,10 @@ struct BundlesManagementView: View {
         }
         .overlay {
             if store.bundles.isEmpty {
-                ContentUnavailableView(
-                    "No Bundles Yet",
+                ThemedEmptyStateView(
+                    title: "No Bundles Yet",
                     systemImage: ShoppingBundle.defaultIcon,
-                    description: Text(
-                        "Create reusable shopping bundles for quick add from the main Shopping button."
-                    )
+                    description: "Create reusable shopping bundles for quick add from the main Shopping button."
                 )
                 .offset(y: -24)
             }

@@ -50,7 +50,7 @@ struct MainAppView: View {
                 applyTabBarAppearance()
             }
             .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
-                refreshTabBarAppearanceAfterDismiss()
+                refreshTabBarAppearanceForHouseholdChromeChange()
             }
             .task {
                 await bootstrapHouseholdIfNeeded()
@@ -143,12 +143,12 @@ struct MainAppView: View {
         )
     }
 
-    private func refreshTabBarAppearanceAfterDismiss() {
+    private func refreshTabBarAppearanceForHouseholdChromeChange() {
         applyTabBarAppearance()
         DispatchQueue.main.async {
             applyTabBarAppearance()
         }
-        // Modal dismissal can finish after the underlying household model update.
+        // A defensive reapply keeps the selected tab tinted even if UIKit settles later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             applyTabBarAppearance()
         }

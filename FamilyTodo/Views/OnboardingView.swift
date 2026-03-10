@@ -6,6 +6,7 @@ struct OnboardingView: View {
     let userId: String
     let displayName: String
     let isCloudSyncEnabled: Bool
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var showCreateSheet = false
     @State private var showJoinSheet = false
@@ -22,19 +23,19 @@ struct OnboardingView: View {
                         .foregroundStyle(.blue)
 
                     Text("Welcome to HousePulse")
-                        .font(.title)
-                        .fontWeight(.bold)
+                        .font(themeStore.font(for: .screenHeader))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
 
                     Text("Create a household to start managing tasks together")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(themeStore.font(for: .listRowTitle))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
 
                     if !isCloudSyncEnabled {
                         Text("Guest mode keeps everything on this device.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
@@ -48,6 +49,7 @@ struct OnboardingView: View {
                         showCreateSheet = true
                     } label: {
                         Label("Create Household", systemImage: "plus.circle.fill")
+                            .font(themeStore.font(for: .buttonLabel))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -57,6 +59,7 @@ struct OnboardingView: View {
                         showJoinSheet = true
                     } label: {
                         Label("Join Household", systemImage: "person.badge.plus")
+                            .font(themeStore.font(for: .buttonLabel))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -65,8 +68,8 @@ struct OnboardingView: View {
 
                     if !isCloudSyncEnabled {
                         Text("Sign in to join an existing household or invite others.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                     }
                 }
@@ -273,4 +276,5 @@ struct JoinHouseholdSheet: View {
         displayName: "Test User",
         isCloudSyncEnabled: true
     )
+    .environmentObject(ThemeStore())
 }

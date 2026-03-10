@@ -353,11 +353,11 @@ struct CompletedTasksView: View {
             if let householdId = userSession.currentHouseholdID {
                 CompletedTasksContent(householdId: householdId, modelContext: modelContext)
             } else {
-                ContentUnavailableView {
-                    Label("No Household", systemImage: "house")
-                } description: {
-                    Text("Join or create a household to see task history.")
-                }
+                ThemedEmptyStateView(
+                    title: "No Household",
+                    systemImage: "house",
+                    description: "Join or create a household to see task history."
+                )
             }
         }
     }
@@ -388,11 +388,11 @@ private struct CompletedTasksContent: View {
     var body: some View {
         Group {
             if store.archivedDoneTasks.isEmpty {
-                ContentUnavailableView {
-                    Label("No Task History", systemImage: "checkmark.circle")
-                } description: {
-                    Text("Completed tasks older than 24h appear here.")
-                }
+                ThemedEmptyStateView(
+                    title: "No Task History",
+                    systemImage: "checkmark.circle",
+                    description: "Completed tasks older than 24h appear here."
+                )
             } else {
                 List {
                     ForEach(store.archivedDoneTasks) { task in

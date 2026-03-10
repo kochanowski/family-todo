@@ -308,25 +308,22 @@ private struct ShoppingListContent: View {
     private var shoppingEmptyState: some View {
         Group {
             if hasSeenShoppingTutorial {
-                ContentUnavailableView(
-                    "Your List is Empty",
+                ThemedEmptyStateView(
+                    title: "Your List is Empty",
                     systemImage: "cart.badge.plus",
-                    description: Text(
-                        "Time to restock! Add groceries or household items you need to buy."
-                    )
+                    description: "Time to restock! Add groceries or household items you need to buy."
                 )
             } else {
-                ContentUnavailableView {
-                    Label("Welcome to Shopping!", systemImage: "cart.fill.badge.plus")
-                } description: {
-                    Text(
-                        "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
-                    )
-                } actions: {
+                ThemedEmptyStateView(
+                    title: "Welcome to Shopping!",
+                    systemImage: "cart.fill.badge.plus",
+                    description: "Add groceries and household items here. Once bought, they save to your history for quick re-adding later!"
+                ) {
                     Button("Got it!") {
                         HapticManager.lightTap()
                         hasSeenShoppingTutorial = true
                     }
+                    .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.borderedProminent)
                     .tint(themeStore.accentTabColor)
                 }
@@ -427,15 +424,9 @@ private struct ShoppingListContent: View {
         return Button {
             startRapidEntry()
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .bold))
+            HStack(spacing: 0) {
                 Text("Add item")
-                    .font(
-                        themeStore.preset == .retro
-                            ? .system(size: 15, weight: .semibold)
-                            : themeStore.font(for: .buttonLabel)
-                    )
+                    .font(themeStore.font(for: .buttonLabel))
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
@@ -1199,8 +1190,8 @@ struct RestockSheet: View {
                     Button(role: .destructive) {
                         showClearAllConfirmation = true
                     } label: {
-                        Text("Clear All")
-                            .font(themeStore.font(for: .listRowTitle))
+                        Text("Clear")
+                            .font(themeStore.font(for: .buttonLabel))
                             .foregroundStyle(.red)
                     }
                     .tint(.red)

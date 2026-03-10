@@ -5,6 +5,7 @@ struct CreateHouseholdView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     private let allowsJoin: Bool
@@ -22,8 +23,6 @@ struct CreateHouseholdView: View {
     @State private var showCustomJoinConfirmation = false
     @FocusState private var isTextFieldFocused: Bool
 
-    @Environment(\.colorScheme) private var colorScheme
-
     init(allowsJoin: Bool = true, showsCloseButton: Bool = false) {
         self.allowsJoin = allowsJoin
         self.showsCloseButton = showsCloseButton
@@ -33,7 +32,7 @@ struct CreateHouseholdView: View {
         NavigationStack {
             ZStack {
                 // Background
-                Color(colorScheme == .dark ? .black : .systemBackground)
+                themeStore.canvasColor
                     .ignoresSafeArea()
 
                 VStack(spacing: 24) {
@@ -43,19 +42,20 @@ struct CreateHouseholdView: View {
                     // Header
                     VStack(spacing: 8) {
                         Text("Name your household.")
-                            .font(.system(size: 28, weight: .bold))
+                            .font(themeStore.font(for: .screenHeader))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
 
                         Text("This name will be visible to members you invite.")
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .listRowTitle))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                     }
 
                     VStack(spacing: 12) {
                         Text("Choose icon")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .bodyStrong))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
 
                         HStack(spacing: 12) {
                             ForEach(Self.availableHouseholdSymbols, id: \.self) { symbol in
@@ -83,7 +83,7 @@ struct CreateHouseholdView: View {
                     // Input Field
                     VStack(spacing: 8) {
                         TextField("e.g. Smith Family", text: $householdName)
-                            .font(.system(size: 28, weight: .semibold))
+                            .font(themeStore.font(for: .screenHeader))
                             .multilineTextAlignment(.center)
                             .focused($isTextFieldFocused)
                             .submitLabel(.done)
@@ -114,7 +114,7 @@ struct CreateHouseholdView: View {
                                 Text("Create Household")
                             }
                         }
-                        .font(.headline)
+                        .font(themeStore.font(for: .buttonLabel))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -138,25 +138,25 @@ struct CreateHouseholdView: View {
                             showJoinSheet = true
                         } label: {
                             Text("Have an invite code? ")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(themeStore.contentSecondaryColor)
                                 + Text("Join Household")
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(themeStore.contentPrimaryColor)
                                 .bold()
                         }
-                        .font(.system(size: 15))
+                        .font(themeStore.font(for: .buttonLabel))
                         .disabled(!canJoinViaInvite || isCreating)
                     }
 
                     if !userSession.hasActiveSession {
                         Text("Sign in or continue as guest before creating or joining household.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                     } else if userSession.syncMode != .cloud {
                         Text("Guest mode can create local household. Joining via invite requires Apple/iCloud sign in.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                     }
@@ -383,6 +383,7 @@ struct HouseholdJoinSheet: View {
     @Binding var inviteLink: String
     let onJoin: () -> Void
     let onPasteFromClipboard: () -> Void
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
     @State private var showScanner = false
     @State private var scannerErrorMessage: String?
@@ -394,7 +395,8 @@ struct HouseholdJoinSheet: View {
                     .frame(height: 20)
 
                 Text("Enter Invite Code")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
                 TextField("A7B9XQ2M", text: $inviteCodeToken)
                     .font(.system(size: 24, weight: .semibold, design: .monospaced))
@@ -412,14 +414,14 @@ struct HouseholdJoinSheet: View {
                     }
 
                 Text("Use the 8-character invite code (A-Z, 0-9)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
 
                 Button {
                     onJoin()
                 } label: {
                     Text("Join with code")
-                        .font(.headline)
+                        .font(themeStore.font(for: .buttonLabel))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -435,11 +437,11 @@ struct HouseholdJoinSheet: View {
                     .padding(.horizontal, 40)
 
                 Text("Or join with invite link")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(themeStore.font(for: .bodyStrong))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
 
                 TextField("https://www.icloud.com/share/...", text: $inviteLink)
-                    .font(.system(size: 16))
+                    .font(themeStore.font(for: .listRowTitle))
                     .multilineTextAlignment(.center)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
@@ -454,7 +456,7 @@ struct HouseholdJoinSheet: View {
                     onJoin()
                 } label: {
                     Text("Join with link")
-                        .font(.headline)
+                        .font(themeStore.font(for: .buttonLabel))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -471,6 +473,7 @@ struct HouseholdJoinSheet: View {
                         onPasteFromClipboard()
                     } label: {
                         Label("Paste", systemImage: "doc.on.clipboard")
+                            .font(themeStore.font(for: .buttonLabel))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -479,6 +482,7 @@ struct HouseholdJoinSheet: View {
                         showScanner = true
                     } label: {
                         Label("Scan QR", systemImage: "qrcode.viewfinder")
+                            .font(themeStore.font(for: .buttonLabel))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)

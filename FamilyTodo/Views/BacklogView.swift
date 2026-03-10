@@ -364,25 +364,22 @@ private struct BacklogContent: View {
     private var emptyState: some View {
         Group {
             if hasSeenIdeasTutorial {
-                ContentUnavailableView(
-                    "No Ideas Yet",
+                ThemedEmptyStateView(
+                    title: "No Ideas Yet",
                     systemImage: "lightbulb",
-                    description: Text(
-                        "Capture home improvement projects, wishlists, or future plans here."
-                    )
+                    description: "Capture home improvement projects, wishlists, or future plans here."
                 )
             } else {
-                ContentUnavailableView {
-                    Label("Your Home's Brainstorming Hub", systemImage: "lightbulb.fill")
-                } description: {
-                    Text(
-                        "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
-                    )
-                } actions: {
+                ThemedEmptyStateView(
+                    title: "Your Home's Brainstorming Hub",
+                    systemImage: "lightbulb.fill",
+                    description: "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
+                ) {
                     Button("Start Dreaming") {
                         HapticManager.lightTap()
                         hasSeenIdeasTutorial = true
                     }
+                    .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.borderedProminent)
                     .tint(themeStore.accentTabColor)
                 }

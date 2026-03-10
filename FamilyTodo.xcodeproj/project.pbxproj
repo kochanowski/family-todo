@@ -7,6 +7,7 @@
 
 /* Begin PBXBuildFile section */
 		D8A148526B034E92ADDBC14A /* NewItemsBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */; };
+		D8A148526B034E92ADDBC14B /* ThemedEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848E1F71D41541C8AFF5824F /* ThemedEmptyStateView.swift */; };
 		1640C04D97C34B6D908BC1E1 /* CloudKitSubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A64C673C65F9499681214CF6 /* CloudKitSubscriptionManager.swift */; };
 		599F980C2C18433EA5926134 /* InteractionTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26545708FFCD49269BCBA414 /* InteractionTokens.swift */; };
 		AC435B3B5E184CB7ADCE00FE /* GuidedEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */; };
@@ -121,6 +122,7 @@
 
 /* Begin PBXFileReference section */
 		848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewItemsBanner.swift; sourceTree = "<group>"; };
+		848E1F71D41541C8AFF5824F /* ThemedEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedEmptyStateView.swift; sourceTree = "<group>"; };
 		A64C673C65F9499681214CF6 /* CloudKitSubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSubscriptionManager.swift; sourceTree = "<group>"; };
 		26545708FFCD49269BCBA414 /* InteractionTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionTokens.swift; sourceTree = "<group>"; };
 		2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedEmptyStateView.swift; sourceTree = "<group>"; };
@@ -437,6 +439,7 @@
 				isa = PBXGroup;
 				children = (
 					848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
+					848E1F71D41541C8AFF5824F /* ThemedEmptyStateView.swift */,
 					NEWFILE0000000000000015 /* FloatingTabBar.swift */,
 					NEWFILE0000000000000016 /* ToastView.swift */,
 					B1C2D3E4F5A60718293B4C52 /* AppModalActionRow.swift */,
@@ -590,6 +593,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D8A148526B034E92ADDBC14A /* NewItemsBanner.swift in Sources */,
+				D8A148526B034E92ADDBC14B /* ThemedEmptyStateView.swift in Sources */,
 				1640C04D97C34B6D908BC1E1 /* CloudKitSubscriptionManager.swift in Sources */,
 				599F980C2C18433EA5926134 /* InteractionTokens.swift in Sources */,
 				AC435B3B5E184CB7ADCE00FE /* GuidedEmptyStateView.swift in Sources */,
