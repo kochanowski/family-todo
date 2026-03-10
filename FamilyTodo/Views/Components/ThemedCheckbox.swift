@@ -60,7 +60,7 @@ struct ThemedCheckbox: View {
             colorScheme: themeStore.colorScheme
         )
 
-        Group {
+        return Group {
             if isChecked {
                 ZStack {
                     Rectangle()
