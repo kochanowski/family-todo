@@ -428,9 +428,9 @@ private struct ShoppingBundleHeaderRow: View {
             TextField(
                 "",
                 text: $name,
-                axis: .vertical,
                 prompt: Text("Bundle Name")
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .foregroundStyle(themeStore.contentSecondaryColor),
+                axis: .vertical
             )
             .font(themeStore.font(for: .listRowTitle))
             .textFieldStyle(.plain)
