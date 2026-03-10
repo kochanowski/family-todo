@@ -43,6 +43,12 @@ struct MainAppView: View {
             .onChange(of: householdStore.currentHousehold?.updatedAt) { _, _ in
                 applyTabBarAppearance()
             }
+            .onChange(of: householdStore.currentHousehold?.name) { _, _ in
+                refreshTabBarAppearanceForHouseholdChromeChange()
+            }
+            .onChange(of: householdStore.currentHousehold?.iconSymbol) { _, _ in
+                refreshTabBarAppearanceForHouseholdChromeChange()
+            }
             .onChange(of: themeStore.retroFontScale) { _, _ in
                 applyTabBarAppearance()
             }

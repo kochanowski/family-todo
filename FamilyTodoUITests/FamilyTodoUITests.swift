@@ -458,6 +458,54 @@ final class FamilyTodoUITests: XCTestCase {
          */
     }
 
+    func testBacklogDeleteItemShowsConfirmationBeforeDeletion() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+        app.buttons["tabButton_backlog"].tap()
+
+        let deleteButton = app.buttons["backlogDeleteButton_Olive Oil"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5.0))
+        deleteButton.tap()
+
+        let alert = app.alerts["Are you sure you want to delete?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2.0))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.staticTexts["Olive Oil"].exists)
+    }
+
+    func testBacklogDeleteEmptyCategoryShowsConfirmation() {
+        let app = launchApp(arguments: ["-seedScenario", "ideas_single_category"])
+        app.buttons["tabButton_backlog"].tap()
+
+        let menuButton = app.buttons["backlogCategoryMenuButton_Projects"]
+        XCTAssertTrue(menuButton.waitForExistence(timeout: 5.0))
+        menuButton.tap()
+
+        let deleteAction = app.buttons["Delete Category"]
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 2.0))
+        deleteAction.tap()
+
+        let alert = app.alerts["Are you sure?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2.0))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.staticTexts["PROJECTS"].exists)
+    }
+
+    func testBacklogPromoteAssignedIdeaMovesToTasksWithoutOpeningEditSheet() {
+        let app = launchApp(arguments: ["-seedScenario", "contextual_onboarding"])
+        app.buttons["tabButton_backlog"].tap()
+
+        let promoteButton = app.buttons["backlogPromoteButton_Paint guest room"]
+        XCTAssertTrue(promoteButton.waitForExistence(timeout: 5.0))
+        promoteButton.tap()
+
+        XCTAssertFalse(app.navigationBars["Idea Item"].waitForExistence(timeout: 1.0))
+
+        app.buttons["tabButton_tasks"].tap()
+        XCTAssertTrue(app.buttons["taskRow_Paint guest room"].waitForExistence(timeout: 5.0))
+    }
+
     func testBacklogContextualTipAppearsWhenPromoteButtonExists() {
         let app = launchApp(
             arguments: [

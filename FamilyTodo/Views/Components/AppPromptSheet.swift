@@ -135,13 +135,18 @@ struct CategoryEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Category Name") {
+                Section {
                     TextField("Category Name", text: $name)
+                        .font(themeStore.font(for: .listRowTitle))
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled(true)
+                } header: {
+                    Text("Category Name")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
-                Section("Category Color") {
+                Section {
                     LazyVGrid(
                         columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
                         spacing: 12
@@ -166,25 +171,39 @@ struct CategoryEditorSheet: View {
                         }
                     }
                     .padding(.vertical, 4)
+                } header: {
+                    Text("Category Color")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
+                    Button {
                         onCancel()
                         dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
                 }
+                ToolbarItem(placement: .principal) {
+                    Text(title)
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(primaryTitle) {
+                    Button {
                         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmedName.isEmpty else { return }
                         onSubmit(trimmedName, selectedColorHex)
                         dismiss()
+                    } label: {
+                        Text(primaryTitle)
+                            .font(themeStore.font(for: .buttonLabel))
                     }
-                    .font(themeStore.font(for: .buttonLabel))
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -283,7 +302,7 @@ struct BacklogItemEditSheet: View {
         self.onDelete = onDelete
         _title = State(initialValue: item.title)
         _notes = State(initialValue: item.notes ?? "")
-        _assigneeId = State(initialValue: item.assigneeId ?? members.first?.id)
+        _assigneeId = State(initialValue: item.assigneeId)
     }
 
     var body: some View {
@@ -301,6 +320,7 @@ struct BacklogItemEditSheet: View {
                             .foregroundStyle(.secondary)
                     } else {
                         Picker("Who", selection: $assigneeId) {
+                            Text("Unassigned").tag(UUID?.none)
                             ForEach(members) { member in
                                 Text(member.displayName).tag(Optional(member.id))
                             }
@@ -325,15 +345,25 @@ struct BacklogItemEditSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
                 }
+                ToolbarItem(placement: .principal) {
+                    Text("Idea Item")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
+                    Button {
                         commit()
+                    } label: {
+                        Text("Save")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
-                    .fontWeight(.semibold)
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

@@ -243,16 +243,27 @@ private struct ShoppingBundleEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text(bundle == nil ? "New Bundle" : "Edit Bundle")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Saving..." : "Save") {
+                    Button {
                         _ = _Concurrency.Task {
                             await saveBundle()
                         }
+                    } label: {
+                        Text(isSaving ? "Saving..." : "Save")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
                     .disabled(!canSave || isSaving)
                 }
@@ -501,9 +512,17 @@ private struct ShoppingBundleIconPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Close")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Choose Icon")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
         }

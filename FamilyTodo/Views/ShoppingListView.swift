@@ -1032,7 +1032,9 @@ private struct RapidEntryTextField: UIViewRepresentable {
         return textField
     }
 
-    func updateUIView(_ uiView: UITextField, context _: Context) {
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        context.coordinator.updateParent(self)
+
         if uiView.text != text {
             uiView.text = text
         }
@@ -1049,6 +1051,8 @@ private struct RapidEntryTextField: UIViewRepresentable {
             )
         }
 
+        context.coordinator.updateAccessoryAppearance()
+
         if isFocused, !uiView.isFirstResponder {
             uiView.becomeFirstResponder()
         } else if !isFocused, uiView.isFirstResponder {
@@ -1058,8 +1062,13 @@ private struct RapidEntryTextField: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextFieldDelegate {
         private var parent: RapidEntryTextField
+        private weak var accessoryButton: UIButton?
 
         init(_ parent: RapidEntryTextField) {
+            self.parent = parent
+        }
+
+        func updateParent(_ parent: RapidEntryTextField) {
             self.parent = parent
         }
 
@@ -1081,6 +1090,18 @@ private struct RapidEntryTextField: UIViewRepresentable {
             return false
         }
 
+        func updateAccessoryAppearance() {
+            guard let button = accessoryButton else { return }
+
+            button.setTitleColor(parent.actionForegroundColor, for: .normal)
+            button.backgroundColor = parent.actionColor
+            button.titleLabel?.font = parent.themeStore.uiFont(for: .buttonLabel)
+            button.layer.shadowColor = parent.actionColor.withAlphaComponent(0.3).cgColor
+            button.layer.borderWidth = shouldShowAccessoryBorder ? 1.2 : 0
+            button.layer.borderColor = accessoryBorderColor?.cgColor
+            button.tintColor = parent.actionForegroundColor
+        }
+
         func makeAccessoryToolbar() -> UIView {
             let topInset: CGFloat = 6
             let buttonHeight = AppChromeMetrics.compactCTAHeight
@@ -1095,11 +1116,10 @@ private struct RapidEntryTextField: UIViewRepresentable {
             container.backgroundColor = .clear
 
             // "Done" pill button matching the "Add item" style
-            let button = UIButton(type: .system)
+            let button = UIButton(type: .custom)
             button.setTitle("Done", for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-            button.setTitleColor(parent.actionForegroundColor, for: .normal)
-            button.backgroundColor = parent.actionColor
+            accessoryButton = button
+            button.titleLabel?.font = parent.themeStore.uiFont(for: .buttonLabel)
             button.layer.cornerRadius = buttonHeight / 2
             button.contentEdgeInsets = UIEdgeInsets(
                 top: 0,
@@ -1108,15 +1128,14 @@ private struct RapidEntryTextField: UIViewRepresentable {
                 right: AppChromeMetrics.compactCTAHorizontalPadding
             )
             button.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
-
-            // Shadow matching the Add item pill
-            button.layer.shadowColor = parent.actionColor.withAlphaComponent(0.3).cgColor
             button.layer.shadowRadius = 8
             button.layer.shadowOffset = CGSize(width: 0, height: 4)
             button.layer.shadowOpacity = 1.0
 
             button.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(button)
+
+            updateAccessoryAppearance()
 
             NSLayoutConstraint.activate([
                 button.trailingAnchor.constraint(
@@ -1135,6 +1154,15 @@ private struct RapidEntryTextField: UIViewRepresentable {
         @objc
         private func doneTapped() {
             parent.onDone()
+        }
+
+        private var shouldShowAccessoryBorder: Bool {
+            parent.themeStore.usesRetroChrome || parent.themeStore.preset == .paper
+        }
+
+        private var accessoryBorderColor: UIColor? {
+            guard shouldShowAccessoryBorder else { return nil }
+            return UIColor(parent.themeStore.borderLightColor.opacity(0.85))
         }
     }
 }

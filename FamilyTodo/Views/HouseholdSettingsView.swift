@@ -35,6 +35,7 @@ struct ProfileView: View {
 
     @State private var showEditProfile = false
     @State private var showEditHousehold = false
+    @State private var didSaveHouseholdMetadata = false
     @State private var isPreparingShareInvite = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
@@ -60,10 +61,18 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(isPresented: $showEditHousehold) {
+        .sheet(
+            isPresented: $showEditHousehold,
+            onDismiss: handleHouseholdEditDismiss
+        ) {
             if let household = householdStore.currentHousehold {
                 NavigationStack {
-                    EditHouseholdView(household: household)
+                    EditHouseholdView(
+                        household: household,
+                        onSaveSuccess: {
+                            didSaveHouseholdMetadata = true
+                        }
+                    )
                 }
             }
         }
@@ -397,6 +406,17 @@ struct ProfileView: View {
             }
         }
     }
+
+    private func handleHouseholdEditDismiss() {
+        guard didSaveHouseholdMetadata else { return }
+        didSaveHouseholdMetadata = false
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .tabBarAppearanceRefreshRequested,
+                object: nil
+            )
+        }
+    }
 }
 
 private struct EditProfileView: View {
@@ -535,6 +555,7 @@ private struct EditHouseholdView: View {
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
+    let onSaveSuccess: () -> Void
 
     @State private var name: String
     @State private var selectedIconSymbol: String
@@ -560,9 +581,11 @@ private struct EditHouseholdView: View {
     ]
 
     init(
-        household: Household
+        household: Household,
+        onSaveSuccess: @escaping () -> Void
     ) {
         self.household = household
+        self.onSaveSuccess = onSaveSuccess
         _name = State(initialValue: household.name)
         _selectedIconSymbol = State(initialValue: household.iconSymbol)
     }
@@ -621,13 +644,19 @@ private struct EditHouseholdView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("Cancel") { dismiss() }
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(themeStore.font(for: .buttonLabel))
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     saveHousehold()
                 } label: {
                     Text("Save")
+                        .font(themeStore.font(for: .buttonLabel))
                 }
                 .disabled(
                     name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
@@ -662,13 +691,8 @@ private struct EditHouseholdView: View {
                     userId: userId,
                     iconSymbol: selectedIconSymbol
                 )
+                onSaveSuccess()
                 dismiss()
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: .tabBarAppearanceRefreshRequested,
-                        object: nil
-                    )
-                }
             } catch {
                 errorMessage = error.localizedDescription
                 isSaving = false
