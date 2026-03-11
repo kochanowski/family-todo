@@ -234,7 +234,8 @@ jobs:
             github.ref == 'refs/heads/appleid-login' ||
             github.ref == 'refs/heads/features-and-testing' ||
             github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features'
+            github.ref == 'refs/heads/feature/next-features' ||
+            github.ref == 'refs/heads/feature/live-shopping-mode'
           )
         )
       ) &&
@@ -245,7 +246,8 @@ jobs:
         (
           (
             github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features'
+            github.ref == 'refs/heads/feature/next-features' ||
+            github.ref == 'refs/heads/feature/live-shopping-mode'
           ) &&
           needs.cloudkit-schema.result == 'skipped'
         )
