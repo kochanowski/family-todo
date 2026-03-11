@@ -233,6 +233,21 @@ private struct ShoppingBundleEditorSheet: View {
                                 onSubmit: commitComposerItem
                             )
                         }
+
+                        if bundle == nil {
+                            Button {
+                                _ = _Concurrency.Task {
+                                    await saveBundle(andAddToShoppingList: true)
+                                }
+                            } label: {
+                                Text(isSaving ? "Saving..." : "Save & Add to List")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canSave || isSaving)
+                            .padding(.top, 4)
+                        }
                     }
 
                     if bundle != nil {
@@ -266,23 +281,6 @@ private struct ShoppingBundleEditorSheet: View {
                     Text(bundle == nil ? "New Bundle" : "Edit Bundle")
                         .font(themeStore.font(for: .inlineTitle))
                         .foregroundStyle(themeStore.contentPrimaryColor)
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    if bundle == nil {
-                        Button {
-                            _ = _Concurrency.Task {
-                                await saveBundle(andAddToShoppingList: true)
-                            }
-                        } label: {
-                            Text(isSaving ? "Saving..." : "Save & Add")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .allowsTightening(true)
-                        }
-                        .disabled(!canSave || isSaving)
-                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
