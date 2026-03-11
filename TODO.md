@@ -15,6 +15,53 @@
 - Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
 - Remaining near-term roadmap items are `P2.9` and `P2.10`; recurring rotation (`P2.6`) is still parked.
 
+## MVP 1.0 Readiness Track (Highest Priority)
+
+### Architecture Assessment Before MVP Testing
+
+- **Multiplayer sync foundation is good enough for physical-device testing**: Tasks, Shopping, and Ideas already use cache-first loading, background CloudKit replay, tombstones, and `updatedAt`-based last-writer-wins merge.
+- **Push infrastructure is only partially ready**: remote notifications refresh the app and show generic shared-change banners, but they do not yet send targeted household event copy such as `Task assigned to you`, `Member joined`, or `Poke from <Name>`.
+- **Shopping anti-spam is partially covered**: shared remote updates are aggregated today, but the logic is still generic and not yet explicitly productized around shopping-only batching rules.
+- **English-only launch is aligned with current direction**: the app is mostly hardcoded in English and does not have active localization plumbing, but a few remaining non-English strings still need cleanup before release.
+- **Monetization schema is NOT ready yet**: `Household` does not currently expose `isPremium` or `subscriptionTier` in the domain model, SwiftData cache, CloudKit mapping, or schema.
+
+### MVP 1.0 Stabilization Tasks
+
+- [ ] **M1.1 Physical Multiplayer Soak Testing**
+Description: Run real-device, two-user household testing for simultaneous edits across Tasks, Shopping, and Ideas to validate current cache-first + CloudKit replay behavior under realistic household use.
+Acceptance Criteria: Two physical devices signed into different accounts can join the same household and reliably observe partner changes after create/edit/delete/promote/poke actions; simultaneous edits converge without ghost records, silent data loss, or permanently stuck pending mutations; leave/delete/invite flows remain stable during and after sync churn.
+Regression Risk: Race conditions may surface only under real-device timing, especially around stale snapshots, repeated writes, app backgrounding, or reconnect-after-offline flows.
+
+- [ ] **M1.2 Targeted Household Event Notifications**
+Description: Replace the current generic shared-change notification experience with explicit household event notifications for `user invited`, `member joined household`, `task assigned to me`, and `poke reminders`, while preserving self-noise suppression.
+Acceptance Criteria: Remote partner actions generate specific, human-readable notifications instead of generic `shared update` copy; invite/join/assignment/poke events can be differentiated in both lock-screen and in-app behavior; self-triggered changes never notify the actor; owner/member flows work correctly across private/shared CloudKit database boundaries.
+Regression Risk: Duplicate notifications, wrong-recipient delivery, or missing notifications due to incomplete coverage of private-vs-shared database events.
+
+- [ ] **M1.3 Shopping Notification Batching Policy**
+Description: Formalize shopping-list notification behavior so partner shopping changes are informative but never spammy, especially during rapid add/buy bursts.
+Acceptance Criteria: Shopping notifications are batched or rate-limited with a clearly defined aggregation window and copy strategy; multiple item changes in a short session never produce a burst of separate notifications; non-shopping notifications (assignment, poke, household join) remain more immediate when appropriate.
+Regression Risk: Over-batching may hide meaningful partner activity, while under-batching will make shared shopping feel noisy and annoying.
+
+- [ ] **M1.4 English-Only Release Audit**
+Description: Audit the codebase for remaining non-English or inconsistent strings and normalize all user-facing copy to English for the v1.0 MVP launch.
+Acceptance Criteria: All visible UI strings, recovery messages, diagnostics surfaced to users, invite/share labels, and household/member flows are in English; no localization framework work is introduced yet; layouts remain stable in all existing themes after the copy sweep.
+Regression Risk: Hidden fallback/system messages or rarely hit diagnostics may remain untranslated and only appear during edge-case failures in production.
+
+- [ ] **M1.5 Household-Level Premium Schema Foundation**
+Description: Add monetization-ready premium state to `Household` rather than to `User`, so Premium can be inherited by all members of a household owned by a paying owner.
+Acceptance Criteria: `Household` gains a durable premium field in the full chain (domain model, SwiftData cache, CloudKit mapping, schema); preferred shape is `subscriptionTier` rather than a single boolean to keep room for future plans; existing households migrate safely with a backward-compatible default such as `free`; no paywall UI is required yet.
+Regression Risk: Schema/mapping drift or migration mistakes could break household fetch/save paths before monetization is even turned on.
+
+- [ ] **M1.6 Premium Inheritance Rules (Household Scope)**
+Description: Define and implement the app-side rules for how Premium is resolved from current household metadata so all invited members inherit the owner-paid benefits inside that household.
+Acceptance Criteria: Runtime feature gating reads premium state from the active household, not only the signed-in user; leaving or switching households updates premium access immediately; the model is compatible with future RevenueCat integration without rewriting the household-level entitlement contract.
+Regression Risk: Mixed household/user entitlement logic can create inconsistent access, especially when a user belongs to multiple households in the future.
+
+- [ ] **M1.7 RevenueCat Preparation Layer**
+Description: Prepare the architecture for future RevenueCat wiring without shipping billing UI yet by identifying the integration seam between remote entitlement state and household-level premium persistence.
+Acceptance Criteria: A clear integration point exists where future RevenueCat owner entitlements can map into `Household.subscriptionTier`; no billing SDK is required in this task; the decision is documented well enough that monetization can start without reworking household sync primitives.
+Regression Risk: If this seam is not defined early, later billing work may leak user-level assumptions into the household data model and cause expensive refactors.
+
 ## Bugfixes & Polish (High Priority)
 
 - [x] **Fix Shopping List Input Padding**
