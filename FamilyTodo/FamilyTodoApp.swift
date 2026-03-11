@@ -59,7 +59,7 @@ struct FamilyTodoApp: App {
         AppTips.configureIfNeeded(launchArguments: launchArguments)
     }
 
-    private func scheduleDeferredStartupTasks(modelContext _: ModelContext) {
+    private func scheduleDeferredStartupTasks(modelContext: ModelContext) {
         guard !hasScheduledDeferredStartupTasks else { return }
         hasScheduledDeferredStartupTasks = true
 
@@ -84,16 +84,10 @@ struct FamilyTodoApp: App {
                 let notifSettings = NotificationSettingsStore()
                 NotificationService.shared.setSettingsStore(notifSettings)
                 await NotificationService.shared.checkAuthorizationStatus()
-                if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
-                    let components = Calendar.current.dateComponents(
-                        [.hour, .minute],
-                        from: notifSettings.reminderTime
-                    )
-                    await NotificationService.shared.scheduleDailyDigest(
-                        at: components.hour ?? 8,
-                        minute: components.minute ?? 0
-                    )
-                }
+                await NotificationService.shared.refreshScheduledNotifications(
+                    householdId: userSession.currentHouseholdID,
+                    modelContext: modelContext
+                )
             #endif
         }
     }

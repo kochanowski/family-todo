@@ -1234,7 +1234,7 @@ struct BacklogItemRow: View {
 
     private var assignButton: some View {
         Button(action: onAssign) {
-            HStack(spacing: 8) {
+            Group {
                 if let assignee {
                     MemberNameChipView(
                         name: assignee.displayName,
@@ -1250,6 +1250,31 @@ struct BacklogItemRow: View {
                         .foregroundStyle(themeStore.contentSecondaryColor)
                 }
             }
+            .modifier(BacklogAssignButtonChrome(
+                showsBackground: assignee == nil,
+                themeStore: themeStore
+            ))
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("backlogAssignButton_\(item.title)")
+        .contextualPopoverTip(
+            showsAssignOwnerTip,
+            IdeasAssignOwnerTip(),
+            arrowEdge: .trailing
+        )
+    }
+}
+
+private struct BacklogAssignButtonChrome: ViewModifier {
+    let showsBackground: Bool
+    let themeStore: ThemeStore
+
+    func body(content: Content) -> some View {
+        if showsBackground {
+            HStack(spacing: 8) {
+                content
+            }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background {
@@ -1260,15 +1285,9 @@ struct BacklogItemRow: View {
                             .stroke(themeStore.borderLightColor.opacity(0.35), lineWidth: 1)
                     }
             }
+        } else {
+            content
         }
-        .fixedSize(horizontal: true, vertical: false)
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("backlogAssignButton_\(item.title)")
-        .contextualPopoverTip(
-            showsAssignOwnerTip,
-            IdeasAssignOwnerTip(),
-            arrowEdge: .trailing
-        )
     }
 }
 

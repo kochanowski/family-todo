@@ -6,12 +6,12 @@ import SwiftUI
 @MainActor
 final class HouseholdSettingsUIState: ObservableObject {
     enum Route: Identifiable {
-        case shareInvite(share: CKShare, container: CKContainer)
+        case inviteMember(share: CKShare, container: CKContainer)
         case inviteQR
 
         var id: String {
             switch self {
-            case let .shareInvite(share, _):
+            case let .inviteMember(share, _):
                 "share-\(share.recordID.recordName)"
             case .inviteQR:
                 "invite-qr"
@@ -78,8 +78,9 @@ struct ProfileView: View {
         }
         .sheet(item: $uiState.route) { route in
             switch route {
-            case let .shareInvite(share, container):
-                ShareInviteView(share: share, container: container)
+            case let .inviteMember(share, container):
+                InviteMemberView(share: share, container: container)
+                    .environmentObject(householdStore)
             case .inviteQR:
                 InviteQRCodeView()
                     .environmentObject(householdStore)
@@ -240,9 +241,11 @@ struct ProfileView: View {
                             ProgressView()
                                 .controlSize(.small)
                             Text("Preparing invite...")
+                                .font(themeStore.font(for: .bodyStrong))
                         }
                     } else {
                         Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
+                            .font(themeStore.font(for: .bodyStrong))
                     }
                 }
                 .disabled(isPreparingShareInvite || !currentUserIsOwner)
@@ -251,6 +254,7 @@ struct ProfileView: View {
                     uiState.route = .inviteQR
                 } label: {
                     Label("Show Invite QR", systemImage: "qrcode")
+                        .font(themeStore.font(for: .bodyStrong))
                 }
                 .disabled(isPreparingShareInvite || !currentUserIsOwner)
 
@@ -366,7 +370,7 @@ struct ProfileView: View {
         do {
             let (share, container) = try await householdStore.createShare()
             _ = try? await householdStore.fetchOrCreateInviteCode()
-            uiState.route = .shareInvite(share: share, container: container)
+            uiState.route = .inviteMember(share: share, container: container)
         } catch {
             actionErrorMessage = error.localizedDescription
         }
@@ -383,6 +387,8 @@ struct ProfileView: View {
                     userId: userId,
                     activeMembersSnapshot: activeMembers
                 )
+                NotificationService.shared.cancelDailyDigest()
+                NotificationService.shared.removeAllTaskReminders()
                 userSession.clearCurrentHousehold()
                 onboardingState.openHouseholdSetup()
             } catch {
@@ -399,6 +405,8 @@ struct ProfileView: View {
         _ = _Concurrency.Task {
             do {
                 try await householdStore.deleteCurrentHousehold(requestedBy: userId)
+                NotificationService.shared.cancelDailyDigest()
+                NotificationService.shared.removeAllTaskReminders()
                 userSession.clearCurrentHousehold()
                 onboardingState.openHouseholdSetup()
             } catch {
@@ -415,6 +423,90 @@ struct ProfileView: View {
                 name: .tabBarAppearanceRefreshRequested,
                 object: nil
             )
+        }
+    }
+}
+
+private struct InviteMemberView: View {
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+
+    let share: CKShare
+    let container: CKContainer
+
+    @State private var showSystemShareSheet = false
+    @State private var showQRCode = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(themeStore.accentTabColor)
+                        .frame(width: 72, height: 72)
+                        .background(
+                            Circle()
+                                .fill(themeStore.surfaceElevatedColor)
+                        )
+
+                    VStack(spacing: 10) {
+                        Text("Invite Member")
+                            .font(themeStore.font(for: .screenHeader))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
+                            .multilineTextAlignment(.center)
+
+                        Text("Share an invite link or show a QR code so someone can join this household.")
+                            .font(themeStore.font(for: .bodyStrong))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    VStack(spacing: 12) {
+                        Button {
+                            showSystemShareSheet = true
+                        } label: {
+                            Label("Share Invite", systemImage: "square.and.arrow.up")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button {
+                            showQRCode = true
+                        } label: {
+                            Label("Show Invite QR", systemImage: "qrcode")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Invite Member")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
+            }
+            .sheet(isPresented: $showSystemShareSheet) {
+                ShareInviteView(share: share, container: container)
+            }
+            .sheet(isPresented: $showQRCode) {
+                InviteQRCodeView()
+                    .environmentObject(householdStore)
+            }
         }
     }
 }
@@ -440,13 +532,18 @@ private struct EditProfileView: View {
 
     var body: some View {
         Form {
-            Section("Display Name") {
-                TextField("Display name", text: $displayName)
+            Section {
+                TextField("Name", text: $displayName)
+                    .font(themeStore.font(for: .bodyStrong))
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
+            } header: {
+                Text("Display Name")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
             }
 
-            Section("Profile Color") {
+            Section {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
                     ForEach(MemberColorToken.allCases, id: \.self) { token in
                         let hex = token.hex
@@ -468,21 +565,31 @@ private struct EditProfileView: View {
                     }
                 }
                 .padding(.vertical, 4)
+            } header: {
+                Text("Profile Color")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
             }
         }
-        .navigationTitle("Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Cancel") {
                     dismiss()
                 }
+                .font(themeStore.font(for: .buttonLabel))
+            }
+            ToolbarItem(placement: .principal) {
+                Text("Edit Profile")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     saveProfile()
                 } label: {
                     Text("Save")
+                        .font(themeStore.font(for: .buttonLabel))
                 }
                 .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

@@ -1262,14 +1262,11 @@ struct TaskRow: View {
 
                         HStack(spacing: 6) {
                             if let categoryName, let categoryColor {
-                                HStack(spacing: 0) {
-                                    Text(categoryName)
-                                        .font(themeStore.font(for: .chip))
-                                        .foregroundStyle(categoryColor)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(categoryColor.opacity(0.12)))
+                                taskMetadataChip(
+                                    categoryName,
+                                    foreground: categoryColor,
+                                    background: categoryColor.opacity(0.12)
+                                )
                             }
 
                             if let assignee {
@@ -1284,12 +1281,12 @@ struct TaskRow: View {
                             }
 
                             if task.taskType == .recurring {
-                                Label("Recurring", systemImage: "repeat")
-                                    .font(themeStore.font(for: .chip))
-                                    .foregroundStyle(.purple)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Capsule().fill(Color.purple.opacity(0.12)))
+                                taskMetadataChip(
+                                    "Recurring",
+                                    systemImage: "repeat",
+                                    foreground: .purple,
+                                    background: Color.purple.opacity(0.12)
+                                )
                             }
                         }
                     }
@@ -1350,6 +1347,35 @@ struct TaskRow: View {
         .clear
     }
 
+    private func taskMetadataChip(
+        _ text: String,
+        systemImage: String? = nil,
+        foreground: Color,
+        background: Color
+    ) -> some View {
+        Group {
+            if let systemImage {
+                Label {
+                    Text(text)
+                } icon: {
+                    Image(systemName: systemImage)
+                }
+            } else {
+                Text(text)
+            }
+        }
+        .font(themeStore.font(for: .chip))
+        .foregroundStyle(foreground)
+        .lineLimit(1)
+        .padding(.horizontal, MetadataChipMetrics.horizontalPadding)
+        .padding(.vertical, MetadataChipMetrics.verticalPadding)
+        .frame(minHeight: MetadataChipMetrics.minHeight)
+        .background(
+            Capsule()
+                .fill(background)
+        )
+    }
+
     @ViewBuilder
     private func dueDateLabel(_ date: Date) -> some View {
         let isToday = Calendar.current.isDateInToday(date)
@@ -1373,21 +1399,18 @@ struct TaskRow: View {
                 .orange
             }
 
-        Text(dateFormatter.string(from: date))
-            .font(themeStore.font(for: .chip))
-            .foregroundStyle(dueColor)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(
-                Capsule()
-                    .fill(dueBackgroundColor.opacity(0.12))
-            )
+        taskMetadataChip(
+            dueDateText(for: date),
+            foreground: dueColor,
+            background: dueBackgroundColor.opacity(0.12)
+        )
     }
 
-    private var dateFormatter: DateFormatter {
+    private func dueDateText(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
-        return formatter
+        formatter.timeStyle = Task.dueDateHasExplicitTime(date) ? .short : .none
+        return formatter.string(from: date)
     }
 }
 
@@ -1400,9 +1423,11 @@ private struct TaskDetailSheet: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
+    @StateObject private var notificationSettings = NotificationSettingsStore()
     @State private var title: String
     @State private var assigneeId: UUID?
     @State private var hasDueDate: Bool
+    @State private var hasDueTime: Bool
     @State private var dueDate: Date
     @State private var notes: String
 
@@ -1420,6 +1445,7 @@ private struct TaskDetailSheet: View {
         _title = State(initialValue: task.title)
         _assigneeId = State(initialValue: task.assigneeId)
         _hasDueDate = State(initialValue: task.dueDate != nil)
+        _hasDueTime = State(initialValue: task.dueDate.map(Task.dueDateHasExplicitTime) ?? false)
         _dueDate = State(initialValue: task.dueDate ?? Date())
         _notes = State(initialValue: task.notes ?? "")
     }
@@ -1462,6 +1488,20 @@ private struct TaskDetailSheet: View {
                             displayedComponents: [.date]
                         )
                         .font(themeStore.font(for: .bodyStrong))
+
+                        Toggle(isOn: $hasDueTime) {
+                            Label("Specific Time", systemImage: "clock")
+                                .font(themeStore.font(for: .bodyStrong))
+                        }
+
+                        if hasDueTime {
+                            DatePicker(
+                                "Reminder Time",
+                                selection: $dueDate,
+                                displayedComponents: [.hourAndMinute]
+                            )
+                            .font(themeStore.font(for: .bodyStrong))
+                        }
                     }
                 } header: {
                     Text("Details")
@@ -1494,6 +1534,15 @@ private struct TaskDetailSheet: View {
             }
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: hasDueTime) { _, isEnabled in
+                guard isEnabled, !Task.dueDateHasExplicitTime(dueDate) else { return }
+                if let updatedDate = Task.date(
+                    byApplyingTimeFrom: notificationSettings.reminderTime,
+                    to: dueDate
+                ) {
+                    dueDate = updatedDate
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
@@ -1522,7 +1571,11 @@ private struct TaskDetailSheet: View {
         updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedTask.assigneeId = assigneeId
         updatedTask.assigneeIds = assigneeId.map { [$0] } ?? []
-        updatedTask.dueDate = hasDueDate ? dueDate : nil
+        updatedTask.dueDate = if hasDueDate {
+            hasDueTime ? dueDate : Calendar.current.startOfDay(for: dueDate)
+        } else {
+            nil
+        }
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedTask.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
 

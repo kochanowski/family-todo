@@ -21,6 +21,7 @@ struct InviteQRCodeView: View {
             Group {
                 if isLoading {
                     ProgressView("Preparing invite...")
+                        .font(themeStore.font(for: .bodyStrong))
                 } else if let errorMessage {
                     ThemedEmptyStateView(
                         title: "Invite unavailable",
@@ -88,13 +89,18 @@ struct InviteQRCodeView: View {
                     .padding(.vertical)
                 }
             }
-            .navigationTitle("Invite QR")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") {
                         dismiss()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Invite QR")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
         }

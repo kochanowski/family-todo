@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum MetadataChipMetrics {
+    static let horizontalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 4
+    static let minHeight: CGFloat = 24
+}
+
 struct MemberBadgeView: View {
     let name: String
     let colorHex: String
@@ -43,11 +49,12 @@ struct MemberNameChipView: View {
 
     var body: some View {
         Text(name)
-            .font(themeStore.font(for: .bodySmall))
+            .font(themeStore.font(for: .chip))
             .foregroundStyle(foregroundColor)
             .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, MetadataChipMetrics.horizontalPadding)
+            .padding(.vertical, MetadataChipMetrics.verticalPadding)
+            .frame(minHeight: MetadataChipMetrics.minHeight)
             .background {
                 Capsule()
                     .fill(chipColor)

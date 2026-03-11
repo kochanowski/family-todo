@@ -140,11 +140,18 @@ final class TaskStore: ObservableObject {
             await notificationService.requestAuthorization()
         }
 
-        if task.dueDate == nil {
+        if task.dueDate == nil || task.status == .done {
             await notificationService.removeTaskReminder(for: task)
         } else {
             await notificationService.scheduleTaskReminder(for: task)
         }
+    }
+
+    private func syncDailyDigestSchedule() async {
+        await notificationService.refreshDailyDigest(
+            householdId: householdId,
+            modelContext: modelContext
+        )
     }
 
     // MARK: - Computed Properties
@@ -239,6 +246,10 @@ final class TaskStore: ObservableObject {
         let pendingSnapshot = pendingSyncSnapshot(from: cachedTasks)
 
         if !isCloudSyncEnabled {
+            await notificationService.refreshScheduledNotifications(
+                householdId: householdId,
+                modelContext: modelContext
+            )
             isLoading = false
             return
         }
@@ -256,6 +267,10 @@ final class TaskStore: ObservableObject {
             self.error = error
         }
 
+        await notificationService.refreshScheduledNotifications(
+            householdId: householdId,
+            modelContext: modelContext
+        )
         isLoading = false
     }
 
@@ -490,6 +505,7 @@ final class TaskStore: ObservableObject {
         saveContextOrSetError(operation: "cache created task")
 
         await syncReminder(for: task)
+        await syncDailyDigestSchedule()
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()
@@ -537,6 +553,7 @@ final class TaskStore: ObservableObject {
         }
 
         await syncReminder(for: updatedTask)
+        await syncDailyDigestSchedule()
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()
@@ -582,11 +599,13 @@ final class TaskStore: ObservableObject {
         if !isCloudSyncEnabled {
             removeCachedTask(id: task.id)
             await notificationService.removeTaskReminder(for: task)
+            await syncDailyDigestSchedule()
             return
         }
 
         markCachedTaskPendingDelete(task)
         await notificationService.removeTaskReminder(for: task)
+        await syncDailyDigestSchedule()
         replayPendingMutationsInBackground()
     }
 
@@ -595,6 +614,9 @@ final class TaskStore: ObservableObject {
             tasks.removeAll { $0.id == task.id }
         }
         markCachedTaskPendingDelete(task)
+        _ = _Concurrency.Task {
+            await self.syncDailyDigestSchedule()
+        }
     }
 
     func restoreTaskLocally(_ task: Task) {
@@ -616,6 +638,9 @@ final class TaskStore: ObservableObject {
             modelContext.insert(cached)
         }
         saveContextOrSetError(operation: "restore task locally")
+        _ = _Concurrency.Task {
+            await self.syncDailyDigestSchedule()
+        }
     }
 
     func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
@@ -744,6 +769,7 @@ final class TaskStore: ObservableObject {
             for task in tasksToDelete {
                 await notificationService.removeTaskReminder(for: task)
             }
+            await syncDailyDigestSchedule()
             return
         }
 
@@ -751,6 +777,7 @@ final class TaskStore: ObservableObject {
         for task in tasksToDelete {
             await notificationService.removeTaskReminder(for: task)
         }
+        await syncDailyDigestSchedule()
         replayPendingMutationsInBackground()
     }
 

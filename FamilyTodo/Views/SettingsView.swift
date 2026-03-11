@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var notificationSettings = NotificationSettingsStore()
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
@@ -134,6 +135,7 @@ struct SettingsView: View {
                         if enabled {
                             _ = _Concurrency.Task {
                                 await NotificationService.shared.requestAuthorization()
+                                await syncNotificationSchedules()
                             }
                         }
                     }
@@ -144,9 +146,11 @@ struct SettingsView: View {
                 Toggle("Daily digest", isOn: $notificationSettings.dailyDigestEnabled)
                     .disabled(!notificationSettings.isEnabled)
 
-                if notificationSettings.dailyDigestEnabled {
+                if notificationSettings.isEnabled,
+                   notificationSettings.taskRemindersEnabled || notificationSettings.dailyDigestEnabled
+                {
                     DatePicker(
-                        "Digest time",
+                        "Default reminder time",
                         selection: Binding(
                             get: { notificationSettings.reminderTime },
                             set: { notificationSettings.reminderTime = $0 }
@@ -181,16 +185,31 @@ struct SettingsView: View {
         .task {
             NotificationService.shared.setSettingsStore(notificationSettings)
             await NotificationService.shared.checkAuthorizationStatus()
-            await syncDailyDigest()
+            await syncNotificationSchedules()
+        }
+        .onChange(of: notificationSettings.isEnabled) { _, _ in
+            _ = _Concurrency.Task {
+                await syncNotificationSchedules()
+            }
+        }
+        .onChange(of: notificationSettings.taskRemindersEnabled) { _, _ in
+            _ = _Concurrency.Task {
+                await syncNotificationSchedules()
+            }
         }
         .onChange(of: notificationSettings.dailyDigestEnabled) { _, _ in
             _ = _Concurrency.Task {
-                await syncDailyDigest()
+                await syncNotificationSchedules()
             }
         }
         .onChange(of: notificationSettings.reminderTime) { _, _ in
             _ = _Concurrency.Task {
-                await syncDailyDigest()
+                await syncNotificationSchedules()
+            }
+        }
+        .onChange(of: notificationSettings.soundEnabled) { _, _ in
+            _ = _Concurrency.Task {
+                await syncNotificationSchedules()
             }
         }
     }
@@ -198,22 +217,19 @@ struct SettingsView: View {
     private func signOut() {
         _Concurrency.Task {
             await subscriptionManager.removeSubscriptions()
+            NotificationService.shared.cancelDailyDigest()
+            NotificationService.shared.removeAllTaskReminders()
             householdStore.clearCurrentHousehold()
             userSession.clearCurrentHousehold()
             userSession.signOut()
         }
     }
 
-    private func syncDailyDigest() async {
-        if notificationSettings.isEnabled, notificationSettings.dailyDigestEnabled {
-            let components = Calendar.current.dateComponents([.hour, .minute], from: notificationSettings.reminderTime)
-            await NotificationService.shared.scheduleDailyDigest(
-                at: components.hour ?? 8,
-                minute: components.minute ?? 0
-            )
-        } else {
-            NotificationService.shared.cancelDailyDigest()
-        }
+    private func syncNotificationSchedules() async {
+        await NotificationService.shared.refreshScheduledNotifications(
+            householdId: userSession.currentHouseholdID ?? householdStore.currentHousehold?.id,
+            modelContext: modelContext
+        )
     }
 
     private var selectedFontScaleBinding: Binding<FontSizeScale> {

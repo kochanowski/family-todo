@@ -78,4 +78,31 @@ struct Task: Identifiable, Codable {
 
         return dueDate < Date()
     }
+
+    static func dueDateHasExplicitTime(
+        _ dueDate: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        let components = calendar.dateComponents([.hour, .minute, .second], from: dueDate)
+        return (components.hour ?? 0) != 0 ||
+            (components.minute ?? 0) != 0 ||
+            (components.second ?? 0) != 0
+    }
+
+    static func date(
+        byApplyingTimeFrom sourceTime: Date,
+        to destinationDate: Date,
+        calendar: Calendar = .current
+    ) -> Date? {
+        let dateComponents = calendar.dateComponents([.year, .month, .day], from: destinationDate)
+        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: sourceTime)
+        var merged = DateComponents()
+        merged.year = dateComponents.year
+        merged.month = dateComponents.month
+        merged.day = dateComponents.day
+        merged.hour = timeComponents.hour
+        merged.minute = timeComponents.minute
+        merged.second = timeComponents.second
+        return calendar.date(from: merged)
+    }
 }

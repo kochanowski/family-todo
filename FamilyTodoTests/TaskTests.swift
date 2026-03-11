@@ -4,6 +4,12 @@ import XCTest
 final class TaskTests: XCTestCase {
     private let householdId = UUID()
 
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar
+    }
+
     // MARK: - Initialization Tests
 
     func testTaskInitialization() {
@@ -207,5 +213,116 @@ final class TaskTests: XCTestCase {
 
         XCTAssertNil(record["lastPokedAt"])
         XCTAssertNil(roundTrip.lastPokedAt)
+    }
+
+    func testDueDateHasExplicitTimeTreatsMidnightAsAllDay() {
+        let calendar = utcCalendar
+        let dueDate = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 11, hour: 0, minute: 0)
+        ) ?? Date()
+
+        XCTAssertFalse(Task.dueDateHasExplicitTime(dueDate, calendar: calendar))
+    }
+
+    func testDueDateHasExplicitTimeDetectsClockTime() {
+        let calendar = utcCalendar
+        let dueDate = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 11, hour: 14, minute: 30)
+        ) ?? Date()
+
+        XCTAssertTrue(Task.dueDateHasExplicitTime(dueDate, calendar: calendar))
+    }
+
+    func testTaskReminderDateUsesDefaultTimeForAllDayTasks() {
+        let calendar = utcCalendar
+        let dueDate = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 13, hour: 0, minute: 0)
+        ) ?? Date()
+        let defaultReminderTime = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 1, hour: 8, minute: 45)
+        ) ?? Date()
+
+        let reminderDate = NotificationSchedulePlanner.taskReminderDate(
+            for: dueDate,
+            defaultReminderTime: defaultReminderTime,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(
+            reminderDate,
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 13, hour: 8, minute: 45))
+        )
+    }
+
+    func testDailyDigestPlanSkipsWhenNoTasksAreDue() {
+        let calendar = utcCalendar
+        let now = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 11, hour: 7, minute: 0)
+        ) ?? Date()
+        let reminderTime = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 1, hour: 8, minute: 0)
+        ) ?? Date()
+
+        let plan = NotificationSchedulePlanner.dailyDigestPlan(
+            tasks: [],
+            now: now,
+            reminderTime: reminderTime,
+            calendar: calendar
+        )
+
+        XCTAssertNil(plan)
+    }
+
+    func testDailyDigestPlanCountsTasksForNextDigestDayOnly() {
+        let calendar = utcCalendar
+        let now = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 11, hour: 21, minute: 0)
+        ) ?? Date()
+        let reminderTime = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 1, hour: 8, minute: 0)
+        ) ?? Date()
+        let tomorrowDueDate = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 12, hour: 0, minute: 0)
+        ) ?? Date()
+        let todayDueDate = calendar.date(
+            from: DateComponents(year: 2026, month: 3, day: 11, hour: 0, minute: 0)
+        ) ?? Date()
+
+        let tomorrowTask = Task(
+            householdId: householdId,
+            title: "Tomorrow",
+            status: .next,
+            dueDate: tomorrowDueDate,
+            taskType: .oneOff
+        )
+        let completedTomorrowTask = Task(
+            householdId: householdId,
+            title: "Done Tomorrow",
+            status: .done,
+            dueDate: tomorrowDueDate,
+            completedAt: now,
+            taskType: .oneOff
+        )
+        let todayTask = Task(
+            householdId: householdId,
+            title: "Today",
+            status: .next,
+            dueDate: todayDueDate,
+            taskType: .oneOff
+        )
+
+        let plan = NotificationSchedulePlanner.dailyDigestPlan(
+            tasks: [tomorrowTask, completedTomorrowTask, todayTask],
+            now: now,
+            reminderTime: reminderTime,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(plan?.dueCount, 1)
+        XCTAssertEqual(
+            plan?.fireDate,
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 12, hour: 8, minute: 0))
+        )
+        XCTAssertEqual(plan?.body, "You have 1 task due today.")
     }
 }
