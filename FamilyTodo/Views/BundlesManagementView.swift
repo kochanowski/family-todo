@@ -257,6 +257,9 @@ private struct ShoppingBundleEditorSheet: View {
                     } label: {
                         Text("Cancel")
                             .font(themeStore.font(for: .buttonLabel))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .allowsTightening(true)
                     }
                 }
                 ToolbarItem(placement: .principal) {
@@ -272,8 +275,11 @@ private struct ShoppingBundleEditorSheet: View {
                                 await saveBundle(andAddToShoppingList: true)
                             }
                         } label: {
-                            Text(isSaving ? "Saving..." : "Save & Add to List")
+                            Text(isSaving ? "Saving..." : "Save & Add")
                                 .font(themeStore.font(for: .buttonLabel))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .allowsTightening(true)
                         }
                         .disabled(!canSave || isSaving)
                     }
@@ -286,6 +292,9 @@ private struct ShoppingBundleEditorSheet: View {
                     } label: {
                         Text(isSaving ? "Saving..." : "Save")
                             .font(themeStore.font(for: .buttonLabel))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .allowsTightening(true)
                     }
                     .disabled(!canSave || isSaving)
                 }

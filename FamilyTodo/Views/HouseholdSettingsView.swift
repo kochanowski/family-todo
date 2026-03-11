@@ -699,13 +699,18 @@ private struct EditHouseholdView: View {
 
     var body: some View {
         Form {
-            Section("Household Name") {
+            Section {
                 TextField("Household name", text: $name)
+                    .font(themeStore.font(for: .bodyStrong))
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
+            } header: {
+                Text("Household Name")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
             }
 
-            Section("Household Icon") {
+            Section {
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
                     spacing: 12
@@ -745,8 +750,13 @@ private struct EditHouseholdView: View {
                     }
                 }
                 .padding(.vertical, 4)
+            } header: {
+                Text("Household Icon")
+                    .font(themeStore.font(for: .sectionHeader))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
             }
         }
+        .font(themeStore.font(for: .bodyStrong))
         .navigationTitle("Edit Household")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -769,6 +779,11 @@ private struct EditHouseholdView: View {
                     name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                         isSaving
                 )
+            }
+            ToolbarItem(placement: .principal) {
+                Text("Edit Household")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
             }
         }
         .alert("Save failed", isPresented: Binding(

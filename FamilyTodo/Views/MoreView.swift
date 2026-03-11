@@ -312,7 +312,7 @@ struct CategoriesManagementView: View {
                     .foregroundStyle(themeStore.contentPrimaryColor)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(editMode.isEditing ? "Done" : "Edit") {
+                Button(editMode.isEditing ? "Done" : "Reorder") {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         editMode = editMode.isEditing ? .inactive : .active
                     }
