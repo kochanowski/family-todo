@@ -15,6 +15,7 @@ final class HouseholdTests: XCTestCase {
         XCTAssertEqual(household.name, "Smith Family")
         XCTAssertEqual(household.iconSymbol, "house.fill")
         XCTAssertEqual(household.ownerId, "user123")
+        XCTAssertNil(household.activeShopperId)
         XCTAssertTrue(household.members.isEmpty)
         XCTAssertTrue(household.areas.isEmpty)
     }
@@ -58,7 +59,8 @@ final class HouseholdTests: XCTestCase {
     func testHouseholdEncodingDecoding() throws {
         let original = Household(
             name: "Codable Family",
-            ownerId: "user456"
+            ownerId: "user456",
+            activeShopperId: "shopper-1"
         )
 
         let encoder = JSONEncoder()
@@ -70,6 +72,7 @@ final class HouseholdTests: XCTestCase {
         XCTAssertEqual(original.id, decoded.id)
         XCTAssertEqual(original.name, decoded.name)
         XCTAssertEqual(original.ownerId, decoded.ownerId)
+        XCTAssertEqual(original.activeShopperId, decoded.activeShopperId)
     }
 }
 
@@ -484,6 +487,57 @@ final class HouseholdStoreTests: XCTestCase {
         }
 
         XCTAssertFalse(localStore.isRecoverySuppressed(for: householdId))
+    }
+
+    func testStartShoppingLocalOnlyPersistsActiveShopperToCache() async throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(.localOnly)
+
+        let household = try await localStore.createHousehold(
+            name: "Errands",
+            userId: "shopper-user",
+            displayName: "Wojtek"
+        )
+
+        try await localStore.startShopping(userId: household.ownerId)
+
+        XCTAssertEqual(localStore.currentHousehold?.activeShopperId, household.ownerId)
+
+        let cachedHouseholds = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
+        XCTAssertEqual(cachedHouseholds.first?.activeShopperId, household.ownerId)
+    }
+
+    func testFinishShoppingLocalOnlyClearsActiveShopperInCache() async throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(.localOnly)
+
+        let household = try await localStore.createHousehold(
+            name: "Errands",
+            userId: "shopper-user",
+            displayName: "Wojtek"
+        )
+
+        try await localStore.startShopping(userId: household.ownerId)
+        try await localStore.finishShopping(userId: household.ownerId)
+
+        XCTAssertNil(localStore.currentHousehold?.activeShopperId)
+
+        let cachedHouseholds = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
+        XCTAssertNil(cachedHouseholds.first?.activeShopperId)
     }
 
     // MARK: - HouseholdError Tests

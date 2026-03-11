@@ -260,6 +260,32 @@ enum NotificationSchedulePlanner {
             }
         }
 
+        func sendShoppingPresenceStartedNotification(shopperName: String) async {
+            guard let settingsStore,
+                  isAuthorized,
+                  settingsStore.isEnabled
+            else {
+                return
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = "🛒 \(shopperName) is at the store!"
+            content.body = "Quick, add any last-minute items to the shopping list now."
+            content.sound = settingsStore.soundEnabled ? .default : nil
+
+            let request = UNNotificationRequest(
+                identifier: "shopping-presence-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+
+            do {
+                try await center.add(request)
+            } catch {
+                // Silently fail
+            }
+        }
+
         private func refreshTaskReminders(
             householdId: UUID?,
             modelContext: ModelContext
@@ -348,5 +374,7 @@ enum NotificationSchedulePlanner {
             householdId _: UUID?,
             modelContext _: ModelContext
         ) async {}
+
+        func sendShoppingPresenceStartedNotification(shopperName _: String) async {}
     }
 #endif

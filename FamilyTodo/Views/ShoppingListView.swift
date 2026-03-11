@@ -23,10 +23,12 @@ struct ShoppingListView: View {
 private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
     @StateObject private var bundleStore: ShoppingBundleStore
+    @StateObject private var memberStore: MemberStore
     @StateObject private var restockPulse = RestockPulseState()
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
@@ -35,6 +37,9 @@ private struct ShoppingListContent: View {
     @State private var isRapidEntryActive = false
     @State private var rapidEntryText = ""
     @State private var rapidEntryFocused = false
+    @State private var showSingleMemberShoppingAlert = false
+    @State private var showInviteQRCode = false
+    @State private var resolvedRemoteActiveShopperName: String?
 
     @State private var showRestock = false
     @State private var showClearToBuyConfirmation = false
@@ -69,6 +74,9 @@ private struct ShoppingListContent: View {
         _bundleStore = StateObject(
             wrappedValue: ShoppingBundleStore(householdId: householdId, modelContext: modelContext)
         )
+        _memberStore = StateObject(
+            wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
+        )
     }
 
     var body: some View {
@@ -81,8 +89,14 @@ private struct ShoppingListContent: View {
             .onChange(of: userSession.syncMode) { _, mode in
                 store.setSyncMode(mode)
                 bundleStore.setSyncMode(mode)
+                memberStore.setSyncMode(mode)
                 _ = _Concurrency.Task {
                     await loadShoppingData()
+                }
+            }
+            .onChange(of: householdStore.currentHousehold?.activeShopperId) { _, newValue in
+                _ = _Concurrency.Task {
+                    await refreshActiveShopperNameIfNeeded(for: newValue)
                 }
             }
             .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
@@ -112,6 +126,15 @@ private struct ShoppingListContent: View {
                 }
             }
             .onReceive(
+                NotificationCenter.default.publisher(for: .householdDataDidChange)
+            ) { _ in
+                _ = _Concurrency.Task {
+                    await memberStore.loadMembers()
+                    await refreshActiveShopperNameIfNeeded(for: activeShopperId)
+                    await clearStaleActiveShopperIfNeeded()
+                }
+            }
+            .onReceive(
                 NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
             ) { _ in
                 isKeyboardVisible = false
@@ -136,11 +159,23 @@ private struct ShoppingListContent: View {
                     }
                 )
             }
+            .sheet(isPresented: $showInviteQRCode) {
+                InviteQRCodeView()
+                    .environmentObject(householdStore)
+            }
+            .alert("Shopping is better together!", isPresented: $showSingleMemberShoppingAlert) {
+                Button("Invite Member") {
+                    showInviteQRCode = true
+                }
+                Button("Maybe Later", role: .cancel) {}
+            } message: {
+                Text("Invite a family member or roommate. When you start shopping, we'll notify them so they can add last-minute items before you check out.")
+            }
             .overlay(alignment: .bottom) {
                 if let activeToast {
                     ToastView(message: activeToast.message)
                         .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                        .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                        .padding(.bottom, toastBottomInset)
                         .transition(ToastView.AnimationTokens.transition)
                         .id(activeToast.id)
                 }
@@ -148,29 +183,31 @@ private struct ShoppingListContent: View {
             .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
             .onAppear {
                 isScreenVisible = true
+                applyIdleTimerState()
             }
             .onDisappear {
                 isScreenVisible = false
                 cancelPendingShoppingCompletionCelebration()
                 cancelToastDismiss()
+                setIdleTimerDisabled(false)
             }
             .onChange(of: showQuickAddBundleChooser) { _, isPresented in
                 if !isPresented {
                     didTriggerQuickAddGesture = false
                 }
             }
+            .onChange(of: shoppingPresenceIdleTimerKey) { _, _ in
+                applyIdleTimerState()
+            }
     }
 
     private func shoppingGeometryContent(_ proxy: GeometryProxy) -> some View {
-        let listBottomInset =
-            isKeyboardVisible
-                ? CGFloat(16)
-                : AppChromeMetrics.compactCTAHeight + 28
-        let floatingButtonInset: CGFloat = 16
+        let listBottomInset = calculatedListBottomInset
+        let floatingButtonInset = ShoppingPresenceLayout.bottomInset
         let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
         let shouldShowEmptyState = store.toBuyItems.isEmpty && !isRapidEntryActive
 
-        return ZStack(alignment: .bottomTrailing) {
+        return ZStack(alignment: .bottom) {
             rapidEntryDismissOverlay(maxHeight: rapidEntryTapHeight)
 
             VStack(spacing: 0) {
@@ -178,6 +215,13 @@ private struct ShoppingListContent: View {
                     .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                     .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
                     .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
+
+                if isOtherMemberShopping {
+                    otherMemberShoppingBanner
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 if shouldShowEmptyState {
                     shoppingEmptyState
@@ -189,9 +233,13 @@ private struct ShoppingListContent: View {
                 }
             }
 
-            floatingAddButton(bottomInset: floatingButtonInset)
+            floatingShoppingButton(bottomInset: floatingButtonInset)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            floatingAddButton(bottomInset: floatingAddButtonBottomInset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .animation(WowAnimation.spring, value: shoppingPresenceAnimationKey)
     }
 
     @ViewBuilder
@@ -213,6 +261,16 @@ private struct ShoppingListContent: View {
                 .padding(.trailing, AppChromeMetrics.horizontalInset)
                 .padding(.bottom, bottomInset)
                 .transition(.scale.combined(with: .opacity))
+        }
+    }
+
+    @ViewBuilder
+    private func floatingShoppingButton(bottomInset: CGFloat) -> some View {
+        if showsShoppingFAB {
+            shoppingPresenceFAB
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, bottomInset)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -418,6 +476,180 @@ private struct ShoppingListContent: View {
                 }
             }
         }
+    }
+
+    private var activeMembers: [Member] {
+        memberStore.members
+            .filter(\.isActive)
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+    }
+
+    private var activeMemberUserIds: Set<String> {
+        Set(activeMembers.map(\.userId))
+    }
+
+    private var effectiveActiveMemberCount: Int {
+        if !activeMembers.isEmpty {
+            return activeMembers.count
+        }
+        return householdStore.currentHousehold == nil ? 0 : 1
+    }
+
+    private var activeShopperId: String? {
+        householdStore.currentHousehold?.activeShopperId
+    }
+
+    private var isCurrentUserActiveShopper: Bool {
+        guard let activeShopperId else { return false }
+        return activeShopperId == userSession.userId
+    }
+
+    private var isOtherMemberShopping: Bool {
+        guard let activeShopperId else { return false }
+        return activeShopperId != userSession.userId
+    }
+
+    private var activeShopperDisplayName: String {
+        guard let activeShopperId else { return "Someone" }
+
+        if activeShopperId == userSession.userId,
+           let displayName = userSession.displayName,
+           !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return displayName
+        }
+
+        if let member = activeMembers.first(where: { $0.userId == activeShopperId }) {
+            return member.displayName
+        }
+
+        if let resolvedRemoteActiveShopperName,
+           !resolvedRemoteActiveShopperName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return resolvedRemoteActiveShopperName
+        }
+
+        return "Someone"
+    }
+
+    private var showsShoppingFAB: Bool {
+        !isKeyboardVisible && !isRapidEntryActive && !isOtherMemberShopping
+    }
+
+    private var floatingAddButtonBottomInset: CGFloat {
+        guard showsShoppingFAB else { return ShoppingPresenceLayout.bottomInset }
+        return ShoppingPresenceLayout.bottomInset + ShoppingPresenceLayout.height + ShoppingPresenceLayout.verticalSpacing
+    }
+
+    private var calculatedListBottomInset: CGFloat {
+        guard !isKeyboardVisible else { return 16 }
+
+        if showsShoppingFAB {
+            return ShoppingPresenceLayout.height
+                + AppChromeMetrics.compactCTAHeight
+                + ShoppingPresenceLayout.bottomInset
+                + ShoppingPresenceLayout.verticalSpacing
+                + 28
+        }
+
+        return AppChromeMetrics.compactCTAHeight + 28
+    }
+
+    private var toastBottomInset: CGFloat {
+        max(calculatedListBottomInset - 6, AppChromeMetrics.compactCTAHeight + 22)
+    }
+
+    private var shoppingPresenceAnimationKey: String {
+        [
+            activeShopperId ?? "none",
+            showsShoppingFAB ? "fab" : "no-fab",
+            isOtherMemberShopping ? "other" : "not-other",
+        ].joined(separator: "|")
+    }
+
+    private var shoppingPresenceIdleTimerKey: String {
+        [
+            isScreenVisible ? "visible" : "hidden",
+            isCurrentUserActiveShopper ? "active" : "inactive",
+            isKeyboardVisible ? "keyboard" : "no-keyboard",
+        ].joined(separator: "|")
+    }
+
+    private var otherMemberShoppingBanner: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "cart.fill.badge.plus")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+
+            Text("🛒 \(activeShopperDisplayName) is shopping right now! Add items quickly.")
+                .font(themeStore.font(for: .bodyStrong))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(themeStore.surfaceElevatedColor)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(themeStore.borderLightColor.opacity(0.2), lineWidth: 1)
+        }
+    }
+
+    private var shoppingPresenceFAB: some View {
+        let backgroundColor = isCurrentUserActiveShopper
+            ? themeStore.accentTabColor.opacity(0.92)
+            : themeStore.accentTabColor
+        let foregroundColor = themeStore.foregroundOnAccent(
+            for: themeStore.accentTabColor,
+            colorScheme: colorScheme
+        )
+
+        return Button {
+            handleShoppingFABTap()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isCurrentUserActiveShopper ? "cart.fill.badge.checkmark" : "cart.fill")
+                    .font(.system(size: 17, weight: .semibold))
+
+                Text(isCurrentUserActiveShopper ? "Shopping... (Tap to finish)" : "Start Shopping")
+                    .font(themeStore.font(for: .buttonLabel))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 22)
+            .frame(height: ShoppingPresenceLayout.height)
+            .frame(maxWidth: .infinity)
+            .background {
+                Capsule()
+                    .fill(backgroundColor)
+                    .shadow(
+                        color: backgroundColor.opacity(isCurrentUserActiveShopper ? 0.42 : 0.28),
+                        radius: isCurrentUserActiveShopper ? 12 : 8,
+                        x: 0,
+                        y: isCurrentUserActiveShopper ? 6 : 4
+                    )
+            }
+            .overlay {
+                Capsule()
+                    .stroke(themeStore.borderLightColor.opacity(themeStore.usesRetroChrome ? 0.52 : 0.18), lineWidth: themeStore.usesRetroChrome ? 1.4 : 0)
+            }
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: ShoppingPresenceLayout.maxWidth)
+        .accessibilityIdentifier("shoppingPresenceFAB")
+        .accessibilityLabel(isCurrentUserActiveShopper ? "Finish shopping mode" : "Start shopping mode")
+        .accessibilityHint(
+            isCurrentUserActiveShopper
+                ? "Double tap to finish shopping mode."
+                : "Double tap to let your household know you are shopping."
+        )
     }
 
     // MARK: - Add Pill Button
@@ -716,6 +948,9 @@ private struct ShoppingListContent: View {
     private func clearToBuy() {
         _Concurrency.Task {
             await store.clearToBuy()
+            if let userId = userSession.userId {
+                try? await householdStore.finishShopping(userId: userId)
+            }
         }
         HapticManager.success()
     }
@@ -723,9 +958,76 @@ private struct ShoppingListContent: View {
     private func loadShoppingData() async {
         store.setSyncMode(userSession.syncMode)
         bundleStore.setSyncMode(userSession.syncMode)
+        memberStore.setSyncMode(userSession.syncMode)
         await store.loadItems()
         await bundleStore.loadBundles()
+        await memberStore.loadMembers()
+        await refreshActiveShopperNameIfNeeded(for: activeShopperId)
+        await clearStaleActiveShopperIfNeeded()
         markShoppingTutorialAsSeenIfNeeded()
+    }
+
+    private func handleShoppingFABTap() {
+        guard let userId = userSession.userId else { return }
+
+        if isCurrentUserActiveShopper {
+            _ = _Concurrency.Task {
+                try? await householdStore.finishShopping(userId: userId)
+            }
+            HapticManager.success()
+            return
+        }
+
+        guard effectiveActiveMemberCount > 1 else {
+            showSingleMemberShoppingAlert = true
+            HapticManager.lightTap()
+            return
+        }
+
+        _ = _Concurrency.Task {
+            try? await householdStore.startShopping(userId: userId)
+        }
+        HapticManager.success()
+    }
+
+    private func refreshActiveShopperNameIfNeeded(for activeShopperId: String?) async {
+        guard let activeShopperId else {
+            resolvedRemoteActiveShopperName = nil
+            return
+        }
+
+        if activeShopperId == userSession.userId {
+            resolvedRemoteActiveShopperName = userSession.displayName
+            return
+        }
+
+        if let member = activeMembers.first(where: { $0.userId == activeShopperId }) {
+            resolvedRemoteActiveShopperName = member.displayName
+            return
+        }
+
+        resolvedRemoteActiveShopperName = await householdStore.resolveMembershipDisplayName(
+            userId: activeShopperId
+        )
+    }
+
+    private func clearStaleActiveShopperIfNeeded() async {
+        guard let userId = userSession.userId else { return }
+        guard !activeMembers.isEmpty else { return }
+        _ = await householdStore.clearStaleActiveShopperIfNeeded(
+            activeMemberUserIds: activeMemberUserIds,
+            userId: userId
+        )
+    }
+
+    private func applyIdleTimerState() {
+        setIdleTimerDisabled(isScreenVisible && isCurrentUserActiveShopper && !isKeyboardVisible)
+    }
+
+    private func setIdleTimerDisabled(_ isDisabled: Bool) {
+        #if !CI
+            UIApplication.shared.isIdleTimerDisabled = isDisabled
+        #endif
     }
 
     private func scheduleShoppingCompletionCelebration() {
@@ -838,6 +1140,13 @@ private struct ShoppingListContent: View {
 private struct ShoppingToastState: Identifiable, Equatable {
     let id = UUID()
     let message: String
+}
+
+private enum ShoppingPresenceLayout {
+    static let height: CGFloat = 50
+    static let bottomInset: CGFloat = 16
+    static let verticalSpacing: CGFloat = 12
+    static let maxWidth: CGFloat = 280
 }
 
 // MARK: - Shopping Item Row

@@ -493,6 +493,35 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    func startShopping(userId: String) async throws {
+        try updateShoppingPresence(activeShopperId: userId, userId: userId)
+    }
+
+    func finishShopping(userId: String) async throws {
+        try updateShoppingPresence(activeShopperId: nil, userId: userId)
+    }
+
+    @discardableResult
+    func clearStaleActiveShopperIfNeeded(
+        activeMemberUserIds: Set<String>,
+        userId: String
+    ) async -> Bool {
+        guard let activeShopperId = currentHousehold?.activeShopperId else {
+            return false
+        }
+        guard !activeMemberUserIds.contains(activeShopperId) else {
+            return false
+        }
+
+        do {
+            try await finishShopping(userId: userId)
+            return true
+        } catch {
+            self.error = error
+            return false
+        }
+    }
+
     func resolveMembershipDisplayName(userId: String) async -> String? {
         guard syncMode == .cloud else { return nil }
 
@@ -516,6 +545,49 @@ class HouseholdStore: ObservableObject {
         }
 
         return nil
+    }
+
+    private func updateShoppingPresence(
+        activeShopperId: String?,
+        userId: String
+    ) throws {
+        guard var household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+
+        guard household.activeShopperId != activeShopperId else {
+            return
+        }
+
+        household.activeShopperId = activeShopperId
+        household.updatedAt = Date()
+        updateCache(with: household)
+        currentHousehold = household
+
+        guard syncMode == .cloud else { return }
+
+        syncShoppingPresenceToCloud(household: household, requestedBy: userId)
+    }
+
+    private func syncShoppingPresenceToCloud(
+        household: Household,
+        requestedBy userId: String
+    ) {
+        _ = _Concurrency.Task { [self] in
+            do {
+                await setCloudScope(for: household, userId: userId)
+                let members = try await cloudKit.fetchMembers(householdId: household.id)
+                guard members.contains(where: { $0.userId == userId && $0.isActive }) else {
+                    throw HouseholdError.notAuthorized
+                }
+                _ = try await cloudKit.updateHouseholdActiveShopper(
+                    householdId: household.id,
+                    activeShopperId: household.activeShopperId
+                )
+            } catch {
+                self.error = error
+            }
+        }
     }
 
     func leaveCurrentHousehold(

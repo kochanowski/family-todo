@@ -9,6 +9,7 @@ final class CachedHousehold {
     var colorHex: String
     var iconSymbol: String
     var ownerId: String
+    var activeShopperId: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -18,6 +19,7 @@ final class CachedHousehold {
         colorHex: String = MemberColorToken.fallbackHex,
         iconSymbol: String = "house.fill",
         ownerId: String = "",
+        activeShopperId: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -26,6 +28,7 @@ final class CachedHousehold {
         self.colorHex = colorHex
         self.iconSymbol = iconSymbol
         self.ownerId = ownerId
+        self.activeShopperId = activeShopperId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -36,6 +39,7 @@ final class CachedHousehold {
         colorHex = MemberColorToken.fallbackHex
         iconSymbol = household.iconSymbol
         ownerId = household.ownerId
+        activeShopperId = household.activeShopperId
         createdAt = household.createdAt
         updatedAt = household.updatedAt
     }
@@ -46,6 +50,7 @@ final class CachedHousehold {
             name: name,
             iconSymbol: iconSymbol,
             ownerId: ownerId,
+            activeShopperId: activeShopperId,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -55,6 +60,7 @@ final class CachedHousehold {
         name = household.name
         iconSymbol = household.iconSymbol
         ownerId = household.ownerId
+        activeShopperId = household.activeShopperId
         updatedAt = household.updatedAt
     }
 }

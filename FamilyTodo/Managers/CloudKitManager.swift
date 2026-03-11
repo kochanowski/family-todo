@@ -1367,6 +1367,46 @@ actor CloudKitManager {
         }
     }
 
+    func updateHouseholdActiveShopper(
+        householdId: UUID,
+        activeShopperId: String?
+    ) async throws -> CKRecord {
+        let db = await activeHouseholdDatabase
+        var retryCount = 0
+
+        while true {
+            let existingRecord = try await fetchRecord(id: householdId, householdId: householdId)
+            if let activeShopperId {
+                existingRecord["activeShopperId"] = activeShopperId as CKRecordValue
+            } else {
+                existingRecord["activeShopperId"] = nil
+            }
+            existingRecord["updatedAt"] = Date() as CKRecordValue
+
+            do {
+                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
+                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                clearCloudKitFailure()
+                return saved
+            } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
+                retryCount += 1
+                continue
+            } catch {
+                guard retryCount == 0, isRetryableZoneResolutionError(error) else {
+                    recordCloudKitFailure(error, operation: "updateHouseholdActiveShopper")
+                    throw error
+                }
+
+                retryCount += 1
+                updateZoneContext(for: householdScope) { context in
+                    context.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+                }
+                clearCachedZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId)
+            }
+        }
+    }
+
     func fetchHousehold(id: UUID) async throws -> Household {
         let record = try await fetchRecord(id: id, householdId: id)
         return try household(from: record)

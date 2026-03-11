@@ -207,6 +207,9 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @State private var lastObservedShoppingPresenceHouseholdId: UUID?
+    @State private var lastObservedActiveShopperId: String?
 
     var body: some View {
         Group {
@@ -262,6 +265,11 @@ struct RootView: View {
             guard userSession.hasActiveSession else { return }
             householdStore.prepareForSetupResolution(key: newKey)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await handleHouseholdDataDidChange()
+            }
+        }
         .task(id: pendingProcessingKey) {
             await shareAcceptanceCoordinator.processPendingIfPossible(
                 userSession: userSession,
@@ -275,6 +283,12 @@ struct RootView: View {
                 userId: userSession.userId,
                 householdId: userSession.currentHouseholdID
             )
+        }
+        .task(id: shoppingPresenceObservationKey) {
+            await observeShoppingPresenceChangeIfNeeded()
+        }
+        .task(id: subscriptionConfigurationKey) {
+            configureSubscriptionsIfNeeded()
         }
         .task(id: householdRecoveryKey) {
             await recoverHouseholdRouteIfNeeded()
@@ -331,6 +345,22 @@ struct RootView: View {
         [
             onboardingState.currentState.rawValue,
             userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private var shoppingPresenceObservationKey: String {
+        [
+            householdStore.currentHousehold?.id.uuidString ?? "none",
+            householdStore.currentHousehold?.activeShopperId ?? "none",
+            userSession.userId ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private var subscriptionConfigurationKey: String {
+        [
+            userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
@@ -406,6 +436,71 @@ struct RootView: View {
             userSession.setCurrentHousehold(household.id)
         }
         onboardingState.completeHouseholdSetup(withHousehold: true)
+    }
+
+    private func handleHouseholdDataDidChange() async {
+        guard onboardingState.currentState == .mainApp else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId else { return }
+        guard userSession.currentHouseholdID != nil else { return }
+
+        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        )
+    }
+
+    private func observeShoppingPresenceChangeIfNeeded() async {
+        let householdId = householdStore.currentHousehold?.id
+        let activeShopperId = householdStore.currentHousehold?.activeShopperId
+
+        if lastObservedShoppingPresenceHouseholdId != householdId {
+            lastObservedShoppingPresenceHouseholdId = householdId
+            lastObservedActiveShopperId = activeShopperId
+            return
+        }
+
+        let previousActiveShopperId = lastObservedActiveShopperId
+        lastObservedActiveShopperId = activeShopperId
+
+        guard previousActiveShopperId != activeShopperId else { return }
+        guard let activeShopperId else { return }
+        guard activeShopperId != userSession.userId else { return }
+
+        let shopperName = await resolveShoppingPresenceNotifierName(for: activeShopperId)
+        subscriptionManager.clearPendingAggregatedNotifications()
+        await NotificationService.shared.sendShoppingPresenceStartedNotification(
+            shopperName: shopperName
+        )
+    }
+
+    private func resolveShoppingPresenceNotifierName(for shopperUserId: String) async -> String {
+        if shopperUserId == userSession.userId,
+           let displayName = userSession.displayName,
+           !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return displayName
+        }
+
+        if let resolvedName = await householdStore.resolveMembershipDisplayName(userId: shopperUserId),
+           !resolvedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return resolvedName
+        }
+
+        return "Someone"
+    }
+
+    private func configureSubscriptionsIfNeeded() {
+        guard onboardingState.currentState == .mainApp else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId,
+              let householdId = userSession.currentHouseholdID
+        else {
+            return
+        }
+
+        subscriptionManager.configure(userId: userId, householdId: householdId)
     }
 
     private var shouldShowCreateHouseholdView: Bool {

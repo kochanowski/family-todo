@@ -11,6 +11,7 @@
         { "name": "icon", "type": "String", "queryable": false, "sortable": false },
         { "name": "iconSymbol", "type": "String", "queryable": false, "sortable": false },
         { "name": "ownerId", "type": "String", "queryable": false, "sortable": false },
+        { "name": "activeShopperId", "type": "String", "queryable": false, "sortable": false },
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],

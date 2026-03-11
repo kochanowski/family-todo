@@ -5,6 +5,7 @@ struct Household: Identifiable, Codable {
     var name: String
     var iconSymbol: String
     let ownerId: String
+    var activeShopperId: String?
     let createdAt: Date
     var updatedAt: Date
     // Legacy/Test helper properties - keeping for compatibility during refactor
@@ -16,6 +17,7 @@ struct Household: Identifiable, Codable {
         name: String = "",
         iconSymbol: String = "house.fill",
         ownerId: String = "",
+        activeShopperId: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -23,6 +25,7 @@ struct Household: Identifiable, Codable {
         self.name = name
         self.iconSymbol = iconSymbol
         self.ownerId = ownerId
+        self.activeShopperId = activeShopperId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -32,6 +35,7 @@ struct Household: Identifiable, Codable {
         case name
         case iconSymbol
         case ownerId
+        case activeShopperId
         case createdAt
         case updatedAt
     }
@@ -42,6 +46,7 @@ struct Household: Identifiable, Codable {
         name = try container.decode(String.self, forKey: .name)
         iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol) ?? "house.fill"
         ownerId = try container.decode(String.self, forKey: .ownerId)
+        activeShopperId = try container.decodeIfPresent(String.self, forKey: .activeShopperId)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -52,6 +57,7 @@ struct Household: Identifiable, Codable {
         try container.encode(name, forKey: .name)
         try container.encode(iconSymbol, forKey: .iconSymbol)
         try container.encode(ownerId, forKey: .ownerId)
+        try container.encodeIfPresent(activeShopperId, forKey: .activeShopperId)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
