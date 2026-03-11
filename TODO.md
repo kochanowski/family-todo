@@ -1,10 +1,19 @@
-# HousePulse - Master Action Plan
+# Family To-Do - Master Action Plan
 
 ## Rules of Engagement
 1. Strictly Sequential: implement EXACTLY ONE task at a time.
 2. No Scope Creep: do not modify code outside the current task scope.
 3. Verify & Commit: after each task, run regression checks, commit, then mark `[x]`.
 4. CloudKit Safety First: if sync behavior is uncertain, stop and validate before continuing.
+
+## Current Repo Snapshot (2026-03-11)
+
+- Implemented through `P2.8`: Phase 1 integrity/cloud fixes, Shopping Bundles, and contextual onboarding are live in the codebase.
+- Production households now start empty; sample/demo seeding is restricted to explicit UI-test launch arguments.
+- Household leave/delete flows are local-first with pending remote cleanup replay and stale CloudKit recovery guards.
+- Retro Dark, Retro Light, and Paper theme support has been rolled out broadly; new UI is expected to wire theme fonts from day one.
+- Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
+- Remaining near-term roadmap items are `P2.9` and `P2.10`; recurring rotation (`P2.6`) is still parked.
 
 ## Bugfixes & Polish (High Priority)
 
@@ -104,19 +113,19 @@ Acceptance Criteria: Completion celebrations use tier priority, weekly surprise 
 Regression Risk: Celebration spam or missing feedback on completion; test milestone (5/10), surprise eligibility window, and disabled-celebrations mode.
 
 - [ ] **P2.6 Round-Robin Recurring Task Rotation** ([Details](TODO_DETAILS.md#p26))
-Description: Parked on `feature/recurring-tasks`; not part of the active `feature/cloudkit-fixes` scope while we move on to P2.7.
+Description: Parked on `feature/recurring-tasks`; not part of the active roadmap while post-P2.7 / UI polish work continues on `feature/next-features`.
 Acceptance Criteria: Resume only from the parked branch if/when recurring work is restarted.
 Regression Risk: Branch drift between parked recurring work and active P2.7 changes; re-evaluate before reviving.
 
-- [ ] **P2.7 Shopping Bundles End-to-End** ([Details](TODO_DETAILS.md#p27))
+- [x] **P2.7 Shopping Bundles End-to-End** ([Details](TODO_DETAILS.md#p27))
 Description: Implement ShoppingBundle domain/cache/store/cloud plus polished UX: header bundles icon, long-press quick add, management screens, and feedback toast.
 Acceptance Criteria: Bundle CRUD works with `itemsJSON` persistence, bundles are accessible from Shopping header, long-press on `+ Add Item` opens native bundle picker, and selecting bundle shows confirmation (`Added <Bundle> (<N> items)`).
 Regression Risk: Serialization mismatch, duplicate inserts, or hidden affordances; test repeated quick-add, discoverability, and local/cloud parity.
 
-- [ ] **P2.8 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p28))
-Description: Implement iOS 17 TipKit using native visuals and contextual tips aligned to bundles, idea promotion, and recurring-task guidance.
-Acceptance Criteria: Tips use native TipKit look, align with app accent color, appear under explicit state rules (Shopping long-press bundles, Ideas promote, Tasks recurring/sweep guidance), dismiss gracefully, and never block primary actions.
-Regression Risk: Layout shifts or tip fatigue; ensure safe `Tips.configure()` startup and precise placement/trigger rules.
+- [x] **P2.8 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p28))
+Description: Implement native TipKit onboarding with contextual, sequential guidance for Shopping and Ideas, plus Tasks first-run guidance via improved empty state and swipe-actions learning.
+Acceptance Criteria: `Tips.configure()` starts safely with immediate display frequency, TipKit progress resets only on real user/household context changes, Shopping runs `first add -> recently purchased -> bundles -> quick add`, Ideas runs `create category -> add idea -> assign -> promote`, and Tasks routes empty-state users to Ideas while preserving the swipe tip for non-empty active lists.
+Regression Risk: Overlapping popovers, stale tip state across users/households, or tips blocking primary actions; validate sequencing, dismissal, and empty-state routing.
 
 - [ ] **P2.9 Push Message Enrichment via Activity Log** ([Details](TODO_DETAILS.md#p29))
 Description: Enrich push/in-app updates from ActivityLog with personalized copy and non-invasive in-app banner behavior.
@@ -159,26 +168,3 @@ Regression Risk: Startup/access regressions on locked device states.
 Description: Close remaining UX quality gaps across empty states, haptics, and dark-mode readability.
 Acceptance Criteria: Every empty tab has polished icon + encouraging copy, key actions emit consistent haptics (success/light/rigid), and tags/categories keep readable contrast in dark mode and custom themes.
 Regression Risk: Theme-specific regressions and inconsistent tactile feedback; run cross-tab, cross-theme smoke validation.
-
-## Implementation Steps for This Consolidation Task
-1. Replace current `TODO.md` content with the master structure above.
-2. Delete `CLOUDKIT_codex.md`.
-3. Delete `FEATURES_codex.md`.
-4. Run quick doc sanity checks:
-- headings present
-- all tasks have Description/Acceptance Criteria/Regression Risk
-- phase ordering follows integrity -> features -> polish
-5. Commit docs-only change locally (no push).
-
-## Test Cases and Scenarios (for consolidation task itself)
-1. `TODO.md` exists and is the only planning source file.
-2. `CLOUDKIT_codex.md` and `FEATURES_codex.md` no longer exist.
-3. Every task is check-boxed and sequenced under exactly one phase.
-4. Rules of Engagement are at the top and explicitly enforce one-task-at-a-time.
-5. No CloudKit or app code changed as part of this consolidation.
-
-## Assumptions
-1. Existing `TODO.md` historical notes are intentionally replaced by the new master plan.
-2. Language for master plan is English to match requested template.
-3. “One task at a time” applies globally across CloudKit and feature work.
-4. Docs-only workflow follows your rule: no push unless explicitly requested.
