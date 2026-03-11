@@ -3,6 +3,7 @@ import SwiftUI
 struct SyncSelectionView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -17,11 +18,12 @@ struct SyncSelectionView: View {
                 // Header
                 VStack(spacing: 8) {
                     Text("Choose how to save.")
-                        .font(.system(size: 28, weight: .bold))
+                        .font(themeStore.font(for: .screenHeader))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
 
                     Text("Select where your data lives.")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.secondary)
+                        .font(themeStore.font(for: .listRowTitle))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
                 Spacer()
@@ -52,12 +54,12 @@ struct SyncSelectionView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text("Sync with iCloud")
-                                        .font(.system(size: 17, weight: .semibold))
-                                        .foregroundStyle(.primary)
+                                        .font(themeStore.font(for: .inlineTitle))
+                                        .foregroundStyle(themeStore.contentPrimaryColor)
 
                                     // Recommended Badge
                                     Text("Recommended")
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(themeStore.font(for: .chip))
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
@@ -65,8 +67,8 @@ struct SyncSelectionView: View {
                                 }
 
                                 Text("Seamlessly share data across devices.")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
+                                    .font(themeStore.font(for: .bodySmall))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
                             }
 
                             Spacer()
@@ -107,12 +109,12 @@ struct SyncSelectionView: View {
                             // Text
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Continue as Guest")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(.primary)
+                                    .font(themeStore.font(for: .inlineTitle))
+                                    .foregroundStyle(themeStore.contentPrimaryColor)
 
                                 Text("Data is saved only on this device.")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
+                                    .font(themeStore.font(for: .bodySmall))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
                             }
 
                             Spacer()
@@ -145,4 +147,5 @@ struct SyncSelectionView: View {
     SyncSelectionView()
         .environmentObject(OnboardingState())
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

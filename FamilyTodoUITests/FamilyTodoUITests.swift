@@ -138,6 +138,223 @@ final class FamilyTodoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Milk"].exists)
     }
 
+    func testShoppingContextualTipAppearsWhenBundleQuickAddIsAnchored() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "shopping_quick_add",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Long-press Add item to quickly add one of your saved bundles."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
+    func testShoppingFirstAddTipAppearsOnFreshHousehold() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "household_empty",
+                "-showTipForTesting", "shopping_first_add",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Tap Add item to create your first shopping entry."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
+    func testShoppingRecentlyPurchasedTipAppearsAfterFirstBoughtItem() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "household_basic",
+                "-showTipForTesting", "shopping_recent",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Open Recently Purchased to quickly re-add items you already bought."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
+    func testShoppingBundlesTipAppearsAfterFirstItemIsAdded() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "shopping_single_item",
+                "-showTipForTesting", "shopping_bundles",
+            ]
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["Open Bundles to save reusable shopping sets for faster planning."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
+    func testRetroThemeRestockHeaderUsesClearLabel() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_basic",
+            "-themeOverride", "retro",
+        ])
+
+        app.buttons["shoppingRestockButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["Recently Purchased"].waitForExistence(timeout: 2.0))
+        XCTAssertTrue(app.buttons["Clear"].exists)
+    }
+
+    func testRetroThemeAddButtonUsesTextOnlyLabel() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_basic",
+            "-themeOverride", "retro",
+        ])
+
+        let addButton = app.buttons["shoppingAddItemButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5.0))
+        XCTAssertEqual(addButton.label, "Add item")
+    }
+
+    func testRetroLightThemeCoreEmptyStatesLoad() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_empty_seen_tutorials",
+            "-themeOverride", "retroLight",
+        ])
+
+        XCTAssertTrue(app.staticTexts["Your List is Empty"].waitForExistence(timeout: 5.0))
+
+        app.buttons["tabButton_tasks"].tap()
+        XCTAssertTrue(
+            app.staticTexts["No Tasks Yet. Ready to get organized?"].waitForExistence(timeout: 2.0)
+        )
+
+        app.buttons["tabButton_backlog"].tap()
+        XCTAssertTrue(app.staticTexts["No Ideas Yet"].waitForExistence(timeout: 2.0))
+    }
+
+    func testSettingsShowsRetroDarkAndRetroLightThemeCards() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+
+        app.buttons["tabButton_more"].tap()
+        app.buttons["Settings"].tap()
+
+        XCTAssertTrue(app.buttons["themeMiniatureCard_retroDark"].waitForExistence(timeout: 2.0))
+        XCTAssertTrue(app.buttons["themeMiniatureCard_retroLight"].exists)
+    }
+
+    func testRetroLightThemeHidesAccentColorSectionInSettings() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+
+        app.buttons["tabButton_more"].tap()
+        app.buttons["Settings"].tap()
+
+        let accentHeader = app.staticTexts["Accent Color"]
+        XCTAssertTrue(accentHeader.waitForExistence(timeout: 2.0))
+
+        let retroLightCard = app.buttons["themeMiniatureCard_retroLight"]
+        XCTAssertTrue(retroLightCard.exists)
+        retroLightCard.tap()
+
+        let disappears = NSPredicate(format: "exists == false")
+        expectation(for: disappears, evaluatedWith: accentHeader)
+        waitForExpectations(timeout: 2.0)
+    }
+
+    func testPaperThemeCoreEmptyStatesLoad() {
+        let app = launchApp(arguments: [
+            "-seedScenario", "household_empty_seen_tutorials",
+            "-themeOverride", "paper",
+        ])
+
+        XCTAssertTrue(app.staticTexts["Your List is Empty"].waitForExistence(timeout: 5.0))
+
+        app.buttons["tabButton_tasks"].tap()
+        XCTAssertTrue(
+            app.staticTexts["No Tasks Yet. Ready to get organized?"].waitForExistence(timeout: 2.0)
+        )
+
+        app.buttons["tabButton_backlog"].tap()
+        XCTAssertTrue(app.staticTexts["No Ideas Yet"].waitForExistence(timeout: 2.0))
+    }
+
+    func testTasksEmptyStateRoutesToIdeasTab() {
+        let app = launchApp(arguments: ["-seedScenario", "household_empty"])
+
+        app.buttons["tabButton_tasks"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["No Tasks Yet. Ready to get organized?"].waitForExistence(timeout: 2.0)
+        )
+
+        let createButton = app.buttons["Create your first task"]
+        XCTAssertTrue(createButton.exists)
+        createButton.tap()
+
+        XCTAssertTrue(app.buttons["backlogAddCategoryButton"].waitForExistence(timeout: 2.0))
+    }
+
+    func testIdeasCategoryTipAppearsOnEmptyIdeasScreen() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "household_empty",
+                "-showTipForTesting", "ideas_category",
+            ]
+        )
+
+        app.buttons["tabButton_backlog"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Start here by creating a category for your ideas."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
+    func testIdeasAddIdeaTipAppearsAfterCreatingFirstCategory() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "ideas_single_category",
+                "-showTipForTesting", "ideas_add",
+            ]
+        )
+
+        app.buttons["tabButton_backlog"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Tap Add idea to capture something you want to plan later."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
+    func testIdeasAssignAndPromoteTipsAnchorToFirstRelevantIdea() {
+        let assignApp = launchApp(
+            arguments: [
+                "-seedScenario", "ideas_unassigned",
+                "-showTipForTesting", "ideas_assign",
+            ]
+        )
+
+        assignApp.buttons["tabButton_backlog"].tap()
+        XCTAssertTrue(
+            assignApp.staticTexts["Use this area to assign the idea to a household member."]
+                .waitForExistence(timeout: 5.0)
+        )
+
+        let promoteApp = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "ideas_promote",
+            ]
+        )
+
+        promoteApp.buttons["tabButton_backlog"].tap()
+        XCTAssertTrue(
+            promoteApp.staticTexts["Once an idea has an owner, tap the arrow to move it into Tasks."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
     // MARK: - C) Tasks Regression
 
     func testTasksCompleteMovesToCompleted() {
@@ -194,6 +411,22 @@ final class FamilyTodoUITests: XCTestCase {
         XCTAssertTrue(app3.staticTexts["PersistMe"].waitForExistence(timeout: 5.0))
     }
 
+    func testTasksContextualTipAppearsForSwipeActions() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "tasks",
+            ]
+        )
+
+        app.buttons["tabButton_tasks"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Swipe a task row for shortcuts like Poke, Move to Ideas, or Delete."]
+                .waitForExistence(timeout: 5.0)
+        )
+    }
+
     // MARK: - D) Backlog Regression
 
     func testBacklogAddCategory() {
@@ -223,6 +456,70 @@ final class FamilyTodoUITests: XCTestCase {
          // "Groceries" has items. Try to delete.
          // Needs to tap ellipses menu first?
          */
+    }
+
+    func testBacklogDeleteItemShowsConfirmationBeforeDeletion() {
+        let app = launchApp(arguments: ["-seedScenario", "household_basic"])
+        app.buttons["tabButton_backlog"].tap()
+
+        let deleteButton = app.buttons["backlogDeleteButton_Olive Oil"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5.0))
+        deleteButton.tap()
+
+        let alert = app.alerts["Are you sure you want to delete?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2.0))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.staticTexts["Olive Oil"].exists)
+    }
+
+    func testBacklogDeleteEmptyCategoryShowsConfirmation() {
+        let app = launchApp(arguments: ["-seedScenario", "ideas_single_category"])
+        app.buttons["tabButton_backlog"].tap()
+
+        let menuButton = app.buttons["backlogCategoryMenuButton_Projects"]
+        XCTAssertTrue(menuButton.waitForExistence(timeout: 5.0))
+        menuButton.tap()
+
+        let deleteAction = app.buttons["Delete Category"]
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 2.0))
+        deleteAction.tap()
+
+        let alert = app.alerts["Are you sure?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2.0))
+        alert.buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.staticTexts["PROJECTS"].exists)
+    }
+
+    func testBacklogPromoteAssignedIdeaMovesToTasksWithoutOpeningEditSheet() {
+        let app = launchApp(arguments: ["-seedScenario", "contextual_onboarding"])
+        app.buttons["tabButton_backlog"].tap()
+
+        let promoteButton = app.buttons["backlogPromoteButton_Paint guest room"]
+        XCTAssertTrue(promoteButton.waitForExistence(timeout: 5.0))
+        promoteButton.tap()
+
+        XCTAssertFalse(app.navigationBars["Idea Item"].waitForExistence(timeout: 1.0))
+
+        app.buttons["tabButton_tasks"].tap()
+        XCTAssertTrue(app.buttons["taskRow_Paint guest room"].waitForExistence(timeout: 5.0))
+    }
+
+    func testBacklogContextualTipAppearsWhenPromoteButtonExists() {
+        let app = launchApp(
+            arguments: [
+                "-seedScenario", "contextual_onboarding",
+                "-showTipForTesting", "ideas",
+            ]
+        )
+
+        app.buttons["tabButton_backlog"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Once an idea has an owner, tap the arrow to move it into Tasks."]
+                .waitForExistence(timeout: 5.0)
+        )
     }
 
     // MARK: - E) Settings Regression

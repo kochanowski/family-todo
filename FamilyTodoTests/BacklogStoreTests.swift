@@ -163,4 +163,48 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(cachedItems.first?.syncStatusRaw, "pendingDelete")
         XCTAssertEqual(cachedItems.first?.title, "Local tombstone title")
     }
+
+    func testDeleteCategoryIsBlockedWhenIdeasStillExist() async {
+        await store.addCategory("Projects")
+
+        guard let category = store.categories.first else {
+            XCTFail("Expected category")
+            return
+        }
+
+        await store.addItem(to: category.id, title: "Paint hallway")
+
+        let result = await store.deleteCategory(category)
+
+        XCTAssertEqual(result, .blocked(.ideas(count: 1)))
+        XCTAssertEqual(store.categories.count, 1)
+    }
+
+    func testDeleteCategoryIsBlockedWhenTaskStillLinksToCategory() async throws {
+        await store.addCategory("Errands")
+
+        guard let category = store.categories.first else {
+            XCTFail("Expected category")
+            return
+        }
+
+        let task = Task(
+            householdId: householdId,
+            title: "Pick up parcel",
+            status: .done,
+            backlogCategoryId: category.id,
+            taskType: .oneOff
+        )
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        let result = await store.deleteCategory(category)
+
+        XCTAssertEqual(result, .blocked(.tasks(count: 1)))
+        XCTAssertEqual(store.categories.count, 1)
+        XCTAssertEqual(
+            store.categoryDeletionBlockReason(for: category.id),
+            .tasks(count: 1)
+        )
+    }
 }

@@ -1,10 +1,72 @@
-# HousePulse - Master Action Plan
+# Family To-Do - Master Action Plan
 
 ## Rules of Engagement
 1. Strictly Sequential: implement EXACTLY ONE task at a time.
 2. No Scope Creep: do not modify code outside the current task scope.
 3. Verify & Commit: after each task, run regression checks, commit, then mark `[x]`.
 4. CloudKit Safety First: if sync behavior is uncertain, stop and validate before continuing.
+
+## Current Repo Snapshot (2026-03-11)
+
+- Implemented through `P2.8`: Phase 1 integrity/cloud fixes, Shopping Bundles, and contextual onboarding are live in the codebase.
+- Production households now start empty; sample/demo seeding is restricted to explicit UI-test launch arguments.
+- Household leave/delete flows are local-first with pending remote cleanup replay and stale CloudKit recovery guards.
+- Retro Dark, Retro Light, and Paper theme support has been rolled out broadly; new UI is expected to wire theme fonts from day one.
+- Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
+- Next planned feature before MVP is `M1.0 Live Shopping Mode / Last-Minute Alert`; after that, the remaining near-term roadmap items are `P2.9` and `P2.10`, while recurring rotation (`P2.6`) is still parked.
+
+## MVP 1.0 Readiness Track (Highest Priority)
+
+### Architecture Assessment Before MVP Testing
+
+- **Multiplayer sync foundation is good enough for physical-device testing**: Tasks, Shopping, and Ideas already use cache-first loading, background CloudKit replay, tombstones, and `updatedAt`-based last-writer-wins merge.
+- **Push infrastructure is only partially ready**: remote notifications refresh the app and show generic shared-change banners, but they do not yet send targeted household event copy such as `Task assigned to you`, `Member joined`, or `Poke from <Name>`.
+- **Shopping anti-spam is partially covered**: shared remote updates are aggregated today, but the logic is still generic and not yet explicitly productized around shopping-only batching rules.
+- **Live shopping presence is a good architectural fit, but needs a dedicated household-presence write path**: `Household` is already cache + CloudKit synced, but the current metadata update flow is owner-only and cannot be reused as-is for any member starting shopping.
+- **English-only launch is aligned with current direction**: the app is mostly hardcoded in English and does not have active localization plumbing, but a few remaining non-English strings still need cleanup before release.
+- **Monetization schema is NOT ready yet**: `Household` does not currently expose `isPremium` or `subscriptionTier` in the domain model, SwiftData cache, CloudKit mapping, or schema.
+
+### MVP 1.0 Stabilization Tasks
+
+- [ ] **M1.0 Live Shopping Mode / Last-Minute Alert** ([Details](TODO_DETAILS.md#m10))
+Description: Add a shared household shopping-presence state that lets one member announce “I’m at the store” so other members can quickly add last-minute items, with real-time UI state in Shopping and targeted partner notifications.
+Acceptance Criteria: `Household` gains nullable `activeShopperId` through the full persistence chain; Shopping shows the correct top banner state for idle / current shopper / other-member shopper; starting shopping updates local UI immediately and syncs through CloudKit; finishing shopping or clearing the shopping list resets the state; active shopper mode can keep the screen awake; other members receive a clear “at the store” notification without shopping-change spam.
+Regression Risk: Reusing owner-only household-edit paths will block non-owner members; stale presence may get stuck if reset paths are incomplete; overly generic push handling may notify the wrong user or fail to distinguish shopping presence from normal shared edits.
+
+- [ ] **M1.1 Physical Multiplayer Soak Testing**
+Description: Run real-device, two-user household testing for simultaneous edits across Tasks, Shopping, and Ideas to validate current cache-first + CloudKit replay behavior under realistic household use.
+Acceptance Criteria: Two physical devices signed into different accounts can join the same household and reliably observe partner changes after create/edit/delete/promote/poke actions; simultaneous edits converge without ghost records, silent data loss, or permanently stuck pending mutations; leave/delete/invite flows remain stable during and after sync churn.
+Regression Risk: Race conditions may surface only under real-device timing, especially around stale snapshots, repeated writes, app backgrounding, or reconnect-after-offline flows.
+
+- [ ] **M1.2 Targeted Household Event Notifications**
+Description: Replace the current generic shared-change notification experience with explicit household event notifications for `user invited`, `member joined household`, `task assigned to me`, and `poke reminders`, while preserving self-noise suppression.
+Acceptance Criteria: Remote partner actions generate specific, human-readable notifications instead of generic `shared update` copy; invite/join/assignment/poke events can be differentiated in both lock-screen and in-app behavior; self-triggered changes never notify the actor; owner/member flows work correctly across private/shared CloudKit database boundaries.
+Regression Risk: Duplicate notifications, wrong-recipient delivery, or missing notifications due to incomplete coverage of private-vs-shared database events.
+
+- [ ] **M1.3 Shopping Notification Batching Policy**
+Description: Formalize shopping-list notification behavior so partner shopping changes are informative but never spammy, especially during rapid add/buy bursts.
+Acceptance Criteria: Shopping notifications are batched or rate-limited with a clearly defined aggregation window and copy strategy; multiple item changes in a short session never produce a burst of separate notifications; non-shopping notifications (assignment, poke, household join) remain more immediate when appropriate.
+Regression Risk: Over-batching may hide meaningful partner activity, while under-batching will make shared shopping feel noisy and annoying.
+
+- [ ] **M1.4 English-Only Release Audit**
+Description: Audit the codebase for remaining non-English or inconsistent strings and normalize all user-facing copy to English for the v1.0 MVP launch.
+Acceptance Criteria: All visible UI strings, recovery messages, diagnostics surfaced to users, invite/share labels, and household/member flows are in English; no localization framework work is introduced yet; layouts remain stable in all existing themes after the copy sweep.
+Regression Risk: Hidden fallback/system messages or rarely hit diagnostics may remain untranslated and only appear during edge-case failures in production.
+
+- [ ] **M1.5 Household-Level Premium Schema Foundation**
+Description: Add monetization-ready premium state to `Household` rather than to `User`, so Premium can be inherited by all members of a household owned by a paying owner.
+Acceptance Criteria: `Household` gains a durable premium field in the full chain (domain model, SwiftData cache, CloudKit mapping, schema); preferred shape is `subscriptionTier` rather than a single boolean to keep room for future plans; existing households migrate safely with a backward-compatible default such as `free`; no paywall UI is required yet.
+Regression Risk: Schema/mapping drift or migration mistakes could break household fetch/save paths before monetization is even turned on.
+
+- [ ] **M1.6 Premium Inheritance Rules (Household Scope)**
+Description: Define and implement the app-side rules for how Premium is resolved from current household metadata so all invited members inherit the owner-paid benefits inside that household.
+Acceptance Criteria: Runtime feature gating reads premium state from the active household, not only the signed-in user; leaving or switching households updates premium access immediately; the model is compatible with future RevenueCat integration without rewriting the household-level entitlement contract.
+Regression Risk: Mixed household/user entitlement logic can create inconsistent access, especially when a user belongs to multiple households in the future.
+
+- [ ] **M1.7 RevenueCat Preparation Layer**
+Description: Prepare the architecture for future RevenueCat wiring without shipping billing UI yet by identifying the integration seam between remote entitlement state and household-level premium persistence.
+Acceptance Criteria: A clear integration point exists where future RevenueCat owner entitlements can map into `Household.subscriptionTier`; no billing SDK is required in this task; the decision is documented well enough that monetization can start without reworking household sync primitives.
+Regression Risk: If this seam is not defined early, later billing work may leak user-level assumptions into the household data model and cause expensive refactors.
 
 ## Bugfixes & Polish (High Priority)
 
@@ -104,19 +166,19 @@ Acceptance Criteria: Completion celebrations use tier priority, weekly surprise 
 Regression Risk: Celebration spam or missing feedback on completion; test milestone (5/10), surprise eligibility window, and disabled-celebrations mode.
 
 - [ ] **P2.6 Round-Robin Recurring Task Rotation** ([Details](TODO_DETAILS.md#p26))
-Description: Parked on `feature/recurring-tasks`; not part of the active `feature/cloudkit-fixes` scope while we move on to P2.7.
+Description: Parked on `feature/recurring-tasks`; not part of the active roadmap while post-P2.7 / UI polish work continues on `feature/next-features`.
 Acceptance Criteria: Resume only from the parked branch if/when recurring work is restarted.
 Regression Risk: Branch drift between parked recurring work and active P2.7 changes; re-evaluate before reviving.
 
-- [ ] **P2.7 Shopping Bundles End-to-End** ([Details](TODO_DETAILS.md#p27))
+- [x] **P2.7 Shopping Bundles End-to-End** ([Details](TODO_DETAILS.md#p27))
 Description: Implement ShoppingBundle domain/cache/store/cloud plus polished UX: header bundles icon, long-press quick add, management screens, and feedback toast.
 Acceptance Criteria: Bundle CRUD works with `itemsJSON` persistence, bundles are accessible from Shopping header, long-press on `+ Add Item` opens native bundle picker, and selecting bundle shows confirmation (`Added <Bundle> (<N> items)`).
 Regression Risk: Serialization mismatch, duplicate inserts, or hidden affordances; test repeated quick-add, discoverability, and local/cloud parity.
 
-- [ ] **P2.8 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p28))
-Description: Implement iOS 17 TipKit using native visuals and contextual tips aligned to bundles, idea promotion, and recurring-task guidance.
-Acceptance Criteria: Tips use native TipKit look, align with app accent color, appear under explicit state rules (Shopping long-press bundles, Ideas promote, Tasks recurring/sweep guidance), dismiss gracefully, and never block primary actions.
-Regression Risk: Layout shifts or tip fatigue; ensure safe `Tips.configure()` startup and precise placement/trigger rules.
+- [x] **P2.8 Contextual Onboarding (TipKit)** ([Details](TODO_DETAILS.md#p28))
+Description: Implement native TipKit onboarding with contextual, sequential guidance for Shopping and Ideas, plus Tasks first-run guidance via improved empty state and swipe-actions learning.
+Acceptance Criteria: `Tips.configure()` starts safely with immediate display frequency, TipKit progress resets only on real user/household context changes, Shopping runs `first add -> recently purchased -> bundles -> quick add`, Ideas runs `create category -> add idea -> assign -> promote`, and Tasks routes empty-state users to Ideas while preserving the swipe tip for non-empty active lists.
+Regression Risk: Overlapping popovers, stale tip state across users/households, or tips blocking primary actions; validate sequencing, dismissal, and empty-state routing.
 
 - [ ] **P2.9 Push Message Enrichment via Activity Log** ([Details](TODO_DETAILS.md#p29))
 Description: Enrich push/in-app updates from ActivityLog with personalized copy and non-invasive in-app banner behavior.
@@ -159,26 +221,3 @@ Regression Risk: Startup/access regressions on locked device states.
 Description: Close remaining UX quality gaps across empty states, haptics, and dark-mode readability.
 Acceptance Criteria: Every empty tab has polished icon + encouraging copy, key actions emit consistent haptics (success/light/rigid), and tags/categories keep readable contrast in dark mode and custom themes.
 Regression Risk: Theme-specific regressions and inconsistent tactile feedback; run cross-tab, cross-theme smoke validation.
-
-## Implementation Steps for This Consolidation Task
-1. Replace current `TODO.md` content with the master structure above.
-2. Delete `CLOUDKIT_codex.md`.
-3. Delete `FEATURES_codex.md`.
-4. Run quick doc sanity checks:
-- headings present
-- all tasks have Description/Acceptance Criteria/Regression Risk
-- phase ordering follows integrity -> features -> polish
-5. Commit docs-only change locally (no push).
-
-## Test Cases and Scenarios (for consolidation task itself)
-1. `TODO.md` exists and is the only planning source file.
-2. `CLOUDKIT_codex.md` and `FEATURES_codex.md` no longer exist.
-3. Every task is check-boxed and sequenced under exactly one phase.
-4. Rules of Engagement are at the top and explicitly enforce one-task-at-a-time.
-5. No CloudKit or app code changed as part of this consolidation.
-
-## Assumptions
-1. Existing `TODO.md` historical notes are intentionally replaced by the new master plan.
-2. Language for master plan is English to match requested template.
-3. “One task at a time” applies globally across CloudKit and feature work.
-4. Docs-only workflow follows your rule: no push unless explicitly requested.

@@ -1,7 +1,81 @@
-# HousePulse - Task Specifications
+# Family To-Do - Task Specifications
 
 This document expands each task from `TODO.md` into implementation-level specs.
 Use it together with the one-task-at-a-time workflow.
+
+## Current Implementation Snapshot (2026-03-11)
+
+- Production households start empty; sample/demo data is limited to explicit UI-test launch arguments.
+- Household leave/delete is local-first, with pending remote cleanup replay and stale CloudKit recovery suppression.
+- Shopping Bundles are implemented end to end, including quick add, management UI, curated icon sets, and `Save & Add to List`.
+- Contextual TipKit onboarding is live with per-context reset logic, Shopping and Ideas sequences, and Tasks first-run routing to Ideas.
+- Retro Dark, Retro Light, and Paper typography support has been expanded broadly; new UI is expected to honor theme fonts during initial implementation.
+- Notification UX has moved beyond the original plan: optional task due time, `Default reminder time`, and a daily digest that fires only when tasks are due.
+
+## MVP 1.0 Readiness
+
+## <a id="m10"></a>M1.0 Live Shopping Mode / Last-Minute Alert
+- Objective: solve the “I’m at the store, add anything last minute now” household coordination problem with a lightweight shared-presence mode in Shopping.
+- Current architecture fit:
+  - Good fit for shared state: `Household` is already local-cache + CloudKit synced and participates in household bootstrap/recovery.
+  - Good fit for real-time refresh: CloudKit remote notifications already trigger shared-data refresh paths.
+  - Partial fit for push: current notification pipeline can surface generic shared updates, but not yet targeted “`<Name>` is at the store” payloads.
+  - Important constraint: the current household metadata edit path is owner-only and only updates `name` / `iconSymbol`, so this feature needs a separate presence update path that any active member can use.
+- In scope:
+  - Add nullable `activeShopperId` to the full `Household` chain:
+    - domain model,
+    - SwiftData cache model,
+    - CloudKit mapping,
+    - schema/validator.
+  - Add a dedicated `HouseholdStore` flow for shopping presence:
+    - `startShopping(userId:)`
+    - `finishShopping(userId:)`
+    - local-first update of `currentHousehold` + cache,
+    - CloudKit sync afterward.
+  - Do **not** reuse owner-only `updateCurrentHousehold(...)` metadata editing for this feature.
+  - Shopping tab top banner states:
+    - idle: full-width CTA `🛒 I'm going shopping!`
+    - active shopper: highlighted `🛒 You are shopping right now` banner with `Finish`
+    - other member active: informational `🛒 <Name> is shopping right now! Add items quickly.`
+  - Resolve shopper display name from current active members; fall back gracefully if member metadata is stale.
+  - Bonus UX:
+    - disable screen idle timer while the current user is the active shopper,
+    - always re-enable it on finish, clear-list reset, and view teardown.
+  - Reset rules:
+    - explicit `Finish`,
+    - `Clear shopping list`,
+    - defensive cleanup when the marked shopper leaves the household or the household changes.
+  - Notifications:
+    - when a user starts shopping, notify all other household members with:
+      - title: `🛒 <User Name> is at the store!`
+      - body: `Quick, add any last-minute items to the shopping list now.`
+    - no notification when finishing shopping unless product explicitly changes this later.
+  - Shopping anti-spam:
+    - this presence notification is a distinct event and should not be batched together with generic shopping-item changes,
+    - normal shopping-item notifications should still remain batched/rate-limited separately.
+- Likely files:
+  - `FamilyTodo/Models/Household.swift`
+  - `FamilyTodo/Models/CachedHousehold.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope:
+  - navigation redesign outside the Shopping banner area,
+  - geofencing / auto-detecting store arrival,
+  - server-side push provider beyond current CloudKit-driven notification path,
+  - multi-shopper simultaneous mode for v1.0.
+- Validation:
+  - Starting shopping as any active member updates local UI instantly on the acting device.
+  - Other household members see the presence banner after CloudKit sync/notification refresh.
+  - Non-owner members can start/finish shopping successfully.
+  - If another member is already active shopper, the current user sees the informational banner, not the CTA.
+  - `Clear shopping list` resets `activeShopperId` to `nil`.
+  - Idle timer is disabled only for the active shopper and is always restored afterward.
+  - Push copy is specific to the shopping-presence event and does not spam repeatedly during ordinary list edits.
 
 ## Phase 1 - Data Integrity & CloudKit
 
@@ -222,7 +296,7 @@ Use it together with the one-task-at-a-time workflow.
   - No celebration toast/confetti appears when `celebrationsEnabled == false`.
 
 ## <a id="p26"></a>P2.6 Round-Robin Recurring Task Rotation
-- Status: parked on `feature/recurring-tasks`; removed from the active `feature/cloudkit-fixes` runtime/UI scope.
+- Status: parked on `feature/recurring-tasks`; removed from the active roadmap/runtime scope while work continues on `feature/next-features`.
 - Objective: deliver a fully working recurring-task engine first, then layer deterministic round-robin assignment.
 - In scope:
   - Core engine first (blocking requirement):
@@ -296,19 +370,30 @@ Use it together with the one-task-at-a-time workflow.
 ## <a id="p28"></a>P2.8 Contextual Onboarding (TipKit)
 - Objective: guide users to discover advanced features without blocking their workflow.
 - In scope:
-  - Use native iOS TipKit presentation (icon + title + short text + dismiss X), styled to fit app accent color.
-  - Shopping tip: point to main `+` add button with guidance for long-press quick bundles (`Tip: Long-press to quickly add shopping bundles!`).
-  - Rule: show only when bundles/quick-add conditions are relevant and user has not used bundle quick-add yet.
-  - Idea Promotion Tip: popover pointing to the `arrow.up` icon in Ideas.
-  - Rule: show when user adds their first idea.
-  - Tasks contextual tip:
-    - primary: for first recurring task, explain auto-rotation (`This task will automatically rotate to the next person when completed.`)
-    - fallback: if recurring context is unavailable, keep swipe-actions learning tip.
-  - TipKit bootstrap in app startup with safe `Tips.configure()` execution.
-- Likely files: `FamilyTodoApp.swift`, `ShoppingListView.swift`, `BacklogView.swift`, `TasksView.swift`, new `AppTips.swift`.
+  - Use native iOS TipKit presentation with safe `Tips.configure()` startup and `.displayFrequency(.immediate)`.
+  - Reset TipKit datastore and local onboarding progress only when the effective app context changes (`sessionMode | userId | householdId`), not on every cold start.
+  - Shopping onboarding sequence:
+    - `first add` tip on the main add control for a truly empty shopping flow.
+    - `recently purchased` tip after the first bought item exists.
+    - `bundles location` tip after first-item discovery, before bundle quick add has been learned.
+    - `bundle quick add` tip as the final Shopping step when bundles exist.
+  - Ideas onboarding sequence:
+    - `create category`
+    - `add idea`
+    - `assign owner`
+    - `promote`
+  - Tasks onboarding is split:
+    - empty-state CTA routes users to `Ideas` to create the first task through the intended planning flow,
+    - swipe-actions TipKit guidance remains for non-empty Active task lists.
+  - Screen-level priority helpers must guarantee only one tip is active per screen at a time.
+- Likely files: `FamilyTodoApp.swift`, `ShoppingListView.swift`, `BacklogView.swift`, `TasksView.swift`, `Services/AppTips.swift`.
 - Out of scope: full-screen blocking tutorials.
 - Validation:
-  - Tips render only when matching their state rules.
+  - Tips render only when matching their state rules and do not overlap on the same screen.
+  - Context reset makes onboarding reappear for a new user or new household on the same device.
+  - Shopping sequence progresses in order: first add -> recently purchased -> bundles -> quick add.
+  - Ideas sequence progresses in order: create category -> add idea -> assign owner -> promote.
+  - Tasks empty state routes to `Ideas`, while non-empty Active lists can still teach swipe actions.
   - Tip dismissal is graceful and non-blocking.
   - Tip placement anchors to intended controls without obscuring primary actions.
   - Inline tips do not cause disruptive layout shifts.

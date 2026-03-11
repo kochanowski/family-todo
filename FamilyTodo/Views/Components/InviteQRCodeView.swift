@@ -5,6 +5,7 @@ import UIKit
 
 struct InviteQRCodeView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var inviteURL: URL?
@@ -20,8 +21,13 @@ struct InviteQRCodeView: View {
             Group {
                 if isLoading {
                     ProgressView("Preparing invite...")
+                        .font(themeStore.font(for: .bodyStrong))
                 } else if let errorMessage {
-                    ContentUnavailableView("Invite unavailable", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                    ThemedEmptyStateView(
+                        title: "Invite unavailable",
+                        systemImage: "exclamationmark.triangle",
+                        description: errorMessage
+                    )
                 } else if let inviteURL, let qrImage = qrImage(from: inviteURL.absoluteString) {
                     VStack(spacing: 20) {
                         Image(uiImage: qrImage)
@@ -36,13 +42,14 @@ struct InviteQRCodeView: View {
                             )
 
                         Text("Scan this QR code to join household")
-                            .font(.headline)
+                            .font(themeStore.font(for: .inlineTitle))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
 
                         if let inviteCode {
                             VStack(spacing: 8) {
                                 Text("Invite code")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .font(themeStore.font(for: .bodySmall))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
                                 Text(inviteCode)
                                     .font(.system(size: 30, weight: .bold, design: .monospaced))
                                     .textSelection(.enabled)
@@ -50,8 +57,8 @@ struct InviteQRCodeView: View {
                         }
 
                         Text(inviteURL.absoluteString)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                             .textSelection(.enabled)
                             .padding(.horizontal)
@@ -62,6 +69,7 @@ struct InviteQRCodeView: View {
                                     UIPasteboard.general.string = inviteCode
                                 } label: {
                                     Label("Copy invite code", systemImage: "number")
+                                        .font(themeStore.font(for: .buttonLabel))
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -71,6 +79,7 @@ struct InviteQRCodeView: View {
                                 UIPasteboard.general.string = inviteURL.absoluteString
                             } label: {
                                 Label("Copy invite link", systemImage: "doc.on.doc")
+                                    .font(themeStore.font(for: .buttonLabel))
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
@@ -80,13 +89,18 @@ struct InviteQRCodeView: View {
                     .padding(.vertical)
                 }
             }
-            .navigationTitle("Invite QR")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") {
                         dismiss()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Invite QR")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
         }

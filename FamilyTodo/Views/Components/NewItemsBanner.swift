@@ -6,6 +6,7 @@ struct NewItemsBanner: View {
     let onTap: () -> Void
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -15,7 +16,7 @@ struct NewItemsBanner: View {
                 .foregroundStyle(.white)
 
             Text(bannerText)
-                .font(.system(size: 14, weight: .medium))
+                .font(themeStore.font(for: .bodyStrong))
                 .foregroundStyle(.white)
 
             Spacer()

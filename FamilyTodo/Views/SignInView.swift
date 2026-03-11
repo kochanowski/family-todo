@@ -9,6 +9,7 @@ struct SignInView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var showDiagnosticsSheet = false
     @State private var showDisplayNamePrompt = false
@@ -25,12 +26,12 @@ struct SignInView: View {
                 housePulseLogo
 
                 Text("HousePulse")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
                 Text("Share tasks, stay organized, live better together")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -55,7 +56,8 @@ struct SignInView: View {
 
                 case .authenticated:
                     Text("Signed in")
-                        .foregroundColor(.green)
+                        .font(themeStore.font(for: .buttonLabel))
+                        .foregroundStyle(.green)
                 }
             }
             .padding(.bottom, 60)
@@ -139,8 +141,8 @@ struct SignInView: View {
     private func errorActions(_ error: AuthenticationService.AuthenticationError) -> some View {
         VStack(spacing: 12) {
             Text(userFacingErrorMessage(for: error))
-                .font(.callout)
-                .foregroundColor(.red)
+                .font(themeStore.font(for: .bodyStrong))
+                .foregroundStyle(.red)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
@@ -148,11 +150,13 @@ struct SignInView: View {
                 Button("Try again") {
                     userSession.signIn()
                 }
+                .font(themeStore.font(for: .buttonLabel))
                 .buttonStyle(.borderedProminent)
 
                 Button("Open diagnostics") {
                     showDiagnosticsSheet = true
                 }
+                .font(themeStore.font(for: .buttonLabel))
                 .buttonStyle(.bordered)
             }
 
@@ -183,14 +187,15 @@ struct SignInView: View {
                 hasHousehold: userSession.currentHouseholdID != nil
             )
         }
+        .font(themeStore.font(for: .buttonLabel))
         .buttonStyle(.bordered)
         .frame(maxWidth: 280)
     }
 
     private var guestFootnote: some View {
         Text("Local-only mode. Data stays on this device.")
-            .font(.footnote)
-            .foregroundColor(.secondary)
+            .font(themeStore.font(for: .bodySmall))
+            .foregroundStyle(themeStore.contentSecondaryColor)
     }
 
     private func userFacingErrorMessage(for error: AuthenticationService.AuthenticationError) -> String {

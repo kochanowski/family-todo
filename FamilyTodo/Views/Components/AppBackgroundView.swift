@@ -16,11 +16,17 @@ struct AppBackgroundView: View {
 
     private var gradientStops: [Gradient.Stop] {
         switch themeStore.preset {
-        case .retro:
+        case .retroDark:
             [
                 .init(color: Color(hex: "050510"), location: 0),
                 .init(color: Color(hex: "0D0D22"), location: 0.74),
                 .init(color: Color(hex: "1A0F2F"), location: 1.0),
+            ]
+        case .retroLight:
+            [
+                .init(color: Color(hex: "FFF6E5"), location: 0),
+                .init(color: Color(hex: "ECE1C6"), location: 0.76),
+                .init(color: Color(hex: "D8CFB9"), location: 1.0),
             ]
         case .paper:
             [

@@ -140,11 +140,18 @@ final class TaskStore: ObservableObject {
             await notificationService.requestAuthorization()
         }
 
-        if task.dueDate == nil {
+        if task.dueDate == nil || task.status == .done {
             await notificationService.removeTaskReminder(for: task)
         } else {
             await notificationService.scheduleTaskReminder(for: task)
         }
+    }
+
+    private func syncDailyDigestSchedule() async {
+        await notificationService.refreshDailyDigest(
+            householdId: householdId,
+            modelContext: modelContext
+        )
     }
 
     // MARK: - Computed Properties
@@ -239,6 +246,10 @@ final class TaskStore: ObservableObject {
         let pendingSnapshot = pendingSyncSnapshot(from: cachedTasks)
 
         if !isCloudSyncEnabled {
+            await notificationService.refreshScheduledNotifications(
+                householdId: householdId,
+                modelContext: modelContext
+            )
             isLoading = false
             return
         }
@@ -256,6 +267,10 @@ final class TaskStore: ObservableObject {
             self.error = error
         }
 
+        await notificationService.refreshScheduledNotifications(
+            householdId: householdId,
+            modelContext: modelContext
+        )
         isLoading = false
     }
 
@@ -438,9 +453,11 @@ final class TaskStore: ObservableObject {
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
-        // Validate transition constraints (assignee required for Next).
-        if status == .next {
-            let validation = validateNextTransition(assigneeId: assigneeId)
+        let resolvedPrimaryAssigneeId = assigneeId ?? assigneeIds.first
+
+        // Tasks shown on the execution board must stay assigned.
+        if status != .backlog {
+            let validation = validateNextTransition(assigneeId: resolvedPrimaryAssigneeId)
             guard validation == .ok else {
                 error = validation.taskStoreError
                 return validation
@@ -490,6 +507,7 @@ final class TaskStore: ObservableObject {
         saveContextOrSetError(operation: "cache created task")
 
         await syncReminder(for: task)
+        await syncDailyDigestSchedule()
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()
@@ -504,10 +522,13 @@ final class TaskStore: ObservableObject {
         beginMutation(updatedTask.id)
         defer { endMutation(updatedTask.id) }
 
-        // Validate transition constraints if moving to Next.
-        let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
-        if task.status == .next {
-            let validation = validateNextTransition(assigneeId: wipAssigneeId, excludingTaskId: task.id)
+        // Tasks outside backlog must keep a concrete assignee.
+        let resolvedAssigneeId = task.assigneeId ?? task.assigneeIds.first
+        if task.status != .backlog {
+            let validation = validateNextTransition(
+                assigneeId: resolvedAssigneeId,
+                excludingTaskId: task.id
+            )
             guard validation == .ok else {
                 error = validation.taskStoreError
                 return validation
@@ -537,6 +558,7 @@ final class TaskStore: ObservableObject {
         }
 
         await syncReminder(for: updatedTask)
+        await syncDailyDigestSchedule()
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()
@@ -582,11 +604,13 @@ final class TaskStore: ObservableObject {
         if !isCloudSyncEnabled {
             removeCachedTask(id: task.id)
             await notificationService.removeTaskReminder(for: task)
+            await syncDailyDigestSchedule()
             return
         }
 
         markCachedTaskPendingDelete(task)
         await notificationService.removeTaskReminder(for: task)
+        await syncDailyDigestSchedule()
         replayPendingMutationsInBackground()
     }
 
@@ -595,6 +619,9 @@ final class TaskStore: ObservableObject {
             tasks.removeAll { $0.id == task.id }
         }
         markCachedTaskPendingDelete(task)
+        _ = _Concurrency.Task {
+            await self.syncDailyDigestSchedule()
+        }
     }
 
     func restoreTaskLocally(_ task: Task) {
@@ -616,6 +643,9 @@ final class TaskStore: ObservableObject {
             modelContext.insert(cached)
         }
         saveContextOrSetError(operation: "restore task locally")
+        _ = _Concurrency.Task {
+            await self.syncDailyDigestSchedule()
+        }
     }
 
     func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
@@ -744,6 +774,7 @@ final class TaskStore: ObservableObject {
             for task in tasksToDelete {
                 await notificationService.removeTaskReminder(for: task)
             }
+            await syncDailyDigestSchedule()
             return
         }
 
@@ -751,6 +782,7 @@ final class TaskStore: ObservableObject {
         for task in tasksToDelete {
             await notificationService.removeTaskReminder(for: task)
         }
+        await syncDailyDigestSchedule()
         replayPendingMutationsInBackground()
     }
 

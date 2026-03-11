@@ -5,8 +5,8 @@ struct GuidedEmptyStateView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
 
-    @Environment(\.colorScheme) private var colorScheme
     @State private var showCreateFlow = false
     @State private var showJoinSheet = false
     @State private var joinInput = ""
@@ -35,11 +35,12 @@ struct GuidedEmptyStateView: View {
             // Text
             VStack(spacing: 8) {
                 Text("No Household Active")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
 
                 Text("To share shopping lists and tasks, you need to create or join a household.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.secondary)
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -55,7 +56,7 @@ struct GuidedEmptyStateView: View {
                     showCreateFlow = true
                 } label: {
                     Text("Create Household")
-                        .font(.headline)
+                        .font(themeStore.font(for: .buttonLabel))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -72,8 +73,8 @@ struct GuidedEmptyStateView: View {
                     showJoinSheet = true
                 } label: {
                     Text("Join Existing")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .font(themeStore.font(for: .buttonLabel))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
                 .disabled(showCreateFlow || !canJoinViaInvite)
             }
@@ -81,8 +82,8 @@ struct GuidedEmptyStateView: View {
 
             if !canJoinViaInvite {
                 Text("Joining requires Apple/iCloud sign in.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -90,7 +91,7 @@ struct GuidedEmptyStateView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(colorScheme == .dark ? .black : .systemBackground))
+        .background(themeStore.canvasColor)
         .fullScreenCover(isPresented: $showCreateFlow) {
             CreateHouseholdView(allowsJoin: false, showsCloseButton: true)
         }
@@ -232,4 +233,5 @@ struct GuidedEmptyStateView: View {
         .environmentObject(OnboardingState())
         .environmentObject(HouseholdStore())
         .environmentObject(UserSession.shared)
+        .environmentObject(ThemeStore())
 }

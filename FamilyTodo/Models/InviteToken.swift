@@ -1,6 +1,6 @@
 import Foundation
 
-struct InviteToken: Equatable, Codable, Sendable {
+struct InviteToken: Equatable, Codable {
     static let ttl: TimeInterval = 24 * 60 * 60
 
     let id: String

@@ -40,6 +40,7 @@ private let slides: [OnboardingSlide] = [
 
 struct OnboardingCarouselView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var themeStore: ThemeStore
     @State private var currentSlide = 0
     private let getStartedSlotHeight = AppChromeMetrics.compactCTAHeight + 8
 
@@ -85,7 +86,7 @@ struct OnboardingCarouselView: View {
                             onboardingState.completeOnboarding()
                         } label: {
                             Text("Get Started")
-                                .font(.headline)
+                                .font(themeStore.font(for: .buttonLabel))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
@@ -115,6 +116,7 @@ struct OnboardingCarouselView: View {
 
 private struct OnboardingSlideView: View {
     let slide: OnboardingSlide
+    @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         VStack(spacing: 24) {
@@ -132,12 +134,13 @@ private struct OnboardingSlideView: View {
 
             VStack(spacing: 12) {
                 Text(slide.title)
-                    .font(.system(size: 28, weight: .bold))
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
                     .multilineTextAlignment(.center)
 
                 Text(slide.subtitle)
-                    .font(.system(size: 17))
-                    .foregroundStyle(.secondary)
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
@@ -149,4 +152,5 @@ private struct OnboardingSlideView: View {
 #Preview {
     OnboardingCarouselView()
         .environmentObject(OnboardingState())
+        .environmentObject(ThemeStore())
 }

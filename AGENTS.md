@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-03-04
+Last updated: 2026-03-11
 
 This file is the practical source of truth for Codex and other AI agents working in this repository. Follow it precisely — when it contradicts the code, code wins; when in doubt, prefer simplicity and follow existing patterns.
 
@@ -22,6 +22,7 @@ Family To-Do is household task management in "home Agile lite" style:
 3. **No micromanagement** — No ratings, points, penalties, or pressure.
 4. **Gentle nudges, not nagging** — Notifications are rare, predictable, and configurable.
 5. **One source of truth** — Every task has clear status, owner, and change history.
+6. **Theme support is mandatory** — Every new UI element must support the app's typography themes out of the box. New buttons, labels, section headers, sheet titles, toolbar titles, picker text, and other visible text controls must be wired to Retro/Paper theme fonts wherever SwiftUI allows native styling.
 
 **Celebrations (Duolingo-style, NOT gamification):**
 - Private micro-celebrations on task completion (toast messages, emoji)
@@ -79,13 +80,13 @@ SwiftData is source of truth. CloudKit is for sync only.
 | `TaskStore` | Task CRUD, WIP limit enforcement, notifications |
 | `ShoppingListStore` | Shopping CRUD, restock, suggestions |
 | `BacklogStore` | Category + item CRUD |
-| `HouseholdStore` | Household CRUD, CKShare, guest seeding |
+| `HouseholdStore` | Household CRUD, CKShare, local-first exit flows, recovery guards |
 | `MemberStore` | Member CRUD, role management |
 | `ThemeStore` | Appearance (Light/Dark/System), celebrations/suggestions toggles |
 
 ### 4.4 Sync Modes
 
-- **Guest Mode (`.localOnly`)** — SwiftData only, no CloudKit. Demo data auto-seeded on household creation.
+- **Guest Mode (`.localOnly`)** — SwiftData only, no CloudKit. Production households start empty; sample/test seeding is allowed only behind explicit UI-test launch arguments.
 - **Cloud Mode (`.cloud`)** — Full CloudKit sync, requires Sign in with Apple.
 
 ### 4.5 CloudKit Constraints
@@ -228,6 +229,18 @@ Additionally, after each implementation handoff always include:
 
 ## 9) Implementation Patterns
 
+### Theme typography contract
+- Every newly added visible UI element must be checked against `ThemeStore` typography before the task is considered complete.
+- Apply theme fonts to all new buttons, labels, section headers, toolbar titles, sheet titles, and picker text wherever SwiftUI allows native styling.
+- If a native SwiftUI control does not honor custom fonts (for example some Alerts, ContextMenus, or parts of native DatePicker/Picker rendering), leave the system font in place rather than building a custom replacement unless explicitly requested.
+- Retro and Paper compatibility must be handled during the initial implementation, not as a later cleanup pass.
+- New UI must be sanity-checked in `System`, `Retro Dark`, `Retro Light`, and `Paper`, including at least one narrow-screen layout.
+
+### Onboarding / TipKit contract
+- TipKit is contextual and sequential. On a given screen, show at most one onboarding tip at a time.
+- Reset TipKit progress only on meaningful context changes (logout, user switch, household switch/leave/delete), not on every cold start of the same session.
+- Prefer first-run guidance that teaches the next useful action; do not ship tips that promise behavior not implemented yet.
+
 ### Adding a new model (full chain)
 1. Define struct in `Models/` (Codable, Identifiable)
 2. Create `Cached*` SwiftData @Model with sync metadata
@@ -318,9 +331,6 @@ Do not implement these without explicit instruction — they are intentionally d
 | Task Detail/Edit | `LegacyStubs.TaskDetailView` | "Coming Soon" |
 | Recurring Chores | `RepetitiveTasksView`, `LegacyStubs` | Model exists, no store/UI |
 | Areas/Rooms | `AreaStore` | Empty stub, `areaId` field exists for compat |
-| Categories Management (More) | `MoreView` | Uses local `@State`, not wired to `BacklogStore` |
-| Sign Out | `SettingsView` ~line 346 | Empty closure |
-| Join Household | `CreateHouseholdView.joinHousehold()` | TODO |
 | Role Guardrails | `MemberStore` | No actual validation enforcement |
 
 ---
@@ -388,7 +398,10 @@ App launch must prioritize instant local UI:
 7. After every implementation: print handoff + regression checklist + task IDs (Section 8)
 8. WIP limit is 3 tasks per assignee in `.next` — enforce in TaskStore
 9. `glassEffect()` is always the last modifier — no modifiers after it
-10. If this file contradicts the code, code wins; if uncertain, ask
+10. Every new UI element must ship with Retro/Paper theme font support wherever SwiftUI natively allows it
+11. New UI should be checked in `System`, `Retro Dark`, `Retro Light`, and `Paper`, plus a narrow layout
+12. TipKit must stay contextual/sequential: one tip per screen, reset only on real context change
+13. If this file contradicts the code, code wins; if uncertain, ask
 
 ---
 

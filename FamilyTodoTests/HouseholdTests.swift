@@ -1,3 +1,4 @@
+import CloudKit
 @testable import HousePulse
 import SwiftData
 import XCTest
@@ -256,7 +257,7 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNil(store.error)
     }
 
-    func testCreateHouseholdLocalOnlySeedsCache() async throws {
+    func testCreateHouseholdLocalOnlyStartsEmpty() async throws {
         let schema = Schema([
             CachedHousehold.self,
             CachedMember.self,
@@ -292,37 +293,24 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertEqual(members.first?.displayName, "Guest")
         XCTAssertEqual(members.first?.roleRaw, "owner")
 
-        // ✅ Verify 8 tasks (3 next, 4 backlog, 1 done)
+        // ✅ Verify a brand-new household starts empty.
         let tasks = try container.mainContext.fetch(FetchDescriptor<CachedTask>())
-        XCTAssertEqual(tasks.count, 8)
+        XCTAssertTrue(tasks.isEmpty)
 
-        let nextTasks = tasks.filter { $0.statusRaw == "next" }
-        XCTAssertEqual(nextTasks.count, 3, "Should respect WIP limit")
-
-        let backlogTasks = tasks.filter { $0.statusRaw == "backlog" }
-        XCTAssertEqual(backlogTasks.count, 4)
-
-        let doneTasks = tasks.filter { $0.statusRaw == "done" }
-        XCTAssertEqual(doneTasks.count, 1)
-
-        // ✅ Verify 5 shopping items
         let items = try container.mainContext.fetch(FetchDescriptor<CachedShoppingItem>())
-        XCTAssertEqual(items.count, 5)
+        XCTAssertTrue(items.isEmpty)
 
-        let boughtItems = items.filter(\.isBought)
-        XCTAssertEqual(boughtItems.count, 1, "Should have one bought item")
+        let bundles = try container.mainContext.fetch(FetchDescriptor<CachedShoppingBundle>())
+        XCTAssertTrue(bundles.isEmpty)
 
-        // ✅ Verify 2 backlog categories
         let categories = try container.mainContext.fetch(FetchDescriptor<CachedBacklogCategory>())
-        XCTAssertEqual(categories.count, 2)
+        XCTAssertTrue(categories.isEmpty)
 
-        let categoryTitles = Set(categories.map(\.title))
-        XCTAssertTrue(categoryTitles.contains("Home Projects"))
-        XCTAssertTrue(categoryTitles.contains("Weekly Routine"))
-
-        // ✅ Verify 5 backlog items
         let backlogItems = try container.mainContext.fetch(FetchDescriptor<CachedBacklogItem>())
-        XCTAssertEqual(backlogItems.count, 5)
+        XCTAssertTrue(backlogItems.isEmpty)
+
+        let recurring = try container.mainContext.fetch(FetchDescriptor<CachedRecurringChore>())
+        XCTAssertTrue(recurring.isEmpty)
     }
 
     func testLeaveCurrentHouseholdLocalOnlyRemovesRecurringCacheAndSuppressesRecovery() async throws {
@@ -378,6 +366,126 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNil(localStore.currentHousehold)
     }
 
+    func testRestoreCachedHouseholdSkipsPendingExitOperations() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+            CachedTask.self,
+            CachedShoppingItem.self,
+            CachedShoppingBundle.self,
+            CachedBacklogCategory.self,
+            CachedBacklogItem.self,
+            CachedRecurringChore.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(
+            modelContext: container.mainContext,
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+        localStore.setSyncMode(.localOnly)
+
+        let household = try await localStore.createHousehold(
+            name: "Pending Exit",
+            userId: "guest-user",
+            displayName: "Guest"
+        )
+        localStore.clearCurrentHousehold()
+
+        let pending = [
+            HouseholdStore.PendingExitOperation(
+                kind: .leaveSharedHousehold,
+                householdId: household.id,
+                userId: household.ownerId
+            ),
+        ]
+        let pendingData = try JSONEncoder().encode(pending)
+        defaults.set(pendingData, forKey: HouseholdStore.pendingExitOperationsDefaultsKey)
+
+        let restored = localStore.restoreCachedHousehold(userId: household.ownerId)
+        XCTAssertNil(restored)
+
+        await localStore.loadCurrentHouseholdAndMembership(userId: household.ownerId)
+        XCTAssertNil(localStore.currentHousehold)
+    }
+
+    func testRecoverableHouseholdIgnoresMissingCloudRootAndSuppressesRecovery() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let localStore = HouseholdStore(
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+
+        let householdId = UUID()
+        let member = Member(
+            householdId: householdId,
+            userId: "cloud-user",
+            displayName: "Wojtek",
+            role: .member
+        )
+
+        let resolved = try await localStore.recoverableHousehold(
+            from: member,
+            source: .participantShared,
+            fetchHousehold: { _ in throw CKError(.unknownItem) },
+            onMissingHousehold: { _, _ in }
+        )
+
+        XCTAssertNil(resolved)
+        XCTAssertTrue(localStore.isRecoverySuppressed(for: householdId))
+    }
+
+    func testRecoverableHouseholdPropagatesNonMissingCloudErrors() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let localStore = HouseholdStore(
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+
+        let householdId = UUID()
+        let member = Member(
+            householdId: householdId,
+            userId: "cloud-user",
+            displayName: "Wojtek",
+            role: .member
+        )
+
+        do {
+            _ = try await localStore.recoverableHousehold(
+                from: member,
+                source: .participantShared,
+                fetchHousehold: { _ in throw CKError(.permissionFailure) },
+                onMissingHousehold: { _, _ in }
+            )
+            XCTFail("Expected permission failure to propagate")
+        } catch let error as CKError {
+            XCTAssertEqual(error.code, .permissionFailure)
+        }
+
+        XCTAssertFalse(localStore.isRecoverySuppressed(for: householdId))
+    }
+
     // MARK: - HouseholdError Tests
 
     func testHouseholdErrorCases() {
@@ -425,6 +533,45 @@ final class HouseholdStoreTests: XCTestCase {
         let decision = store.resolveLeaveBehavior(for: owner, activeMembers: [owner, member])
 
         XCTAssertEqual(decision, .requireTransfer)
+    }
+}
+
+final class CloudKitManagerScopeTests: XCTestCase {
+    func testParticipantSharedRejectsDefaultZone() {
+        XCTAssertFalse(
+            CloudKitManager.isZoneCompatible(
+                CKRecordZone.default().zoneID,
+                for: .participantShared
+            )
+        )
+    }
+
+    func testParticipantSharedRejectsOwnerPrivateCustomZonePrefix() {
+        let zoneID = CKRecordZone.ID(
+            zoneName: "HouseholdZone-\(UUID().uuidString)",
+            ownerName: CKCurrentUserDefaultName
+        )
+
+        XCTAssertFalse(
+            CloudKitManager.isZoneCompatible(
+                zoneID,
+                for: .participantShared
+            )
+        )
+    }
+
+    func testParticipantSharedAllowsSharedCustomZone() {
+        let zoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+
+        XCTAssertTrue(
+            CloudKitManager.isZoneCompatible(
+                zoneID,
+                for: .participantShared
+            )
+        )
     }
 }
 

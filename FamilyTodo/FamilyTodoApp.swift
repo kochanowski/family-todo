@@ -33,6 +33,9 @@ struct FamilyTodoApp: App {
     ])
 
     init() {
+        let launchArguments = ProcessInfo.processInfo.arguments
+        UITestHelper.prepareForLaunch(arguments: launchArguments)
+
         let fontRegistrationReport = FontRegistrar.registerBundledFonts()
         _themeStore = StateObject(
             wrappedValue: ThemeStore(initialFontReport: fontRegistrationReport)
@@ -53,9 +56,10 @@ struct FamilyTodoApp: App {
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
         _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
         _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
+        AppTips.configureIfNeeded(launchArguments: launchArguments)
     }
 
-    private func scheduleDeferredStartupTasks(modelContext _: ModelContext) {
+    private func scheduleDeferredStartupTasks(modelContext: ModelContext) {
         guard !hasScheduledDeferredStartupTasks else { return }
         hasScheduledDeferredStartupTasks = true
 
@@ -80,114 +84,119 @@ struct FamilyTodoApp: App {
                 let notifSettings = NotificationSettingsStore()
                 NotificationService.shared.setSettingsStore(notifSettings)
                 await NotificationService.shared.checkAuthorizationStatus()
-                if notifSettings.isEnabled, notifSettings.dailyDigestEnabled {
-                    let components = Calendar.current.dateComponents(
-                        [.hour, .minute],
-                        from: notifSettings.reminderTime
-                    )
-                    await NotificationService.shared.scheduleDailyDigest(
-                        at: components.hour ?? 8,
-                        minute: components.minute ?? 0
-                    )
-                }
+                await NotificationService.shared.refreshScheduledNotifications(
+                    householdId: userSession.currentHouseholdID,
+                    modelContext: modelContext
+                )
             #endif
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if startupBootstrapState == .emergency || sharedModelContainer == nil {
-                    StartupRecoveryView(
-                        message: startupRecoveryMessage
-                            ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
-                        diagnostics: startupDiagnostics
-                    )
-                } else if let sharedModelContainer {
-                    RootView()
-                        .environmentObject(userSession)
-                        .environmentObject(themeStore)
-                        .environmentObject(householdStore)
-                        .environmentObject(onboardingState)
-                        .environmentObject(subscriptionManager)
-                        .environmentObject(celebrationManager)
-                        .environmentObject(shareAcceptanceCoordinator)
-                        .environmentObject(cloudKitDiagnostics)
-                        .modelContainer(sharedModelContainer)
-                        .overlay {
-                            let toastBackground = themeStore.surfaceElevatedColor
-                            let toastAppearance = ToastView.Appearance(
-                                backgroundColor: toastBackground,
-                                messageColor: themeStore.inkColor,
-                                strokeColor: themeStore.borderLightColor.opacity(0.55),
-                                shadowColor: themeStore.inkColor.opacity(0.18),
-                                actionColor: themeStore.accentTabColor,
-                                messageFont: themeStore.font(for: .celebrationMessage),
-                                actionFont: themeStore.font(for: .buttonLabel)
-                            )
-
-                            CelebrationOverlay(
-                                manager: celebrationManager,
-                                messageFont: themeStore.font(for: .celebrationMessage),
-                                accentPalette: themeStore.confettiAccentPalette,
-                                toastAppearance: toastAppearance
-                            )
+            AppChromeContainer(themeStore: themeStore) {
+                Group {
+                    if startupBootstrapState == .emergency || sharedModelContainer == nil {
+                        StartupRecoveryView(
+                            message: startupRecoveryMessage
+                                ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
+                            diagnostics: startupDiagnostics
+                        )
+                    } else if let sharedModelContainer {
+                        RootView()
+                            .environmentObject(userSession)
                             .environmentObject(themeStore)
-                        }
-                        .task {
-                            appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
-                            appDelegate.flushPendingInviteIfNeeded()
-                            householdStore.setModelContext(sharedModelContainer.mainContext)
-                            householdStore.setSyncMode(userSession.syncMode)
+                            .environmentObject(householdStore)
+                            .environmentObject(onboardingState)
+                            .environmentObject(subscriptionManager)
+                            .environmentObject(celebrationManager)
+                            .environmentObject(shareAcceptanceCoordinator)
+                            .environmentObject(cloudKitDiagnostics)
+                            .modelContainer(sharedModelContainer)
+                            .overlay {
+                                let toastBackground = themeStore.surfaceElevatedColor
+                                let toastAppearance = ToastView.Appearance(
+                                    backgroundColor: toastBackground,
+                                    messageColor: themeStore.inkColor,
+                                    strokeColor: themeStore.borderLightColor.opacity(0.55),
+                                    shadowColor: themeStore.inkColor.opacity(0.18),
+                                    actionColor: themeStore.accentTabColor,
+                                    messageFont: themeStore.font(for: .celebrationMessage),
+                                    actionFont: themeStore.font(for: .buttonLabel)
+                                )
 
-                            // Configure for UI Testing if needed
-                            UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+                                CelebrationOverlay(
+                                    manager: celebrationManager,
+                                    messageFont: themeStore.font(for: .celebrationMessage),
+                                    accentPalette: themeStore.confettiAccentPalette,
+                                    toastAppearance: toastAppearance
+                                )
+                                .environmentObject(themeStore)
+                            }
+                            .task {
+                                appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                                appDelegate.flushPendingInviteIfNeeded()
+                                householdStore.setModelContext(sharedModelContainer.mainContext)
+                                householdStore.setSyncMode(userSession.syncMode)
 
-                            #if !CI
-                                if userSession.syncMode == .cloud,
-                                   let userId = userSession.userId,
-                                   let householdId = userSession.currentHouseholdID
+                                // Configure for UI Testing if needed
+                                UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+
+                                #if !CI
+                                    if userSession.syncMode == .cloud,
+                                       let userId = userSession.userId,
+                                       let householdId = userSession.currentHouseholdID
+                                    {
+                                        subscriptionManager.configure(userId: userId, householdId: householdId)
+                                    }
+                                #endif
+                                scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
+                            }
+                            .onOpenURL { url in
+                                if url.scheme?.lowercased() == "housepulse" {
+                                    do {
+                                        let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
+                                        shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
+                                    } catch {
+                                        shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                                    }
+                                    return
+                                }
+
+                                if let host = url.host?.lowercased(),
+                                   host.contains("icloud.com")
                                 {
-                                    subscriptionManager.configure(userId: userId, householdId: householdId)
+                                    shareAcceptanceCoordinator.enqueue(inviteURL: url)
                                 }
-                            #endif
-                            scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
-                        }
-                        .onOpenURL { url in
-                            if url.scheme?.lowercased() == "housepulse" {
-                                do {
-                                    let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
-                                    shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
-                                } catch {
-                                    shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                            }
+                            .alert(
+                                "Recovery Complete",
+                                isPresented: Binding(
+                                    get: { startupRecoveryMessage != nil },
+                                    set: { if !$0 { startupRecoveryMessage = nil } }
+                                )
+                            ) {
+                                Button("OK", role: .cancel) {
+                                    startupRecoveryMessage = nil
                                 }
-                                return
+                            } message: {
+                                Text(startupRecoveryMessage ?? "")
                             }
-
-                            if let host = url.host?.lowercased(),
-                               host.contains("icloud.com")
-                            {
-                                shareAcceptanceCoordinator.enqueue(inviteURL: url)
-                            }
-                        }
-                        .alert(
-                            "Recovery Complete",
-                            isPresented: Binding(
-                                get: { startupRecoveryMessage != nil },
-                                set: { if !$0 { startupRecoveryMessage = nil } }
-                            )
-                        ) {
-                            Button("OK", role: .cancel) {
-                                startupRecoveryMessage = nil
-                            }
-                        } message: {
-                            Text(startupRecoveryMessage ?? "")
-                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+private struct AppChromeContainer<Content: View>: View {
+    @ObservedObject var themeStore: ThemeStore
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
             .tint(themeStore.resolvedTabTint)
             .preferredColorScheme(themeStore.colorScheme)
-        }
     }
 }
 
@@ -260,6 +269,13 @@ struct RootView: View {
                 onboardingState: onboardingState
             )
         }
+        .task(id: tipContextKey) {
+            AppTips.syncContextIfNeeded(
+                sessionMode: userSession.sessionMode,
+                userId: userSession.userId,
+                householdId: userSession.currentHouseholdID
+            )
+        }
         .task(id: householdRecoveryKey) {
             await recoverHouseholdRouteIfNeeded()
         }
@@ -300,6 +316,14 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.id.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private var tipContextKey: String {
+        [
+            userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
     }
 
@@ -420,6 +444,12 @@ private struct HouseholdSetupLoadingView: View {
 /// Helper to configure the app state for UI Testing based on launch arguments
 @MainActor
 struct UITestHelper {
+    static func prepareForLaunch(arguments: [String] = ProcessInfo.processInfo.arguments) {
+        guard arguments.contains("-uiTestMode") else { return }
+        applyThemeOverride(arguments: arguments)
+        AppTips.resetDatastoreForTestingIfNeeded(launchArguments: arguments)
+    }
+
     static func configure(modelContext: ModelContext) {
         let args = ProcessInfo.processInfo.arguments
 
@@ -431,6 +461,8 @@ struct UITestHelper {
             clearAllData(context: modelContext)
             clearUserDefaults()
         }
+
+        applyThemeOverride(arguments: args)
 
         // Check for specific scenario
         if let scenarioIndex = args.firstIndex(of: "-seedScenario"),
@@ -469,6 +501,32 @@ struct UITestHelper {
             seedTasks(context: context, household: household)
             seedBacklog(context: context, household: household)
 
+        case "household_empty":
+            _ = seedHousehold(context: context)
+
+        case "household_empty_seen_tutorials":
+            _ = seedHousehold(context: context)
+            markTutorialsSeen()
+
+        case "shopping_single_item":
+            let household = seedHousehold(context: context)
+            seedShoppingSingleActiveItem(context: context, household: household)
+
+        case "ideas_single_category":
+            let household = seedHousehold(context: context)
+            seedSingleBacklogCategory(context: context, household: household)
+
+        case "ideas_unassigned":
+            let household = seedHousehold(context: context)
+            seedUnassignedBacklog(context: context, household: household)
+
+        case "contextual_onboarding":
+            let household = seedHousehold(context: context)
+            seedShoppingList(context: context, household: household)
+            seedShoppingBundles(context: context, household: household)
+            seedTasks(context: context, household: household)
+            seedPromotableBacklog(context: context, household: household)
+
         case "heavy_data":
             let household = seedHousehold(context: context)
             seedHeavyData(context: context, household: household)
@@ -498,6 +556,44 @@ struct UITestHelper {
         let domain = Bundle.main.bundleIdentifier!
         UserDefaults.standard.removePersistentDomain(forName: domain)
         UserDefaults.standard.synchronize()
+    }
+
+    private static func applyThemeOverride(arguments: [String]) {
+        guard let themeIndex = arguments.firstIndex(of: "-themeOverride"),
+              themeIndex + 1 < arguments.count
+        else {
+            return
+        }
+
+        let defaults = UserDefaults.standard
+        defaults.set(FontSizeScale.regular.rawValue, forKey: "paperFontScale")
+        defaults.set(FontSizeScale.regular.rawValue, forKey: "retroFontScale")
+        defaults.set(FontSizeScale.regular.rawValue, forKey: "systemFontScale")
+
+        switch arguments[themeIndex + 1].lowercased() {
+        case "retro", "retrodark", "retro-dark":
+            defaults.set(ThemePreset.retroDark.rawValue, forKey: "themePreset")
+        case "retrolight", "retro-light":
+            defaults.set(ThemePreset.retroLight.rawValue, forKey: "themePreset")
+        case "paper":
+            defaults.set(ThemePreset.paper.rawValue, forKey: "themePreset")
+        case "light":
+            defaults.set(ThemePreset.system.rawValue, forKey: "themePreset")
+            defaults.set(AppearanceMode.light.rawValue, forKey: "appearanceMode")
+        case "dark":
+            defaults.set(ThemePreset.system.rawValue, forKey: "themePreset")
+            defaults.set(AppearanceMode.dark.rawValue, forKey: "appearanceMode")
+        default:
+            defaults.set(ThemePreset.system.rawValue, forKey: "themePreset")
+            defaults.set(AppearanceMode.system.rawValue, forKey: "appearanceMode")
+        }
+    }
+
+    private static func markTutorialsSeen() {
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: "hasSeenShoppingTutorial")
+        defaults.set(true, forKey: "hasSeenTasksTutorial")
+        defaults.set(true, forKey: "hasSeenIdeasTutorial")
     }
 
     private static func getCurrentHouseholdId() -> UUID? {
@@ -533,6 +629,34 @@ struct UITestHelper {
         }
     }
 
+    private static func seedShoppingBundles(context: ModelContext, household: CachedHousehold? = nil) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed shopping bundles: no household available")
+            return
+        }
+
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Weekend Reset",
+            icon: "sparkles",
+            items: ["Dish soap", "Paper towels", "Coffee beans"]
+        )
+        context.insert(CachedShoppingBundle(from: bundle))
+    }
+
+    private static func seedShoppingSingleActiveItem(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed single shopping item: no household available")
+            return
+        }
+
+        let item = ShoppingItem(householdId: householdId, title: "Coffee", isBought: false)
+        context.insert(CachedShoppingItem(from: item))
+    }
+
     private static func seedTasks(context: ModelContext, household: CachedHousehold? = nil) {
         guard let householdId = household?.id ?? getCurrentHouseholdId() else {
             print("Cannot seed tasks: no household available")
@@ -562,6 +686,61 @@ struct UITestHelper {
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
+    }
+
+    private static func seedPromotableBacklog(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed promotable backlog: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Projects")
+        let cachedCategory = CachedBacklogCategory(from: category)
+        context.insert(cachedCategory)
+
+        let assignedIdea = BacklogItem(
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Paint guest room",
+            assigneeId: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")
+        )
+        context.insert(CachedBacklogItem(from: assignedIdea))
+    }
+
+    private static func seedSingleBacklogCategory(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed single backlog category: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Projects")
+        context.insert(CachedBacklogCategory(from: category))
+    }
+
+    private static func seedUnassignedBacklog(
+        context: ModelContext,
+        household: CachedHousehold? = nil
+    ) {
+        guard let householdId = household?.id ?? getCurrentHouseholdId() else {
+            print("Cannot seed unassigned backlog: no household available")
+            return
+        }
+
+        let category = BacklogCategory(householdId: householdId, title: "Projects")
+        context.insert(CachedBacklogCategory(from: category))
+
+        let idea = BacklogItem(
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Replace hallway lamp"
+        )
+        context.insert(CachedBacklogItem(from: idea))
     }
 
     private static func seedHeavyData(context: ModelContext, household: CachedHousehold) {

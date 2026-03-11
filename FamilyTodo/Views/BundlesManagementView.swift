@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BundlesManagementView: View {
     @ObservedObject var store: ShoppingBundleStore
+    let shoppingStore: ShoppingListStore?
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
@@ -40,12 +41,10 @@ struct BundlesManagementView: View {
         }
         .overlay {
             if store.bundles.isEmpty {
-                ContentUnavailableView(
-                    "No Bundles Yet",
+                ThemedEmptyStateView(
+                    title: "No Bundles Yet",
                     systemImage: ShoppingBundle.defaultIcon,
-                    description: Text(
-                        "Create reusable shopping bundles for quick add from the main Shopping button."
-                    )
+                    description: "Create reusable shopping bundles for quick add from the main Shopping button."
                 )
                 .offset(y: -24)
             }
@@ -57,6 +56,11 @@ struct BundlesManagementView: View {
         .navigationTitle("Shopping Bundles")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Shopping Bundles")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     presentedEditor = .create
@@ -83,6 +87,7 @@ struct BundlesManagementView: View {
         .sheet(item: $presentedEditor) { destination in
             ShoppingBundleEditorSheet(
                 store: store,
+                shoppingStore: shoppingStore,
                 bundle: destination.bundle
             )
         }
@@ -150,6 +155,7 @@ private struct ShoppingBundleRow: View {
 
 private struct ShoppingBundleEditorSheet: View {
     @ObservedObject var store: ShoppingBundleStore
+    let shoppingStore: ShoppingListStore?
     let bundle: ShoppingBundle?
 
     @Environment(\.dismiss) private var dismiss
@@ -165,8 +171,9 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var hasAppliedInitialFocus = false
     @FocusState private var focusedField: BundleEditorFocus?
 
-    init(store: ShoppingBundleStore, bundle: ShoppingBundle?) {
+    init(store: ShoppingBundleStore, shoppingStore: ShoppingListStore?, bundle: ShoppingBundle?) {
         self.store = store
+        self.shoppingStore = shoppingStore
         self.bundle = bundle
         _name = State(initialValue: bundle?.name ?? "")
         _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.defaultIcon)
@@ -226,6 +233,21 @@ private struct ShoppingBundleEditorSheet: View {
                                 onSubmit: commitComposerItem
                             )
                         }
+
+                        if bundle == nil {
+                            Button {
+                                _ = _Concurrency.Task {
+                                    await saveBundle(andAddToShoppingList: true)
+                                }
+                            } label: {
+                                Text(isSaving ? "Saving..." : "Save & Add to List")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canSave || isSaving)
+                            .padding(.top, 4)
+                        }
                     }
 
                     if bundle != nil {
@@ -245,16 +267,32 @@ private struct ShoppingBundleEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(themeStore.font(for: .buttonLabel))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .allowsTightening(true)
                     }
                 }
-
+                ToolbarItem(placement: .principal) {
+                    Text(bundle == nil ? "New Bundle" : "Edit Bundle")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Saving..." : "Save") {
+                    Button {
                         _ = _Concurrency.Task {
-                            await saveBundle()
+                            await saveBundle(andAddToShoppingList: false)
                         }
+                    } label: {
+                        Text(isSaving ? "Saving..." : "Save")
+                            .font(themeStore.font(for: .buttonLabel))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .allowsTightening(true)
                     }
                     .disabled(!canSave || isSaving)
                 }
@@ -307,7 +345,7 @@ private struct ShoppingBundleEditorSheet: View {
         setFocus(nextFocus)
     }
 
-    private func saveBundle() async {
+    private func saveBundle(andAddToShoppingList: Bool) async {
         guard canSave else { return }
         isSaving = true
         defer { isSaving = false }
@@ -323,6 +361,10 @@ private struct ShoppingBundleEditorSheet: View {
                 icon: selectedIcon,
                 items: cleanedItems
             )
+
+            if andAddToShoppingList {
+                _ = await shoppingStore?.createItems(fromTitles: cleanedItems)
+            }
         }
 
         dismiss()
@@ -394,10 +436,13 @@ private struct ShoppingBundleHeaderRow: View {
                 "",
                 text: $name,
                 prompt: Text("Bundle Name")
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .foregroundStyle(themeStore.contentSecondaryColor),
+                axis: .vertical
             )
-            .font(themeStore.font(for: .screenHeader))
+            .font(themeStore.font(for: .listRowTitle))
             .textFieldStyle(.plain)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
             .textInputAutocapitalization(.words)
             .autocorrectionDisabled()
             .submitLabel(.next)
@@ -503,9 +548,17 @@ private struct ShoppingBundleIconPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Close")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Choose Icon")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
         }

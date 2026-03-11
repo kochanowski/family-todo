@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes]
+    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes, feature/next-features]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -220,7 +220,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     needs: [build-and-test, swiftlint, cloudkit-schema]
-    # Run on release/testing lanes and on feature/cloudkit-fixes, allowing that branch to bypass the production schema gate.
+    # Run on release/testing lanes and selected feature lanes, allowing those branches to bypass the production schema gate.
     if: >
       always() &&
       (
@@ -233,7 +233,8 @@ jobs:
             github.ref == 'refs/heads/r4-features' ||
             github.ref == 'refs/heads/appleid-login' ||
             github.ref == 'refs/heads/features-and-testing' ||
-            github.ref == 'refs/heads/feature/cloudkit-fixes'
+            github.ref == 'refs/heads/feature/cloudkit-fixes' ||
+            github.ref == 'refs/heads/feature/next-features'
           )
         )
       ) &&
@@ -242,7 +243,10 @@ jobs:
       (
         needs.cloudkit-schema.result == 'success' ||
         (
-          github.ref == 'refs/heads/feature/cloudkit-fixes' &&
+          (
+            github.ref == 'refs/heads/feature/cloudkit-fixes' ||
+            github.ref == 'refs/heads/feature/next-features'
+          ) &&
           needs.cloudkit-schema.result == 'skipped'
         )
       )

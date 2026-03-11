@@ -5,7 +5,7 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
-    enum HouseholdDatabaseScope: Sendable {
+    enum HouseholdDatabaseScope {
         case ownerPrivate
         case participantShared
     }
@@ -25,10 +25,15 @@ actor CloudKitManager {
         case finalize
     }
 
-    private struct SharedZoneContext {
+    private struct DatabaseZoneContext {
         var zoneByHouseholdId: [UUID: CKRecordZone.ID] = [:]
         var zoneByRecordName: [String: CKRecordZone.ID] = [:]
-        var lastResolvedSharedZones: [CKRecordZone.ID] = []
+        var lastResolvedZones: [CKRecordZone.ID] = []
+    }
+
+    private struct SharedZoneContext {
+        var ownerPrivate = DatabaseZoneContext()
+        var participantShared = DatabaseZoneContext()
     }
 
     // CloudKit container identifier - matches the app's iCloud container
@@ -49,6 +54,7 @@ actor CloudKitManager {
     private var migratedMemberColorHouseholds: Set<UUID>
     private var recentInviteRedeemAttempts: [Date] = []
 
+    private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
@@ -72,17 +78,29 @@ actor CloudKitManager {
         }
 
         let suffixes = ["(owner)", "(właściciel)"]
-        for suffix in suffixes {
-            if trimmed.range(
-                of: suffix,
-                options: [.caseInsensitive, .anchored, .backwards]
-            ) != nil {
-                let endIndex = trimmed.index(trimmed.endIndex, offsetBy: -suffix.count)
-                let cleaned = trimmed[..<endIndex].trimmingCharacters(in: .whitespacesAndNewlines)
-                return cleaned.isEmpty ? "Household" : String(cleaned)
-            }
+        for suffix in suffixes where trimmed.range(
+            of: suffix,
+            options: [.caseInsensitive, .anchored, .backwards]
+        ) != nil {
+            let endIndex = trimmed.index(trimmed.endIndex, offsetBy: -suffix.count)
+            let cleaned = trimmed[..<endIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleaned.isEmpty ? "Household" : String(cleaned)
         }
         return trimmed
+    }
+
+    static func isZoneCompatible(
+        _ zoneID: CKRecordZone.ID,
+        for scope: HouseholdDatabaseScope
+    ) -> Bool {
+        switch scope {
+        case .ownerPrivate:
+            return true
+        case .participantShared:
+            let defaultZone = CKRecordZone.default().zoneID
+            guard zoneID != defaultZone else { return false }
+            return !zoneID.zoneName.hasPrefix(ownerHouseholdZonePrefix)
+        }
     }
 
     /// Gets the shared container, must call ensureReady() first
@@ -90,10 +108,12 @@ actor CloudKitManager {
         get async {
             // Container should be created by ensureReady() on main thread
             await MainActor.run {
-                if Self._sharedContainer == nil {
-                    Self._sharedContainer = CKContainer(identifier: Self.containerIdentifier)
+                if let existingContainer = Self._sharedContainer {
+                    return existingContainer
                 }
-                return Self._sharedContainer!
+                let container = CKContainer(identifier: Self.containerIdentifier)
+                Self._sharedContainer = container
+                return container
             }
         }
     }
@@ -129,7 +149,12 @@ actor CloudKitManager {
 
     init() {
         // Container is lazily initialized on first use via ensureReady()
-        sharedZoneContext.zoneByHouseholdId = Self.loadStoredZoneByHouseholdId()
+        sharedZoneContext.ownerPrivate.zoneByHouseholdId = Self.loadStoredZoneByHouseholdId(
+            defaultsKey: Self.ownerZoneContextDefaultsKey
+        )
+        sharedZoneContext.participantShared.zoneByHouseholdId = Self.loadStoredZoneByHouseholdId(
+            defaultsKey: Self.sharedZoneContextDefaultsKey
+        )
         migratedMemberColorHouseholds = Self.loadMigratedMemberColorHouseholds()
     }
 
@@ -214,23 +239,25 @@ actor CloudKitManager {
     // MARK: - Shared Zone Context
 
     func setSharedZoneContext(householdId: UUID, zoneID: CKRecordZone.ID) {
-        sharedZoneContext.zoneByHouseholdId[householdId] = zoneID
-        persistSharedZoneContext()
+        updateZoneContext(for: householdScope) { context in
+            context.zoneByHouseholdId[householdId] = zoneID
+        }
+        persistSharedZoneContext(for: householdScope)
         print("CloudKitScope: mapped household \(householdId) to zone \(zoneID.zoneName)")
     }
 
-    private func persistSharedZoneContext() {
-        let encoded = sharedZoneContext.zoneByHouseholdId.reduce(into: [String: String]()) { output, element in
+    private func persistSharedZoneContext(for scope: HouseholdDatabaseScope) {
+        let encoded = zoneContext(for: scope).zoneByHouseholdId.reduce(into: [String: String]()) { output, element in
             let householdId = element.key.uuidString
             let zoneID = element.value
             output[householdId] = Self.encodedZoneID(zoneID)
         }
-        UserDefaults.standard.set(encoded, forKey: Self.sharedZoneContextDefaultsKey)
+        UserDefaults.standard.set(encoded, forKey: Self.defaultsKey(for: scope))
     }
 
-    private static func loadStoredZoneByHouseholdId() -> [UUID: CKRecordZone.ID] {
+    private static func loadStoredZoneByHouseholdId(defaultsKey: String) -> [UUID: CKRecordZone.ID] {
         guard
-            let raw = UserDefaults.standard.dictionary(forKey: sharedZoneContextDefaultsKey) as? [String: String]
+            let raw = UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: String]
         else {
             return [:]
         }
@@ -246,6 +273,36 @@ actor CloudKitManager {
             output[householdId] = zoneID
         }
         return output
+    }
+
+    private static func defaultsKey(for scope: HouseholdDatabaseScope) -> String {
+        switch scope {
+        case .ownerPrivate:
+            ownerZoneContextDefaultsKey
+        case .participantShared:
+            sharedZoneContextDefaultsKey
+        }
+    }
+
+    private func zoneContext(for scope: HouseholdDatabaseScope) -> DatabaseZoneContext {
+        switch scope {
+        case .ownerPrivate:
+            sharedZoneContext.ownerPrivate
+        case .participantShared:
+            sharedZoneContext.participantShared
+        }
+    }
+
+    private func updateZoneContext(
+        for scope: HouseholdDatabaseScope,
+        _ mutate: (inout DatabaseZoneContext) -> Void
+    ) {
+        switch scope {
+        case .ownerPrivate:
+            mutate(&sharedZoneContext.ownerPrivate)
+        case .participantShared:
+            mutate(&sharedZoneContext.participantShared)
+        }
     }
 
     private func persistMigratedMemberColorHouseholds() {
@@ -272,11 +329,15 @@ actor CloudKitManager {
 
     private func rememberRecordZone(_ record: CKRecord, explicitHouseholdId: UUID?) {
         let zoneID = record.recordID.zoneID
-        sharedZoneContext.zoneByRecordName[record.recordID.recordName] = zoneID
+        updateZoneContext(for: householdScope) { context in
+            context.zoneByRecordName[record.recordID.recordName] = zoneID
+        }
 
         if let explicitHouseholdId {
-            sharedZoneContext.zoneByHouseholdId[explicitHouseholdId] = zoneID
-            persistSharedZoneContext()
+            updateZoneContext(for: householdScope) { context in
+                context.zoneByHouseholdId[explicitHouseholdId] = zoneID
+            }
+            persistSharedZoneContext(for: householdScope)
             return
         }
 
@@ -284,33 +345,76 @@ actor CloudKitManager {
            let householdRaw = record["id"] as? String,
            let householdId = UUID(uuidString: householdRaw)
         {
-            sharedZoneContext.zoneByHouseholdId[householdId] = zoneID
-            persistSharedZoneContext()
+            updateZoneContext(for: householdScope) { context in
+                context.zoneByHouseholdId[householdId] = zoneID
+            }
+            persistSharedZoneContext(for: householdScope)
             return
         }
 
         if let householdRef = record["householdId"] as? CKRecord.Reference,
            let householdId = UUID(uuidString: householdRef.recordID.recordName)
         {
-            sharedZoneContext.zoneByHouseholdId[householdId] = zoneID
-            persistSharedZoneContext()
+            updateZoneContext(for: householdScope) { context in
+                context.zoneByHouseholdId[householdId] = zoneID
+            }
+            persistSharedZoneContext(for: householdScope)
         }
     }
 
     private func resolveZoneForRecordName(_ recordName: String) -> CKRecordZone.ID? {
-        sharedZoneContext.zoneByRecordName[recordName]
+        let scope = householdScope
+        guard let zoneID = zoneContext(for: scope).zoneByRecordName[recordName] else {
+            return nil
+        }
+        guard Self.isZoneCompatible(zoneID, for: scope) else {
+            updateZoneContext(for: scope) { context in
+                context.zoneByRecordName.removeValue(forKey: recordName)
+            }
+            return nil
+        }
+        return zoneID
     }
 
     private func resolveCachedZone(for householdId: UUID?) -> CKRecordZone.ID? {
         guard let householdId else { return nil }
-        return sharedZoneContext.zoneByHouseholdId[householdId]
+        let scope = householdScope
+        guard let zoneID = zoneContext(for: scope).zoneByHouseholdId[householdId] else {
+            return nil
+        }
+        guard Self.isZoneCompatible(zoneID, for: scope) else {
+            clearCachedZone(for: householdId, scope: scope)
+            return nil
+        }
+        return zoneID
     }
 
     private func clearCachedZone(for householdId: UUID?) {
+        clearCachedZone(for: householdId, scope: householdScope)
+    }
+
+    private func clearCachedZone(
+        for householdId: UUID?,
+        scope: HouseholdDatabaseScope
+    ) {
         guard let householdId else { return }
-        sharedZoneContext.zoneByHouseholdId.removeValue(forKey: householdId)
-        persistSharedZoneContext()
+        updateZoneContext(for: scope) { context in
+            context.zoneByHouseholdId.removeValue(forKey: householdId)
+        }
+        persistSharedZoneContext(for: scope)
         print("CloudKitScope: cleared cached zone for household \(householdId)")
+    }
+
+    func clearAllCachedZones(for householdId: UUID) {
+        clearCachedZone(for: householdId, scope: .ownerPrivate)
+        clearCachedZone(for: householdId, scope: .participantShared)
+        let recordName = householdId.uuidString
+        updateZoneContext(for: .ownerPrivate) { context in
+            context.zoneByRecordName.removeValue(forKey: recordName)
+        }
+        updateZoneContext(for: .participantShared) { context in
+            context.zoneByRecordName.removeValue(forKey: recordName)
+        }
     }
 
     private nonisolated func recordCloudKitFailure(_ error: Error, operation: String) {
@@ -361,6 +465,7 @@ actor CloudKitManager {
         return zoneID
     }
 
+    // swiftlint:disable cyclomatic_complexity function_body_length
     func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
         guard householdScope == .ownerPrivate else { return }
         do {
@@ -443,6 +548,8 @@ actor CloudKitManager {
         }
     }
 
+    // swiftlint:enable cyclomatic_complexity function_body_length
+
     private func fetchRecordIfExists(
         _ recordID: CKRecord.ID,
         database: CKDatabase
@@ -456,8 +563,12 @@ actor CloudKitManager {
 
     private func allSharedZoneIDs() async throws -> [CKRecordZone.ID] {
         let zones = try await sharedDatabase.allRecordZones()
-        let zoneIDs = zones.map(\.zoneID)
-        sharedZoneContext.lastResolvedSharedZones = zoneIDs
+        let zoneIDs = zones.map(\.zoneID).filter {
+            Self.isZoneCompatible($0, for: .participantShared)
+        }
+        updateZoneContext(for: .participantShared) { context in
+            context.lastResolvedZones = zoneIDs
+        }
         if !zoneIDs.isEmpty {
             let names = zoneIDs.map(\.zoneName).joined(separator: ",")
             print("CloudKitScope: resolved shared zones [\(names)]")
@@ -480,9 +591,18 @@ actor CloudKitManager {
     }
 
     private func removeCachedRecordZones(_ zoneID: CKRecordZone.ID) {
+        removeCachedRecordZones(zoneID, scope: householdScope)
+    }
+
+    private func removeCachedRecordZones(
+        _ zoneID: CKRecordZone.ID,
+        scope: HouseholdDatabaseScope
+    ) {
         let target = zoneCacheKey(zoneID)
-        sharedZoneContext.zoneByRecordName = sharedZoneContext.zoneByRecordName.filter { _, value in
-            zoneCacheKey(value) != target
+        updateZoneContext(for: scope) { context in
+            context.zoneByRecordName = context.zoneByRecordName.filter { _, value in
+                zoneCacheKey(value) != target
+            }
         }
     }
 
@@ -617,6 +737,7 @@ actor CloudKitManager {
         return allRecords
     }
 
+    // swiftlint:disable cyclomatic_complexity function_body_length
     private func queryRecords(
         _ query: CKQuery,
         householdId: UUID? = nil
@@ -704,6 +825,8 @@ actor CloudKitManager {
             return records
         }
     }
+
+    // swiftlint:enable cyclomatic_complexity function_body_length
 
     private func fetchRecord(
         id: UUID,
@@ -816,7 +939,9 @@ actor CloudKitManager {
             print(
                 "CloudKitScope: save \(record.recordType) failed in \(scopeName), retrying with refreshed zone context"
             )
-            sharedZoneContext.zoneByRecordName.removeValue(forKey: record.recordID.recordName)
+            updateZoneContext(for: householdScope) { context in
+                context.zoneByRecordName.removeValue(forKey: record.recordID.recordName)
+            }
             clearCachedZone(for: householdId)
             if let householdId {
                 _ = try await resolveHouseholdZone(for: householdId)
@@ -1233,7 +1358,9 @@ actor CloudKitManager {
                 }
 
                 retryCount += 1
-                sharedZoneContext.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+                updateZoneContext(for: householdScope) { context in
+                    context.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+                }
                 clearCachedZone(for: householdId)
                 _ = try await resolveHouseholdZone(for: householdId)
             }
@@ -1247,6 +1374,27 @@ actor CloudKitManager {
 
     func deleteHousehold(id: UUID) async throws {
         try await deleteRecord(id: id, householdId: id)
+    }
+
+    func leaveSharedHousehold(householdId: UUID) async throws {
+        guard householdScope == .participantShared else { return }
+
+        let resolvedZone: CKRecordZone.ID? = if let cachedZone = resolveCachedZone(for: householdId) {
+            cachedZone
+        } else {
+            try await resolveHouseholdZone(for: householdId)
+        }
+
+        do {
+            try await deleteRecord(id: householdId, householdId: householdId)
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            // Already removed from the participant's shared database.
+        }
+
+        clearCachedZone(for: householdId, scope: .participantShared)
+        if let resolvedZone {
+            removeCachedRecordZones(resolvedZone, scope: .participantShared)
+        }
     }
 
     /// Delete owner private zone for household when using a custom zone.
@@ -1313,7 +1461,9 @@ actor CloudKitManager {
 
                 retryCount += 1
                 print("CloudKitScope: Member patch (\(operationName)) failed, refreshing zone context and retrying")
-                sharedZoneContext.zoneByRecordName.removeValue(forKey: memberId.uuidString)
+                updateZoneContext(for: householdScope) { context in
+                    context.zoneByRecordName.removeValue(forKey: memberId.uuidString)
+                }
                 clearCachedZone(for: householdId)
                 _ = try await resolveHouseholdZone(for: householdId)
             }
@@ -1364,6 +1514,7 @@ actor CloudKitManager {
         }
     }
 
+    // swiftlint:disable function_parameter_count
     func updateMemberState(
         memberId: UUID,
         householdId: UUID,
@@ -1383,6 +1534,8 @@ actor CloudKitManager {
             record["colorHex"] = colorHex as CKRecordValue
         }
     }
+
+    // swiftlint:enable function_parameter_count
 
     func fetchMember(id: UUID) async throws -> Member {
         let record = try await fetchRecord(id: id)
@@ -1908,6 +2061,7 @@ actor CloudKitManager {
     }
 
     /// Create a CKShare for a household
+    // swiftlint:disable function_body_length
     func createShare(for household: Household) async throws -> CKShare {
         var stage: ShareCreationStage = .ensureZone
         do {
@@ -1997,6 +2151,8 @@ actor CloudKitManager {
             throw error
         }
     }
+
+    // swiftlint:enable function_body_length
 
     func fetchShare(for householdId: UUID) async throws -> CKShare? {
         switch householdScope {
@@ -2130,6 +2286,7 @@ actor CloudKitManager {
         }
     }
 
+    // swiftlint:disable function_body_length
     func createInviteCode(for household: Household) async throws -> InviteToken {
         try await checkAvailability()
         setHouseholdScope(.ownerPrivate)
@@ -2212,6 +2369,8 @@ actor CloudKitManager {
         }
     }
 
+    // swiftlint:enable function_body_length
+
     func fetchInviteToken(code rawCode: String) async throws -> InviteToken {
         try await checkAvailability()
         guard let code = InviteInputNormalizer.normalizeInviteCodeToken(rawCode) else {
@@ -2224,6 +2383,23 @@ actor CloudKitManager {
         }
 
         return try inviteToken(from: record)
+    }
+
+    func deleteInviteTokens(for householdId: UUID) async throws {
+        try await checkAvailability()
+
+        let db = await publicDatabase
+        let predicate = NSPredicate(format: "householdId == %@", householdId.uuidString)
+        let query = CKQuery(recordType: "InviteToken", predicate: predicate)
+        let records = try await queryRecordsPaginated(query, database: db)
+
+        for record in records {
+            do {
+                _ = try await db.deleteRecord(withID: record.recordID)
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                continue
+            }
+        }
     }
 
     func redeemInviteCode(_ rawCode: String) async throws -> Household {

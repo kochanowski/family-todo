@@ -60,19 +60,20 @@ final class ShoppingBundleStoreTests: XCTestCase {
 
     func testCuratedIconsExposeGroupedPickerChoicesAndKeepValidLegacySymbols() {
         let expectedCuratedIcons = [
-            "cart.fill",
-            "basket.fill",
+            "fork.knife",
+            "takeoutbag.and.cup.and.straw.fill",
             "carrot.fill",
             "house.fill",
             "pawprint.fill",
             "shippingbox.fill",
             "sparkles",
             "gift.fill",
-            "archivebox.fill",
         ]
 
         XCTAssertEqual(ShoppingBundle.curatedIconGroups.map(\.title), ["Food", "Home", "Generic"])
         XCTAssertTrue(expectedCuratedIcons.allSatisfy(ShoppingBundle.curatedIcons.contains))
+        XCTAssertEqual(ShoppingBundle.foodIcons.count, 12)
+        XCTAssertEqual(ShoppingBundle.genericIcons.count, 12)
         XCTAssertEqual(ShoppingBundle.resolvedIconName("cube.box.fill"), "cube.box.fill")
         XCTAssertEqual(ShoppingBundle.resolvedIconName("not-a-real-symbol"), ShoppingBundle.defaultIcon)
     }

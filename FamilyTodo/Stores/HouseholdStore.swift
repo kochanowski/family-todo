@@ -5,10 +5,24 @@ import SwiftUI
 import UIKit
 
 @MainActor
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 class HouseholdStore: ObservableObject {
     private enum DefaultsKey {
         static let suppressedHouseholdRecoveries = "suppressedHouseholdRecoveries"
+        static let pendingExitOperations = "pendingHouseholdExitOperations"
+    }
+
+    static let pendingExitOperationsDefaultsKey = DefaultsKey.pendingExitOperations
+
+    enum PendingExitOperationKind: String, Codable, Equatable {
+        case leaveSharedHousehold
+        case deleteOwnedHousehold
+    }
+
+    struct PendingExitOperation: Codable, Equatable {
+        let kind: PendingExitOperationKind
+        let householdId: UUID
+        let userId: String?
     }
 
     enum LeaveResolution: Equatable {
@@ -43,6 +57,11 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    enum RecoverableMembershipSource: String {
+        case participantShared
+        case ownerPrivate
+    }
+
     @Published var currentHousehold: Household?
     @Published var isLoading = false
     @Published var error: Error?
@@ -56,6 +75,7 @@ class HouseholdStore: ObservableObject {
     private let userDefaults: UserDefaults
     private let recoverySuppressionDuration: TimeInterval
     private var isRefreshingCloudHousehold = false
+    private var isReplayingPendingExitOperations = false
 
     // Cache for sharing controller
     private var activeShare: CKShare?
@@ -144,6 +164,7 @@ class HouseholdStore: ObservableObject {
         }
 
         do {
+            await replayPendingExitOperationsIfNeeded()
             await cloudKit.ensureReady()
             try await cloudKit.checkAvailability()
 
@@ -236,9 +257,9 @@ class HouseholdStore: ObservableObject {
             await cloudKit.migrateMemberColorsIfNeeded(householdId: newHousehold.id)
         }
 
-        // 2. Seed default data in local-only mode
+        // 2. Cache the local owner membership in local-only mode
         if syncMode == .localOnly {
-            try seedDefaultData(
+            try cacheLocalOwnerMembership(
                 householdId: newHousehold.id,
                 userId: userId,
                 displayName: validatedDisplayName
@@ -497,45 +518,47 @@ class HouseholdStore: ObservableObject {
         return nil
     }
 
-    func leaveCurrentHousehold(userId: String) async throws {
+    func leaveCurrentHousehold(
+        userId: String,
+        activeMembersSnapshot: [Member]? = nil
+    ) async throws {
         guard let household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
 
-        if syncMode == .cloud {
-            await setCloudScope(for: household, userId: userId)
-
-            guard let member = try await cloudKit.fetchMemberByUserId(userId, householdId: household.id),
-                  member.householdId == household.id
-            else {
-                throw HouseholdError.memberNotFound
-            }
-
-            let members = try await cloudKit.fetchMembers(householdId: household.id)
-            let activeMembers = members.filter(\.isActive)
-            switch resolveLeaveBehavior(for: member, activeMembers: activeMembers) {
-            case .deleteHousehold:
-                try await deleteCurrentHousehold(requestedBy: userId)
-                return
-            case .requireTransfer:
-                throw HouseholdError.transferOwnershipRequired
-            case .deactivateMembership:
-                break
-            }
-
-            _ = try await cloudKit.updateMemberState(
-                memberId: member.id,
-                householdId: member.householdId,
-                newDisplayName: member.displayName,
-                newRole: member.role,
-                isActive: false,
-                colorHex: member.colorHex
-            )
+        switch try resolveLocalLeaveBehavior(
+            for: household,
+            userId: userId,
+            activeMembersSnapshot: activeMembersSnapshot
+        ) {
+        case .deleteHousehold:
+            try await deleteCurrentHousehold(requestedBy: userId)
+            return
+        case .requireTransfer:
+            throw HouseholdError.transferOwnershipRequired
+        case .deactivateMembership:
+            break
         }
 
-        suppressRecovery(for: household.id)
-        removeHouseholdFromCache(id: household.id)
-        clearCurrentHousehold()
+        let pendingOperation: PendingExitOperation? = if syncMode == .cloud {
+            PendingExitOperation(
+                kind: .leaveSharedHousehold,
+                householdId: household.id,
+                userId: userId
+            )
+        } else {
+            nil
+        }
+
+        if let pendingOperation {
+            enqueuePendingExitOperation(pendingOperation)
+        }
+
+        performLocalHouseholdExit(householdId: household.id)
+
+        if pendingOperation != nil {
+            replayPendingExitOperationsInBackground()
+        }
     }
 
     func deleteCurrentHousehold(requestedBy userId: String) async throws {
@@ -547,60 +570,248 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.notAuthorized
         }
 
-        if syncMode == .cloud {
-            await cloudKit.setHouseholdScope(.ownerPrivate)
-            let deletedByZone = try await cloudKit.deleteHouseholdZoneIfCustom(id: household.id)
-
-            if !deletedByZone {
-                let members = try await cloudKit.fetchMembers(householdId: household.id)
-                for member in members {
-                    try await cloudKit.deleteMember(id: member.id, householdId: household.id)
-                }
-
-                let tasks = try await cloudKit.fetchTasks(householdId: household.id)
-                for task in tasks {
-                    try await cloudKit.deleteTask(id: task.id, householdId: household.id)
-                }
-
-                let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: household.id)
-                for item in shoppingItems {
-                    try await cloudKit.deleteShoppingItem(id: item.id, householdId: household.id)
-                }
-
-                let backlogItems = try await cloudKit.fetchBacklogItems(householdId: household.id)
-                for item in backlogItems {
-                    try await cloudKit.deleteBacklogItem(id: item.id, householdId: household.id)
-                }
-
-                let categories = try await cloudKit.fetchBacklogCategories(householdId: household.id)
-                for category in categories {
-                    try await cloudKit.deleteBacklogCategory(id: category.id, householdId: household.id)
-                }
-
-                try await cloudKit.deleteHousehold(id: household.id)
-            }
-
-            do {
-                _ = try await cloudKit.fetchHousehold(id: household.id)
-                throw NSError(
-                    domain: "HouseholdStore",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Household deletion could not be verified."]
-                )
-            } catch {
-                guard isRecordMissingError(error) else { throw error }
-            }
+        let pendingOperation: PendingExitOperation? = if syncMode == .cloud {
+            PendingExitOperation(
+                kind: .deleteOwnedHousehold,
+                householdId: household.id,
+                userId: userId
+            )
+        } else {
+            nil
         }
 
-        suppressRecovery(for: household.id)
-        removeHouseholdFromCache(id: household.id)
-        clearCurrentHousehold()
+        if let pendingOperation {
+            enqueuePendingExitOperation(pendingOperation)
+        }
+
+        performLocalHouseholdExit(householdId: household.id)
+
+        if pendingOperation != nil {
+            replayPendingExitOperationsInBackground()
+        }
     }
 
     private func setCloudScope(for household: Household, userId: String) async {
         let scope: CloudKitManager.HouseholdDatabaseScope =
             household.ownerId == userId ? .ownerPrivate : .participantShared
         await cloudKit.setHouseholdScope(scope)
+    }
+
+    private func resolveLocalLeaveBehavior(
+        for household: Household,
+        userId: String,
+        activeMembersSnapshot: [Member]?
+    ) throws -> LeaveResolution {
+        let activeMembers = resolvedActiveMembersForExit(
+            householdId: household.id,
+            activeMembersSnapshot: activeMembersSnapshot
+        )
+
+        guard let member = activeMembers.first(where: { $0.userId == userId }) else {
+            if syncMode == .localOnly, household.ownerId == userId {
+                return .deleteHousehold
+            }
+            throw HouseholdError.memberNotFound
+        }
+
+        return resolveLeaveBehavior(for: member, activeMembers: activeMembers)
+    }
+
+    private func performLocalHouseholdExit(householdId: UUID) {
+        suppressRecovery(for: householdId)
+        removeHouseholdFromCache(id: householdId)
+        clearCurrentHousehold()
+        _ = _Concurrency.Task { [cloudKit] in
+            await cloudKit.clearAllCachedZones(for: householdId)
+        }
+    }
+
+    private func replayPendingExitOperationsInBackground() {
+        guard syncMode == .cloud else { return }
+        _ = _Concurrency.Task { [self] in
+            await replayPendingExitOperationsIfNeeded()
+        }
+    }
+
+    private func replayPendingExitOperationsIfNeeded() async {
+        guard syncMode == .cloud else { return }
+        guard !isReplayingPendingExitOperations else { return }
+
+        let operations = loadPendingExitOperations()
+        guard !operations.isEmpty else { return }
+
+        isReplayingPendingExitOperations = true
+        defer { isReplayingPendingExitOperations = false }
+
+        do {
+            await cloudKit.ensureReady()
+            try await cloudKit.checkAvailability()
+        } catch {
+            print("DEBUG: Pending household exit replay deferred: \(error)")
+            return
+        }
+
+        for operation in operations {
+            do {
+                try await performRemoteExitOperation(operation)
+                removePendingExitOperation(operation)
+            } catch {
+                print("DEBUG: Pending household exit replay failed for \(operation.householdId): \(error)")
+            }
+        }
+    }
+
+    private func performRemoteExitOperation(_ operation: PendingExitOperation) async throws {
+        switch operation.kind {
+        case .leaveSharedHousehold:
+            guard let userId = operation.userId else {
+                throw HouseholdError.memberNotFound
+            }
+            try await leaveSharedHouseholdRemotely(
+                householdId: operation.householdId,
+                userId: userId
+            )
+        case .deleteOwnedHousehold:
+            try await deleteRemoteOwnedHousehold(householdId: operation.householdId)
+        }
+    }
+
+    private func leaveSharedHouseholdRemotely(
+        householdId: UUID,
+        userId: String
+    ) async throws {
+        await cloudKit.setHouseholdScope(.participantShared)
+
+        if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: householdId),
+           member.householdId == householdId
+        {
+            do {
+                _ = try await cloudKit.updateMemberState(
+                    memberId: member.id,
+                    householdId: member.householdId,
+                    newDisplayName: member.displayName,
+                    newRole: member.role,
+                    isActive: false,
+                    colorHex: member.colorHex
+                )
+            } catch {
+                print("DEBUG: Member deactivation during leave failed: \(error)")
+            }
+        }
+
+        try await cloudKit.leaveSharedHousehold(householdId: householdId)
+        await cloudKit.clearAllCachedZones(for: householdId)
+    }
+
+    // swiftlint:disable cyclomatic_complexity
+    private func deleteRemoteOwnedHousehold(householdId: UUID) async throws {
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        let deletedByZone = try await cloudKit.deleteHouseholdZoneIfCustom(id: householdId)
+
+        if !deletedByZone {
+            let members = try await cloudKit.fetchMembers(householdId: householdId)
+            for member in members {
+                try await cloudKit.deleteMember(id: member.id, householdId: householdId)
+            }
+
+            let tasks = try await cloudKit.fetchTasks(householdId: householdId)
+            for task in tasks {
+                try await cloudKit.deleteTask(id: task.id, householdId: householdId)
+            }
+
+            let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
+            for item in shoppingItems {
+                try await cloudKit.deleteShoppingItem(id: item.id, householdId: householdId)
+            }
+
+            let shoppingBundles = try await cloudKit.fetchShoppingBundles(householdId: householdId)
+            for bundle in shoppingBundles {
+                try await cloudKit.deleteShoppingBundle(id: bundle.id, householdId: householdId)
+            }
+
+            let backlogItems = try await cloudKit.fetchBacklogItems(householdId: householdId)
+            for item in backlogItems {
+                try await cloudKit.deleteBacklogItem(id: item.id, householdId: householdId)
+            }
+
+            let categories = try await cloudKit.fetchBacklogCategories(householdId: householdId)
+            for category in categories {
+                try await cloudKit.deleteBacklogCategory(id: category.id, householdId: householdId)
+            }
+
+            let areas = try await cloudKit.fetchAreas(householdId: householdId)
+            for area in areas {
+                try await cloudKit.deleteArea(id: area.id, householdId: householdId)
+            }
+
+            let recurringChores = try await cloudKit.fetchRecurringChores(householdId: householdId)
+            for chore in recurringChores {
+                try await cloudKit.deleteRecurringChore(id: chore.id, householdId: householdId)
+            }
+
+            try await cloudKit.deleteHousehold(id: householdId)
+        }
+
+        try await cloudKit.deleteInviteTokens(for: householdId)
+
+        do {
+            _ = try await cloudKit.fetchHousehold(id: householdId)
+            throw NSError(
+                domain: "HouseholdStore",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Household deletion could not be verified."]
+            )
+        } catch {
+            guard isRecordMissingError(error) else { throw error }
+        }
+
+        await cloudKit.clearAllCachedZones(for: householdId)
+    }
+
+    // swiftlint:enable cyclomatic_complexity
+
+    private func enqueuePendingExitOperation(_ operation: PendingExitOperation) {
+        var operations = loadPendingExitOperations()
+        if !operations.contains(operation) {
+            operations.append(operation)
+            savePendingExitOperations(operations)
+        }
+    }
+
+    private func removePendingExitOperation(_ operation: PendingExitOperation) {
+        let filtered = loadPendingExitOperations().filter { $0 != operation }
+        savePendingExitOperations(filtered)
+    }
+
+    private func hasPendingExitOperation(for householdId: UUID) -> Bool {
+        loadPendingExitOperations().contains(where: { $0.householdId == householdId })
+    }
+
+    private func loadPendingExitOperations() -> [PendingExitOperation] {
+        guard let data = userDefaults.data(forKey: DefaultsKey.pendingExitOperations) else {
+            return []
+        }
+
+        do {
+            return try JSONDecoder().decode([PendingExitOperation].self, from: data)
+        } catch {
+            print("DEBUG: Failed to decode pending household exit operations: \(error)")
+            return []
+        }
+    }
+
+    private func savePendingExitOperations(_ operations: [PendingExitOperation]) {
+        if operations.isEmpty {
+            userDefaults.removeObject(forKey: DefaultsKey.pendingExitOperations)
+            return
+        }
+
+        do {
+            let data = try JSONEncoder().encode(operations)
+            userDefaults.set(data, forKey: DefaultsKey.pendingExitOperations)
+        } catch {
+            print("DEBUG: Failed to persist pending household exit operations: \(error)")
+        }
     }
 
     private func upsertMembership(
@@ -698,7 +909,7 @@ class HouseholdStore: ObservableObject {
 
     func isRecoverySuppressed(for householdId: UUID) -> Bool {
         let suppressions = loadSuppressedRecoveries(cleaningExpired: true)
-        return suppressions[householdId.uuidString] != nil
+        return suppressions[householdId.uuidString] != nil || hasPendingExitOperation(for: householdId)
     }
 
     func prepareForSetupResolution(key: String) {
@@ -756,6 +967,30 @@ class HouseholdStore: ObservableObject {
         return cachedHouseholds.first
     }
 
+    private func fetchCachedMembers(householdId: UUID) -> [Member] {
+        guard let context = modelContext else { return [] }
+
+        let descriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.joinedAt)]
+        )
+
+        do {
+            return try context.fetch(descriptor).map { $0.toMember() }
+        } catch {
+            print("Fetch cached members error: \(error)")
+            return []
+        }
+    }
+
+    private func resolvedActiveMembersForExit(
+        householdId: UUID,
+        activeMembersSnapshot: [Member]?
+    ) -> [Member] {
+        let source = activeMembersSnapshot ?? fetchCachedMembers(householdId: householdId)
+        return source.filter(\.isActive)
+    }
+
     private func fetchRecoverableCachedHouseholds(
         userId _: String,
         preferredHouseholdId _: UUID?
@@ -792,6 +1027,7 @@ class HouseholdStore: ObservableObject {
 
         guard syncMode == .cloud else { return }
 
+        await replayPendingExitOperationsIfNeeded()
         await cloudKit.ensureReady()
         try await cloudKit.checkAvailability()
 
@@ -815,20 +1051,79 @@ class HouseholdStore: ObservableObject {
         }
 
         await cloudKit.setHouseholdScope(.participantShared)
-        if let participantMember = try await cloudKit.fetchMemberByUserId(userId),
-           !isRecoverySuppressed(for: participantMember.householdId)
-        {
-            return try await cloudKit.fetchHousehold(id: participantMember.householdId)
+        if let participantHousehold = try await recoverableHousehold(
+            from: cloudKit.fetchMemberByUserId(userId),
+            source: .participantShared
+        ) {
+            return participantHousehold
         }
 
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        if let ownerMember = try await cloudKit.fetchMemberByUserId(userId),
-           !isRecoverySuppressed(for: ownerMember.householdId)
-        {
-            return try await cloudKit.fetchHousehold(id: ownerMember.householdId)
+        if let ownerHousehold = try await recoverableHousehold(
+            from: cloudKit.fetchMemberByUserId(userId),
+            source: .ownerPrivate
+        ) {
+            return ownerHousehold
         }
 
         return nil
+    }
+
+    func recoverableHousehold(
+        from member: Member?,
+        source: RecoverableMembershipSource,
+        fetchHousehold: ((UUID) async throws -> Household)? = nil,
+        onMissingHousehold: ((Member, RecoverableMembershipSource) async -> Void)? = nil
+    ) async throws -> Household? {
+        guard let member, !isRecoverySuppressed(for: member.householdId) else {
+            return nil
+        }
+
+        let fetchHousehold = fetchHousehold ?? { [cloudKit] householdId in
+            try await cloudKit.fetchHousehold(id: householdId)
+        }
+
+        do {
+            return try await fetchHousehold(member.householdId)
+        } catch {
+            guard isRecordMissingError(error) else {
+                throw error
+            }
+
+            print(
+                "DEBUG: Ignoring stale \(source.rawValue) membership for missing household \(member.householdId)"
+            )
+            suppressRecovery(for: member.householdId)
+            if let onMissingHousehold {
+                await onMissingHousehold(member, source)
+            } else {
+                await cleanupStaleRecoverableMembership(member, source: source)
+            }
+            return nil
+        }
+    }
+
+    private func cleanupStaleRecoverableMembership(
+        _ member: Member,
+        source: RecoverableMembershipSource
+    ) async {
+        await cloudKit.clearAllCachedZones(for: member.householdId)
+
+        do {
+            _ = try await cloudKit.updateMemberState(
+                memberId: member.id,
+                householdId: member.householdId,
+                newDisplayName: member.displayName,
+                newRole: member.role,
+                isActive: false,
+                colorHex: member.colorHex
+            )
+        } catch {
+            guard !isRecordMissingError(error) else { return }
+            print(
+                "DEBUG: Failed to deactivate stale \(source.rawValue) membership for household \(member.householdId): \(error)"
+            )
+        }
     }
 
     private func normalizedSingleHouseholdCount(_ count: Int) -> Int {
@@ -856,6 +1151,7 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    // swiftlint:disable function_body_length
     private func removeHouseholdFromCache(id: UUID) {
         guard let context = modelContext else { return }
 
@@ -919,6 +1215,8 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    // swiftlint:enable function_body_length
+
     private func suppressRecovery(for householdId: UUID) {
         var suppressions = loadSuppressedRecoveries(cleaningExpired: true)
         suppressions[householdId.uuidString] = Date().addingTimeInterval(recoverySuppressionDuration)
@@ -948,9 +1246,9 @@ class HouseholdStore: ObservableObject {
         return mapped
     }
 
-    // MARK: - Guest Mode Data Seeding
+    // MARK: - Local Household Bootstrap
 
-    private func seedDefaultData(
+    private func cacheLocalOwnerMembership(
         householdId: UUID,
         userId: String,
         displayName: String
@@ -959,7 +1257,14 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cacheNotAvailable
         }
 
-        // 1. Create owner member
+        let descriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate { $0.householdId == householdId && $0.userId == userId }
+        )
+
+        if try context.fetch(descriptor).isEmpty == false {
+            return
+        }
+
         let ownerMember = Member(
             householdId: householdId,
             userId: userId,
@@ -968,199 +1273,7 @@ class HouseholdStore: ObservableObject {
             colorHex: MemberColorToken.randomHex()
         )
         context.insert(CachedMember(from: ownerMember))
-
-        // 2. Create 8 starter tasks (3 next, 4 backlog, 1 done)
-        let tasks = createStarterTasks(
-            householdId: householdId,
-            memberId: ownerMember.id
-        )
-        for task in tasks {
-            context.insert(CachedTask(from: task))
-        }
-
-        // 3. Create 5 shopping items
-        let items = createStarterShoppingItems(householdId: householdId)
-        for item in items {
-            context.insert(CachedShoppingItem(from: item))
-        }
-
-        // 4. Create backlog categories and items
-        let (categories, backlogItems) = createStarterBacklog(householdId: householdId)
-        for category in categories {
-            context.insert(CachedBacklogCategory(from: category))
-        }
-        for item in backlogItems {
-            context.insert(CachedBacklogItem(from: item))
-        }
-
-        // Save all
-        try context.save()
-    }
-
-    private func createStarterTasks(
-        householdId: UUID,
-        memberId: UUID
-    ) -> [Task] {
-        let today = Date()
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today) ?? today
-        let thisWeek = Calendar.current.date(byAdding: .day, value: 5, to: today) ?? today
-
-        return [
-            // Next tasks (3 - respects WIP limit)
-            Task(
-                householdId: householdId,
-                title: "Clean kitchen counters",
-                status: .next,
-                assigneeId: memberId,
-                assigneeIds: [memberId],
-                dueDate: today,
-                taskType: .oneOff
-            ),
-            Task(
-                householdId: householdId,
-                title: "Take out trash",
-                status: .next,
-                assigneeId: memberId,
-                assigneeIds: [memberId],
-                dueDate: today,
-                taskType: .oneOff
-            ),
-            Task(
-                householdId: householdId,
-                title: "Water plants",
-                status: .next,
-                assigneeId: memberId,
-                assigneeIds: [memberId],
-                dueDate: thisWeek,
-                taskType: .oneOff
-            ),
-
-            // Backlog tasks (4)
-            Task(
-                householdId: householdId,
-                title: "Vacuum living room",
-                status: .backlog,
-                taskType: .oneOff
-            ),
-            Task(
-                householdId: householdId,
-                title: "Clean bathroom sink",
-                status: .backlog,
-                taskType: .oneOff
-            ),
-            Task(
-                householdId: householdId,
-                title: "Change bed sheets",
-                status: .backlog,
-                taskType: .oneOff
-            ),
-            Task(
-                householdId: householdId,
-                title: "Organize pantry",
-                status: .backlog,
-                taskType: .oneOff
-            ),
-
-            // Done task (1 - shows completion)
-            Task(
-                householdId: householdId,
-                title: "Wipe dining table",
-                status: .done,
-                assigneeId: memberId,
-                assigneeIds: [memberId],
-                completedAt: yesterday,
-                completedById: memberId.uuidString,
-                taskType: .oneOff
-            ),
-        ]
-    }
-
-    private func createStarterShoppingItems(householdId: UUID) -> [ShoppingItem] {
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
-
-        return [
-            ShoppingItem(
-                householdId: householdId,
-                title: "Milk",
-                quantityValue: "2",
-                quantityUnit: "L"
-            ),
-            ShoppingItem(
-                householdId: householdId,
-                title: "Bread",
-                quantityValue: "1",
-                quantityUnit: "loaf"
-            ),
-            ShoppingItem(
-                householdId: householdId,
-                title: "Dish soap",
-                quantityValue: "1",
-                quantityUnit: "bottle"
-            ),
-            ShoppingItem(
-                householdId: householdId,
-                title: "Paper towels",
-                quantityValue: "2",
-                quantityUnit: "rolls",
-                isBought: true,
-                boughtAt: yesterday,
-                restockCount: 1
-            ),
-            ShoppingItem(
-                householdId: householdId,
-                title: "Coffee",
-                quantityValue: "200",
-                quantityUnit: "g"
-            ),
-        ]
-    }
-
-    private func createStarterBacklog(
-        householdId: UUID
-    ) -> (categories: [BacklogCategory], items: [BacklogItem]) {
-        let homeProjectsCategory = BacklogCategory(
-            householdId: householdId,
-            title: "Home Projects",
-            sortOrder: 0
-        )
-
-        let routineCategory = BacklogCategory(
-            householdId: householdId,
-            title: "Weekly Routine",
-            sortOrder: 1
-        )
-
-        let items = [
-            BacklogItem(
-                categoryId: homeProjectsCategory.id,
-                householdId: householdId,
-                title: "Paint bedroom walls",
-                notes: "Need to buy paint and brushes"
-            ),
-            BacklogItem(
-                categoryId: homeProjectsCategory.id,
-                householdId: householdId,
-                title: "Fix leaky faucet"
-            ),
-            BacklogItem(
-                categoryId: homeProjectsCategory.id,
-                householdId: householdId,
-                title: "Install new shelves in garage"
-            ),
-            BacklogItem(
-                categoryId: routineCategory.id,
-                householdId: householdId,
-                title: "Deep clean bathroom"
-            ),
-            BacklogItem(
-                categoryId: routineCategory.id,
-                householdId: householdId,
-                title: "Mow the lawn"
-            ),
-        ]
-
-        return ([homeProjectsCategory, routineCategory], items)
     }
 }
 
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length file_length
