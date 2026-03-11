@@ -93,6 +93,7 @@ private struct TasksContent: View {
     @State private var hasInitialMetadataLoaded = false
     @State private var hasStartedInitialLoad = false
     @State private var editMode: EditMode = .inactive
+    @State private var showRecommendedLimitInfo = false
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
     @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
@@ -258,6 +259,13 @@ private struct TasksContent: View {
                         await store.deleteTask(taskToDelete)
                     }
                 }
+            )
+        }
+        .alert("Recommended Task Limit", isPresented: $showRecommendedLimitInfo) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                "This is your daily recommended limit of active tasks to help you stay focused. You can adjust this limit in the More -> Settings tab."
             )
         }
         .sheet(
@@ -546,7 +554,13 @@ private struct TasksContent: View {
     private var header: some View {
         AppScreenHeader(title: "Tasks") {
             if activeFilter == .active {
-                TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+                Button {
+                    showRecommendedLimitInfo = true
+                } label: {
+                    TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows information about the recommended task limit")
             }
         } trailing: {
             if activeFilter == .active {
@@ -557,6 +571,10 @@ private struct TasksContent: View {
                         }
                     }
                     .font(themeStore.font(for: .buttonLabel))
+                    .foregroundStyle(
+                        visibleNextTasks.isEmpty
+                            ? themeStore.contentSecondaryColor : themeStore.accentTabColor
+                    )
                     .disabled(visibleNextTasks.isEmpty)
                 }
             } else {
@@ -950,7 +968,7 @@ private struct TasksContent: View {
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(themeStore.accentTabColor)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }

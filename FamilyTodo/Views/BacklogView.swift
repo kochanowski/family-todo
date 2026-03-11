@@ -477,6 +477,7 @@ private struct BacklogContent: View {
                     .foregroundStyle(themeStore.accentTabColor)
                     .frame(width: 44, height: 44)
             }
+            .buttonStyle(.plain)
             .accessibilityIdentifier("backlogAddCategoryButton")
             .contextualPopoverTip(
                 activeIdeasTip == .createCategory,

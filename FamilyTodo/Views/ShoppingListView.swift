@@ -362,7 +362,7 @@ private struct ShoppingListContent: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .foregroundStyle(themeStore.accentTabColor)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
@@ -374,7 +374,7 @@ private struct ShoppingListContent: View {
                 } label: {
                     Image(systemName: ShoppingBundle.defaultIcon)
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .foregroundStyle(themeStore.accentTabColor)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -397,7 +397,7 @@ private struct ShoppingListContent: View {
                 } label: {
                     Image(systemName: "clock.badge.checkmark")
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .foregroundStyle(themeStore.accentTabColor)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
