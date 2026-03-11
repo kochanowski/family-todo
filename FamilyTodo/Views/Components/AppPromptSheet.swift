@@ -218,6 +218,7 @@ struct BacklogAssigneePickerSheet: View {
     let actionTitle: String
     let members: [Member]
     let autoConfirmOnSelection: Bool
+    let showsUnassignedOption: Bool
     @Binding var selectedAssigneeId: UUID?
     let onCancel: () -> Void
     let onConfirm: () -> Void
@@ -225,31 +226,34 @@ struct BacklogAssigneePickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if members.isEmpty {
+                if showsUnassignedOption {
+                    assigneeRow(
+                        title: "Unassigned",
+                        isSelected: selectedAssigneeId == nil
+                    ) {
+                        selectedAssigneeId = nil
+                        if autoConfirmOnSelection {
+                            onConfirm()
+                        }
+                    }
+                }
+
+                if members.isEmpty, !showsUnassignedOption {
                     Text("No members available.")
                         .font(themeStore.font(for: .bodySmall))
                         .foregroundStyle(.secondary)
                 }
 
                 ForEach(members) { member in
-                    Button {
+                    assigneeRow(
+                        title: member.displayName,
+                        isSelected: selectedAssigneeId == member.id
+                    ) {
                         selectedAssigneeId = member.id
                         if autoConfirmOnSelection {
                             onConfirm()
                         }
-                    } label: {
-                        HStack {
-                            Text(member.displayName)
-                                .font(themeStore.font(for: .inlineTitle))
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if !autoConfirmOnSelection, selectedAssigneeId == member.id {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .navigationTitle(title)
@@ -279,6 +283,28 @@ struct BacklogAssigneePickerSheet: View {
         }
         .presentationDetents([.height(320)])
         .presentationBackground(.ultraThinMaterial)
+    }
+
+    private func assigneeRow(
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(themeStore.font(for: .inlineTitle))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if !autoConfirmOnSelection, isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.blue)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -319,34 +345,54 @@ struct BacklogItemEditSheet: View {
                         .font(themeStore.font(for: .listRowTitle))
                 }
 
-                Section("Assignee") {
+                Section {
                     if members.isEmpty {
                         Text("No members available.")
                             .font(themeStore.font(for: .bodySmall))
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("Who", selection: $assigneeId) {
-                            Text("Unassigned").tag(UUID?.none)
+                        Picker(selection: $assigneeId) {
+                            Text("Unassigned")
+                                .font(themeStore.font(for: .bodyStrong))
+                                .tag(UUID?.none)
                             ForEach(members) { member in
-                                Text(member.displayName).tag(Optional(member.id))
+                                Text(member.displayName)
+                                    .font(themeStore.font(for: .bodyStrong))
+                                    .tag(Optional(member.id))
                             }
+                        } label: {
+                            Text("Who")
+                                .font(themeStore.font(for: .bodyStrong))
                         }
+                        .font(themeStore.font(for: .bodyStrong))
                     }
+                } header: {
+                    Text("Assignee")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
-                Section("Notes") {
+                Section {
                     TextEditor(text: $notes)
                         .font(themeStore.font(for: .listRowTitle))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120)
+                } header: {
+                    Text("Notes")
+                        .font(themeStore.font(for: .sectionHeader))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
 
                 Section {
-                    Button("Delete Item", role: .destructive) {
+                    Button(role: .destructive) {
                         showDeleteConfirmation = true
+                    } label: {
+                        Text("Delete Item")
+                            .font(themeStore.font(for: .buttonLabel))
                     }
                 }
             }
+            .font(themeStore.font(for: .bodyStrong))
             .navigationTitle("Idea Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

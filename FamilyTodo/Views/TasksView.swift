@@ -1476,6 +1476,7 @@ private struct TaskDetailSheet: View {
                         Label("Assigned To", systemImage: "person.fill")
                             .font(themeStore.font(for: .bodyStrong))
                     }
+                    .font(themeStore.font(for: .bodyStrong))
 
                     Toggle(isOn: $hasDueDate) {
                         Label("Due Date", systemImage: "calendar")
@@ -1483,10 +1484,12 @@ private struct TaskDetailSheet: View {
                     }
                     if hasDueDate {
                         DatePicker(
-                            "Choose Date",
                             selection: $dueDate,
                             displayedComponents: [.date]
-                        )
+                        ) {
+                            Text("Choose Date")
+                                .font(themeStore.font(for: .bodyStrong))
+                        }
                         .font(themeStore.font(for: .bodyStrong))
 
                         Toggle(isOn: $hasDueTime) {
@@ -1496,10 +1499,12 @@ private struct TaskDetailSheet: View {
 
                         if hasDueTime {
                             DatePicker(
-                                "Reminder Time",
                                 selection: $dueDate,
                                 displayedComponents: [.hourAndMinute]
-                            )
+                            ) {
+                                Text("Reminder Time")
+                                    .font(themeStore.font(for: .bodyStrong))
+                            }
                             .font(themeStore.font(for: .bodyStrong))
                         }
                     }
@@ -1532,6 +1537,7 @@ private struct TaskDetailSheet: View {
                     .foregroundStyle(.red)
                 }
             }
+            .font(themeStore.font(for: .bodyStrong))
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: hasDueTime) { _, isEnabled in

@@ -33,9 +33,12 @@ struct SettingsView: View {
             Section {
                 Picker("System Font Size", selection: selectedFontScaleBinding) {
                     ForEach(FontSizeScale.allCases) { scale in
-                        Text(scale.displayName).tag(scale)
+                        Text(scale.displayName)
+                            .font(themeStore.font(for: .bodyStrong))
+                            .tag(scale)
                     }
                 }
+                .font(themeStore.font(for: .bodyStrong))
                 .pickerStyle(.segmented)
                 .controlSize(.large)
                 .padding(.vertical, 6)
@@ -157,6 +160,7 @@ struct SettingsView: View {
                         ),
                         displayedComponents: [.hourAndMinute]
                     )
+                    .font(themeStore.font(for: .bodyStrong))
                     .disabled(!notificationSettings.isEnabled)
                 }
 

@@ -260,6 +260,7 @@ private struct BacklogContent: View {
                     actionTitle: "Promote",
                     members: activeMembers,
                     autoConfirmOnSelection: false,
+                    showsUnassignedOption: false,
                     selectedAssigneeId: $selectedAssigneeIdForPromotion,
                     onCancel: {
                         cancelPendingPromotion()
@@ -298,6 +299,7 @@ private struct BacklogContent: View {
                     actionTitle: "Save",
                     members: activeMembers,
                     autoConfirmOnSelection: true,
+                    showsUnassignedOption: true,
                     selectedAssigneeId: $selectedAssigneeIdForAssignment,
                     onCancel: {
                         pendingAssignmentItemID = nil
@@ -305,7 +307,7 @@ private struct BacklogContent: View {
                     },
                     onConfirm: {
                         guard let item = currentPendingAssignmentItem else { return }
-                        guard let selectedAssignee = selectedAssigneeIdForAssignment else { return }
+                        let selectedAssignee = selectedAssigneeIdForAssignment
                         let hadAssignee = item.assigneeId != nil
                         let pendingItemID = item.id
                         pendingAssignmentItemID = nil
@@ -959,13 +961,23 @@ struct CategoryCard: View {
                     Button {
                         onEditCategory()
                     } label: {
-                        Label("Edit Category", systemImage: "pencil")
+                        Label {
+                            Text("Edit Category")
+                                .font(themeStore.font(for: .bodyStrong))
+                        } icon: {
+                            Image(systemName: "pencil")
+                        }
                     }
 
                     Button(role: .destructive) {
                         onDeleteCategory()
                     } label: {
-                        Label("Delete Category", systemImage: "trash")
+                        Label {
+                            Text("Delete Category")
+                                .font(themeStore.font(for: .bodyStrong))
+                        } icon: {
+                            Image(systemName: "trash")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis")
