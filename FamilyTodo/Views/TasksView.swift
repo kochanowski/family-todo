@@ -1445,7 +1445,7 @@ private struct TaskDetailSheet: View {
         _title = State(initialValue: task.title)
         _assigneeId = State(initialValue: task.assigneeId)
         _hasDueDate = State(initialValue: task.dueDate != nil)
-        _hasDueTime = State(initialValue: task.dueDate.map(Task.dueDateHasExplicitTime) ?? false)
+        _hasDueTime = State(initialValue: task.dueDate.map { Task.dueDateHasExplicitTime($0) } ?? false)
         _dueDate = State(initialValue: task.dueDate ?? Date())
         _notes = State(initialValue: task.notes ?? "")
     }
