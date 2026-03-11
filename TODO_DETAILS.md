@@ -12,6 +12,71 @@ Use it together with the one-task-at-a-time workflow.
 - Retro Dark, Retro Light, and Paper typography support has been expanded broadly; new UI is expected to honor theme fonts during initial implementation.
 - Notification UX has moved beyond the original plan: optional task due time, `Default reminder time`, and a daily digest that fires only when tasks are due.
 
+## MVP 1.0 Readiness
+
+## <a id="m10"></a>M1.0 Live Shopping Mode / Last-Minute Alert
+- Objective: solve the “I’m at the store, add anything last minute now” household coordination problem with a lightweight shared-presence mode in Shopping.
+- Current architecture fit:
+  - Good fit for shared state: `Household` is already local-cache + CloudKit synced and participates in household bootstrap/recovery.
+  - Good fit for real-time refresh: CloudKit remote notifications already trigger shared-data refresh paths.
+  - Partial fit for push: current notification pipeline can surface generic shared updates, but not yet targeted “`<Name>` is at the store” payloads.
+  - Important constraint: the current household metadata edit path is owner-only and only updates `name` / `iconSymbol`, so this feature needs a separate presence update path that any active member can use.
+- In scope:
+  - Add nullable `activeShopperId` to the full `Household` chain:
+    - domain model,
+    - SwiftData cache model,
+    - CloudKit mapping,
+    - schema/validator.
+  - Add a dedicated `HouseholdStore` flow for shopping presence:
+    - `startShopping(userId:)`
+    - `finishShopping(userId:)`
+    - local-first update of `currentHousehold` + cache,
+    - CloudKit sync afterward.
+  - Do **not** reuse owner-only `updateCurrentHousehold(...)` metadata editing for this feature.
+  - Shopping tab top banner states:
+    - idle: full-width CTA `🛒 I'm going shopping!`
+    - active shopper: highlighted `🛒 You are shopping right now` banner with `Finish`
+    - other member active: informational `🛒 <Name> is shopping right now! Add items quickly.`
+  - Resolve shopper display name from current active members; fall back gracefully if member metadata is stale.
+  - Bonus UX:
+    - disable screen idle timer while the current user is the active shopper,
+    - always re-enable it on finish, clear-list reset, and view teardown.
+  - Reset rules:
+    - explicit `Finish`,
+    - `Clear shopping list`,
+    - defensive cleanup when the marked shopper leaves the household or the household changes.
+  - Notifications:
+    - when a user starts shopping, notify all other household members with:
+      - title: `🛒 <User Name> is at the store!`
+      - body: `Quick, add any last-minute items to the shopping list now.`
+    - no notification when finishing shopping unless product explicitly changes this later.
+  - Shopping anti-spam:
+    - this presence notification is a distinct event and should not be batched together with generic shopping-item changes,
+    - normal shopping-item notifications should still remain batched/rate-limited separately.
+- Likely files:
+  - `FamilyTodo/Models/Household.swift`
+  - `FamilyTodo/Models/CachedHousehold.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `cloudkit/schema/housepulse-schema.json`
+  - `scripts/cloudkit/validate_schema.sh`
+- Out of scope:
+  - navigation redesign outside the Shopping banner area,
+  - geofencing / auto-detecting store arrival,
+  - server-side push provider beyond current CloudKit-driven notification path,
+  - multi-shopper simultaneous mode for v1.0.
+- Validation:
+  - Starting shopping as any active member updates local UI instantly on the acting device.
+  - Other household members see the presence banner after CloudKit sync/notification refresh.
+  - Non-owner members can start/finish shopping successfully.
+  - If another member is already active shopper, the current user sees the informational banner, not the CTA.
+  - `Clear shopping list` resets `activeShopperId` to `nil`.
+  - Idle timer is disabled only for the active shopper and is always restored afterward.
+  - Push copy is specific to the shopping-presence event and does not spam repeatedly during ordinary list edits.
+
 ## Phase 1 - Data Integrity & CloudKit
 
 ## <a id="p11"></a>P1.1 Replace Silent SwiftData Saves

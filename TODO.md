@@ -13,7 +13,7 @@
 - Household leave/delete flows are local-first with pending remote cleanup replay and stale CloudKit recovery guards.
 - Retro Dark, Retro Light, and Paper theme support has been rolled out broadly; new UI is expected to wire theme fonts from day one.
 - Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
-- Remaining near-term roadmap items are `P2.9` and `P2.10`; recurring rotation (`P2.6`) is still parked.
+- Next planned feature before MVP is `M1.0 Live Shopping Mode / Last-Minute Alert`; after that, the remaining near-term roadmap items are `P2.9` and `P2.10`, while recurring rotation (`P2.6`) is still parked.
 
 ## MVP 1.0 Readiness Track (Highest Priority)
 
@@ -22,10 +22,16 @@
 - **Multiplayer sync foundation is good enough for physical-device testing**: Tasks, Shopping, and Ideas already use cache-first loading, background CloudKit replay, tombstones, and `updatedAt`-based last-writer-wins merge.
 - **Push infrastructure is only partially ready**: remote notifications refresh the app and show generic shared-change banners, but they do not yet send targeted household event copy such as `Task assigned to you`, `Member joined`, or `Poke from <Name>`.
 - **Shopping anti-spam is partially covered**: shared remote updates are aggregated today, but the logic is still generic and not yet explicitly productized around shopping-only batching rules.
+- **Live shopping presence is a good architectural fit, but needs a dedicated household-presence write path**: `Household` is already cache + CloudKit synced, but the current metadata update flow is owner-only and cannot be reused as-is for any member starting shopping.
 - **English-only launch is aligned with current direction**: the app is mostly hardcoded in English and does not have active localization plumbing, but a few remaining non-English strings still need cleanup before release.
 - **Monetization schema is NOT ready yet**: `Household` does not currently expose `isPremium` or `subscriptionTier` in the domain model, SwiftData cache, CloudKit mapping, or schema.
 
 ### MVP 1.0 Stabilization Tasks
+
+- [ ] **M1.0 Live Shopping Mode / Last-Minute Alert** ([Details](TODO_DETAILS.md#m10))
+Description: Add a shared household shopping-presence state that lets one member announce “I’m at the store” so other members can quickly add last-minute items, with real-time UI state in Shopping and targeted partner notifications.
+Acceptance Criteria: `Household` gains nullable `activeShopperId` through the full persistence chain; Shopping shows the correct top banner state for idle / current shopper / other-member shopper; starting shopping updates local UI immediately and syncs through CloudKit; finishing shopping or clearing the shopping list resets the state; active shopper mode can keep the screen awake; other members receive a clear “at the store” notification without shopping-change spam.
+Regression Risk: Reusing owner-only household-edit paths will block non-owner members; stale presence may get stuck if reset paths are incomplete; overly generic push handling may notify the wrong user or fail to distinguish shopping presence from normal shared edits.
 
 - [ ] **M1.1 Physical Multiplayer Soak Testing**
 Description: Run real-device, two-user household testing for simultaneous edits across Tasks, Shopping, and Ideas to validate current cache-first + CloudKit replay behavior under realistic household use.
