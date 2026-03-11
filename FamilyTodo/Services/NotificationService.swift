@@ -299,7 +299,7 @@ enum NotificationSchedulePlanner {
             }
 
             return cachedTasks
-                .filter { $0.syncStatusRaw != TaskSyncStatus.pendingDelete }
+                .filter { $0.syncStatusRaw != SyncStatus.pendingDelete.rawValue }
                 .map { $0.toTask() }
         }
 
