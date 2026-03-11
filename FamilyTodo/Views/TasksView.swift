@@ -1460,8 +1460,9 @@ private struct TaskDetailSheet: View {
         self.onSave = onSave
         self.onDelete = onDelete
 
+        let initialAssigneeId = task.assigneeId ?? members.first(where: \.isActive)?.id
         _title = State(initialValue: task.title)
-        _assigneeId = State(initialValue: task.assigneeId)
+        _assigneeId = State(initialValue: initialAssigneeId)
         _hasDueDate = State(initialValue: task.dueDate != nil)
         _hasDueTime = State(initialValue: task.dueDate.map { Task.dueDateHasExplicitTime($0) } ?? false)
         _dueDate = State(initialValue: task.dueDate ?? Date())
@@ -1481,20 +1482,23 @@ private struct TaskDetailSheet: View {
                 }
 
                 Section {
-                    Picker(selection: $assigneeId) {
-                        Text("Unassigned")
-                            .font(themeStore.font(for: .bodyStrong))
-                            .tag(UUID?.none)
-                        ForEach(members.filter(\.isActive)) { member in
-                            Text(member.displayName)
+                    if assignableMembers.isEmpty {
+                        Text("No members available.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                    } else {
+                        Picker(selection: $assigneeId) {
+                            ForEach(assignableMembers) { member in
+                                Text(member.displayName)
+                                    .font(themeStore.font(for: .bodyStrong))
+                                    .tag(Optional(member.id))
+                            }
+                        } label: {
+                            Label("Assigned To", systemImage: "person.fill")
                                 .font(themeStore.font(for: .bodyStrong))
-                                .tag(Optional(member.id))
                         }
-                    } label: {
-                        Label("Assigned To", systemImage: "person.fill")
-                            .font(themeStore.font(for: .bodyStrong))
+                        .font(themeStore.font(for: .bodyStrong))
                     }
-                    .font(themeStore.font(for: .bodyStrong))
 
                     Toggle(isOn: $hasDueDate) {
                         Label("Due Date", systemImage: "calendar")
@@ -1584,17 +1588,34 @@ private struct TaskDetailSheet: View {
                         save()
                     }
                     .font(themeStore.font(for: .buttonLabel))
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                            assigneeId == nil
+                    )
                 }
             }
         }
     }
 
+    private var assignableMembers: [Member] {
+        var byID: [UUID: Member] = [:]
+
+        for member in members where member.isActive || member.id == assigneeId {
+            byID[member.id] = member
+        }
+
+        return byID.values.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+
     private func save() {
+        guard let assigneeId else { return }
+
         var updatedTask = task
         updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedTask.assigneeId = assigneeId
-        updatedTask.assigneeIds = assigneeId.map { [$0] } ?? []
+        updatedTask.assigneeIds = [assigneeId]
         updatedTask.dueDate = if hasDueDate {
             hasDueTime ? dueDate : Calendar.current.startOfDay(for: dueDate)
         } else {

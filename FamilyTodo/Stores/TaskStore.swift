@@ -453,9 +453,11 @@ final class TaskStore: ObservableObject {
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
-        // Validate transition constraints (assignee required for Next).
-        if status == .next {
-            let validation = validateNextTransition(assigneeId: assigneeId)
+        let resolvedPrimaryAssigneeId = assigneeId ?? assigneeIds.first
+
+        // Tasks shown on the execution board must stay assigned.
+        if status != .backlog {
+            let validation = validateNextTransition(assigneeId: resolvedPrimaryAssigneeId)
             guard validation == .ok else {
                 error = validation.taskStoreError
                 return validation
@@ -520,10 +522,13 @@ final class TaskStore: ObservableObject {
         beginMutation(updatedTask.id)
         defer { endMutation(updatedTask.id) }
 
-        // Validate transition constraints if moving to Next.
-        let wipAssigneeId = task.assigneeId ?? task.assigneeIds.first
-        if task.status == .next {
-            let validation = validateNextTransition(assigneeId: wipAssigneeId, excludingTaskId: task.id)
+        // Tasks outside backlog must keep a concrete assignee.
+        let resolvedAssigneeId = task.assigneeId ?? task.assigneeIds.first
+        if task.status != .backlog {
+            let validation = validateNextTransition(
+                assigneeId: resolvedAssigneeId,
+                excludingTaskId: task.id
+            )
             guard validation == .ok else {
                 error = validation.taskStoreError
                 return validation

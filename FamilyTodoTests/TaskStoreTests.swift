@@ -72,6 +72,40 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(store.canMoveToNext(assigneeId: assigneeId))
     }
 
+    func testCreateTask_BacklogWithoutAssignee_IsAllowed() async {
+        let result = await store.createTask(
+            title: "Idea without owner yet",
+            status: .backlog,
+            assigneeId: nil
+        )
+
+        XCTAssertEqual(result, .ok)
+    }
+
+    func testCreateTask_DoneWithoutAssignee_ReturnsAssigneeRequired() async {
+        let result = await store.createTask(
+            title: "Completed task without owner",
+            status: .done,
+            assigneeId: nil
+        )
+
+        XCTAssertEqual(result, .assigneeRequired)
+    }
+
+    func testUpdateTask_DoneWithoutAssignee_ReturnsAssigneeRequired() async {
+        let task = Task(
+            householdId: householdId,
+            title: "Completed task without owner",
+            status: .done,
+            assigneeId: nil,
+            taskType: .oneOff
+        )
+
+        let result = await store.updateTask(task)
+
+        XCTAssertEqual(result, .assigneeRequired)
+    }
+
     // MARK: - Computed Properties Tests
 
     func testBacklogTasks_Empty() {
