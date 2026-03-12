@@ -45,6 +45,7 @@ private struct BacklogContent: View {
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var isAddingCategory = false
@@ -171,10 +172,7 @@ private struct BacklogContent: View {
                     .scrollDismissesKeyboard(.never)
                 }
                 .refreshable {
-                    store.setSyncMode(userSession.syncMode)
-                    memberStore.setSyncMode(userSession.syncMode)
-                    await store.loadData()
-                    await memberStore.loadMembers()
+                    await loadBacklogData()
                     markIdeasTutorialAsSeenIfNeeded()
                 }
             }
@@ -183,11 +181,20 @@ private struct BacklogContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
-            store.setSyncMode(userSession.syncMode)
-            memberStore.setSyncMode(userSession.syncMode)
-            await store.loadData()
-            await memberStore.loadMembers()
+            await loadBacklogData()
             markIdeasTutorialAsSeenIfNeeded()
+        }
+        .onChange(of: userSession.syncMode) { _, _ in
+            _ = _Concurrency.Task {
+                await loadBacklogData()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: userSession.userId) { _, _ in
+            updateStoreCloudContext()
+        }
+        .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
+            updateStoreCloudContext()
         }
         .onChange(of: store.categories.isEmpty) { _, isEmpty in
             if !isEmpty {
@@ -196,6 +203,7 @@ private struct BacklogContent: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
             _ = _Concurrency.Task {
+                updateStoreCloudContext()
                 await store.loadData()
                 markIdeasTutorialAsSeenIfNeeded()
             }
@@ -424,6 +432,20 @@ private struct BacklogContent: View {
             }
         }
         .animation(ToastView.AnimationTokens.curve, value: pendingDeletionItem?.id)
+    }
+
+    private func loadBacklogData() async {
+        updateStoreCloudContext()
+        store.setSyncMode(userSession.syncMode)
+        memberStore.setSyncMode(userSession.syncMode)
+        await store.loadData()
+        await memberStore.loadMembers()
+    }
+
+    private func updateStoreCloudContext() {
+        let ownerId = householdStore.currentHousehold?.ownerId
+        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
     }
 
     private var activeMembers: [Member] {

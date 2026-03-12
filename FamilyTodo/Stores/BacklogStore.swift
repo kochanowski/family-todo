@@ -61,6 +61,8 @@ final class BacklogStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
+    private var currentUserId: String?
+    private var householdOwnerId: String?
     private var pendingMutationIDs: Set<UUID> = []
     private var isReplayingPendingMutations = false
 
@@ -68,8 +70,20 @@ final class BacklogStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
+        self.currentUserId = currentUserId
+        self.householdOwnerId = householdOwnerId
+    }
+
     private var isCloudSyncEnabled: Bool {
         syncMode == .cloud
+    }
+
+    private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
+        guard let currentUserId, let householdOwnerId else {
+            return .participantShared
+        }
+        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
@@ -131,8 +145,14 @@ final class BacklogStore: ObservableObject {
         do {
             // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
-            async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: householdId)
-            async let fetchedItems = cloudKit.fetchBacklogItems(householdId: householdId)
+            async let fetchedCategories = cloudKit.fetchBacklogCategories(
+                householdId: householdId,
+                scope: cloudScope
+            )
+            async let fetchedItems = cloudKit.fetchBacklogItems(
+                householdId: householdId,
+                scope: cloudScope
+            )
 
             let (categoriesResult, itemsResult) = try await (fetchedCategories, fetchedItems)
 
@@ -298,7 +318,10 @@ final class BacklogStore: ObservableObject {
 
         for cached in pendingCategoryUploads {
             do {
-                _ = try await cloudKit.saveBacklogCategory(cached.toBacklogCategory())
+                _ = try await cloudKit.saveBacklogCategory(
+                    cached.toBacklogCategory(),
+                    scope: cloudScope
+                )
                 cached.syncStatusRaw = BacklogSyncStatus.synced
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -309,7 +332,10 @@ final class BacklogStore: ObservableObject {
 
         for cached in pendingItemUploads {
             do {
-                _ = try await cloudKit.saveBacklogItem(cached.toBacklogItem())
+                _ = try await cloudKit.saveBacklogItem(
+                    cached.toBacklogItem(),
+                    scope: cloudScope
+                )
                 cached.syncStatusRaw = BacklogSyncStatus.synced
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -320,7 +346,11 @@ final class BacklogStore: ObservableObject {
 
         for cached in pendingItemDeletes {
             do {
-                try await cloudKit.deleteBacklogItem(id: cached.id, householdId: cached.householdId)
+                try await cloudKit.deleteBacklogItem(
+                    id: cached.id,
+                    householdId: cached.householdId,
+                    scope: cloudScope
+                )
                 context.delete(cached)
                 items.removeAll { $0.id == cached.id }
                 didMutateCache = true
@@ -372,7 +402,7 @@ final class BacklogStore: ObservableObject {
         if !isCloudSyncEnabled { return }
 
         do {
-            _ = try await cloudKit.saveBacklogCategory(category)
+            _ = try await cloudKit.saveBacklogCategory(category, scope: cloudScope)
 
             // Mark synced
             if let context = modelContext {
@@ -430,7 +460,11 @@ final class BacklogStore: ObservableObject {
         if !isCloudSyncEnabled { return .deleted }
 
         do {
-            try await cloudKit.deleteBacklogCategory(id: category.id, householdId: category.householdId)
+            try await cloudKit.deleteBacklogCategory(
+                id: category.id,
+                householdId: category.householdId,
+                scope: cloudScope
+            )
             // CloudKit should cascade delete items optionally, or we delete them explicitly?
             // Assuming we handle items delete or specific logic elsewhere, but for now just category delete.
             // Ideally we should delete items first or rely on CloudKit references if configured.
@@ -512,7 +546,8 @@ final class BacklogStore: ObservableObject {
                 categoryId: updatedCategory.id,
                 householdId: updatedCategory.householdId,
                 newTitle: updatedCategory.title,
-                newColorHex: updatedCategory.colorHex
+                newColorHex: updatedCategory.colorHex,
+                scope: cloudScope
             )
 
             if let context = modelContext {
@@ -579,7 +614,7 @@ final class BacklogStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            try await cloudKit.saveBacklogCategoriesBatch(categories)
+            try await cloudKit.saveBacklogCategoriesBatch(categories, scope: cloudScope)
             for category in categories {
                 markCachedCategoryAwaitingCloudEcho(id: category.id)
             }
@@ -587,7 +622,7 @@ final class BacklogStore: ObservableObject {
             self.error = error
             for category in categories {
                 do {
-                    _ = try await cloudKit.saveBacklogCategory(category)
+                    _ = try await cloudKit.saveBacklogCategory(category, scope: cloudScope)
                     markCachedCategoryAwaitingCloudEcho(id: category.id)
                 } catch {
                     self.error = error
@@ -646,7 +681,7 @@ final class BacklogStore: ObservableObject {
         }
 
         do {
-            _ = try await cloudKit.saveBacklogItem(item)
+            _ = try await cloudKit.saveBacklogItem(item, scope: cloudScope)
             if let context = modelContext {
                 let descriptor = FetchDescriptor<CachedBacklogItem>(
                     predicate: #Predicate { $0.id == item.id }
@@ -700,7 +735,7 @@ final class BacklogStore: ObservableObject {
         if !isCloudSyncEnabled { return }
 
         do {
-            _ = try await cloudKit.saveBacklogItem(item)
+            _ = try await cloudKit.saveBacklogItem(item, scope: cloudScope)
 
             // Mark synced
             if let context = modelContext {
@@ -829,7 +864,7 @@ final class BacklogStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveBacklogItem(updatedItem)
+            _ = try await cloudKit.saveBacklogItem(updatedItem, scope: cloudScope)
             markCachedItemAwaitingCloudEcho(id: updatedItem.id)
         } catch {
             self.error = error
@@ -850,6 +885,10 @@ final class BacklogStore: ObservableObject {
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setSyncMode(syncMode)
         taskStore.setHousehold(householdId)
+        taskStore.setCloudContext(
+            currentUserId: currentUserId,
+            householdOwnerId: householdOwnerId
+        )
 
         let createdTaskId = UUID()
         let resolvedAssigneeId = assigneeId ?? item.assigneeId

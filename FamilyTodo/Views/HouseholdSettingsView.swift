@@ -129,10 +129,18 @@ struct ProfileView: View {
             memberStore.setModelContext(modelContext)
             memberStore.setSyncMode(userSession.syncMode)
             memberStore.setHousehold(householdStore.currentHousehold?.id)
+            memberStore.setCloudContext(
+                currentUserId: userSession.userId,
+                householdOwnerId: householdStore.currentHousehold?.ownerId
+            )
             await memberStore.loadMembers()
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
             _ = _Concurrency.Task {
+                memberStore.setCloudContext(
+                    currentUserId: userSession.userId,
+                    householdOwnerId: householdStore.currentHousehold?.ownerId
+                )
                 await memberStore.loadMembers()
             }
         }
@@ -342,6 +350,10 @@ struct ProfileView: View {
                     newRole: newRole,
                     currentUserId: userId
                 )
+                memberStore.setCloudContext(
+                    currentUserId: userSession.userId,
+                    householdOwnerId: householdStore.currentHousehold?.ownerId
+                )
                 await memberStore.loadMembers()
             } catch {
                 actionErrorMessage = error.localizedDescription
@@ -355,6 +367,10 @@ struct ProfileView: View {
             do {
                 try await memberStore.deleteMember(id: member.id, currentUserId: userId)
                 memberToDelete = nil
+                memberStore.setCloudContext(
+                    currentUserId: userSession.userId,
+                    householdOwnerId: householdStore.currentHousehold?.ownerId
+                )
                 await memberStore.loadMembers()
             } catch {
                 actionErrorMessage = error.localizedDescription
@@ -515,6 +531,7 @@ private struct EditProfileView: View {
     @StateObject private var memberStore: MemberStore
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
@@ -607,6 +624,10 @@ private struct EditProfileView: View {
             hasLoaded = true
             memberStore.setModelContext(modelContext)
             memberStore.setSyncMode(userSession.syncMode)
+            memberStore.setCloudContext(
+                currentUserId: userSession.userId,
+                householdOwnerId: householdStore.currentHousehold?.ownerId
+            )
             await memberStore.loadMembers()
             hydrateInitialValues()
         }

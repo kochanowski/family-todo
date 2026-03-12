@@ -241,6 +241,7 @@ struct MoreRow: View {
 struct CategoriesManagementView: View {
     @StateObject private var store: BacklogStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var selectedCategory: BacklogCategory?
     @State private var isAddingCategory = false
@@ -334,6 +335,10 @@ struct CategoriesManagementView: View {
             Text(categoryDeletionBlockReason?.alertDetail ?? "")
         }
         .task {
+            store.setCloudContext(
+                currentUserId: userSession.userId,
+                householdOwnerId: householdStore.currentHousehold?.ownerId
+            )
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
@@ -407,6 +412,7 @@ private struct CompletedTasksContent: View {
 
     @StateObject private var store: TaskStore
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var pendingCleanup: CleanupAction?
 
@@ -495,6 +501,10 @@ private struct CompletedTasksContent: View {
             )
         }
         .task {
+            store.setCloudContext(
+                currentUserId: userSession.userId,
+                householdOwnerId: householdStore.currentHousehold?.ownerId
+            )
             store.setSyncMode(userSession.syncMode)
             await store.loadTasks()
         }

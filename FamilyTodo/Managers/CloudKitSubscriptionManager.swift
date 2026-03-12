@@ -22,6 +22,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     /// Use CloudKitManager for consistent container access
     private let cloudKit = CloudKitManager.shared
     private var subscriptionIds: [String] = []
+    private var configuredUserId: String?
     private var configuredHouseholdId: UUID?
     private var aggregationTimer: Timer?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
@@ -36,8 +37,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Setup
 
-    func configure(userId _: String, householdId: UUID) {
-        guard configuredHouseholdId != householdId else { return }
+    func configure(userId: String, householdId: UUID) {
+        guard configuredUserId != userId || configuredHouseholdId != householdId else { return }
+        configuredUserId = userId
         configuredHouseholdId = householdId
 
         _Concurrency.Task {

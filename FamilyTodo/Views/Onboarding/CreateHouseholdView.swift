@@ -179,6 +179,7 @@ struct CreateHouseholdView: View {
                 HouseholdJoinSheet(
                     inviteCodeToken: $joinInviteCode,
                     inviteLink: $joinInput,
+                    isJoining: isJoining,
                     onJoin: joinHousehold,
                     onPasteFromClipboard: {
                         joinInput = UIPasteboard.general.string ?? ""
@@ -381,6 +382,7 @@ struct CreateHouseholdView: View {
 struct HouseholdJoinSheet: View {
     @Binding var inviteCodeToken: String
     @Binding var inviteLink: String
+    let isJoining: Bool
     let onJoin: () -> Void
     let onPasteFromClipboard: () -> Void
     @EnvironmentObject private var themeStore: ThemeStore
@@ -403,6 +405,7 @@ struct HouseholdJoinSheet: View {
                     .multilineTextAlignment(.center)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled(true)
+                    .disabled(isJoining)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
@@ -420,17 +423,23 @@ struct HouseholdJoinSheet: View {
                 Button {
                     onJoin()
                 } label: {
-                    Text("Join with code")
-                        .font(themeStore.font(for: .buttonLabel))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            Capsule()
-                                .fill(canJoinWithCode ? Color.blue : Color.secondary)
-                        )
+                    HStack(spacing: 10) {
+                        if isJoining {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                        Text(isJoining ? "Joining..." : "Join with code")
+                            .font(themeStore.font(for: .buttonLabel))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        Capsule()
+                            .fill(canJoinWithCode && !isJoining ? Color.blue : Color.secondary)
+                    )
                 }
-                .disabled(!canJoinWithCode)
+                .disabled(!canJoinWithCode || isJoining)
                 .padding(.horizontal, 40)
 
                 Divider()
@@ -445,6 +454,7 @@ struct HouseholdJoinSheet: View {
                     .multilineTextAlignment(.center)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
+                    .disabled(isJoining)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
@@ -455,18 +465,30 @@ struct HouseholdJoinSheet: View {
                 Button {
                     onJoin()
                 } label: {
-                    Text("Join with link")
-                        .font(themeStore.font(for: .buttonLabel))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            Capsule()
-                                .fill(canJoinWithLink ? Color.blue : Color.secondary)
-                        )
+                    HStack(spacing: 10) {
+                        if isJoining {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                        Text(isJoining ? "Joining..." : "Join with link")
+                            .font(themeStore.font(for: .buttonLabel))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        Capsule()
+                            .fill(canJoinWithLink && !isJoining ? Color.blue : Color.secondary)
+                    )
                 }
-                .disabled(!canJoinWithLink)
+                .disabled(!canJoinWithLink || isJoining)
                 .padding(.horizontal, 40)
+
+                if isJoining {
+                    ProgressView("Joining household...")
+                        .font(themeStore.font(for: .bodySmall))
+                        .tint(themeStore.accentTabColor)
+                }
 
                 HStack(spacing: 12) {
                     Button {
@@ -477,6 +499,7 @@ struct HouseholdJoinSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(isJoining)
 
                     Button {
                         showScanner = true
@@ -486,6 +509,7 @@ struct HouseholdJoinSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(isJoining)
                 }
                 .padding(.horizontal, 40)
 
@@ -497,6 +521,7 @@ struct HouseholdJoinSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isJoining)
                 }
             }
             .sheet(isPresented: $showScanner) {

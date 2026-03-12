@@ -193,6 +193,11 @@ class HouseholdStore: ObservableObject {
             if let resolvedCloudHousehold {
                 print("DEBUG: Found recoverable household in cloud: \(resolvedCloudHousehold.id)")
                 await setCloudScope(for: resolvedCloudHousehold, userId: userId)
+                if resolvedCloudHousehold.ownerId == userId {
+                    try? await cloudKit.repairSharedHouseholdGraphIfNeeded(
+                        householdId: resolvedCloudHousehold.id
+                    )
+                }
                 await cloudKit.migrateMemberColorsIfNeeded(householdId: resolvedCloudHousehold.id)
                 updateCache(with: resolvedCloudHousehold)
                 currentHousehold = resolvedCloudHousehold
@@ -285,6 +290,7 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.ownerPrivate)
         _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: household.id)
         try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
+        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
         let container = await cloudKit.getContainer()
 
         let share = try await cloudKit.createShare(for: household)
@@ -301,6 +307,7 @@ class HouseholdStore: ObservableObject {
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.ownerPrivate)
         try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
+        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
 
         if let existingURL = share?.url {
             return existingURL
@@ -339,6 +346,9 @@ class HouseholdStore: ObservableObject {
         guard syncMode == .cloud else {
             throw HouseholdError.cloudSyncRequired
         }
+
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
 
         if let activeInviteCode {
             do {
@@ -402,6 +412,7 @@ class HouseholdStore: ObservableObject {
         // Update local cache
         updateCache(with: household)
         currentHousehold = household
+        await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     func joinHousehold(metadata: CKShare.Metadata, userId: String, displayName: String) async throws {
@@ -432,6 +443,7 @@ class HouseholdStore: ObservableObject {
 
         updateCache(with: household)
         currentHousehold = household
+        await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     // MARK: - Household Management
@@ -865,6 +877,38 @@ class HouseholdStore: ObservableObject {
             return validated
         }
         return syncMode == .localOnly ? "Guest" : "Member"
+    }
+
+    private func prewarmJoinedHouseholdGraph(household: Household, userId: String) async {
+        guard syncMode == .cloud, let modelContext else { return }
+
+        let ownerId = household.ownerId
+
+        let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
+        memberStore.setSyncMode(syncMode)
+        memberStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await memberStore.loadMembers()
+
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(household.id)
+        taskStore.setSyncMode(syncMode)
+        taskStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await taskStore.loadTasks()
+
+        let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
+        shoppingStore.setSyncMode(syncMode)
+        shoppingStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await shoppingStore.loadItems()
+
+        let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
+        bundleStore.setSyncMode(syncMode)
+        bundleStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await bundleStore.loadBundles()
+
+        let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
+        backlogStore.setSyncMode(syncMode)
+        backlogStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await backlogStore.loadData()
     }
 
     func resolveLeaveBehavior(for member: Member, activeMembers: [Member]) -> LeaveResolution {

@@ -24,6 +24,8 @@ final class ShoppingBundleStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
+    private var currentUserId: String?
+    private var householdOwnerId: String?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
 
@@ -31,8 +33,20 @@ final class ShoppingBundleStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
+        self.currentUserId = currentUserId
+        self.householdOwnerId = householdOwnerId
+    }
+
     private var isCloudSyncEnabled: Bool {
         syncMode == .cloud
+    }
+
+    private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
+        guard let currentUserId, let householdOwnerId else {
+            return .participantShared
+        }
+        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
@@ -82,7 +96,10 @@ final class ShoppingBundleStore: ObservableObject {
 
         do {
             await cloudKit.ensureReady()
-            let fetchedBundles = try await cloudKit.fetchShoppingBundles(householdId: householdId)
+            let fetchedBundles = try await cloudKit.fetchShoppingBundles(
+                householdId: householdId,
+                scope: cloudScope
+            )
             bundles = mergeCloudSnapshot(fetchedBundles, with: pendingSnapshot)
             syncToCache(fetchedBundles, cloudBundleIDs: Set(fetchedBundles.map(\.id)))
             replayPendingMutationsInBackground()
@@ -181,7 +198,10 @@ final class ShoppingBundleStore: ObservableObject {
 
         for cached in pendingUploads {
             do {
-                _ = try await cloudKit.saveShoppingBundle(cached.toShoppingBundle())
+                _ = try await cloudKit.saveShoppingBundle(
+                    cached.toShoppingBundle(),
+                    scope: cloudScope
+                )
                 cached.syncStatusRaw = BundleSyncStatus.awaitingCloudEcho
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -194,7 +214,8 @@ final class ShoppingBundleStore: ObservableObject {
             do {
                 try await cloudKit.deleteShoppingBundle(
                     id: cached.id,
-                    householdId: cached.householdId
+                    householdId: cached.householdId,
+                    scope: cloudScope
                 )
                 context.delete(cached)
                 didMutateCache = true

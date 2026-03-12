@@ -103,6 +103,7 @@ private struct TasksContent: View {
     @Namespace private var tasksFilterGlassNamespace
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
@@ -200,6 +201,18 @@ private struct TasksContent: View {
                 await refreshData()
                 markTasksTutorialAsSeenIfNeeded()
             }
+        }
+        .onChange(of: userSession.syncMode) { _, _ in
+            _ = _Concurrency.Task {
+                await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: userSession.userId) { _, _ in
+            updateStoreCloudContext()
+        }
+        .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
+            updateStoreCloudContext()
         }
         .onChange(of: store.nextTasks.isEmpty) { _, isEmpty in
             if !isEmpty {
@@ -1013,6 +1026,7 @@ private struct TasksContent: View {
     }
 
     private func refreshData() async {
+        updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         memberStore.setSyncMode(userSession.syncMode)
         backlogStore.setSyncMode(userSession.syncMode)
@@ -1023,6 +1037,13 @@ private struct TasksContent: View {
 
         _ = await (loadTasks, loadMembers, loadBacklog)
         normalizeAssigneeFilterSelection()
+    }
+
+    private func updateStoreCloudContext() {
+        let ownerId = householdStore.currentHousehold?.ownerId
+        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        backlogStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
     }
 
     private func markTasksTutorialAsSeenIfNeeded() {

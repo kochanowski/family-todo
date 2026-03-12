@@ -57,6 +57,7 @@ actor CloudKitManager {
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
+    private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
@@ -67,6 +68,10 @@ actor CloudKitManager {
     private static let inviteCodeLockWindow: TimeInterval = 10 * 60
     private static let inviteCodeAttemptWindow: TimeInterval = 5 * 60
     private static let inviteCodeAttemptLimit = 12
+
+    private func resolvedScope(_ explicitScope: HouseholdDatabaseScope?) -> HouseholdDatabaseScope {
+        explicitScope ?? householdScope
+    }
 
     static func sanitizeShareTitle(_ rawValue: String?) -> String {
         guard let rawValue else {
@@ -98,8 +103,7 @@ actor CloudKitManager {
             return true
         case .participantShared:
             let defaultZone = CKRecordZone.default().zoneID
-            guard zoneID != defaultZone else { return false }
-            return !zoneID.zoneName.hasPrefix(ownerHouseholdZonePrefix)
+            return zoneID != defaultZone
         }
     }
 
@@ -136,14 +140,18 @@ actor CloudKitManager {
         }
     }
 
+    private func activeHouseholdDatabase(for scope: HouseholdDatabaseScope) async -> CKDatabase {
+        switch scope {
+        case .ownerPrivate:
+            await privateDatabase
+        case .participantShared:
+            await sharedDatabase
+        }
+    }
+
     private var activeHouseholdDatabase: CKDatabase {
         get async {
-            switch householdScope {
-            case .ownerPrivate:
-                await privateDatabase
-            case .participantShared:
-                await sharedDatabase
-            }
+            await activeHouseholdDatabase(for: householdScope)
         }
     }
 
@@ -238,12 +246,21 @@ actor CloudKitManager {
 
     // MARK: - Shared Zone Context
 
-    func setSharedZoneContext(householdId: UUID, zoneID: CKRecordZone.ID) {
-        updateZoneContext(for: householdScope) { context in
+    func setSharedZoneContext(
+        householdId: UUID,
+        zoneID: CKRecordZone.ID,
+        scope: HouseholdDatabaseScope
+    ) {
+        updateZoneContext(for: scope) { context in
             context.zoneByHouseholdId[householdId] = zoneID
         }
-        persistSharedZoneContext(for: householdScope)
-        print("CloudKitScope: mapped household \(householdId) to zone \(zoneID.zoneName)")
+        persistSharedZoneContext(for: scope)
+        let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        print("CloudKitScope: mapped household \(householdId) to zone \(zoneID.zoneName) for \(scopeName)")
+    }
+
+    func setSharedZoneContext(householdId: UUID, zoneID: CKRecordZone.ID) {
+        setSharedZoneContext(householdId: householdId, zoneID: zoneID, scope: householdScope)
     }
 
     private func persistSharedZoneContext(for scope: HouseholdDatabaseScope) {
@@ -317,6 +334,26 @@ actor CloudKitManager {
         return Set(raw.compactMap(UUID.init(uuidString:)))
     }
 
+    private func markSharedGraphRepairCompleted(householdId: UUID) {
+        var repaired = Self.loadRepairedSharedGraphHouseholds()
+        repaired.insert(householdId)
+        UserDefaults.standard.set(
+            repaired.map(\.uuidString),
+            forKey: Self.sharedGraphRepairDefaultsKey
+        )
+    }
+
+    private func hasCompletedSharedGraphRepair(householdId: UUID) -> Bool {
+        Self.loadRepairedSharedGraphHouseholds().contains(householdId)
+    }
+
+    private static func loadRepairedSharedGraphHouseholds() -> Set<UUID> {
+        guard let raw = UserDefaults.standard.array(forKey: sharedGraphRepairDefaultsKey) as? [String] else {
+            return []
+        }
+        return Set(raw.compactMap(UUID.init(uuidString:)))
+    }
+
     private static func encodedZoneID(_ zoneID: CKRecordZone.ID) -> String {
         "\(zoneID.zoneName)|\(zoneID.ownerName)"
     }
@@ -327,17 +364,21 @@ actor CloudKitManager {
         return CKRecordZone.ID(zoneName: String(parts[0]), ownerName: String(parts[1]))
     }
 
-    private func rememberRecordZone(_ record: CKRecord, explicitHouseholdId: UUID?) {
+    private func rememberRecordZone(
+        _ record: CKRecord,
+        explicitHouseholdId: UUID?,
+        scope: HouseholdDatabaseScope
+    ) {
         let zoneID = record.recordID.zoneID
-        updateZoneContext(for: householdScope) { context in
+        updateZoneContext(for: scope) { context in
             context.zoneByRecordName[record.recordID.recordName] = zoneID
         }
 
         if let explicitHouseholdId {
-            updateZoneContext(for: householdScope) { context in
+            updateZoneContext(for: scope) { context in
                 context.zoneByHouseholdId[explicitHouseholdId] = zoneID
             }
-            persistSharedZoneContext(for: householdScope)
+            persistSharedZoneContext(for: scope)
             return
         }
 
@@ -345,25 +386,31 @@ actor CloudKitManager {
            let householdRaw = record["id"] as? String,
            let householdId = UUID(uuidString: householdRaw)
         {
-            updateZoneContext(for: householdScope) { context in
+            updateZoneContext(for: scope) { context in
                 context.zoneByHouseholdId[householdId] = zoneID
             }
-            persistSharedZoneContext(for: householdScope)
+            persistSharedZoneContext(for: scope)
             return
         }
 
         if let householdRef = record["householdId"] as? CKRecord.Reference,
            let householdId = UUID(uuidString: householdRef.recordID.recordName)
         {
-            updateZoneContext(for: householdScope) { context in
+            updateZoneContext(for: scope) { context in
                 context.zoneByHouseholdId[householdId] = zoneID
             }
-            persistSharedZoneContext(for: householdScope)
+            persistSharedZoneContext(for: scope)
         }
     }
 
-    private func resolveZoneForRecordName(_ recordName: String) -> CKRecordZone.ID? {
-        let scope = householdScope
+    private func rememberRecordZone(_ record: CKRecord, explicitHouseholdId: UUID?) {
+        rememberRecordZone(record, explicitHouseholdId: explicitHouseholdId, scope: householdScope)
+    }
+
+    private func resolveZoneForRecordName(
+        _ recordName: String,
+        scope: HouseholdDatabaseScope
+    ) -> CKRecordZone.ID? {
         guard let zoneID = zoneContext(for: scope).zoneByRecordName[recordName] else {
             return nil
         }
@@ -376,9 +423,15 @@ actor CloudKitManager {
         return zoneID
     }
 
-    private func resolveCachedZone(for householdId: UUID?) -> CKRecordZone.ID? {
+    private func resolveZoneForRecordName(_ recordName: String) -> CKRecordZone.ID? {
+        resolveZoneForRecordName(recordName, scope: householdScope)
+    }
+
+    private func resolveCachedZone(
+        for householdId: UUID?,
+        scope: HouseholdDatabaseScope
+    ) -> CKRecordZone.ID? {
         guard let householdId else { return nil }
-        let scope = householdScope
         guard let zoneID = zoneContext(for: scope).zoneByHouseholdId[householdId] else {
             return nil
         }
@@ -387,6 +440,10 @@ actor CloudKitManager {
             return nil
         }
         return zoneID
+    }
+
+    private func resolveCachedZone(for householdId: UUID?) -> CKRecordZone.ID? {
+        resolveCachedZone(for: householdId, scope: householdScope)
     }
 
     private func clearCachedZone(for householdId: UUID?) {
@@ -550,6 +607,108 @@ actor CloudKitManager {
 
     // swiftlint:enable cyclomatic_complexity function_body_length
 
+    // swiftlint:disable function_body_length
+    func repairSharedHouseholdGraphIfNeeded(
+        householdId: UUID,
+        force: Bool = false
+    ) async throws {
+        guard householdScope == .ownerPrivate else { return }
+        guard force || !hasCompletedSharedGraphRepair(householdId: householdId) else { return }
+
+        try await migrateHouseholdToCustomZoneIfNeeded(householdId: householdId)
+
+        let householdReference = CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
+        let querySpecs: [(String, CKQuery)] = [
+            (
+                "Member",
+                {
+                    let query = CKQuery(
+                        recordType: "Member",
+                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
+                    return query
+                }()
+            ),
+            (
+                "Task",
+                {
+                    let query = CKQuery(
+                        recordType: "Task",
+                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+                    return query
+                }()
+            ),
+            (
+                "ShoppingItem",
+                {
+                    let query = CKQuery(
+                        recordType: "ShoppingItem",
+                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+                    return query
+                }()
+            ),
+            (
+                "ShoppingBundle",
+                {
+                    let query = CKQuery(
+                        recordType: "ShoppingBundle",
+                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+                    return query
+                }()
+            ),
+            (
+                "BacklogCategory",
+                {
+                    let query = CKQuery(
+                        recordType: "BacklogCategory",
+                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+                    return query
+                }()
+            ),
+            (
+                "BacklogItem",
+                {
+                    let query = CKQuery(
+                        recordType: "BacklogItem",
+                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+                    return query
+                }()
+            ),
+        ]
+
+        do {
+            for (recordType, query) in querySpecs {
+                let records = try await queryOwnerPrivateRecordsAcrossAllZones(query, householdId: householdId)
+                guard !records.isEmpty else { continue }
+                print("CloudKitScope: repairing \(recordType) records into owner zone for household \(householdId)")
+                _ = try await saveRecordsBatchWithZoneRecovery(
+                    records,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
+            }
+
+            markSharedGraphRepairCompleted(householdId: householdId)
+            clearCloudKitFailure()
+        } catch {
+            recordCloudKitFailure(error, operation: "repairSharedHouseholdGraphIfNeeded")
+            throw error
+        }
+    }
+
+    // swiftlint:enable function_body_length
+
     private func fetchRecordIfExists(
         _ recordID: CKRecord.ID,
         database: CKDatabase
@@ -584,6 +743,54 @@ actor CloudKitManager {
             print("CloudKitScope: resolved private zones [\(names)]")
         }
         return zoneIDs
+    }
+
+    private func recordFreshnessTimestamp(_ record: CKRecord) -> Date {
+        if let updatedAt = record["updatedAt"] as? Date {
+            return updatedAt
+        }
+        if let joinedAt = record["joinedAt"] as? Date {
+            return joinedAt
+        }
+        if let createdAt = record["createdAt"] as? Date {
+            return createdAt
+        }
+        return .distantPast
+    }
+
+    private func queryOwnerPrivateRecordsAcrossAllZones(
+        _ query: CKQuery,
+        householdId: UUID
+    ) async throws -> [CKRecord] {
+        let db = await privateDatabase
+        let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+        let defaultZoneID = CKRecordZone.default().zoneID
+
+        var zoneIDs: [CKRecordZone.ID] = [targetZoneID, defaultZoneID]
+        for zoneID in try await allPrivateZoneIDs() where !zoneIDs.contains(zoneID) {
+            zoneIDs.append(zoneID)
+        }
+
+        var recordsByRecordName: [String: CKRecord] = [:]
+        for zoneID in zoneIDs {
+            let zoneRecords = try await queryRecordsPaginated(
+                query,
+                database: db,
+                zoneID: zoneID
+            )
+            for record in zoneRecords {
+                let recordName = record.recordID.recordName
+                if let existing = recordsByRecordName[recordName] {
+                    if recordFreshnessTimestamp(record) >= recordFreshnessTimestamp(existing) {
+                        recordsByRecordName[recordName] = record
+                    }
+                } else {
+                    recordsByRecordName[recordName] = record
+                }
+            }
+        }
+
+        return Array(recordsByRecordName.values)
     }
 
     private func zoneCacheKey(_ zoneID: CKRecordZone.ID) -> String {
@@ -622,20 +829,28 @@ actor CloudKitManager {
         }
     }
 
-    private func resolveHouseholdZone(for householdId: UUID) async throws -> CKRecordZone.ID? {
-        if let cachedZone = resolveCachedZone(for: householdId) {
+    private func resolveHouseholdZone(
+        for householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> CKRecordZone.ID? {
+        if let cachedZone = resolveCachedZone(for: householdId, scope: scope) {
             return cachedZone
         }
 
         let householdPredicate = NSPredicate(format: "id == %@", householdId.uuidString)
         let householdQuery = CKQuery(recordType: "Household", predicate: householdPredicate)
-        _ = try await queryRecords(householdQuery, householdId: householdId)
-        return resolveCachedZone(for: householdId)
+        _ = try await queryRecords(householdQuery, householdId: householdId, scope: scope)
+        return resolveCachedZone(for: householdId, scope: scope)
+    }
+
+    private func resolveHouseholdZone(for householdId: UUID) async throws -> CKRecordZone.ID? {
+        try await resolveHouseholdZone(for: householdId, scope: householdScope)
     }
 
     private func candidateZoneIDs(
         recordName: String,
-        householdId: UUID?
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope
     ) async throws -> [CKRecordZone.ID] {
         var ordered: [CKRecordZone.ID] = []
         var seen = Set<String>()
@@ -648,14 +863,14 @@ actor CloudKitManager {
             ordered.append(zoneID)
         }
 
-        appendUnique(resolveZoneForRecordName(recordName))
-        appendUnique(resolveCachedZone(for: householdId))
+        appendUnique(resolveZoneForRecordName(recordName, scope: scope))
+        appendUnique(resolveCachedZone(for: householdId, scope: scope))
 
         if let householdId {
-            try await appendUnique(resolveHouseholdZone(for: householdId))
+            try await appendUnique(resolveHouseholdZone(for: householdId, scope: scope))
         }
 
-        switch householdScope {
+        switch scope {
         case .ownerPrivate:
             appendUnique(CKRecordZone.default().zoneID)
             for zoneID in try await allPrivateZoneIDs() {
@@ -668,6 +883,13 @@ actor CloudKitManager {
         }
 
         return ordered
+    }
+
+    private func candidateZoneIDs(
+        recordName: String,
+        householdId: UUID?
+    ) async throws -> [CKRecordZone.ID] {
+        try await candidateZoneIDs(recordName: recordName, householdId: householdId, scope: householdScope)
     }
 
     private func queryRecordsPage(
@@ -740,19 +962,36 @@ actor CloudKitManager {
     // swiftlint:disable cyclomatic_complexity function_body_length
     private func queryRecords(
         _ query: CKQuery,
-        householdId: UUID? = nil
+        householdId: UUID? = nil,
+        scope: HouseholdDatabaseScope
     ) async throws -> [CKRecord] {
-        let db = await activeHouseholdDatabase
+        let db = await activeHouseholdDatabase(for: scope)
 
-        switch householdScope {
+        switch scope {
         case .ownerPrivate:
             print("CloudKitScope: query ownerPrivate \(query.recordType)")
+            if let householdId,
+               let zoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
+            {
+                let zoneRecords = try await queryRecordsPaginated(
+                    query,
+                    database: db,
+                    zoneID: zoneID
+                )
+                if !zoneRecords.isEmpty {
+                    for zoneRecord in zoneRecords {
+                        rememberRecordZone(zoneRecord, explicitHouseholdId: householdId, scope: scope)
+                    }
+                    return zoneRecords
+                }
+            }
+
             let records = try await queryRecordsPaginated(query, database: db)
-            records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId) }
+            records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId, scope: scope) }
             return records
 
         case .participantShared:
-            let cachedZone = resolveCachedZone(for: householdId)
+            let cachedZone = resolveCachedZone(for: householdId, scope: scope)
             let initialZoneIDs: [CKRecordZone.ID] = if let cachedZone {
                 [cachedZone]
             } else {
@@ -788,7 +1027,7 @@ actor CloudKitManager {
             var records = Array(aggregatedByRecordName.values)
 
             if let cachedZone, records.isEmpty || needsZoneRefresh {
-                clearCachedZone(for: householdId)
+                clearCachedZone(for: householdId, scope: scope)
                 var fallbackZones = try await allSharedZoneIDs()
                 fallbackZones.removeAll(where: { $0 == cachedZone })
 
@@ -821,29 +1060,48 @@ actor CloudKitManager {
                 }
             }
 
-            records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId) }
+            records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId, scope: scope) }
             return records
         }
+    }
+
+    private func queryRecords(
+        _ query: CKQuery,
+        householdId: UUID? = nil
+    ) async throws -> [CKRecord] {
+        try await queryRecords(query, householdId: householdId, scope: householdScope)
+    }
+
+    private func queryRecords(
+        _ query: CKQuery,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [CKRecord] {
+        try await queryRecords(query, householdId: nil, scope: scope)
     }
 
     // swiftlint:enable cyclomatic_complexity function_body_length
 
     private func fetchRecord(
         id: UUID,
-        householdId: UUID? = nil
+        householdId: UUID? = nil,
+        scope: HouseholdDatabaseScope
     ) async throws -> CKRecord {
-        let db = await activeHouseholdDatabase
+        let db = await activeHouseholdDatabase(for: scope)
         let recordName = id.uuidString
 
-        let scopeName = householdScope == .ownerPrivate ? "ownerPrivate" : "participantShared"
-        let zoneIDs = try await candidateZoneIDs(recordName: recordName, householdId: householdId)
+        let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        let zoneIDs = try await candidateZoneIDs(
+            recordName: recordName,
+            householdId: householdId,
+            scope: scope
+        )
 
         for zoneID in zoneIDs {
             do {
                 print("CloudKitScope: fetch \(recordName) in \(scopeName) zone \(zoneID.zoneName)")
                 let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
                 let record = try await db.record(for: recordID)
-                rememberRecordZone(record, explicitHouseholdId: householdId)
+                rememberRecordZone(record, explicitHouseholdId: householdId, scope: scope)
                 return record
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 continue
@@ -858,15 +1116,27 @@ actor CloudKitManager {
         throw CKError(.unknownItem)
     }
 
-    private func deleteRecord(
+    private func fetchRecord(
         id: UUID,
         householdId: UUID? = nil
+    ) async throws -> CKRecord {
+        try await fetchRecord(id: id, householdId: householdId, scope: householdScope)
+    }
+
+    private func deleteRecord(
+        id: UUID,
+        householdId: UUID? = nil,
+        scope: HouseholdDatabaseScope
     ) async throws {
-        let db = await activeHouseholdDatabase
+        let db = await activeHouseholdDatabase(for: scope)
         let recordName = id.uuidString
 
-        let scopeName = householdScope == .ownerPrivate ? "ownerPrivate" : "participantShared"
-        let zoneIDs = try await candidateZoneIDs(recordName: recordName, householdId: householdId)
+        let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        let zoneIDs = try await candidateZoneIDs(
+            recordName: recordName,
+            householdId: householdId,
+            scope: scope
+        )
 
         for zoneID in zoneIDs {
             do {
@@ -890,16 +1160,24 @@ actor CloudKitManager {
         throw CKError(.unknownItem)
     }
 
+    private func deleteRecord(
+        id: UUID,
+        householdId: UUID? = nil
+    ) async throws {
+        try await deleteRecord(id: id, householdId: householdId, scope: householdScope)
+    }
+
     private func recordForSave(
         _ record: CKRecord,
-        householdId: UUID?
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope
     ) async throws -> CKRecord {
-        var zoneID = resolveCachedZone(for: householdId)
+        var zoneID = resolveCachedZone(for: householdId, scope: scope)
         if zoneID == nil {
-            zoneID = resolveZoneForRecordName(record.recordID.recordName)
+            zoneID = resolveZoneForRecordName(record.recordID.recordName, scope: scope)
         }
         if zoneID == nil, let householdId {
-            zoneID = try await resolveHouseholdZone(for: householdId)
+            zoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
         }
 
         guard let zoneID else { return record }
@@ -916,19 +1194,27 @@ actor CloudKitManager {
         return rewritten
     }
 
-    private func saveRecordWithZoneRecovery(
+    private func recordForSave(
         _ record: CKRecord,
         householdId: UUID?
     ) async throws -> CKRecord {
-        let db = await activeHouseholdDatabase
-        let scopeName = householdScope == .ownerPrivate ? "ownerPrivate" : "participantShared"
-        let scopedRecord = try await recordForSave(record, householdId: householdId)
+        try await recordForSave(record, householdId: householdId, scope: householdScope)
+    }
+
+    private func saveRecordWithZoneRecovery(
+        _ record: CKRecord,
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope
+    ) async throws -> CKRecord {
+        let db = await activeHouseholdDatabase(for: scope)
+        let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        let scopedRecord = try await recordForSave(record, householdId: householdId, scope: scope)
         do {
             print(
                 "CloudKitScope: save \(record.recordType) in \(scopeName) zone \(scopedRecord.recordID.zoneID.zoneName)"
             )
             let saved = try await saveRecordWithChangedKeys(scopedRecord, database: db)
-            rememberRecordZone(saved, explicitHouseholdId: householdId)
+            rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
             return saved
         } catch {
             guard isRetryableZoneResolutionError(error) else {
@@ -939,27 +1225,34 @@ actor CloudKitManager {
             print(
                 "CloudKitScope: save \(record.recordType) failed in \(scopeName), retrying with refreshed zone context"
             )
-            updateZoneContext(for: householdScope) { context in
+            updateZoneContext(for: scope) { context in
                 context.zoneByRecordName.removeValue(forKey: record.recordID.recordName)
             }
-            clearCachedZone(for: householdId)
+            clearCachedZone(for: householdId, scope: scope)
             if let householdId {
-                _ = try await resolveHouseholdZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
 
-            let retryRecord = try await recordForSave(record, householdId: householdId)
+            let retryRecord = try await recordForSave(record, householdId: householdId, scope: scope)
             print(
                 "CloudKitScope: retry save \(record.recordType) in \(scopeName) zone \(retryRecord.recordID.zoneID.zoneName)"
             )
             do {
                 let saved = try await saveRecordWithChangedKeys(retryRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
                 return saved
             } catch {
                 recordCloudKitFailure(error, operation: "saveRecordWithZoneRecovery.retry.\(record.recordType)")
                 throw error
             }
         }
+    }
+
+    private func saveRecordWithZoneRecovery(
+        _ record: CKRecord,
+        householdId: UUID?
+    ) async throws -> CKRecord {
+        try await saveRecordWithZoneRecovery(record, householdId: householdId, scope: householdScope)
     }
 
     private func saveRecordWithChangedKeys(
@@ -1056,16 +1349,20 @@ actor CloudKitManager {
 
     private func saveRecordsBatchWithZoneRecovery(
         _ records: [CKRecord],
-        householdId: UUID?
+        householdId: UUID?,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [CKRecord] {
         guard !records.isEmpty else { return [] }
-        let db = await activeHouseholdDatabase
+        let scope = resolvedScope(explicitScope)
+        let db = await activeHouseholdDatabase(for: scope)
 
         func scopedRecords(from sourceRecords: [CKRecord]) async throws -> [CKRecord] {
             var output: [CKRecord] = []
             output.reserveCapacity(sourceRecords.count)
             for record in sourceRecords {
-                try await output.append(recordForSave(record, householdId: householdId))
+                try await output.append(
+                    recordForSave(record, householdId: householdId, scope: scope)
+                )
             }
             return output
         }
@@ -1079,7 +1376,7 @@ actor CloudKitManager {
                 database: db
             )
             for record in outcome.saved {
-                rememberRecordZone(record, explicitHouseholdId: householdId)
+                rememberRecordZone(record, explicitHouseholdId: householdId, scope: scope)
                 _Concurrency.Task { @MainActor in
                     CloudKitSubscriptionManager.shared.registerLocalMutation(
                         recordName: record.recordID.recordName
@@ -1092,9 +1389,9 @@ actor CloudKitManager {
                 throw error
             }
 
-            clearCachedZone(for: householdId)
+            clearCachedZone(for: householdId, scope: scope)
             if let householdId {
-                _ = try await resolveHouseholdZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
 
             let retryScopedRecords = try await scopedRecords(from: records)
@@ -1105,7 +1402,7 @@ actor CloudKitManager {
                 database: db
             )
             for record in outcome.saved {
-                rememberRecordZone(record, explicitHouseholdId: householdId)
+                rememberRecordZone(record, explicitHouseholdId: householdId, scope: scope)
                 _Concurrency.Task { @MainActor in
                     CloudKitSubscriptionManager.shared.registerLocalMutation(
                         recordName: record.recordID.recordName
@@ -1118,15 +1415,17 @@ actor CloudKitManager {
 
     private func batchDeleteRecordIDs(
         recordNames: [String],
-        householdId: UUID?
+        householdId: UUID?,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws {
         guard !recordNames.isEmpty else { return }
-        let db = await activeHouseholdDatabase
+        let scope = resolvedScope(explicitScope)
+        let db = await activeHouseholdDatabase(for: scope)
 
         func resolvedDeleteIDs() async throws -> [CKRecord.ID] {
-            var resolvedZoneID = resolveCachedZone(for: householdId)
+            var resolvedZoneID = resolveCachedZone(for: householdId, scope: scope)
             if resolvedZoneID == nil, let householdId {
-                resolvedZoneID = try await resolveHouseholdZone(for: householdId)
+                resolvedZoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
             if let resolvedZoneID {
                 return recordNames.map { CKRecord.ID(recordName: $0, zoneID: resolvedZoneID) }
@@ -1153,9 +1452,9 @@ actor CloudKitManager {
                 throw error
             }
 
-            clearCachedZone(for: householdId)
+            clearCachedZone(for: householdId, scope: scope)
             if let householdId {
-                _ = try await resolveHouseholdZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
             let retryDeleteIDs = try await resolvedDeleteIDs()
             let outcome = try await modifyRecordsBatch(
@@ -1173,35 +1472,77 @@ actor CloudKitManager {
         }
     }
 
-    func saveTasksBatch(_ tasks: [Task]) async throws {
+    func saveTasksBatch(
+        _ tasks: [Task],
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
         guard !tasks.isEmpty else { return }
+        let scope = resolvedScope(explicitScope)
         let householdId = tasks.first?.householdId
         let records = tasks.map { taskRecord(from: $0) }
-        _ = try await saveRecordsBatchWithZoneRecovery(records, householdId: householdId)
+        _ = try await saveRecordsBatchWithZoneRecovery(
+            records,
+            householdId: householdId,
+            scope: scope
+        )
     }
 
-    func saveShoppingItemsBatch(_ items: [ShoppingItem]) async throws {
+    func saveShoppingItemsBatch(
+        _ items: [ShoppingItem],
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
         guard !items.isEmpty else { return }
+        let scope = resolvedScope(explicitScope)
         let householdId = items.first?.householdId
         let records = items.map { shoppingItemRecord(from: $0) }
-        _ = try await saveRecordsBatchWithZoneRecovery(records, householdId: householdId)
+        _ = try await saveRecordsBatchWithZoneRecovery(
+            records,
+            householdId: householdId,
+            scope: scope
+        )
     }
 
-    func saveBacklogCategoriesBatch(_ categories: [BacklogCategory]) async throws {
+    func saveBacklogCategoriesBatch(
+        _ categories: [BacklogCategory],
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
         guard !categories.isEmpty else { return }
+        let scope = resolvedScope(explicitScope)
         let householdId = categories.first?.householdId
         let records = categories.map { backlogCategoryRecord(from: $0) }
-        _ = try await saveRecordsBatchWithZoneRecovery(records, householdId: householdId)
+        _ = try await saveRecordsBatchWithZoneRecovery(
+            records,
+            householdId: householdId,
+            scope: scope
+        )
     }
 
-    func deleteTasksBatch(ids: Set<UUID>, householdId: UUID) async throws {
+    func deleteTasksBatch(
+        ids: Set<UUID>,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
         let recordNames = ids.map(\.uuidString)
-        try await batchDeleteRecordIDs(recordNames: recordNames, householdId: householdId)
+        try await batchDeleteRecordIDs(
+            recordNames: recordNames,
+            householdId: householdId,
+            scope: scope
+        )
     }
 
-    func deleteShoppingItemsBatch(ids: Set<UUID>, householdId: UUID) async throws {
+    func deleteShoppingItemsBatch(
+        ids: Set<UUID>,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
         let recordNames = ids.map(\.uuidString)
-        try await batchDeleteRecordIDs(recordNames: recordNames, householdId: householdId)
+        try await batchDeleteRecordIDs(
+            recordNames: recordNames,
+            householdId: householdId,
+            scope: scope
+        )
     }
 
     private func resolvedPaletteColor(
@@ -1319,12 +1660,20 @@ actor CloudKitManager {
 
     // MARK: - Household
 
-    func saveHousehold(_ household: Household) async throws -> CKRecord {
-        if householdScope == .ownerPrivate {
+    func saveHousehold(
+        _ household: Household,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
+        if scope == .ownerPrivate {
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
         }
         let record = householdRecord(from: household)
-        let saved = try await saveRecordWithZoneRecovery(record, householdId: household.id)
+        let saved = try await saveRecordWithZoneRecovery(
+            record,
+            householdId: household.id,
+            scope: scope
+        )
         clearCloudKitFailure()
         return saved
     }
@@ -1332,20 +1681,26 @@ actor CloudKitManager {
     func updateHouseholdMetadata(
         householdId: UUID,
         newName: String,
-        newIconSymbol: String
+        newIconSymbol: String,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
-        let db = await activeHouseholdDatabase
+        let scope = resolvedScope(explicitScope)
+        let db = await activeHouseholdDatabase(for: scope)
         var retryCount = 0
 
         while true {
-            let existingRecord = try await fetchRecord(id: householdId, householdId: householdId)
+            let existingRecord = try await fetchRecord(
+                id: householdId,
+                householdId: householdId,
+                scope: scope
+            )
             existingRecord["name"] = newName as CKRecordValue
             existingRecord["iconSymbol"] = newIconSymbol as CKRecordValue
             existingRecord["updatedAt"] = Date() as CKRecordValue
 
             do {
                 let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
                 clearCloudKitFailure()
                 return saved
             } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
@@ -1358,22 +1713,30 @@ actor CloudKitManager {
                 }
 
                 retryCount += 1
-                updateZoneContext(for: householdScope) { context in
+                updateZoneContext(for: scope) { context in
                     context.zoneByRecordName.removeValue(forKey: householdId.uuidString)
                 }
-                clearCachedZone(for: householdId)
-                _ = try await resolveHouseholdZone(for: householdId)
+                clearCachedZone(for: householdId, scope: scope)
+                _ = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
         }
     }
 
-    func fetchHousehold(id: UUID) async throws -> Household {
-        let record = try await fetchRecord(id: id, householdId: id)
+    func fetchHousehold(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Household {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, householdId: id, scope: scope)
         return try household(from: record)
     }
 
-    func deleteHousehold(id: UUID) async throws {
-        try await deleteRecord(id: id, householdId: id)
+    func deleteHousehold(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: id, scope: scope)
     }
 
     func leaveSharedHousehold(householdId: UUID) async throws {
@@ -1422,23 +1785,37 @@ actor CloudKitManager {
 
     // MARK: - Member
 
-    func saveMember(_ member: Member) async throws -> CKRecord {
+    func saveMember(
+        _ member: Member,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = memberRecord(from: member)
-        return try await saveRecordWithZoneRecovery(record, householdId: member.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: member.householdId,
+            scope: scope
+        )
     }
 
     private func updateMemberRecord(
         memberId: UUID,
         householdId: UUID,
         operationName: String,
+        scope explicitScope: HouseholdDatabaseScope? = nil,
         mutate: (CKRecord) -> Void
     ) async throws -> CKRecord {
-        let db = await activeHouseholdDatabase
-        let scopeName = householdScope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        let scope = resolvedScope(explicitScope)
+        let db = await activeHouseholdDatabase(for: scope)
+        let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
         var retryCount = 0
 
         while true {
-            let existingRecord = try await fetchRecord(id: memberId, householdId: householdId)
+            let existingRecord = try await fetchRecord(
+                id: memberId,
+                householdId: householdId,
+                scope: scope
+            )
             mutate(existingRecord)
 
             do {
@@ -1446,7 +1823,7 @@ actor CloudKitManager {
                     "CloudKitScope: patch Member (\(operationName)) in \(scopeName) zone \(existingRecord.recordID.zoneID.zoneName)"
                 )
                 let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
                 clearCloudKitFailure()
                 return saved
             } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
@@ -1461,11 +1838,11 @@ actor CloudKitManager {
 
                 retryCount += 1
                 print("CloudKitScope: Member patch (\(operationName)) failed, refreshing zone context and retrying")
-                updateZoneContext(for: householdScope) { context in
+                updateZoneContext(for: scope) { context in
                     context.zoneByRecordName.removeValue(forKey: memberId.uuidString)
                 }
-                clearCachedZone(for: householdId)
-                _ = try await resolveHouseholdZone(for: householdId)
+                clearCachedZone(for: householdId, scope: scope)
+                _ = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
         }
     }
@@ -1473,12 +1850,14 @@ actor CloudKitManager {
     func updateMemberDisplayName(
         memberId: UUID,
         householdId: UUID,
-        newDisplayName: String
+        newDisplayName: String,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         try await updateMemberRecord(
             memberId: memberId,
             householdId: householdId,
-            operationName: "displayName"
+            operationName: "displayName",
+            scope: explicitScope
         ) { record in
             record["displayName"] = newDisplayName as CKRecordValue
         }
@@ -1488,12 +1867,14 @@ actor CloudKitManager {
         memberId: UUID,
         householdId: UUID,
         newDisplayName: String,
-        newColorHex: String
+        newColorHex: String,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         try await updateMemberRecord(
             memberId: memberId,
             householdId: householdId,
-            operationName: "profile"
+            operationName: "profile",
+            scope: explicitScope
         ) { record in
             record["displayName"] = newDisplayName as CKRecordValue
             record["colorHex"] = newColorHex as CKRecordValue
@@ -1503,12 +1884,14 @@ actor CloudKitManager {
     func updateMemberRole(
         memberId: UUID,
         householdId: UUID,
-        newRole: Member.MemberRole
+        newRole: Member.MemberRole,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         try await updateMemberRecord(
             memberId: memberId,
             householdId: householdId,
-            operationName: "role"
+            operationName: "role",
+            scope: explicitScope
         ) { record in
             record["role"] = newRole.rawValue as CKRecordValue
         }
@@ -1521,12 +1904,14 @@ actor CloudKitManager {
         newDisplayName: String,
         newRole: Member.MemberRole,
         isActive: Bool,
-        colorHex: String
+        colorHex: String,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         try await updateMemberRecord(
             memberId: memberId,
             householdId: householdId,
-            operationName: "state"
+            operationName: "state",
+            scope: explicitScope
         ) { record in
             record["displayName"] = newDisplayName as CKRecordValue
             record["role"] = newRole.rawValue as CKRecordValue
@@ -1537,21 +1922,39 @@ actor CloudKitManager {
 
     // swiftlint:enable function_parameter_count
 
-    func fetchMember(id: UUID) async throws -> Member {
-        let record = try await fetchRecord(id: id)
+    func fetchMember(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Member {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try member(from: record)
     }
 
-    func deleteMember(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteMember(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteMember(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteMember(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Find active member by Apple user ID in active database scope.
-    func fetchMemberByUserId(_ userId: String, householdId: UUID? = nil) async throws -> Member? {
+    func fetchMemberByUserId(
+        _ userId: String,
+        householdId: UUID? = nil,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Member? {
+        let scope = resolvedScope(explicitScope)
         let predicate = if let householdId {
             NSPredicate(
                 format: "userId == %@ AND householdId == %@",
@@ -1564,14 +1967,18 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Member", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         let members = try records.map(member(from:))
 
         return members.first(where: { $0.isActive })
     }
 
     /// Fetch all members for a household
-    func fetchMembers(householdId: UUID) async throws -> [Member] {
+    func fetchMembers(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Member] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
@@ -1579,7 +1986,7 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Member", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(member(from:))
     }
 
@@ -1618,26 +2025,51 @@ actor CloudKitManager {
 
     // MARK: - Task
 
-    func saveTask(_ task: Task) async throws -> CKRecord {
+    func saveTask(
+        _ task: Task,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = taskRecord(from: task)
-        return try await saveRecordWithZoneRecovery(record, householdId: task.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: task.householdId,
+            scope: scope
+        )
     }
 
-    func fetchTask(id: UUID) async throws -> Task {
-        let record = try await fetchRecord(id: id)
+    func fetchTask(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Task {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try task(from: record)
     }
 
-    func deleteTask(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteTask(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteTask(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteTask(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all tasks for a household
-    func fetchTasks(householdId: UUID) async throws -> [Task] {
+    func fetchTasks(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Task] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
@@ -1645,12 +2077,17 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Task", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(task(from:))
     }
 
     /// Fetch tasks filtered by status
-    func fetchTasks(householdId: UUID, status: Task.TaskStatus) async throws -> [Task] {
+    func fetchTasks(
+        householdId: UUID,
+        status: Task.TaskStatus,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Task] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@ AND status == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none),
@@ -1659,12 +2096,16 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "Task", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(task(from:))
     }
 
     /// Fetch tasks assigned to a specific member in "next" status (for WIP limit check)
-    func fetchNextTasks(assigneeId: UUID) async throws -> [Task] {
+    func fetchNextTasks(
+        assigneeId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Task] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "assigneeId == %@ AND status == %@",
             CKRecord.Reference(recordID: recordID(for: assigneeId), action: .none),
@@ -1672,13 +2113,16 @@ actor CloudKitManager {
         )
         let query = CKQuery(recordType: "Task", predicate: predicate)
 
-        let records = try await queryRecords(query)
+        let records = try await queryRecords(query, scope: scope)
         return try records.map(task(from:))
     }
 
     /// Count tasks in "next" for a member (WIP limit = 3)
-    func countNextTasks(assigneeId: UUID) async throws -> Int {
-        try await fetchNextTasks(assigneeId: assigneeId).count
+    func countNextTasks(
+        assigneeId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Int {
+        try await fetchNextTasks(assigneeId: assigneeId, scope: explicitScope).count
     }
 
     // MARK: - Recurring Chore
@@ -1716,26 +2160,51 @@ actor CloudKitManager {
 
     // MARK: - Shopping Item
 
-    func saveShoppingItem(_ item: ShoppingItem) async throws -> CKRecord {
+    func saveShoppingItem(
+        _ item: ShoppingItem,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = shoppingItemRecord(from: item)
-        return try await saveRecordWithZoneRecovery(record, householdId: item.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: item.householdId,
+            scope: scope
+        )
     }
 
-    func fetchShoppingItem(id: UUID) async throws -> ShoppingItem {
-        let record = try await fetchRecord(id: id)
+    func fetchShoppingItem(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> ShoppingItem {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try shoppingItem(from: record)
     }
 
-    func deleteShoppingItem(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteShoppingItem(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteShoppingItem(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteShoppingItem(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all shopping items for a household
-    func fetchShoppingItems(householdId: UUID) async throws -> [ShoppingItem] {
+    func fetchShoppingItems(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [ShoppingItem] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
@@ -1743,31 +2212,56 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "ShoppingItem", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(shoppingItem(from:))
     }
 
     // MARK: - Shopping Bundle
 
-    func saveShoppingBundle(_ bundle: ShoppingBundle) async throws -> CKRecord {
+    func saveShoppingBundle(
+        _ bundle: ShoppingBundle,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = shoppingBundleRecord(from: bundle)
-        return try await saveRecordWithZoneRecovery(record, householdId: bundle.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: bundle.householdId,
+            scope: scope
+        )
     }
 
-    func fetchShoppingBundle(id: UUID) async throws -> ShoppingBundle {
-        let record = try await fetchRecord(id: id)
+    func fetchShoppingBundle(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> ShoppingBundle {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try shoppingBundle(from: record)
     }
 
-    func deleteShoppingBundle(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteShoppingBundle(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteShoppingBundle(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteShoppingBundle(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
-    func fetchShoppingBundles(householdId: UUID) async throws -> [ShoppingBundle] {
+    func fetchShoppingBundles(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [ShoppingBundle] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
@@ -1775,35 +2269,49 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "ShoppingBundle", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(shoppingBundle(from:))
     }
 
     // MARK: - Backlog Category
 
-    func saveBacklogCategory(_ category: BacklogCategory) async throws -> CKRecord {
+    func saveBacklogCategory(
+        _ category: BacklogCategory,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = backlogCategoryRecord(from: category)
-        return try await saveRecordWithZoneRecovery(record, householdId: category.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: category.householdId,
+            scope: scope
+        )
     }
 
     func updateBacklogCategoryMetadata(
         categoryId: UUID,
         householdId: UUID,
         newTitle: String,
-        newColorHex: String
+        newColorHex: String,
+        scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
-        let db = await activeHouseholdDatabase
+        let scope = resolvedScope(explicitScope)
+        let db = await activeHouseholdDatabase(for: scope)
         var didRetryAfterConflict = false
 
         while true {
             do {
-                let existingRecord = try await fetchRecord(id: categoryId, householdId: householdId)
+                let existingRecord = try await fetchRecord(
+                    id: categoryId,
+                    householdId: householdId,
+                    scope: scope
+                )
                 existingRecord["title"] = newTitle as CKRecordValue
                 existingRecord["colorHex"] = newColorHex as CKRecordValue
                 existingRecord["updatedAt"] = Date() as CKRecordValue
 
                 let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId)
+                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
                 return saved
             } catch let ckError as CKError where ckError.code == .serverRecordChanged {
                 if didRetryAfterConflict {
@@ -1821,7 +2329,7 @@ actor CloudKitManager {
                     throw CloudKitManagerError.serverRecordChanged
                 }
                 didRetryAfterConflict = true
-                _ = try await resolveHouseholdZone(for: householdId)
+                _ = try await resolveHouseholdZone(for: householdId, scope: scope)
             } catch {
                 recordCloudKitFailure(error, operation: "updateBacklogCategoryMetadata")
                 throw error
@@ -1829,21 +2337,38 @@ actor CloudKitManager {
         }
     }
 
-    func fetchBacklogCategory(id: UUID) async throws -> BacklogCategory {
-        let record = try await fetchRecord(id: id)
+    func fetchBacklogCategory(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> BacklogCategory {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try backlogCategory(from: record)
     }
 
-    func deleteBacklogCategory(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteBacklogCategory(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteBacklogCategory(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteBacklogCategory(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all backlog categories for a household
-    func fetchBacklogCategories(householdId: UUID) async throws -> [BacklogCategory] {
+    func fetchBacklogCategories(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [BacklogCategory] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
@@ -1851,32 +2376,57 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "BacklogCategory", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(backlogCategory(from:))
     }
 
     // MARK: - Backlog Item
 
-    func saveBacklogItem(_ item: BacklogItem) async throws -> CKRecord {
+    func saveBacklogItem(
+        _ item: BacklogItem,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = backlogItemRecord(from: item)
-        return try await saveRecordWithZoneRecovery(record, householdId: item.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: item.householdId,
+            scope: scope
+        )
     }
 
-    func fetchBacklogItem(id: UUID) async throws -> BacklogItem {
-        let record = try await fetchRecord(id: id)
+    func fetchBacklogItem(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> BacklogItem {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try backlogItem(from: record)
     }
 
-    func deleteBacklogItem(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteBacklogItem(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteBacklogItem(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteBacklogItem(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all backlog items for a category
-    func fetchBacklogItems(categoryId: UUID) async throws -> [BacklogItem] {
+    func fetchBacklogItems(
+        categoryId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [BacklogItem] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "categoryId == %@",
             CKRecord.Reference(recordID: recordID(for: categoryId), action: .none)
@@ -1884,12 +2434,16 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
 
-        let records = try await queryRecords(query)
+        let records = try await queryRecords(query, scope: scope)
         return try records.map(backlogItem(from:))
     }
 
     /// Fetch all backlog items for a household
-    func fetchBacklogItems(householdId: UUID) async throws -> [BacklogItem] {
+    func fetchBacklogItems(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [BacklogItem] {
+        let scope = resolvedScope(explicitScope)
         let predicate = NSPredicate(
             format: "householdId == %@",
             CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
@@ -1897,7 +2451,7 @@ actor CloudKitManager {
         let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
 
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         return try records.map(backlogItem(from:))
     }
 

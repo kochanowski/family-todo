@@ -76,6 +76,8 @@ final class TaskStore: ObservableObject {
     private let modelContext: ModelContext
     private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
+    private var currentUserId: String?
+    private var householdOwnerId: String?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
 
@@ -83,8 +85,20 @@ final class TaskStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
+        self.currentUserId = currentUserId
+        self.householdOwnerId = householdOwnerId
+    }
+
     private var isCloudSyncEnabled: Bool {
         syncMode == .cloud
+    }
+
+    private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
+        guard let currentUserId, let householdOwnerId else {
+            return .participantShared
+        }
+        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
     /// Default recommended WIP limit per user.
@@ -259,7 +273,10 @@ final class TaskStore: ObservableObject {
         do {
             // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
-            let cloudTasks = try await cloudKit.fetchTasks(householdId: householdId)
+            let cloudTasks = try await cloudKit.fetchTasks(
+                householdId: householdId,
+                scope: cloudScope
+            )
             tasks = mergeCloudSnapshot(cloudTasks, with: pendingSnapshot)
             syncToCache(cloudTasks, cloudTaskIDs: Set(cloudTasks.map(\.id)))
             replayPendingMutationsInBackground()
@@ -355,7 +372,7 @@ final class TaskStore: ObservableObject {
 
         for cached in pendingUploads where !pendingTaskMutations.contains(cached.id) {
             do {
-                _ = try await cloudKit.saveTask(cached.toTask())
+                _ = try await cloudKit.saveTask(cached.toTask(), scope: cloudScope)
                 cached.syncStatusRaw = TaskSyncStatus.awaitingCloudEcho
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -366,7 +383,11 @@ final class TaskStore: ObservableObject {
 
         for cached in pendingDeletes where !pendingTaskMutations.contains(cached.id) {
             do {
-                try await cloudKit.deleteTask(id: cached.id, householdId: cached.householdId)
+                try await cloudKit.deleteTask(
+                    id: cached.id,
+                    householdId: cached.householdId,
+                    scope: cloudScope
+                )
                 modelContext.delete(cached)
                 tasks.removeAll { $0.id == cached.id }
                 didMutateCache = true
@@ -650,7 +671,7 @@ final class TaskStore: ObservableObject {
     }
 
     func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
-        try await cloudKit.deleteTask(id: id, householdId: householdId)
+        try await cloudKit.deleteTask(id: id, householdId: householdId, scope: cloudScope)
         removeCachedTask(id: id)
     }
 

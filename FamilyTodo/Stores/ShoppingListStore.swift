@@ -13,6 +13,8 @@ final class ShoppingListStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
+    private var currentUserId: String?
+    private var householdOwnerId: String?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
 
@@ -25,8 +27,20 @@ final class ShoppingListStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
+        self.currentUserId = currentUserId
+        self.householdOwnerId = householdOwnerId
+    }
+
     private var isCloudSyncEnabled: Bool {
         syncMode == .cloud
+    }
+
+    private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
+        guard let currentUserId, let householdOwnerId else {
+            return .participantShared
+        }
+        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
@@ -112,7 +126,10 @@ final class ShoppingListStore: ObservableObject {
         do {
             // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
-            let fetchedItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
+            let fetchedItems = try await cloudKit.fetchShoppingItems(
+                householdId: householdId,
+                scope: cloudScope
+            )
             items = mergeCloudSnapshot(fetchedItems, with: pendingSnapshot)
 
             // 3. Update cache
@@ -206,9 +223,12 @@ final class ShoppingListStore: ObservableObject {
 
             do {
                 if pendingItems.count == 1, let item = pendingItems.first {
-                    _ = try await cloudKit.saveShoppingItem(item)
+                    _ = try await cloudKit.saveShoppingItem(item, scope: cloudScope)
                 } else {
-                    try await cloudKit.saveShoppingItemsBatch(pendingItems)
+                    try await cloudKit.saveShoppingItemsBatch(
+                        pendingItems,
+                        scope: cloudScope
+                    )
                 }
 
                 for cached in pendingUploads {
@@ -221,7 +241,10 @@ final class ShoppingListStore: ObservableObject {
 
                 for cached in pendingUploads {
                     do {
-                        _ = try await cloudKit.saveShoppingItem(cached.toShoppingItem())
+                        _ = try await cloudKit.saveShoppingItem(
+                            cached.toShoppingItem(),
+                            scope: cloudScope
+                        )
                         cached.syncStatusRaw = "synced"
                         cached.lastSyncedAt = syncedAt
                         didMutateCache = true
@@ -234,7 +257,11 @@ final class ShoppingListStore: ObservableObject {
 
         for cached in pendingDeletes {
             do {
-                try await cloudKit.deleteShoppingItem(id: cached.id, householdId: cached.householdId)
+                try await cloudKit.deleteShoppingItem(
+                    id: cached.id,
+                    householdId: cached.householdId,
+                    scope: cloudScope
+                )
                 context.delete(cached)
                 items.removeAll { $0.id == cached.id }
                 didMutateCache = true
@@ -379,7 +406,7 @@ final class ShoppingListStore: ObservableObject {
         }
 
         do {
-            _ = try await cloudKit.saveShoppingItem(updatedItem)
+            _ = try await cloudKit.saveShoppingItem(updatedItem, scope: cloudScope)
 
             // Mark as synced
             if let context = modelContext {
@@ -459,7 +486,7 @@ final class ShoppingListStore: ObservableObject {
         guard isCloudSyncEnabled else { return }
 
         do {
-            try await cloudKit.saveShoppingItemsBatch(orderedItems)
+            try await cloudKit.saveShoppingItemsBatch(orderedItems, scope: cloudScope)
             for item in orderedItems {
                 markCachedItemSynced(itemId: item.id)
             }
@@ -467,7 +494,7 @@ final class ShoppingListStore: ObservableObject {
             self.error = error
             for item in orderedItems {
                 do {
-                    _ = try await cloudKit.saveShoppingItem(item)
+                    _ = try await cloudKit.saveShoppingItem(item, scope: cloudScope)
                     markCachedItemSynced(itemId: item.id)
                 } catch {
                     self.error = error
@@ -555,12 +582,20 @@ final class ShoppingListStore: ObservableObject {
             if let householdId {
                 let boughtIDs = Set(boughtItems.map(\.id))
                 do {
-                    try await cloudKit.deleteShoppingItemsBatch(ids: boughtIDs, householdId: householdId)
+                    try await cloudKit.deleteShoppingItemsBatch(
+                        ids: boughtIDs,
+                        householdId: householdId,
+                        scope: cloudScope
+                    )
                 } catch {
                     self.error = error
                     for item in boughtItems {
                         do {
-                            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                            try await cloudKit.deleteShoppingItem(
+                                id: item.id,
+                                householdId: item.householdId,
+                                scope: cloudScope
+                            )
                         } catch {
                             self.error = error
                         }
@@ -569,7 +604,11 @@ final class ShoppingListStore: ObservableObject {
             } else {
                 for item in boughtItems {
                     do {
-                        try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                        try await cloudKit.deleteShoppingItem(
+                            id: item.id,
+                            householdId: item.householdId,
+                            scope: cloudScope
+                        )
                     } catch {
                         self.error = error
                     }
@@ -639,12 +678,20 @@ final class ShoppingListStore: ObservableObject {
             if let householdId {
                 let idsToDelete = Set(itemsToClear.map(\.id))
                 do {
-                    try await cloudKit.deleteShoppingItemsBatch(ids: idsToDelete, householdId: householdId)
+                    try await cloudKit.deleteShoppingItemsBatch(
+                        ids: idsToDelete,
+                        householdId: householdId,
+                        scope: cloudScope
+                    )
                 } catch {
                     self.error = error
                     for item in itemsToClear {
                         do {
-                            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                            try await cloudKit.deleteShoppingItem(
+                                id: item.id,
+                                householdId: item.householdId,
+                                scope: cloudScope
+                            )
                         } catch {
                             self.error = error
                         }
@@ -653,7 +700,11 @@ final class ShoppingListStore: ObservableObject {
             } else {
                 for item in itemsToClear {
                     do {
-                        try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+                        try await cloudKit.deleteShoppingItem(
+                            id: item.id,
+                            householdId: item.householdId,
+                            scope: cloudScope
+                        )
                     } catch {
                         self.error = error
                     }
@@ -691,7 +742,11 @@ final class ShoppingListStore: ObservableObject {
         }
 
         do {
-            try await cloudKit.deleteShoppingItem(id: item.id, householdId: item.householdId)
+            try await cloudKit.deleteShoppingItem(
+                id: item.id,
+                householdId: item.householdId,
+                scope: cloudScope
+            )
 
             // Remove from cache
             if let context = modelContext {

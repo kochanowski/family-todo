@@ -546,13 +546,13 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
     }
 
-    func testParticipantSharedRejectsOwnerPrivateCustomZonePrefix() {
+    func testParticipantSharedAllowsOwnerStyleCustomZoneWhenItIsNotDefaultZone() {
         let zoneID = CKRecordZone.ID(
             zoneName: "HouseholdZone-\(UUID().uuidString)",
             ownerName: CKCurrentUserDefaultName
         )
 
-        XCTAssertFalse(
+        XCTAssertTrue(
             CloudKitManager.isZoneCompatible(
                 zoneID,
                 for: .participantShared

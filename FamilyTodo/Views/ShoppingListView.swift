@@ -27,6 +27,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
@@ -79,11 +80,18 @@ private struct ShoppingListContent: View {
                 await loadShoppingData()
             }
             .onChange(of: userSession.syncMode) { _, mode in
+                updateStoreCloudContext()
                 store.setSyncMode(mode)
                 bundleStore.setSyncMode(mode)
                 _ = _Concurrency.Task {
                     await loadShoppingData()
                 }
+            }
+            .onChange(of: userSession.userId) { _, _ in
+                updateStoreCloudContext()
+            }
+            .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
+                updateStoreCloudContext()
             }
             .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
                 if !isEmpty {
@@ -721,11 +729,18 @@ private struct ShoppingListContent: View {
     }
 
     private func loadShoppingData() async {
+        updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         bundleStore.setSyncMode(userSession.syncMode)
         await store.loadItems()
         await bundleStore.loadBundles()
         markShoppingTutorialAsSeenIfNeeded()
+    }
+
+    private func updateStoreCloudContext() {
+        let ownerId = householdStore.currentHousehold?.ownerId
+        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        bundleStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
     }
 
     private func scheduleShoppingCompletionCelebration() {
