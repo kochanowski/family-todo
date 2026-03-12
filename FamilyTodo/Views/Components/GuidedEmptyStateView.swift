@@ -99,6 +99,7 @@ struct GuidedEmptyStateView: View {
             HouseholdJoinSheet(
                 inviteCodeToken: $joinInviteCode,
                 inviteLink: $joinInput,
+                isJoining: isJoining,
                 onJoin: joinHousehold,
                 onPasteFromClipboard: {
                     joinInput = UIPasteboard.general.string ?? ""
