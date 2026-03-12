@@ -41,6 +41,8 @@ actor CloudKitManager {
         let legacyDuplicateRecordIDs: [CKRecord.ID]
     }
 
+    private typealias ZoneScopedQueryFactory = (CKRecordZone.ID?) -> CKQuery
+
     // CloudKit container identifier - matches the app's iCloud container
     #if CI
         private static let containerIdentifier = "iCloud.com.example.familytodo"
@@ -62,7 +64,7 @@ actor CloudKitManager {
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
-    private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds.v2"
+    private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds.v3"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
@@ -622,73 +624,96 @@ actor CloudKitManager {
 
         try await migrateHouseholdToCustomZoneIfNeeded(householdId: householdId)
 
-        let householdReference = CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        let querySpecs: [(String, CKQuery)] = [
+        let querySpecs: [(String, ZoneScopedQueryFactory)] = [
             (
                 "Member",
-                {
+                { zoneID in
                     let query = CKQuery(
                         recordType: "Member",
-                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
                     )
                     query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
                     return query
-                }()
+                }
             ),
             (
                 "Task",
-                {
+                { zoneID in
                     let query = CKQuery(
                         recordType: "Task",
-                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
                     )
                     query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
                     return query
-                }()
+                }
             ),
             (
                 "ShoppingItem",
-                {
+                { zoneID in
                     let query = CKQuery(
                         recordType: "ShoppingItem",
-                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
                     )
                     query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
                     return query
-                }()
+                }
             ),
             (
                 "ShoppingBundle",
-                {
+                { zoneID in
                     let query = CKQuery(
                         recordType: "ShoppingBundle",
-                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
                     )
                     query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
                     return query
-                }()
+                }
             ),
             (
                 "BacklogCategory",
-                {
+                { zoneID in
                     let query = CKQuery(
                         recordType: "BacklogCategory",
-                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
                     )
                     query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
                     return query
-                }()
+                }
             ),
             (
                 "BacklogItem",
-                {
+                { zoneID in
                     let query = CKQuery(
                         recordType: "BacklogItem",
-                        predicate: NSPredicate(format: "householdId == %@", householdReference)
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
                     )
                     query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
                     return query
-                }()
+                }
             ),
         ]
 
@@ -844,6 +869,70 @@ actor CloudKitManager {
         return unique
     }
 
+    private func referenceMatchPredicate(
+        field: String,
+        id: UUID,
+        zoneID: CKRecordZone.ID?
+    ) -> NSPredicate {
+        let legacyReference = reference(for: id)
+        guard let zoneID else {
+            return NSPredicate(format: "%K == %@", field, legacyReference)
+        }
+
+        let scopedReference = reference(for: id, in: zoneID)
+        return NSCompoundPredicate(orPredicateWithSubpredicates: [
+            NSPredicate(format: "%K == %@", field, scopedReference),
+            NSPredicate(format: "%K == %@", field, legacyReference),
+        ])
+    }
+
+    private func rewriteGraphReferenceFields(
+        in record: CKRecord,
+        targetZoneID: CKRecordZone.ID
+    ) {
+        let singleReferenceKeys = [
+            "householdId",
+            "assigneeId",
+            "backlogCategoryId",
+            "areaId",
+            "recurringChoreId",
+            "defaultAssigneeId",
+            "categoryId",
+        ]
+        let arrayReferenceKeys = [
+            "assigneeIds",
+            "defaultAssigneeIds",
+        ]
+
+        for key in singleReferenceKeys {
+            guard let reference = record[key] as? CKRecord.Reference,
+                  UUID(uuidString: reference.recordID.recordName) != nil
+            else {
+                continue
+            }
+            record[key] = CKRecord.Reference(
+                recordID: CKRecord.ID(
+                    recordName: reference.recordID.recordName,
+                    zoneID: targetZoneID
+                ),
+                action: reference.action
+            )
+        }
+
+        for key in arrayReferenceKeys {
+            guard let references = record[key] as? [CKRecord.Reference] else { continue }
+            record[key] = references.map { reference in
+                CKRecord.Reference(
+                    recordID: CKRecord.ID(
+                        recordName: reference.recordID.recordName,
+                        zoneID: targetZoneID
+                    ),
+                    action: reference.action
+                )
+            } as CKRecordValue
+        }
+    }
+
     static func mergeOwnerPrivateRecords(
         _ records: [CKRecord],
         targetZoneID: CKRecordZone.ID,
@@ -886,7 +975,7 @@ actor CloudKitManager {
     }
 
     private func queryOwnerPrivateRecordsAcrossAllZones(
-        _ query: CKQuery,
+        _ queryFactory: ZoneScopedQueryFactory,
         householdId: UUID
     ) async throws -> OwnerPrivateScanResult {
         let db = await privateDatabase
@@ -900,6 +989,7 @@ actor CloudKitManager {
 
         var scannedRecords: [CKRecord] = []
         for zoneID in zoneIDs {
+            let query = queryFactory(zoneID)
             let zoneRecords = try await queryRecordsPaginated(
                 query,
                 database: db,
@@ -911,7 +1001,7 @@ actor CloudKitManager {
         return Self.mergeOwnerPrivateRecords(
             scannedRecords,
             targetZoneID: targetZoneID,
-            sortDescriptors: query.sortDescriptors ?? []
+            sortDescriptors: queryFactory(targetZoneID).sortDescriptors ?? []
         )
     }
 
@@ -1101,18 +1191,19 @@ actor CloudKitManager {
 
     // swiftlint:disable cyclomatic_complexity function_body_length
     private func queryRecords(
-        _ query: CKQuery,
         householdId: UUID? = nil,
-        scope: HouseholdDatabaseScope
+        scope: HouseholdDatabaseScope,
+        queryFactory: ZoneScopedQueryFactory
     ) async throws -> [CKRecord] {
         let db = await activeHouseholdDatabase(for: scope)
+        let baselineSortDescriptors = queryFactory(nil).sortDescriptors ?? []
 
         switch scope {
         case .ownerPrivate:
-            print("CloudKitScope: query ownerPrivate \(query.recordType)")
+            print("CloudKitScope: query ownerPrivate \(queryFactory(nil).recordType)")
             if let householdId {
                 let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
-                    query,
+                    queryFactory,
                     householdId: householdId
                 )
                 for authoritativeRecord in scanResult.authoritativeRecords {
@@ -1121,9 +1212,10 @@ actor CloudKitManager {
                 return scanResult.authoritativeRecords
             }
 
+            let query = queryFactory(nil)
             let records = try await queryRecordsPaginated(query, database: db)
             records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId, scope: scope) }
-            return records
+            return Self.sortRecords(records, using: baselineSortDescriptors)
 
         case .participantShared:
             let cachedZone = resolveCachedZone(for: householdId, scope: scope)
@@ -1137,6 +1229,7 @@ actor CloudKitManager {
             var needsZoneRefresh = false
 
             for zoneID in initialZoneIDs {
+                let query = queryFactory(zoneID)
                 print("CloudKitScope: query participantShared \(query.recordType) in zone \(zoneID.zoneName)")
                 do {
                     let zoneRecords = try await queryRecordsPaginated(
@@ -1170,6 +1263,7 @@ actor CloudKitManager {
                     print("CloudKitScope: retrying participantShared query across refreshed zones")
                     var fallbackByRecordName: [String: CKRecord] = [:]
                     for zoneID in fallbackZones {
+                        let query = queryFactory(zoneID)
                         print(
                             "CloudKitScope: query participantShared \(query.recordType) fallback zone \(zoneID.zoneName)"
                         )
@@ -1190,14 +1284,25 @@ actor CloudKitManager {
                         }
                     }
                     if !fallbackByRecordName.isEmpty {
-                        records = Array(fallbackByRecordName.values)
+                        records = Self.sortRecords(
+                            Array(fallbackByRecordName.values),
+                            using: baselineSortDescriptors
+                        )
                     }
                 }
             }
 
             records.forEach { rememberRecordZone($0, explicitHouseholdId: householdId, scope: scope) }
-            return records
+            return Self.sortRecords(records, using: baselineSortDescriptors)
         }
+    }
+
+    private func queryRecords(
+        _ query: CKQuery,
+        householdId: UUID? = nil,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [CKRecord] {
+        try await queryRecords(householdId: householdId, scope: scope) { _ in query }
     }
 
     private func queryRecords(
@@ -1318,6 +1423,7 @@ actor CloudKitManager {
         guard let zoneID else { return record }
         let currentID = record.recordID
         if currentID.zoneID == zoneID {
+            rewriteGraphReferenceFields(in: record, targetZoneID: zoneID)
             return record
         }
 
@@ -1326,6 +1432,7 @@ actor CloudKitManager {
         for key in record.allKeys() {
             rewritten[key] = record[key]
         }
+        rewriteGraphReferenceFields(in: rewritten, targetZoneID: zoneID)
         return rewritten
     }
 
@@ -1703,15 +1810,19 @@ actor CloudKitManager {
     func migrateMemberColorsIfNeeded(householdId: UUID) async {
         guard !migratedMemberColorHouseholds.contains(householdId) else { return }
 
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "Member", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
-
         do {
-            let records = try await queryRecords(query, householdId: householdId)
+            let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+                let query = CKQuery(
+                    recordType: "Member",
+                    predicate: self.referenceMatchPredicate(
+                        field: "householdId",
+                        id: householdId,
+                        zoneID: zoneID
+                    )
+                )
+                query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
+                return query
+            }
             var recordsToSave: [CKRecord] = []
             recordsToSave.reserveCapacity(records.count)
 
@@ -1820,7 +1931,6 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
-        let db = await activeHouseholdDatabase(for: scope)
         var retryCount = 0
 
         while true {
@@ -1834,8 +1944,11 @@ actor CloudKitManager {
             existingRecord["updatedAt"] = Date() as CKRecordValue
 
             do {
-                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
+                let saved = try await saveRecordWithZoneRecovery(
+                    existingRecord,
+                    householdId: householdId,
+                    scope: scope
+                )
                 clearCloudKitFailure()
                 return saved
             } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
@@ -1941,7 +2054,6 @@ actor CloudKitManager {
         mutate: (CKRecord) -> Void
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
-        let db = await activeHouseholdDatabase(for: scope)
         let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
         var retryCount = 0
 
@@ -1957,8 +2069,11 @@ actor CloudKitManager {
                 print(
                     "CloudKitScope: patch Member (\(operationName)) in \(scopeName) zone \(existingRecord.recordID.zoneID.zoneName)"
                 )
-                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
+                let saved = try await saveRecordWithZoneRecovery(
+                    existingRecord,
+                    householdId: householdId,
+                    scope: scope
+                )
                 clearCloudKitFailure()
                 return saved
             } catch let ckError as CKError where ckError.code == .serverRecordChanged && retryCount == 0 {
@@ -2090,19 +2205,32 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> Member? {
         let scope = resolvedScope(explicitScope)
-        let predicate = if let householdId {
-            NSPredicate(
-                format: "userId == %@ AND householdId == %@",
-                userId,
-                CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-            )
+        let records: [CKRecord]
+        if let householdId {
+            records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+                let predicates = [
+                    NSPredicate(format: "userId == %@", userId),
+                    self.referenceMatchPredicate(
+                        field: "householdId",
+                        id: householdId,
+                        zoneID: zoneID
+                    ),
+                ]
+                let query = CKQuery(
+                    recordType: "Member",
+                    predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+                )
+                query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
+                return query
+            }
         } else {
-            NSPredicate(format: "userId == %@", userId)
+            let query = CKQuery(
+                recordType: "Member",
+                predicate: NSPredicate(format: "userId == %@", userId)
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
+            records = try await queryRecords(query, householdId: householdId, scope: scope)
         }
-        let query = CKQuery(recordType: "Member", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
         let members = try records.map(member(from:))
 
         return members.first(where: { $0.isActive })
@@ -2114,14 +2242,18 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [Member] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "Member", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "Member",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
+            return query
+        }
         return try records.map(member(from:))
     }
 
@@ -2147,14 +2279,18 @@ actor CloudKitManager {
 
     /// Fetch all areas for a household
     func fetchAreas(householdId: UUID) async throws -> [Area] {
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "Area", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+            let query = CKQuery(
+                recordType: "Area",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+            return query
+        }
         return try records.map(area(from:))
     }
 
@@ -2205,14 +2341,18 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [Task] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "Task", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "Task",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+            return query
+        }
         return try records.map(task(from:))
     }
 
@@ -2223,15 +2363,22 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [Task] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@ AND status == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none),
-            status.rawValue
-        )
-        let query = CKQuery(recordType: "Task", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let predicates = [
+                self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                ),
+                NSPredicate(format: "status == %@", status.rawValue),
+            ]
+            let query = CKQuery(
+                recordType: "Task",
+                predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+            return query
+        }
         return try records.map(task(from:))
     }
 
@@ -2282,14 +2429,18 @@ actor CloudKitManager {
 
     /// Fetch all recurring chores for a household
     func fetchRecurringChores(householdId: UUID) async throws -> [RecurringChore] {
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "RecurringChore", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
-
-        let records = try await queryRecords(query, householdId: householdId)
+        let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+            let query = CKQuery(
+                recordType: "RecurringChore",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+            return query
+        }
         return try records.map(recurringChore(from:))
     }
 
@@ -2340,14 +2491,18 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [ShoppingItem] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "ShoppingItem", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "ShoppingItem",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+            return query
+        }
         return try records.map(shoppingItem(from:))
     }
 
@@ -2397,14 +2552,18 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [ShoppingBundle] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "ShoppingBundle", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "ShoppingBundle",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+            return query
+        }
         return try records.map(shoppingBundle(from:))
     }
 
@@ -2431,7 +2590,6 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
-        let db = await activeHouseholdDatabase(for: scope)
         var didRetryAfterConflict = false
 
         while true {
@@ -2445,9 +2603,11 @@ actor CloudKitManager {
                 existingRecord["colorHex"] = newColorHex as CKRecordValue
                 existingRecord["updatedAt"] = Date() as CKRecordValue
 
-                let saved = try await saveRecordWithChangedKeys(existingRecord, database: db)
-                rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
-                return saved
+                return try await saveRecordWithZoneRecovery(
+                    existingRecord,
+                    householdId: householdId,
+                    scope: scope
+                )
             } catch let ckError as CKError where ckError.code == .serverRecordChanged {
                 if didRetryAfterConflict {
                     recordCloudKitFailure(ckError, operation: "updateBacklogCategoryMetadata")
@@ -2504,14 +2664,18 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [BacklogCategory] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "BacklogCategory", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "BacklogCategory",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+            return query
+        }
         return try records.map(backlogCategory(from:))
     }
 
@@ -2579,14 +2743,18 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [BacklogItem] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "householdId == %@",
-            CKRecord.Reference(recordID: recordID(for: householdId), action: .none)
-        )
-        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-
-        let records = try await queryRecords(query, householdId: householdId, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "BacklogItem",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            return query
+        }
         return try records.map(backlogItem(from:))
     }
 

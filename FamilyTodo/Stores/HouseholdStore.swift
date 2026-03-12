@@ -412,7 +412,7 @@ class HouseholdStore: ObservableObject {
         // Update local cache
         updateCache(with: household)
         currentHousehold = household
-        await prewarmJoinedHouseholdGraph(household: household, userId: userId)
+        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     func joinHousehold(metadata: CKShare.Metadata, userId: String, displayName: String) async throws {
@@ -443,7 +443,7 @@ class HouseholdStore: ObservableObject {
 
         updateCache(with: household)
         currentHousehold = household
-        await prewarmJoinedHouseholdGraph(household: household, userId: userId)
+        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     // MARK: - Household Management
@@ -879,36 +879,82 @@ class HouseholdStore: ObservableObject {
         return syncMode == .localOnly ? "Guest" : "Member"
     }
 
-    private func prewarmJoinedHouseholdGraph(household: Household, userId: String) async {
+    private func prewarmJoinedHouseholdGraph(household: Household, userId: String) async throws {
         guard syncMode == .cloud, let modelContext else { return }
 
+        let retryBackoffNanoseconds: [UInt64] = [0, 400_000_000, 1_000_000_000, 2_000_000_000]
+        var lastError: Error?
+
+        for (attempt, delay) in retryBackoffNanoseconds.enumerated() {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            do {
+                try await prewarmJoinedHouseholdGraphOnce(household: household, userId: userId, modelContext: modelContext)
+                return
+            } catch {
+                lastError = error
+                let isLastAttempt = attempt == retryBackoffNanoseconds.count - 1
+                if isLastAttempt {
+                    throw error
+                }
+            }
+        }
+
+        throw lastError ?? HouseholdError.householdNotFound
+    }
+
+    private func prewarmJoinedHouseholdGraphOnce(
+        household: Household,
+        userId: String,
+        modelContext: ModelContext
+    ) async throws {
         let ownerId = household.ownerId
 
         let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
         memberStore.setSyncMode(syncMode)
         memberStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
         await memberStore.loadMembers()
+        if let error = memberStore.error {
+            throw error
+        }
+        guard memberStore.members.contains(where: { $0.userId == userId && $0.isActive }) else {
+            throw HouseholdError.memberNotFound
+        }
 
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(household.id)
         taskStore.setSyncMode(syncMode)
         taskStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
         await taskStore.loadTasks()
+        if let error = taskStore.error {
+            throw error
+        }
 
         let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
         shoppingStore.setSyncMode(syncMode)
         shoppingStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
         await shoppingStore.loadItems()
+        if let error = shoppingStore.error {
+            throw error
+        }
 
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         bundleStore.setSyncMode(syncMode)
         bundleStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
         await bundleStore.loadBundles()
+        if let error = bundleStore.error {
+            throw error
+        }
 
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
         backlogStore.setSyncMode(syncMode)
         backlogStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
         await backlogStore.loadData()
+        if let error = backlogStore.error {
+            throw error
+        }
     }
 
     func resolveLeaveBehavior(for member: Member, activeMembers: [Member]) -> LeaveResolution {

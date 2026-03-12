@@ -200,12 +200,24 @@ struct JoinHouseholdSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Invite code or link", text: $inviteInput)
+                    TextField("8-character invite code", text: $inviteInput)
                         .textContentType(.oneTimeCode)
-                        .textInputAutocapitalization(.never)
+                        .textInputAutocapitalization(.characters)
                         .disableAutocorrection(true)
+                        .onChange(of: inviteInput) { _, newValue in
+                            inviteInput = normalizedInviteCodeInput(newValue)
+                        }
                 } footer: {
-                    Text("Ask the household owner for an 8-character code or invite link")
+                    Text("Ask the household owner for the 8-character invite code.")
+                }
+
+                if isJoining {
+                    Section {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Joining household...")
+                        }
+                    }
                 }
 
                 if let errorMessage {
@@ -225,7 +237,7 @@ struct JoinHouseholdSheet: View {
                     Button("Join") {
                         joinHousehold()
                     }
-                    .disabled(inviteInput.trimmingCharacters(in: .whitespaces).isEmpty || isJoining)
+                    .disabled(preferredInviteCode() == nil || isJoining)
                 }
             }
             .interactiveDismissDisabled(isJoining)
@@ -233,8 +245,7 @@ struct JoinHouseholdSheet: View {
     }
 
     private func joinHousehold() {
-        let input = preferredInviteInput()
-        guard !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard let inviteCode = preferredInviteCode() else { return }
 
         isJoining = true
         errorMessage = nil
@@ -242,7 +253,7 @@ struct JoinHouseholdSheet: View {
         _Concurrency.Task {
             do {
                 try await householdStore.joinHousehold(
-                    withInviteInput: input,
+                    inviteCode: inviteCode,
                     userId: userId,
                     displayName: resolvedDisplayNameForMembership()
                 )
@@ -261,11 +272,20 @@ struct JoinHouseholdSheet: View {
         return "Member"
     }
 
-    private func preferredInviteInput() -> String {
-        if let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput) {
-            return normalizedCode
+    private func normalizedInviteCodeInput(_ raw: String) -> String {
+        let uppercased = raw.uppercased()
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        let filtered = String(uppercased.unicodeScalars.filter { allowed.contains($0) })
+        return String(filtered.prefix(8))
+    }
+
+    private func preferredInviteCode() -> String? {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput),
+              normalizedCode.count == 8
+        else {
+            return nil
         }
-        return inviteInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedCode
     }
 }
 

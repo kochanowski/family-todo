@@ -18,8 +18,23 @@ extension CloudKitManager {
         CKRecord.Reference(recordID: recordID(for: id), action: .none)
     }
 
+    func reference(for id: UUID, in zoneID: CKRecordZone.ID) -> CKRecord.Reference {
+        CKRecord.Reference(recordID: recordID(for: id, in: zoneID), action: .none)
+    }
+
+    func reference(for id: UUID, zoneID: CKRecordZone.ID?) -> CKRecord.Reference {
+        if let zoneID {
+            return reference(for: id, in: zoneID)
+        }
+        return reference(for: id)
+    }
+
     func references(from ids: [UUID]) -> [CKRecord.Reference] {
         ids.map { reference(for: $0) }
+    }
+
+    func references(from ids: [UUID], zoneID: CKRecordZone.ID?) -> [CKRecord.Reference] {
+        ids.map { reference(for: $0, zoneID: zoneID) }
     }
 
     func uuid(from reference: CKRecord.Reference?) -> UUID? {
