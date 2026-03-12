@@ -145,6 +145,17 @@ class HouseholdStore: ObservableObject {
         }
 
         let restoredHousehold = cached.toHousehold()
+        guard isValidCachedMembershipForRecoveredHousehold(
+            householdId: restoredHousehold.id,
+            userId: userId
+        ) else {
+            print(
+                "DEBUG: Ignoring cached household \(restoredHousehold.id) because the current user has no cached membership."
+            )
+            removeHouseholdFromCache(id: restoredHousehold.id)
+            currentHousehold = nil
+            return nil
+        }
         currentHousehold = restoredHousehold
         return restoredHousehold
     }
@@ -175,8 +186,13 @@ class HouseholdStore: ObservableObject {
                 do {
                     await setCloudScope(for: current, userId: userId)
                     let fresh = try await cloudKit.fetchHousehold(id: current.id)
-                    await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
-                    resolvedCloudHousehold = fresh
+                    if try await validateRecoveredMembershipOrAbandon(
+                        household: fresh,
+                        userId: userId
+                    ) {
+                        await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
+                        resolvedCloudHousehold = fresh
+                    }
                 } catch {
                     print("DEBUG: Cached household refresh failed, retrying membership lookup: \(error)")
                 }
@@ -1111,6 +1127,16 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    private func isValidCachedMembershipForRecoveredHousehold(
+        householdId: UUID,
+        userId: String
+    ) -> Bool {
+        guard syncMode == .cloud else { return true }
+        return fetchCachedMembers(householdId: householdId).contains {
+            $0.userId == userId && $0.isActive
+        }
+    }
+
     private func resolvedActiveMembersForExit(
         householdId: UUID,
         activeMembersSnapshot: [Member]?
@@ -1171,11 +1197,34 @@ class HouseholdStore: ObservableObject {
         preferredHouseholdId: UUID? = nil
     ) async throws -> Household? {
         if let preferredHouseholdId, !isRecoverySuppressed(for: preferredHouseholdId) {
-            do {
-                return try await cloudKit.fetchHousehold(id: preferredHouseholdId)
-            } catch {
-                print("DEBUG: Preferred household lookup failed, falling back to membership lookup: \(error)")
+            await cloudKit.setHouseholdScope(.participantShared)
+            if let participantPreferredHousehold = try await recoverableHousehold(
+                from: cloudKit.fetchMemberByUserId(
+                    userId,
+                    householdId: preferredHouseholdId,
+                    scope: .participantShared
+                ),
+                source: .participantShared
+            ) {
+                return participantPreferredHousehold
             }
+
+            await cloudKit.setHouseholdScope(.ownerPrivate)
+            if let ownerPreferredHousehold = try await recoverableHousehold(
+                from: cloudKit.fetchMemberByUserId(
+                    userId,
+                    householdId: preferredHouseholdId,
+                    scope: .ownerPrivate
+                ),
+                source: .ownerPrivate
+            ) {
+                return ownerPreferredHousehold
+            }
+
+            print(
+                "DEBUG: Preferred household \(preferredHouseholdId) has no active membership for user \(userId); abandoning recovery."
+            )
+            await invalidateRecoveredHousehold(preferredHouseholdId)
         }
 
         await cloudKit.setHouseholdScope(.participantShared)
@@ -1195,6 +1244,42 @@ class HouseholdStore: ObservableObject {
         }
 
         return nil
+    }
+
+    func validateRecoveredMembershipOrAbandon(
+        household: Household,
+        userId: String,
+        retryDelaysNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000],
+        fetchActiveMember: ((Household, String) async throws -> Member?)? = nil
+    ) async throws -> Bool {
+        guard syncMode == .cloud else { return true }
+
+        let fetchActiveMember = fetchActiveMember ?? { [cloudKit] household, userId in
+            let scope: CloudKitManager.HouseholdDatabaseScope = household.ownerId == userId
+                ? .ownerPrivate
+                : .participantShared
+            return try await cloudKit.fetchMemberByUserId(
+                userId,
+                householdId: household.id,
+                scope: scope
+            )
+        }
+
+        for delay in retryDelaysNanoseconds {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            if let member = try await fetchActiveMember(household, userId), member.isActive {
+                return true
+            }
+        }
+
+        print(
+            "DEBUG: Abandoning recovered household \(household.id) because no active membership exists for user \(userId)."
+        )
+        await invalidateRecoveredHousehold(household.id)
+        return false
     }
 
     func recoverableHousehold(
@@ -1229,6 +1314,15 @@ class HouseholdStore: ObservableObject {
             }
             return nil
         }
+    }
+
+    private func invalidateRecoveredHousehold(_ householdId: UUID) async {
+        suppressRecovery(for: householdId)
+        removeHouseholdFromCache(id: householdId)
+        if currentHousehold?.id == householdId {
+            clearCurrentHousehold()
+        }
+        await cloudKit.clearAllCachedZones(for: householdId)
     }
 
     private func cleanupStaleRecoverableMembership(

@@ -4,11 +4,15 @@ struct SettingsView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var notificationSettings = NotificationSettingsStore()
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
+    @State private var showHardResetConfirmation = false
+    @State private var isPerformingHardReset = false
 
     var body: some View {
         List {
@@ -182,6 +186,31 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            #if DEBUG
+                Section {
+                    Button(role: .destructive) {
+                        showHardResetConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isPerformingHardReset {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Resetting app...")
+                            } else {
+                                Text("Debug: Hard Reset App")
+                            }
+                            Spacer()
+                        }
+                        .font(themeStore.font(for: .buttonLabel))
+                    }
+                    .disabled(isPerformingHardReset)
+                } footer: {
+                    Text("Clears local cache, app defaults, onboarding state, and signs out locally.")
+                        .font(themeStore.font(for: .bodySmall))
+                }
+            #endif
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Settings")
@@ -216,6 +245,14 @@ struct SettingsView: View {
                 await syncNotificationSchedules()
             }
         }
+        .alert("Hard Reset App?", isPresented: $showHardResetConfirmation) {
+            Button("Maybe Later", role: .cancel) {}
+            Button("Hard Reset", role: .destructive) {
+                performHardReset()
+            }
+        } message: {
+            Text("This clears local cache, app defaults, onboarding progress, and signs you out locally. CloudKit data stays untouched.")
+        }
     }
 
     private func signOut() {
@@ -234,6 +271,23 @@ struct SettingsView: View {
             householdId: userSession.currentHouseholdID ?? householdStore.currentHousehold?.id,
             modelContext: modelContext
         )
+    }
+
+    private func performHardReset() {
+        guard !isPerformingHardReset else { return }
+        isPerformingHardReset = true
+
+        _Concurrency.Task { @MainActor in
+            await LocalAppReset.performHardReset(
+                modelContext: modelContext,
+                userSession: userSession,
+                householdStore: householdStore,
+                onboardingState: onboardingState,
+                subscriptionManager: subscriptionManager,
+                shareAcceptanceCoordinator: shareAcceptanceCoordinator
+            )
+            isPerformingHardReset = false
+        }
     }
 
     private var selectedFontScaleBinding: Binding<FontSizeScale> {

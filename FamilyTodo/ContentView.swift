@@ -13,6 +13,7 @@ struct ContentView: View {
 struct MainAppView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var activeTab: AppTab = .shopping
@@ -126,6 +127,9 @@ struct MainAppView: View {
                     userId: userId,
                     preferredHouseholdId: userSession.currentHouseholdID
                 )
+                await MainActor.run {
+                    handleSuppressedHouseholdRecoveryIfNeeded()
+                }
             }
             return
         }
@@ -134,6 +138,9 @@ struct MainAppView: View {
             userId: userId,
             preferredHouseholdId: userSession.currentHouseholdID
         )
+        if handleSuppressedHouseholdRecoveryIfNeeded() {
+            return
+        }
         if let household = householdStore.currentHousehold,
            userSession.currentHouseholdID != household.id
         {
@@ -158,6 +165,21 @@ struct MainAppView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             applyTabBarAppearance()
         }
+    }
+
+    @discardableResult
+    private func handleSuppressedHouseholdRecoveryIfNeeded() -> Bool {
+        guard let householdId = userSession.currentHouseholdID,
+              householdStore.isRecoverySuppressed(for: householdId)
+        else {
+            return false
+        }
+
+        householdStore.clearCurrentHousehold()
+        userSession.clearCurrentHousehold()
+        householdStore.resetSetupResolution()
+        onboardingState.openHouseholdSetup()
+        return true
     }
 }
 

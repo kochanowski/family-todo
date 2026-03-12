@@ -869,6 +869,46 @@ actor CloudKitManager {
         return unique
     }
 
+    private static func deduplicateReferences(
+        _ references: [CKRecord.Reference]
+    ) -> [CKRecord.Reference] {
+        var seen = Set<String>()
+        var unique: [CKRecord.Reference] = []
+        unique.reserveCapacity(references.count)
+
+        for reference in references {
+            let recordID = reference.recordID
+            let key = [
+                recordID.recordName,
+                recordID.zoneID.zoneName,
+                recordID.zoneID.ownerName,
+                String(reference.action.rawValue),
+            ].joined(separator: "|")
+            guard seen.insert(key).inserted else { continue }
+            unique.append(reference)
+        }
+
+        return unique
+    }
+
+    static func referenceMatchPredicate(
+        field: String,
+        references: [CKRecord.Reference]
+    ) -> NSPredicate {
+        let uniqueReferences = deduplicateReferences(references)
+        guard let firstReference = uniqueReferences.first else {
+            return NSPredicate(value: false)
+        }
+        guard uniqueReferences.count > 1 else {
+            return NSPredicate(format: "%K == %@", field, firstReference)
+        }
+        return NSPredicate(
+            format: "%K IN %@",
+            field,
+            NSArray(array: uniqueReferences)
+        )
+    }
+
     private func referenceMatchPredicate(
         field: String,
         id: UUID,
@@ -876,14 +916,14 @@ actor CloudKitManager {
     ) -> NSPredicate {
         let legacyReference = reference(for: id)
         guard let zoneID else {
-            return NSPredicate(format: "%K == %@", field, legacyReference)
+            return Self.referenceMatchPredicate(field: field, references: [legacyReference])
         }
 
         let scopedReference = reference(for: id, in: zoneID)
-        return NSCompoundPredicate(orPredicateWithSubpredicates: [
-            NSPredicate(format: "%K == %@", field, scopedReference),
-            NSPredicate(format: "%K == %@", field, legacyReference),
-        ])
+        return Self.referenceMatchPredicate(
+            field: field,
+            references: [scopedReference, legacyReference]
+        )
     }
 
     private func rewriteGraphReferenceFields(

@@ -363,17 +363,7 @@ struct RootView: View {
         let resolutionKey = householdSetupResolutionKey
         householdStore.prepareForSetupResolution(key: resolutionKey)
 
-        if let householdId = userSession.currentHouseholdID,
-           householdStore.isRecoverySuppressed(for: householdId)
-        {
-            userSession.clearCurrentHousehold()
-        }
-
-        if let household = householdStore.currentHousehold,
-           householdStore.isRecoverySuppressed(for: household.id)
-        {
-            householdStore.clearCurrentHousehold()
-        }
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: false)
 
         if let household = householdStore.currentHousehold {
             completeRecoveredHouseholdRoute(with: household, resolutionKey: resolutionKey)
@@ -403,6 +393,8 @@ struct RootView: View {
             userId: userId,
             preferredHouseholdId: userSession.currentHouseholdID
         )
+
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: false)
 
         if let household = householdStore.currentHousehold,
            !householdStore.isRecoverySuppressed(for: household.id)
@@ -438,6 +430,8 @@ struct RootView: View {
             userId: userId,
             preferredHouseholdId: userSession.currentHouseholdID
         )
+
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: true)
     }
 
     private func configureSubscriptionsIfNeeded() {
@@ -469,6 +463,32 @@ struct RootView: View {
             userSession.hasActiveSession &&
             !shouldShowCreateHouseholdView
     }
+
+    @discardableResult
+    private func clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: Bool) -> Bool {
+        var didClear = false
+
+        if let householdId = userSession.currentHouseholdID,
+           householdStore.isRecoverySuppressed(for: householdId)
+        {
+            userSession.clearCurrentHousehold()
+            didClear = true
+        }
+
+        if let household = householdStore.currentHousehold,
+           householdStore.isRecoverySuppressed(for: household.id)
+        {
+            householdStore.clearCurrentHousehold()
+            didClear = true
+        }
+
+        if didClear, routeToSetup {
+            householdStore.resetSetupResolution()
+            onboardingState.openHouseholdSetup()
+        }
+
+        return didClear
+    }
 }
 
 private struct HouseholdSetupLoadingView: View {
@@ -482,6 +502,65 @@ private struct HouseholdSetupLoadingView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+@MainActor
+enum LocalAppReset {
+    static func clearAllData(context: ModelContext) {
+        do {
+            try context.delete(model: CachedShoppingItem.self)
+            try context.delete(model: CachedShoppingBundle.self)
+            try context.delete(model: CachedTask.self)
+            try context.delete(model: CachedBacklogItem.self)
+            try context.delete(model: CachedBacklogCategory.self)
+            try context.delete(model: CachedMember.self)
+            try context.delete(model: CachedHousehold.self)
+            try context.delete(model: CachedArea.self)
+            try context.delete(model: CachedRecurringChore.self)
+            try context.save()
+        } catch {
+            print("Failed to clear data: \(error)")
+        }
+    }
+
+    static func clearUserDefaults(_ userDefaults: UserDefaults = .standard) {
+        guard let domain = Bundle.main.bundleIdentifier else { return }
+        userDefaults.removePersistentDomain(forName: domain)
+        userDefaults.synchronize()
+    }
+
+    static func performHardReset(
+        modelContext: ModelContext,
+        userSession: UserSession,
+        householdStore: HouseholdStore,
+        onboardingState: OnboardingState,
+        subscriptionManager: CloudKitSubscriptionManager,
+        shareAcceptanceCoordinator: ShareAcceptanceCoordinator,
+        userDefaults: UserDefaults = .standard
+    ) async {
+        await subscriptionManager.removeSubscriptions()
+        await CloudKitManager.shared.resetAvailabilityCache()
+        NotificationService.shared.cancelDailyDigest()
+        NotificationService.shared.removeAllTaskReminders()
+
+        clearAllData(context: modelContext)
+        shareAcceptanceCoordinator.resetForDevelopment()
+        AppTips.resetForDevelopment()
+        clearUserDefaults(userDefaults)
+        SwiftDataContainerFactory.requestStoreReset(userDefaults)
+
+        householdStore.clearCurrentHousehold()
+        householdStore.resetSetupResolution()
+        userSession.clearCurrentHousehold()
+
+        #if DEBUG
+            onboardingState.resetOnboarding()
+        #else
+            onboardingState.openAuth()
+        #endif
+
+        userSession.signOut()
     }
 }
 
@@ -502,8 +581,8 @@ struct UITestHelper {
 
         // Reset Data
         if args.contains("-resetData") {
-            clearAllData(context: modelContext)
-            clearUserDefaults()
+            LocalAppReset.clearAllData(context: modelContext)
+            LocalAppReset.clearUserDefaults()
         }
 
         applyThemeOverride(arguments: args)
@@ -578,28 +657,6 @@ struct UITestHelper {
         default:
             print("Unknown seeding scenario: \(scenario)")
         }
-    }
-
-    private static func clearAllData(context: ModelContext) {
-        do {
-            try context.delete(model: CachedShoppingItem.self)
-            try context.delete(model: CachedShoppingBundle.self)
-            try context.delete(model: CachedTask.self)
-            try context.delete(model: CachedBacklogItem.self)
-            try context.delete(model: CachedBacklogCategory.self)
-            try context.delete(model: CachedMember.self)
-            try context.delete(model: CachedHousehold.self)
-            try context.delete(model: CachedArea.self)
-            try context.delete(model: CachedRecurringChore.self)
-        } catch {
-            print("Failed to clear data: \(error)")
-        }
-    }
-
-    private static func clearUserDefaults() {
-        let domain = Bundle.main.bundleIdentifier!
-        UserDefaults.standard.removePersistentDomain(forName: domain)
-        UserDefaults.standard.synchronize()
     }
 
     private static func applyThemeOverride(arguments: [String]) {

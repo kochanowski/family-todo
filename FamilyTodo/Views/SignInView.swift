@@ -278,6 +278,13 @@ struct SignInView: View {
             }
         }
 
+        if let householdId = userSession.currentHouseholdID,
+           householdStore.isRecoverySuppressed(for: householdId)
+        {
+            householdStore.clearCurrentHousehold()
+            userSession.clearCurrentHousehold()
+        }
+
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
         if userSession.needsDisplayNamePrompt {
             if let userId = userSession.userId,

@@ -117,6 +117,19 @@ private enum AppTipStorageKey {
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
         }
 
+        static func resetForDevelopment() {
+            if #available(iOS 17, *) {
+                do {
+                    try Tips.resetDatastore()
+                } catch {
+                    print("TipKit development reset failed: \(error.localizedDescription)")
+                }
+            }
+
+            clearOnboardingProgress()
+            defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+        }
+
         static func donateShoppingFirstItemCreated() {
             markProgress(AppTipProgressKey.shoppingFirstAddCompleted)
             guard #available(iOS 17, *) else { return }
@@ -598,6 +611,11 @@ private enum AppTipStorageKey {
         static func resetDatastoreForTestingIfNeeded(
             launchArguments _: [String] = ProcessInfo.processInfo.arguments
         ) {
+            clearOnboardingProgress()
+            defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+        }
+
+        static func resetForDevelopment() {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
         }

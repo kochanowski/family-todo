@@ -112,6 +112,15 @@ final class ShareAcceptanceCoordinator: ObservableObject {
         userDefaults.removeObject(forKey: StorageKeys.pendingInviteTimestamp)
     }
 
+    func resetForDevelopment() {
+        pendingMetadata = nil
+        pendingInviteCode = nil
+        pendingSource = nil
+        pendingTimestampISO8601 = nil
+        lastErrorMessage = nil
+        clearPendingPersistent()
+    }
+
     private func processMetadata(
         _ metadata: CKShare.Metadata,
         userId: String,
