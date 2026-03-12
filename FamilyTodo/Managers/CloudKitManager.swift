@@ -36,6 +36,11 @@ actor CloudKitManager {
         var participantShared = DatabaseZoneContext()
     }
 
+    struct OwnerPrivateScanResult {
+        let authoritativeRecords: [CKRecord]
+        let legacyDuplicateRecordIDs: [CKRecord.ID]
+    }
+
     // CloudKit container identifier - matches the app's iCloud container
     #if CI
         private static let containerIdentifier = "iCloud.com.example.familytodo"
@@ -57,7 +62,7 @@ actor CloudKitManager {
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
-    private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds"
+    private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds.v2"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
@@ -689,13 +694,16 @@ actor CloudKitManager {
 
         do {
             for (recordType, query) in querySpecs {
-                let records = try await queryOwnerPrivateRecordsAcrossAllZones(query, householdId: householdId)
-                guard !records.isEmpty else { continue }
+                let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(query, householdId: householdId)
+                guard !scanResult.authoritativeRecords.isEmpty else { continue }
                 print("CloudKitScope: repairing \(recordType) records into owner zone for household \(householdId)")
                 _ = try await saveRecordsBatchWithZoneRecovery(
-                    records,
+                    scanResult.authoritativeRecords,
                     householdId: householdId,
                     scope: .ownerPrivate
+                )
+                try await deleteLegacyOwnerPrivateRecordsIfNeeded(
+                    scanResult.legacyDuplicateRecordIDs
                 )
             }
 
@@ -745,7 +753,7 @@ actor CloudKitManager {
         return zoneIDs
     }
 
-    private func recordFreshnessTimestamp(_ record: CKRecord) -> Date {
+    private static func recordFreshnessTimestamp(_ record: CKRecord) -> Date {
         if let updatedAt = record["updatedAt"] as? Date {
             return updatedAt
         }
@@ -758,10 +766,129 @@ actor CloudKitManager {
         return .distantPast
     }
 
+    private static func isPreferredOwnerPrivateCandidate(
+        _ candidate: CKRecord,
+        over current: CKRecord,
+        targetZoneID: CKRecordZone.ID
+    ) -> Bool {
+        let candidateFreshness = recordFreshnessTimestamp(candidate)
+        let currentFreshness = recordFreshnessTimestamp(current)
+
+        if candidateFreshness != currentFreshness {
+            return candidateFreshness > currentFreshness
+        }
+
+        let candidateIsTarget = candidate.recordID.zoneID == targetZoneID
+        let currentIsTarget = current.recordID.zoneID == targetZoneID
+        if candidateIsTarget != currentIsTarget {
+            return candidateIsTarget
+        }
+
+        return false
+    }
+
+    private static func compareRecordValues(_ lhs: CKRecordValueProtocol?, _ rhs: CKRecordValueProtocol?) -> ComparisonResult {
+        switch (lhs, rhs) {
+        case let (lhsDate as Date, rhsDate as Date):
+            lhsDate.compare(rhsDate)
+        case let (lhsNumber as NSNumber, rhsNumber as NSNumber):
+            lhsNumber.compare(rhsNumber)
+        case let (lhsString as NSString, rhsString as NSString):
+            lhsString.compare(rhsString as String)
+        case (nil, nil):
+            .orderedSame
+        case (nil, _):
+            .orderedAscending
+        case (_, nil):
+            .orderedDescending
+        default:
+            .orderedSame
+        }
+    }
+
+    private static func sortRecords(
+        _ records: [CKRecord],
+        using sortDescriptors: [NSSortDescriptor]
+    ) -> [CKRecord] {
+        guard !sortDescriptors.isEmpty else {
+            return records.sorted {
+                $0.recordID.recordName < $1.recordID.recordName
+            }
+        }
+
+        return records.sorted { lhs, rhs in
+            for sortDescriptor in sortDescriptors {
+                guard let key = sortDescriptor.key else { continue }
+                let comparison = compareRecordValues(lhs[key], rhs[key])
+                guard comparison != .orderedSame else { continue }
+                return sortDescriptor.ascending
+                    ? comparison == .orderedAscending
+                    : comparison == .orderedDescending
+            }
+
+            return lhs.recordID.recordName < rhs.recordID.recordName
+        }
+    }
+
+    private static func deduplicateRecordIDs(_ recordIDs: [CKRecord.ID]) -> [CKRecord.ID] {
+        var seen = Set<String>()
+        var unique: [CKRecord.ID] = []
+        unique.reserveCapacity(recordIDs.count)
+
+        for recordID in recordIDs {
+            let key = "\(recordID.recordName)|\(recordID.zoneID.zoneName)|\(recordID.zoneID.ownerName)"
+            guard seen.insert(key).inserted else { continue }
+            unique.append(recordID)
+        }
+
+        return unique
+    }
+
+    static func mergeOwnerPrivateRecords(
+        _ records: [CKRecord],
+        targetZoneID: CKRecordZone.ID,
+        sortDescriptors: [NSSortDescriptor]
+    ) -> OwnerPrivateScanResult {
+        guard !records.isEmpty else {
+            return OwnerPrivateScanResult(authoritativeRecords: [], legacyDuplicateRecordIDs: [])
+        }
+
+        var groupedByRecordName: [String: [CKRecord]] = [:]
+        for record in records {
+            groupedByRecordName[record.recordID.recordName, default: []].append(record)
+        }
+
+        var authoritativeRecords: [CKRecord] = []
+        var legacyDuplicateRecordIDs: [CKRecord.ID] = []
+        authoritativeRecords.reserveCapacity(groupedByRecordName.count)
+
+        for recordsWithSameName in groupedByRecordName.values {
+            guard var authoritativeRecord = recordsWithSameName.first else { continue }
+
+            for candidate in recordsWithSameName.dropFirst() where isPreferredOwnerPrivateCandidate(
+                candidate,
+                over: authoritativeRecord,
+                targetZoneID: targetZoneID
+            ) {
+                authoritativeRecord = candidate
+            }
+
+            authoritativeRecords.append(authoritativeRecord)
+            legacyDuplicateRecordIDs.append(contentsOf: recordsWithSameName.compactMap { record in
+                record.recordID.zoneID == targetZoneID ? nil : record.recordID
+            })
+        }
+
+        return OwnerPrivateScanResult(
+            authoritativeRecords: sortRecords(authoritativeRecords, using: sortDescriptors),
+            legacyDuplicateRecordIDs: deduplicateRecordIDs(legacyDuplicateRecordIDs)
+        )
+    }
+
     private func queryOwnerPrivateRecordsAcrossAllZones(
         _ query: CKQuery,
         householdId: UUID
-    ) async throws -> [CKRecord] {
+    ) async throws -> OwnerPrivateScanResult {
         let db = await privateDatabase
         let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
         let defaultZoneID = CKRecordZone.default().zoneID
@@ -771,26 +898,39 @@ actor CloudKitManager {
             zoneIDs.append(zoneID)
         }
 
-        var recordsByRecordName: [String: CKRecord] = [:]
+        var scannedRecords: [CKRecord] = []
         for zoneID in zoneIDs {
             let zoneRecords = try await queryRecordsPaginated(
                 query,
                 database: db,
                 zoneID: zoneID
             )
-            for record in zoneRecords {
-                let recordName = record.recordID.recordName
-                if let existing = recordsByRecordName[recordName] {
-                    if recordFreshnessTimestamp(record) >= recordFreshnessTimestamp(existing) {
-                        recordsByRecordName[recordName] = record
-                    }
-                } else {
-                    recordsByRecordName[recordName] = record
-                }
-            }
+            scannedRecords.append(contentsOf: zoneRecords)
         }
 
-        return Array(recordsByRecordName.values)
+        return Self.mergeOwnerPrivateRecords(
+            scannedRecords,
+            targetZoneID: targetZoneID,
+            sortDescriptors: query.sortDescriptors ?? []
+        )
+    }
+
+    private func deleteLegacyOwnerPrivateRecordsIfNeeded(_ recordIDs: [CKRecord.ID]) async throws {
+        guard !recordIDs.isEmpty else { return }
+        let db = await privateDatabase
+
+        for recordID in recordIDs {
+            do {
+                _ = try await db.deleteRecord(withID: recordID)
+                _Concurrency.Task { @MainActor in
+                    CloudKitSubscriptionManager.shared.registerLocalMutation(
+                        recordName: recordID.recordName
+                    )
+                }
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                continue
+            }
+        }
     }
 
     private func zoneCacheKey(_ zoneID: CKRecordZone.ID) -> String {
@@ -970,20 +1110,15 @@ actor CloudKitManager {
         switch scope {
         case .ownerPrivate:
             print("CloudKitScope: query ownerPrivate \(query.recordType)")
-            if let householdId,
-               let zoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
-            {
-                let zoneRecords = try await queryRecordsPaginated(
+            if let householdId {
+                let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
                     query,
-                    database: db,
-                    zoneID: zoneID
+                    householdId: householdId
                 )
-                if !zoneRecords.isEmpty {
-                    for zoneRecord in zoneRecords {
-                        rememberRecordZone(zoneRecord, explicitHouseholdId: householdId, scope: scope)
-                    }
-                    return zoneRecords
+                for authoritativeRecord in scanResult.authoritativeRecords {
+                    rememberRecordZone(authoritativeRecord, explicitHouseholdId: householdId, scope: scope)
                 }
+                return scanResult.authoritativeRecords
             }
 
             let records = try await queryRecordsPaginated(query, database: db)

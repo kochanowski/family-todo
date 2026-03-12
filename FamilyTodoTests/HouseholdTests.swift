@@ -537,6 +537,16 @@ final class HouseholdStoreTests: XCTestCase {
 }
 
 final class CloudKitManagerScopeTests: XCTestCase {
+    private let ownerZoneID = CKRecordZone.ID(
+        zoneName: "HouseholdZone-owner",
+        ownerName: CKCurrentUserDefaultName
+    )
+    private let legacyZoneID = CKRecordZone.ID(
+        zoneName: "LegacyZone-owner",
+        ownerName: CKCurrentUserDefaultName
+    )
+    private let defaultZoneID = CKRecordZone.default().zoneID
+
     func testParticipantSharedRejectsDefaultZone() {
         XCTAssertFalse(
             CloudKitManager.isZoneCompatible(
@@ -572,6 +582,124 @@ final class CloudKitManagerScopeTests: XCTestCase {
                 for: .participantShared
             )
         )
+    }
+
+    func testMergeOwnerPrivateRecordsReturnsUnionAcrossMixedZonesAndSortsByUpdatedAt() {
+        let olderTask = makeTaskRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1") ?? UUID(),
+            zoneID: ownerZoneID,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newerLegacyTask = makeTaskRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000B2") ?? UUID(),
+            zoneID: legacyZoneID,
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [olderTask, newerLegacyTask],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        )
+
+        XCTAssertEqual(
+            result.authoritativeRecords.map(\.recordID.recordName),
+            [newerLegacyTask.recordID.recordName, olderTask.recordID.recordName]
+        )
+        XCTAssertEqual(
+            result.legacyDuplicateRecordIDs.map(\.recordName),
+            [newerLegacyTask.recordID.recordName]
+        )
+    }
+
+    func testMergeOwnerPrivateRecordsPrefersTargetZoneWhenFreshnessTies() {
+        let recordID = UUID(uuidString: "00000000-0000-0000-0000-0000000000C3") ?? UUID()
+        let sharedTimestamp = Date(timeIntervalSince1970: 300)
+        let targetRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: ownerZoneID,
+            updatedAt: sharedTimestamp
+        )
+        let legacyRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: defaultZoneID,
+            updatedAt: sharedTimestamp
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [legacyRecord, targetRecord],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        )
+
+        XCTAssertEqual(result.authoritativeRecords.map(\.recordID), [targetRecord.recordID])
+        XCTAssertEqual(result.legacyDuplicateRecordIDs, [legacyRecord.recordID])
+    }
+
+    func testMergeOwnerPrivateRecordsKeepsNewerLegacySourceButDoesNotDeleteTargetRecordID() {
+        let recordID = UUID(uuidString: "00000000-0000-0000-0000-0000000000D4") ?? UUID()
+        let targetRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: ownerZoneID,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newerLegacyRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: legacyZoneID,
+            updatedAt: Date(timeIntervalSince1970: 500)
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [targetRecord, newerLegacyRecord],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        )
+
+        XCTAssertEqual(result.authoritativeRecords.map(\.recordID), [newerLegacyRecord.recordID])
+        XCTAssertEqual(result.legacyDuplicateRecordIDs, [newerLegacyRecord.recordID])
+        XCTAssertFalse(result.legacyDuplicateRecordIDs.contains(targetRecord.recordID))
+    }
+
+    func testMergeOwnerPrivateRecordsSortsBySortOrderAscending() {
+        let first = makeShoppingRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000E5") ?? UUID(),
+            zoneID: legacyZoneID,
+            sortOrder: 1
+        )
+        let second = makeShoppingRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000F6") ?? UUID(),
+            zoneID: ownerZoneID,
+            sortOrder: 2
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [second, first],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "sortOrder", ascending: true)]
+        )
+
+        XCTAssertEqual(
+            result.authoritativeRecords.map(\.recordID.recordName),
+            [first.recordID.recordName, second.recordID.recordName]
+        )
+    }
+
+    private func makeTaskRecord(id: UUID, zoneID: CKRecordZone.ID, updatedAt: Date) -> CKRecord {
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+        )
+        record["updatedAt"] = updatedAt
+        return record
+    }
+
+    private func makeShoppingRecord(id: UUID, zoneID: CKRecordZone.ID, sortOrder: Int) -> CKRecord {
+        let record = CKRecord(
+            recordType: "ShoppingItem",
+            recordID: CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+        )
+        record["sortOrder"] = sortOrder as NSNumber
+        return record
     }
 }
 
