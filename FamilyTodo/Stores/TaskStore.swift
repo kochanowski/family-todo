@@ -7,6 +7,7 @@ extension Notification.Name {
     static let memberProfileDidChange = Notification.Name("HousePulse.memberProfileDidChange")
     static let taskBoardDataDidChange = Notification.Name("HousePulse.taskBoardDataDidChange")
     static let shoppingListDataDidChange = Notification.Name("HousePulse.shoppingListDataDidChange")
+    static let householdDataDidChange = Notification.Name("HousePulse.householdDataDidChange")
     static let tabBarAppearanceRefreshRequested = Notification.Name("HousePulse.tabBarAppearanceRefreshRequested")
 }
 

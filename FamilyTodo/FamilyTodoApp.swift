@@ -207,6 +207,7 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     var body: some View {
         Group {
@@ -262,6 +263,11 @@ struct RootView: View {
             guard userSession.hasActiveSession else { return }
             householdStore.prepareForSetupResolution(key: newKey)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await handleHouseholdDataDidChange()
+            }
+        }
         .task(id: pendingProcessingKey) {
             await shareAcceptanceCoordinator.processPendingIfPossible(
                 userSession: userSession,
@@ -275,6 +281,9 @@ struct RootView: View {
                 userId: userSession.userId,
                 householdId: userSession.currentHouseholdID
             )
+        }
+        .task(id: subscriptionConfigurationKey) {
+            configureSubscriptionsIfNeeded()
         }
         .task(id: householdRecoveryKey) {
             await recoverHouseholdRouteIfNeeded()
@@ -322,6 +331,14 @@ struct RootView: View {
     private var tipContextKey: String {
         [
             userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private var subscriptionConfigurationKey: String {
+        [
+            userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
@@ -406,6 +423,30 @@ struct RootView: View {
             userSession.setCurrentHousehold(household.id)
         }
         onboardingState.completeHouseholdSetup(withHousehold: true)
+    }
+
+    private func handleHouseholdDataDidChange() async {
+        guard onboardingState.currentState == .mainApp else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId else { return }
+        guard userSession.currentHouseholdID != nil else { return }
+
+        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        )
+    }
+
+    private func configureSubscriptionsIfNeeded() {
+        guard onboardingState.currentState == .mainApp else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId,
+              let householdId = userSession.currentHouseholdID
+        else {
+            return
+        }
+
+        subscriptionManager.configure(userId: userId, householdId: householdId)
     }
 
     private var shouldShowCreateHouseholdView: Bool {

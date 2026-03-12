@@ -53,13 +53,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
         await cloudKit.ensureReady()
 
         let container = await cloudKit.getContainer()
-        let database = container.sharedCloudDatabase
-        let subscriptionId = "shared-database-changes"
+        let sharedDatabase = container.sharedCloudDatabase
+        let privateDatabase = container.privateCloudDatabase
 
-        // Create Database Subscription for Shared Database
         await createDatabaseSubscription(
-            subscriptionId: subscriptionId,
-            database: database
+            subscriptionId: "shared-database-changes",
+            database: sharedDatabase
+        )
+        await createDatabaseSubscription(
+            subscriptionId: "private-database-changes",
+            database: privateDatabase
         )
     }
 
@@ -161,9 +164,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
             NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
         case "Task", "BacklogItem", "BacklogCategory":
             NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        case "Household", "Member":
+            NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
         default:
             NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
             NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
         }
     }
 
@@ -181,6 +187,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
         let recordName = notification.recordID?.recordName
         triggerRefresh(for: recordType)
         guard !isLikelySelfNoise(recordName: recordName) else { return }
+
+        if recordType == "Household" || recordType == "Member" {
+            return
+        }
 
         // Add to pending notifications for aggregation
         if recordType == "ShoppingItem" || recordType == "ShoppingBundle" {
@@ -262,14 +272,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func removeSubscriptions() async {
         let container = await cloudKit.getContainer()
-        let database = container.sharedCloudDatabase
+        let databases = [
+            container.sharedCloudDatabase,
+            container.privateCloudDatabase,
+        ]
 
         for subscriptionId in subscriptionIds {
-            do {
-                try await database.deleteSubscription(withID: subscriptionId)
-                print("🗑️ Removed subscription: \(subscriptionId)")
-            } catch {
-                print("❌ Failed to remove subscription: \(error)")
+            for database in databases {
+                do {
+                    try await database.deleteSubscription(withID: subscriptionId)
+                    print("🗑️ Removed subscription: \(subscriptionId)")
+                } catch {
+                    print("❌ Failed to remove subscription: \(error)")
+                }
             }
         }
         subscriptionIds.removeAll()

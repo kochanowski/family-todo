@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes, feature/next-features]
+    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes, feature/next-features, feature/multi-user-sync-fixes]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -234,7 +234,8 @@ jobs:
             github.ref == 'refs/heads/appleid-login' ||
             github.ref == 'refs/heads/features-and-testing' ||
             github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features'
+            github.ref == 'refs/heads/feature/next-features' ||
+            github.ref == 'refs/heads/feature/multi-user-sync-fixes'
           )
         )
       ) &&
@@ -245,7 +246,8 @@ jobs:
         (
           (
             github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features'
+            github.ref == 'refs/heads/feature/next-features' ||
+            github.ref == 'refs/heads/feature/multi-user-sync-fixes'
           ) &&
           needs.cloudkit-schema.result == 'skipped'
         )
