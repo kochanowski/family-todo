@@ -254,11 +254,34 @@ final class UserSessionTests: XCTestCase {
         try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertTrue(session.needsDisplayNamePrompt)
+        XCTAssertNil(session.confirmedMembershipDisplayName)
 
         session.confirmDisplayName("Tester")
 
         XCTAssertFalse(session.needsDisplayNamePrompt)
         XCTAssertEqual(session.displayName, "Tester")
+        XCTAssertEqual(session.confirmedMembershipDisplayName, "Tester")
+    }
+
+    func testSuggestedDisplayNameForPromptUsesAvailableAuthNameWithoutAutoConfirming() async {
+        let authService = TestAuthenticationService()
+        let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
+
+        let user = AuthenticationService.AuthenticatedUser(
+            id: "cloudkit-user-3",
+            appleUserID: "apple-user-3",
+            email: nil,
+            displayName: "Taylor",
+            givenName: "Taylor",
+            familyName: "Swift"
+        )
+        authService.currentUser = user
+        authService.authenticationState = .authenticated(userID: user.id)
+        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertTrue(session.needsDisplayNamePrompt)
+        XCTAssertEqual(session.suggestedDisplayNameForPrompt, "Taylor")
+        XCTAssertNil(session.confirmedMembershipDisplayName)
     }
 }
 

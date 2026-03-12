@@ -313,6 +313,38 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertTrue(recurring.isEmpty)
     }
 
+    func testCreateHouseholdRejectsMissingDisplayName() async throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+            CachedTask.self,
+            CachedShoppingItem.self,
+            CachedShoppingBundle.self,
+            CachedBacklogCategory.self,
+            CachedBacklogItem.self,
+            CachedRecurringChore.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        store.setModelContext(container.mainContext)
+        store.setSyncMode(.localOnly)
+
+        do {
+            _ = try await store.createHousehold(
+                name: "Local Home",
+                userId: "guest-user",
+                displayName: "   "
+            )
+            XCTFail("Expected createHousehold to reject an empty display name")
+        } catch let error as HouseholdError {
+            XCTAssertEqual(error, .displayNameRequired)
+        }
+
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).isEmpty)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedMember>()).isEmpty)
+    }
+
     func testLeaveCurrentHouseholdLocalOnlyRemovesRecurringCacheAndSuppressesRecovery() async throws {
         let suiteName = "HouseholdStoreTests.\(#function)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

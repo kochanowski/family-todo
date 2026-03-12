@@ -222,7 +222,10 @@ struct RootView: View {
 
             case .householdSetup:
                 if userSession.hasActiveSession {
-                    if shouldShowHouseholdSetupLoader {
+                    if userSession.needsDisplayNamePrompt {
+                        SignInView()
+                            .transition(.opacity)
+                    } else if shouldShowHouseholdSetupLoader {
                         HouseholdSetupLoadingView()
                             .transition(.opacity)
                     } else {

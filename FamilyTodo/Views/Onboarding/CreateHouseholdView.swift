@@ -125,7 +125,9 @@ struct CreateHouseholdView: View {
                     }
                     .disabled(
                         householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                            isCreating || !userSession.hasActiveSession
+                            isCreating ||
+                            !userSession.hasActiveSession ||
+                            confirmedMembershipDisplayName == nil
                     )
                     .padding(.horizontal, 40)
 
@@ -141,7 +143,7 @@ struct CreateHouseholdView: View {
                                 .bold()
                         }
                         .font(themeStore.font(for: .buttonLabel))
-                        .disabled(!canJoinViaInvite || isCreating)
+                        .disabled(!canJoinViaInvite || isCreating || confirmedMembershipDisplayName == nil)
                     }
 
                     if !userSession.hasActiveSession {
@@ -209,6 +211,10 @@ struct CreateHouseholdView: View {
     private func createHousehold() {
         householdName = householdName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !householdName.isEmpty else { return }
+        guard let displayName = confirmedMembershipDisplayName else {
+            joinErrorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
         guard userSession.hasActiveSession, let userId = userSession.userId else {
             joinErrorMessage = "Sign in or continue as guest before creating household."
             return
@@ -224,7 +230,7 @@ struct CreateHouseholdView: View {
                 let newHousehold = try await householdStore.createHousehold(
                     name: householdName,
                     userId: userId,
-                    displayName: fallbackDisplayNameForMembership(),
+                    displayName: displayName,
                     iconSymbol: selectedIconSymbol
                 )
                 userSession.setCurrentHousehold(newHousehold.id)
@@ -250,6 +256,10 @@ struct CreateHouseholdView: View {
             joinErrorMessage = "Could not determine your account identity."
             return
         }
+        guard let displayName = confirmedMembershipDisplayName else {
+            joinErrorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
 
         let inviteCode = preferredJoinCode()
         guard let inviteCode else { return }
@@ -263,7 +273,7 @@ struct CreateHouseholdView: View {
                 try await performJoinHousehold(
                     inviteCode: inviteCode,
                     userId: userId,
-                    displayName: fallbackDisplayNameForMembership()
+                    displayName: displayName
                 )
             } catch {
                 joinErrorMessage = error.localizedDescription
@@ -298,13 +308,8 @@ struct CreateHouseholdView: View {
         return normalizedCode
     }
 
-    private func fallbackDisplayNameForMembership() -> String {
-        if let displayName = userSession.displayName,
-           let validated = try? DisplayNameValidator.validate(displayName)
-        {
-            return validated
-        }
-        return userSession.isGuest ? "Guest" : "Member"
+    private var confirmedMembershipDisplayName: String? {
+        userSession.confirmedMembershipDisplayName
     }
 
     private func defaultHouseholdName() -> String {

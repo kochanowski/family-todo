@@ -229,16 +229,27 @@ class HouseholdStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
+        let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
         let trimmedHouseholdName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedHouseholdName.isEmpty else {
             throw HouseholdError.invalidInviteCode
+        }
+        if syncMode == .localOnly, modelContext == nil {
+            throw HouseholdError.cacheNotAvailable
         }
 
         let newHousehold = Household(
             name: trimmedHouseholdName,
             iconSymbol: iconSymbol,
             ownerId: userId
+        )
+
+        let ownerMember = Member(
+            householdId: newHousehold.id,
+            userId: userId,
+            displayName: validatedDisplayName,
+            role: .owner,
+            colorHex: MemberColorToken.randomHex()
         )
 
         // 1. Save to CloudKit (if cloud sync is enabled and available)
@@ -249,26 +260,18 @@ class HouseholdStore: ObservableObject {
             _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: newHousehold.id)
 
             _ = try await cloudKit.saveHousehold(newHousehold)
-
-            // Create initial member (owner)
-            let owner = Member(
-                householdId: newHousehold.id,
-                userId: userId,
-                displayName: validatedDisplayName,
-                role: .owner,
-                colorHex: MemberColorToken.randomHex()
-            )
-            _ = try await cloudKit.saveMember(owner)
+            _ = try await cloudKit.saveMember(ownerMember)
             await cloudKit.migrateMemberColorsIfNeeded(householdId: newHousehold.id)
+            updateCache(with: ownerMember)
+            try await validateOwnerMembershipBootstrap(
+                household: newHousehold,
+                userId: userId
+            )
         }
 
-        // 2. Cache the local owner membership in local-only mode
+        // 2. Cache the local owner membership for immediate UI availability.
         if syncMode == .localOnly {
-            try cacheLocalOwnerMembership(
-                householdId: newHousehold.id,
-                userId: userId,
-                displayName: validatedDisplayName
-            )
+            updateCache(with: ownerMember)
         }
 
         // 3. Update Cache
@@ -387,7 +390,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
-        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
+        let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
         let normalizedInvite = try InviteInputNormalizer.normalizeInput(input)
@@ -425,7 +428,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
-        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
+        let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.participantShared)
@@ -872,11 +875,46 @@ class HouseholdStore: ObservableObject {
         _ = try await cloudKit.saveMember(member)
     }
 
-    private func normalizedMembershipDisplayName(from rawDisplayName: String) -> String {
-        if let validated = try? DisplayNameValidator.validate(rawDisplayName) {
-            return validated
+    private func requiredMembershipDisplayName(from rawDisplayName: String) throws -> String {
+        guard let validated = try? DisplayNameValidator.validate(rawDisplayName) else {
+            throw HouseholdError.displayNameRequired
         }
-        return syncMode == .localOnly ? "Guest" : "Member"
+        return validated
+    }
+
+    private func validateOwnerMembershipBootstrap(
+        household: Household,
+        userId: String
+    ) async throws {
+        let retryBackoffNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000]
+        var lastError: Error?
+
+        for (attempt, delay) in retryBackoffNanoseconds.enumerated() {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
+            memberStore.setSyncMode(syncMode)
+            memberStore.setCloudContext(currentUserId: userId, householdOwnerId: household.ownerId)
+            await memberStore.loadMembers()
+
+            if let error = memberStore.error {
+                lastError = error
+            } else if let ownerMember = memberStore.members.first(where: {
+                $0.userId == userId && $0.role == .owner && $0.isActive
+            }) {
+                updateCache(with: ownerMember)
+                return
+            } else {
+                lastError = HouseholdError.memberNotFound
+            }
+
+            let isLastAttempt = attempt == retryBackoffNanoseconds.count - 1
+            if isLastAttempt {
+                throw lastError ?? HouseholdError.memberNotFound
+            }
+        }
     }
 
     private func prewarmJoinedHouseholdGraph(household: Household, userId: String) async throws {
@@ -1338,31 +1376,25 @@ class HouseholdStore: ObservableObject {
 
     // MARK: - Local Household Bootstrap
 
-    private func cacheLocalOwnerMembership(
-        householdId: UUID,
-        userId: String,
-        displayName: String
-    ) throws {
-        guard let context = modelContext else {
-            throw HouseholdError.cacheNotAvailable
-        }
+    private func updateCache(with member: Member) {
+        guard let context = modelContext else { return }
 
+        let memberId = member.id
         let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.householdId == householdId && $0.userId == userId }
+            predicate: #Predicate { $0.id == memberId }
         )
 
-        if try context.fetch(descriptor).isEmpty == false {
-            return
+        do {
+            if let cached = try context.fetch(descriptor).first {
+                cached.update(from: member)
+            } else {
+                context.insert(CachedMember(from: member))
+            }
+            saveContextOrSetError(context, operation: "upsert cached household member")
+        } catch {
+            print("Cache update error: \(error)")
+            self.error = error
         }
-
-        let ownerMember = Member(
-            householdId: householdId,
-            userId: userId,
-            displayName: displayName,
-            role: .owner,
-            colorHex: MemberColorToken.randomHex()
-        )
-        context.insert(CachedMember(from: ownerMember))
     }
 }
 

@@ -150,6 +150,10 @@ struct CreateHouseholdSheet: View {
     private func createHousehold() {
         let name = householdName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
+        guard let resolvedDisplayName = resolvedDisplayNameForMembership() else {
+            errorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
 
         isCreating = true
         errorMessage = nil
@@ -159,7 +163,7 @@ struct CreateHouseholdSheet: View {
                 _ = try await householdStore.createHousehold(
                     name: name,
                     userId: userId,
-                    displayName: resolvedDisplayNameForMembership()
+                    displayName: resolvedDisplayName
                 )
                 dismiss()
             } catch {
@@ -169,11 +173,8 @@ struct CreateHouseholdSheet: View {
         }
     }
 
-    private func resolvedDisplayNameForMembership() -> String {
-        if let validated = try? DisplayNameValidator.validate(displayName) {
-            return validated
-        }
-        return "Member"
+    private func resolvedDisplayNameForMembership() -> String? {
+        try? DisplayNameValidator.validate(displayName)
     }
 
     private func defaultHouseholdName() -> String {
@@ -246,6 +247,10 @@ struct JoinHouseholdSheet: View {
 
     private func joinHousehold() {
         guard let inviteCode = preferredInviteCode() else { return }
+        guard let resolvedDisplayName = resolvedDisplayNameForMembership() else {
+            errorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
 
         isJoining = true
         errorMessage = nil
@@ -255,7 +260,7 @@ struct JoinHouseholdSheet: View {
                 try await householdStore.joinHousehold(
                     inviteCode: inviteCode,
                     userId: userId,
-                    displayName: resolvedDisplayNameForMembership()
+                    displayName: resolvedDisplayName
                 )
                 dismiss()
             } catch {
@@ -265,11 +270,8 @@ struct JoinHouseholdSheet: View {
         }
     }
 
-    private func resolvedDisplayNameForMembership() -> String {
-        if let validated = try? DisplayNameValidator.validate(displayName) {
-            return validated
-        }
-        return "Member"
+    private func resolvedDisplayNameForMembership() -> String? {
+        try? DisplayNameValidator.validate(displayName)
     }
 
     private func normalizedInviteCodeInput(_ raw: String) -> String {

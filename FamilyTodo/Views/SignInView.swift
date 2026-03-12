@@ -229,7 +229,9 @@ struct SignInView: View {
     }
 
     private func handleAuthRoutingIfNeeded() async {
-        guard onboardingState.currentState == .auth else { return }
+        guard onboardingState.currentState == .auth || onboardingState.currentState == .householdSetup else {
+            return
+        }
         guard !isResolvingAuthRoute else { return }
 
         if userSession.isGuest {
@@ -291,7 +293,7 @@ struct SignInView: View {
             }
 
             pendingPostAuthHasHousehold = hasHousehold
-            pendingDisplayName = userSession.displayName ?? ""
+            pendingDisplayName = userSession.suggestedDisplayNameForPrompt
             showDisplayNamePrompt = true
             return
         }

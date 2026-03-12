@@ -55,9 +55,7 @@ final class ShareAcceptanceCoordinator: ObservableObject {
         guard userSession.hasActiveSession,
               userSession.syncMode == .cloud,
               let userId = userSession.userId,
-              !userSession.needsDisplayNamePrompt,
-              let displayName = userSession.displayName,
-              !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              let displayName = userSession.confirmedMembershipDisplayName
         else {
             return
         }

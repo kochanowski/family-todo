@@ -62,7 +62,7 @@ struct GuidedEmptyStateView: View {
                                 .fill(Color.blue)
                         )
                 }
-                .disabled(showJoinSheet)
+                .disabled(showJoinSheet || confirmedMembershipDisplayName == nil)
 
                 // Secondary - Join
                 Button {
@@ -73,7 +73,7 @@ struct GuidedEmptyStateView: View {
                         .font(themeStore.font(for: .buttonLabel))
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
-                .disabled(showCreateFlow || !canJoinViaInvite)
+                .disabled(showCreateFlow || !canJoinViaInvite || confirmedMembershipDisplayName == nil)
             }
             .padding(.horizontal, 40)
 
@@ -131,6 +131,10 @@ struct GuidedEmptyStateView: View {
             joinErrorMessage = "Could not determine your account identity."
             return
         }
+        guard let displayName = confirmedMembershipDisplayName else {
+            joinErrorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
         guard let inviteCode = preferredJoinCode() else { return }
         guard !isJoining else { return }
 
@@ -139,7 +143,11 @@ struct GuidedEmptyStateView: View {
 
         _Concurrency.Task {
             do {
-                try await performJoinHousehold(inviteCode: inviteCode, userId: userId)
+                try await performJoinHousehold(
+                    inviteCode: inviteCode,
+                    userId: userId,
+                    displayName: displayName
+                )
             } catch {
                 joinErrorMessage = error.localizedDescription
             }
@@ -148,12 +156,16 @@ struct GuidedEmptyStateView: View {
         }
     }
 
-    private func performJoinHousehold(inviteCode: String, userId: String) async throws {
+    private func performJoinHousehold(
+        inviteCode: String,
+        userId: String,
+        displayName: String
+    ) async throws {
         householdStore.setSyncMode(userSession.syncMode)
         try await householdStore.joinHousehold(
             inviteCode: inviteCode,
             userId: userId,
-            displayName: fallbackDisplayNameForMembership()
+            displayName: displayName
         )
 
         if let household = householdStore.currentHousehold {
@@ -174,13 +186,8 @@ struct GuidedEmptyStateView: View {
         return normalizedCode
     }
 
-    private func fallbackDisplayNameForMembership() -> String {
-        if let displayName = userSession.displayName,
-           let validated = try? DisplayNameValidator.validate(displayName)
-        {
-            return validated
-        }
-        return userSession.isGuest ? "Guest" : "Member"
+    private var confirmedMembershipDisplayName: String? {
+        userSession.confirmedMembershipDisplayName
     }
 }
 
