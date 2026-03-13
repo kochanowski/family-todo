@@ -154,16 +154,12 @@ final class OnboardingState: ObservableObject {
         completeAuth(syncMethod: method, isGuest: method == .local, hasHousehold: false)
     }
 
-    // MARK: - Debug
-
-    #if DEBUG
-        func resetOnboarding() {
-            hasSeenOnboarding = false
-            legacyHasCompletedOnboarding = false
-            syncMethodRaw = SyncMethod.none.rawValue
-            householdStatusRaw = HouseholdStatus.none.rawValue
-            lastLaunchStateRaw = LaunchState.onboarding.rawValue
-            currentState = .onboarding
-        }
-    #endif
+    func resetOnboarding() {
+        hasSeenOnboarding = false
+        legacyHasCompletedOnboarding = false
+        syncMethodRaw = SyncMethod.none.rawValue
+        householdStatusRaw = HouseholdStatus.none.rawValue
+        lastLaunchStateRaw = LaunchState.onboarding.rawValue
+        currentState = .onboarding
+    }
 }

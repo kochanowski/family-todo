@@ -77,6 +77,29 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(cachedTasks.first?.statusRaw, Task.TaskStatus.next.rawValue)
     }
 
+    func testDeleteItemInCloudModeReplacesVisibleCacheRowWithPendingDeleteTombstone() async throws {
+        let categoryId = UUID()
+        await store.addItem(to: categoryId, title: "Promoted idea")
+
+        guard let item = store.items(for: categoryId).first else {
+            XCTFail("Expected backlog item")
+            return
+        }
+
+        store.setSyncMode(.cloud)
+        let didDelete = await store.deleteItem(item)
+
+        XCTAssertTrue(didDelete)
+        XCTAssertTrue(store.items(for: categoryId).isEmpty)
+
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == item.id }
+        )
+        let cachedItems = try modelContainer.mainContext.fetch(descriptor)
+        XCTAssertEqual(cachedItems.count, 1)
+        XCTAssertEqual(cachedItems.first?.syncStatusRaw, "pendingDelete")
+    }
+
     func testUpdateItemUpsertsCacheWhenCachedRowMissing() async throws {
         let categoryId = UUID()
         let assigneeId = UUID()

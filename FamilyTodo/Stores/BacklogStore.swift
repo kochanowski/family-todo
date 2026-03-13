@@ -797,9 +797,9 @@ final class BacklogStore: ObservableObject {
         )
 
         if let cached = try? context.fetch(descriptor).first {
-            cached.syncStatusRaw = BacklogSyncStatus.pendingDelete
-            cached.lastSyncedAt = nil
-            return saveContextOrSetError(context, operation: "mark backlog item pending delete")
+            // Replace the visible cache row with a tombstone so SwiftData-backed reloads
+            // cannot resurrect the promoted idea in the same session.
+            context.delete(cached)
         }
 
         let tombstone = CachedBacklogItem(from: item)

@@ -599,7 +599,9 @@ private struct BacklogContent: View {
                 processingPromotionItemIds.remove(item.id)
                 switch result {
                 case .success:
-                    hiddenPendingPromotionIds.remove(item.id)
+                    // Keep the item hidden for the rest of the session so a delayed
+                    // cloud echo cannot briefly show the promoted idea again.
+                    break
                 case .assigneeRequired, .wipLimitReached, .failed:
                     withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
                         hiddenPendingPromotionIds.remove(item.id)

@@ -283,6 +283,24 @@ final class UserSessionTests: XCTestCase {
         XCTAssertEqual(session.suggestedDisplayNameForPrompt, "Taylor")
         XCTAssertNil(session.confirmedMembershipDisplayName)
     }
+
+    func testLocalAppResetClearsPersistedDisplayNameAndHouseholdSelection() {
+        let defaults = makeUserDefaults()
+        defaults.set("household-id", forKey: "currentHouseholdId")
+        defaults.set(true, forKey: "signedInSessionEnabled")
+        defaults.set("cloud-user", forKey: "lastSignedInUserId")
+        defaults.set(
+            ["cloud-user": "Wojtek"],
+            forKey: "preferredDisplayNameByUserId"
+        )
+
+        LocalAppReset.clearUserDefaults(defaults)
+
+        XCTAssertNil(defaults.object(forKey: "currentHouseholdId"))
+        XCTAssertNil(defaults.object(forKey: "signedInSessionEnabled"))
+        XCTAssertNil(defaults.object(forKey: "lastSignedInUserId"))
+        XCTAssertNil(defaults.object(forKey: "preferredDisplayNameByUserId"))
+    }
 }
 
 @MainActor

@@ -554,13 +554,8 @@ enum LocalAppReset {
         householdStore.resetSetupResolution()
         userSession.clearCurrentHousehold()
 
-        #if DEBUG
-            onboardingState.resetOnboarding()
-        #else
-            onboardingState.openAuth()
-        #endif
-
         userSession.signOut()
+        onboardingState.resetOnboarding()
     }
 }
 

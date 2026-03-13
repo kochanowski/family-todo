@@ -187,30 +187,28 @@ struct SettingsView: View {
                 }
             }
 
-            #if DEBUG
-                Section {
-                    Button(role: .destructive) {
-                        showHardResetConfirmation = true
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if isPerformingHardReset {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Resetting app...")
-                            } else {
-                                Text("Debug: Hard Reset App")
-                            }
-                            Spacer()
+            Section {
+                Button(role: .destructive) {
+                    showHardResetConfirmation = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isPerformingHardReset {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Resetting app...")
+                        } else {
+                            Text("Hard Reset App")
                         }
-                        .font(themeStore.font(for: .buttonLabel))
+                        Spacer()
                     }
-                    .disabled(isPerformingHardReset)
-                } footer: {
-                    Text("Clears local cache, app defaults, onboarding state, and signs out locally.")
-                        .font(themeStore.font(for: .bodySmall))
+                    .font(themeStore.font(for: .buttonLabel))
                 }
-            #endif
+                .disabled(isPerformingHardReset)
+            } footer: {
+                Text("Clears local cache, app defaults, onboarding state, and signs out locally.")
+                    .font(themeStore.font(for: .bodySmall))
+            }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Settings")
