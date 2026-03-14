@@ -248,6 +248,13 @@ struct SignInView: View {
         isResolvingAuthRoute = true
         defer { isResolvingAuthRoute = false }
 
+        // Capture local session context BEFORE any CloudKit queries.
+        // Used to distinguish "returning user on same device" from "fresh install / hard reset".
+        // After a hard reset, both currentHousehold and currentHouseholdID are nil (local state cleared),
+        // so display name should never be silently restored from cloud — the user must confirm it explicitly.
+        let hadLocalHouseholdContext = householdStore.currentHousehold != nil
+            || userSession.currentHouseholdID != nil
+
         if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
 
@@ -287,7 +294,8 @@ struct SignInView: View {
 
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
         if userSession.needsDisplayNamePrompt {
-            if let userId = userSession.userId,
+            if hadLocalHouseholdContext,
+               let userId = userSession.userId,
                let restoredDisplayName = await householdStore.resolveMembershipDisplayName(userId: userId)
             {
                 userSession.applyProfileUpdate(displayName: restoredDisplayName)
