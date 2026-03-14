@@ -322,10 +322,16 @@ final class TaskStore: ObservableObject {
                 {
                     continue
                 }
-                if existing.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho,
-                   !cloudTaskIDs.contains(task.id)
-                {
-                    continue
+                if existing.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho {
+                    // Ghost protection: cloud hasn't received our write yet — skip entirely.
+                    if !cloudTaskIDs.contains(task.id) {
+                        continue
+                    }
+                    // LWW: cloud record exists but may be stale. Only accept it if it is
+                    // strictly newer than the local pending version; otherwise keep our write.
+                    if task.updatedAt <= existing.toTask().updatedAt {
+                        continue
+                    }
                 }
                 existing.update(from: task)
                 existing.syncStatusRaw = TaskSyncStatus.synced

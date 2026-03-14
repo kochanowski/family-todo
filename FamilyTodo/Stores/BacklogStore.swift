@@ -750,9 +750,11 @@ final class BacklogStore: ObservableObject {
             }
         } catch {
             self.error = error
-            withAnimation {
-                items.removeAll { $0.id == item.id }
-            }
+            // Do NOT remove item from the visible list on failure — the local cache already
+            // holds it as pendingUpload and replayPendingMutationsInBackground will retry.
+            // Removing it here would violate offline-first and create the visible "delay"
+            // where the item disappears and reappears once CloudKit eventually accepts it.
+            replayPendingMutationsInBackground()
         }
     }
 

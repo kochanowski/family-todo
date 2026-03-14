@@ -55,9 +55,13 @@ struct SignInView: View {
                     defaultAuthActions
 
                 case .authenticated:
-                    Text("Signed in")
-                        .font(themeStore.font(for: .buttonLabel))
-                        .foregroundStyle(.green)
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                        Text("Loading your household...")
+                            .font(themeStore.font(for: .bodyStrong))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                    }
                 }
             }
             .padding(.bottom, 60)
