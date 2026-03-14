@@ -174,11 +174,12 @@ enum NotificationSchedulePlanner {
             center.removePendingNotificationRequests(withIdentifiers: [taskNotificationId(task)])
         }
 
-        /// Remove all task reminders
+        /// Remove all task reminders (pending and already delivered).
         func removeAllTaskReminders() {
             _ = _Concurrency.Task {
                 let taskRequestIDs = await pendingTaskReminderRequestIDs()
                 center.removePendingNotificationRequests(withIdentifiers: taskRequestIDs)
+                center.removeDeliveredNotifications(withIdentifiers: taskRequestIDs)
             }
         }
 
@@ -198,6 +199,11 @@ enum NotificationSchedulePlanner {
         /// Cancel daily digest
         func cancelDailyDigest() {
             center.removePendingNotificationRequests(withIdentifiers: ["daily-digest"])
+        }
+
+        /// Remove all delivered notifications from the notification center.
+        func removeAllDeliveredNotifications() {
+            center.removeAllDeliveredNotifications()
         }
 
         func refreshScheduledNotifications(
@@ -334,6 +340,8 @@ enum NotificationSchedulePlanner {
         func removeTaskReminder(for _: Task) async {}
 
         func removeAllTaskReminders() {}
+
+        func removeAllDeliveredNotifications() {}
 
         func scheduleDailyDigest(at _: Int = 8, minute _: Int = 0) async {}
 

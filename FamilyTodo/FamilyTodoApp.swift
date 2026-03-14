@@ -548,6 +548,7 @@ enum LocalAppReset {
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
         NotificationService.shared.cancelDailyDigest()
+        NotificationService.shared.removeAllDeliveredNotifications()
         NotificationService.shared.removeAllTaskReminders()
 
         clearAllData(context: modelContext)
