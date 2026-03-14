@@ -252,40 +252,40 @@ struct SignInView: View {
         isResolvingAuthRoute = true
         defer { isResolvingAuthRoute = false }
 
-        // Capture local session context BEFORE any CloudKit queries.
-        // Used to distinguish "returning user on same device" from "fresh install / hard reset".
-        // After a hard reset, both currentHousehold and currentHouseholdID are nil (local state cleared),
-        // so display name should never be silently restored from cloud — the user must confirm it explicitly.
-        let hadLocalHouseholdContext = householdStore.currentHousehold != nil
-            || userSession.currentHouseholdID != nil
-
         if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
+            let hasTrustedLocalHouseholdContext = userSession.currentHouseholdID != nil ||
+                householdStore.hasTrustedLocalHouseholdContext(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
 
-            if let restoredHousehold = householdStore.restoreCachedHousehold(
-                userId: userId,
-                preferredHouseholdId: userSession.currentHouseholdID
-            ) {
-                if userSession.currentHouseholdID != restoredHousehold.id {
-                    userSession.setCurrentHousehold(restoredHousehold.id)
-                }
-                _ = _Concurrency.Task {
-                    await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+            if hasTrustedLocalHouseholdContext {
+                if let restoredHousehold = householdStore.restoreCachedHousehold(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                ) {
+                    if userSession.currentHouseholdID != restoredHousehold.id {
+                        userSession.setCurrentHousehold(restoredHousehold.id)
+                    }
+                    _ = _Concurrency.Task {
+                        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                            userId: userId,
+                            preferredHouseholdId: userSession.currentHouseholdID
+                        )
+                    }
+                } else {
+                    await householdStore.loadCurrentHouseholdAndMembership(
                         userId: userId,
                         preferredHouseholdId: userSession.currentHouseholdID
                     )
                 }
-            } else {
-                await householdStore.loadCurrentHouseholdAndMembership(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                )
-            }
 
-            if let household = householdStore.currentHousehold,
-               userSession.currentHouseholdID != household.id
-            {
-                userSession.setCurrentHousehold(household.id)
+                if let household = householdStore.currentHousehold,
+                   userSession.currentHouseholdID != household.id
+                {
+                    userSession.setCurrentHousehold(household.id)
+                }
             }
         }
 
@@ -298,8 +298,12 @@ struct SignInView: View {
 
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
         if userSession.needsDisplayNamePrompt {
-            if hadLocalHouseholdContext,
-               let userId = userSession.userId,
+            if let userId = userSession.userId,
+               userSession.currentHouseholdID != nil ||
+               householdStore.hasTrustedLocalHouseholdContext(
+                   userId: userId,
+                   preferredHouseholdId: userSession.currentHouseholdID
+               ),
                let restoredDisplayName = await householdStore.resolveMembershipDisplayName(userId: userId)
             {
                 userSession.applyProfileUpdate(displayName: restoredDisplayName)

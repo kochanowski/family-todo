@@ -41,8 +41,9 @@ enum AppTipProgressKey {
     ]
 }
 
-private enum AppTipStorageKey {
+enum AppTipStorageKey {
     static let contextSignature = "appTips.contextSignature"
+    static let runtimeGeneration = "appTips.runtimeGeneration"
 }
 
 #if canImport(TipKit)
@@ -51,6 +52,10 @@ private enum AppTipStorageKey {
     enum AppTips {
         private static var hasConfigured = false
         private static let defaults = UserDefaults.standard
+
+        static var runtimeGenerationDefaultsKey: String {
+            AppTipStorageKey.runtimeGeneration
+        }
 
         static func configureIfNeeded(launchArguments: [String] = ProcessInfo.processInfo.arguments) {
             guard !hasConfigured else { return }
@@ -95,7 +100,10 @@ private enum AppTipStorageKey {
             }
 
             clearOnboardingProgress()
+            bumpRuntimeGeneration()
             defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+            hasConfigured = false
+            configureIfNeeded(launchArguments: launchArguments)
             configureTestingOverridesIfNeeded(launchArguments: launchArguments)
         }
 
@@ -115,6 +123,8 @@ private enum AppTipStorageKey {
 
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            bumpRuntimeGeneration()
+            hasConfigured = false
         }
 
         static func resetForDevelopment() {
@@ -128,6 +138,9 @@ private enum AppTipStorageKey {
 
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            bumpRuntimeGeneration()
+            hasConfigured = false
+            configureIfNeeded()
         }
 
         static func donateShoppingFirstItemCreated() {
@@ -204,6 +217,10 @@ private enum AppTipStorageKey {
 
         private static func markProgress(_ key: String) {
             defaults.set(true, forKey: key)
+        }
+
+        private static func bumpRuntimeGeneration() {
+            defaults.set(defaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1, forKey: AppTipStorageKey.runtimeGeneration)
         }
 
         @available(iOS 17, *)
@@ -575,10 +592,12 @@ private enum AppTipStorageKey {
         func contextualPopoverTip(
             _ isEnabled: Bool,
             _ tip: some Tip,
-            arrowEdge: Edge = .top
+            arrowEdge: Edge = .top,
+            generation: Int = 0
         ) -> some View {
             if #available(iOS 17, *), isEnabled {
-                popoverTip(tip, arrowEdge: arrowEdge)
+                id("app-tip-\(generation)")
+                    .popoverTip(tip, arrowEdge: arrowEdge)
             } else {
                 self
             }
@@ -587,6 +606,10 @@ private enum AppTipStorageKey {
 #else
     enum AppTips {
         private static let defaults = UserDefaults.standard
+
+        static var runtimeGenerationDefaultsKey: String {
+            AppTipStorageKey.runtimeGeneration
+        }
 
         static func configureIfNeeded(launchArguments _: [String] = ProcessInfo.processInfo.arguments) {}
 
@@ -605,6 +628,7 @@ private enum AppTipStorageKey {
             guard previousSignature != newSignature else { return }
 
             clearOnboardingProgress()
+            bumpRuntimeGeneration()
             defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
         }
 
@@ -613,11 +637,13 @@ private enum AppTipStorageKey {
         ) {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            bumpRuntimeGeneration()
         }
 
         static func resetForDevelopment() {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            bumpRuntimeGeneration()
         }
 
         static func donateShoppingFirstItemCreated() {
@@ -660,6 +686,10 @@ private enum AppTipStorageKey {
             for key in AppTipProgressKey.all {
                 defaults.removeObject(forKey: key)
             }
+        }
+
+        private static func bumpRuntimeGeneration() {
+            defaults.set(defaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1, forKey: AppTipStorageKey.runtimeGeneration)
         }
     }
 

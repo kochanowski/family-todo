@@ -62,6 +62,8 @@ private struct ShoppingListContent: View {
     private var hasCompletedShoppingBundlesLocationTip = false
     @AppStorage(AppTipProgressKey.shoppingBundleQuickAddCompleted)
     private var hasCompletedShoppingBundleQuickAddTip = false
+    @AppStorage(AppTips.runtimeGenerationDefaultsKey)
+    private var appTipRuntimeGeneration = 0
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -394,7 +396,8 @@ private struct ShoppingListContent: View {
                 .contextualPopoverTip(
                     activeShoppingTip == .bundlesLocation,
                     ShoppingBundlesLocationTip(),
-                    arrowEdge: .top
+                    arrowEdge: .top,
+                    generation: appTipRuntimeGeneration
                 )
 
                 // Recently purchased
@@ -414,7 +417,8 @@ private struct ShoppingListContent: View {
                 .contextualPopoverTip(
                     activeShoppingTip == .recentPurchases,
                     ShoppingRecentlyPurchasedTip(),
-                    arrowEdge: .top
+                    arrowEdge: .top,
+                    generation: appTipRuntimeGeneration
                 )
                 .sheet(isPresented: $showRestock) {
                     RestockSheet(
@@ -478,12 +482,14 @@ private struct ShoppingListContent: View {
         .contextualPopoverTip(
             activeShoppingTip == .firstAdd,
             ShoppingFirstAddTip(),
-            arrowEdge: .bottom
+            arrowEdge: .bottom,
+            generation: appTipRuntimeGeneration
         )
         .contextualPopoverTip(
             activeShoppingTip == .bundleQuickAdd,
             ShoppingBundleQuickAddTip(),
-            arrowEdge: .bottom
+            arrowEdge: .bottom,
+            generation: appTipRuntimeGeneration
         )
     }
 

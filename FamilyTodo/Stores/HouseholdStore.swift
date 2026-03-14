@@ -240,7 +240,10 @@ class HouseholdStore: ObservableObject {
             "Invalid sync mode for household creation"
         )
 
-        try await ensureUserCanStartSingleHousehold(userId: userId)
+        try ensureUserCanStartSingleHouseholdLocally(userId: userId)
+        if syncMode == .cloud, !shouldSkipRemoteSingleHouseholdDiscoveryForCreate {
+            try await ensureUserCanStartSingleHouseholdRemotely(userId: userId)
+        }
 
         isLoading = true
         defer { isLoading = false }
@@ -277,12 +280,11 @@ class HouseholdStore: ObservableObject {
 
             _ = try await cloudKit.saveHousehold(newHousehold)
             _ = try await cloudKit.saveMember(ownerMember)
-            await cloudKit.migrateMemberColorsIfNeeded(householdId: newHousehold.id)
             updateCache(with: ownerMember)
-            try await validateOwnerMembershipBootstrap(
-                household: newHousehold,
-                userId: userId
-            )
+            updateCache(with: newHousehold)
+            currentHousehold = newHousehold
+            runCreateHouseholdPostflight(household: newHousehold, userId: userId)
+            return newHousehold
         }
 
         // 2. Cache the local owner membership for immediate UI availability.
@@ -921,6 +923,24 @@ class HouseholdStore: ObservableObject {
         return validated
     }
 
+    private func runCreateHouseholdPostflight(household: Household, userId: String) {
+        _ = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
+
+            do {
+                try await validateOwnerMembershipBootstrap(
+                    household: household,
+                    userId: userId
+                )
+            } catch {
+                self.error = error
+                print("DEBUG: Owner membership postflight validation failed: \(error)")
+            }
+        }
+    }
+
     private func validateOwnerMembershipBootstrap(
         household: Household,
         userId: String
@@ -1109,6 +1129,14 @@ class HouseholdStore: ObservableObject {
         ).count)
     }
 
+    func hasTrustedLocalHouseholdContext(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Bool {
+        currentHousehold != nil ||
+            fetchCachedHousehold(userId: userId, preferredHouseholdId: preferredHouseholdId) != nil
+    }
+
     // MARK: - SwiftData Helpers
 
     private func fetchCachedHousehold(
@@ -1190,7 +1218,11 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    private func ensureUserCanStartSingleHousehold(userId: String) async throws {
+    private var shouldSkipRemoteSingleHouseholdDiscoveryForCreate: Bool {
+        setupResolutionState.resolvedHouseholdCount == 0
+    }
+
+    private func ensureUserCanStartSingleHouseholdLocally(userId: String) throws {
         if let household = currentHousehold,
            !isRecoverySuppressed(for: household.id)
         {
@@ -1201,9 +1233,9 @@ class HouseholdStore: ObservableObject {
             currentHousehold = cachedHousehold.toHousehold()
             throw HouseholdError.alreadyInHousehold
         }
+    }
 
-        guard syncMode == .cloud else { return }
-
+    private func ensureUserCanStartSingleHouseholdRemotely(userId: String) async throws {
         await replayPendingExitOperationsIfNeeded()
         await cloudKit.ensureReady()
         try await cloudKit.checkAvailability()
@@ -1213,6 +1245,13 @@ class HouseholdStore: ObservableObject {
             currentHousehold = existingCloudHousehold
             throw HouseholdError.alreadyInHousehold
         }
+    }
+
+    private func ensureUserCanStartSingleHousehold(userId: String) async throws {
+        try ensureUserCanStartSingleHouseholdLocally(userId: userId)
+
+        guard syncMode == .cloud else { return }
+        try await ensureUserCanStartSingleHouseholdRemotely(userId: userId)
     }
 
     private func resolveRecoverableCloudHousehold(

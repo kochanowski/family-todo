@@ -114,24 +114,26 @@ struct FamilyTodoApp: App {
                             .environmentObject(cloudKitDiagnostics)
                             .modelContainer(sharedModelContainer)
                             .overlay {
-                                let toastBackground = themeStore.surfaceElevatedColor
-                                let toastAppearance = ToastView.Appearance(
-                                    backgroundColor: toastBackground,
-                                    messageColor: themeStore.inkColor,
-                                    strokeColor: themeStore.borderLightColor.opacity(0.55),
-                                    shadowColor: themeStore.inkColor.opacity(0.18),
-                                    actionColor: themeStore.accentTabColor,
-                                    messageFont: themeStore.font(for: .celebrationMessage),
-                                    actionFont: themeStore.font(for: .buttonLabel)
-                                )
+                                if onboardingState.currentState == .mainApp {
+                                    let toastBackground = themeStore.surfaceElevatedColor
+                                    let toastAppearance = ToastView.Appearance(
+                                        backgroundColor: toastBackground,
+                                        messageColor: themeStore.inkColor,
+                                        strokeColor: themeStore.borderLightColor.opacity(0.55),
+                                        shadowColor: themeStore.inkColor.opacity(0.18),
+                                        actionColor: themeStore.accentTabColor,
+                                        messageFont: themeStore.font(for: .celebrationMessage),
+                                        actionFont: themeStore.font(for: .buttonLabel)
+                                    )
 
-                                CelebrationOverlay(
-                                    manager: celebrationManager,
-                                    messageFont: themeStore.font(for: .celebrationMessage),
-                                    accentPalette: themeStore.confettiAccentPalette,
-                                    toastAppearance: toastAppearance
-                                )
-                                .environmentObject(themeStore)
+                                    CelebrationOverlay(
+                                        manager: celebrationManager,
+                                        messageFont: themeStore.font(for: .celebrationMessage),
+                                        accentPalette: themeStore.confettiAccentPalette,
+                                        toastAppearance: toastAppearance
+                                    )
+                                    .environmentObject(themeStore)
+                                }
                             }
                             .task {
                                 appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
@@ -279,6 +281,7 @@ struct RootView: View {
             )
         }
         .task(id: tipContextKey) {
+            guard onboardingState.currentState == .mainApp else { return }
             AppTips.syncContextIfNeeded(
                 sessionMode: userSession.sessionMode,
                 userId: userSession.userId,
@@ -333,6 +336,7 @@ struct RootView: View {
 
     private var tipContextKey: String {
         [
+            onboardingState.currentState.rawValue,
             userSession.sessionMode.rawValue,
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
@@ -341,6 +345,7 @@ struct RootView: View {
 
     private var subscriptionConfigurationKey: String {
         [
+            onboardingState.currentState.rawValue,
             userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
@@ -354,6 +359,21 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
+    }
+
+    private var hasPendingShareAcceptance: Bool {
+        shareAcceptanceCoordinator.pendingInviteCode != nil ||
+            shareAcceptanceCoordinator.pendingMetadata != nil ||
+            shareAcceptanceCoordinator.isProcessing
+    }
+
+    private var hasTrustedLocalHouseholdSetupContext: Bool {
+        guard let userId = userSession.userId else { return false }
+        return userSession.currentHouseholdID != nil ||
+            householdStore.hasTrustedLocalHouseholdContext(
+                userId: userId,
+                preferredHouseholdId: userSession.currentHouseholdID
+            )
     }
 
     private func recoverHouseholdRouteIfNeeded() async {
@@ -372,6 +392,11 @@ struct RootView: View {
 
         guard let userId = userSession.userId else { return }
         householdStore.setSyncMode(userSession.syncMode)
+
+        guard hasTrustedLocalHouseholdSetupContext || hasPendingShareAcceptance else {
+            householdStore.completeSetupResolution(key: resolutionKey, householdCount: 0)
+            return
+        }
 
         if let cachedHousehold = householdStore.restoreCachedHousehold(
             userId: userId,
@@ -461,6 +486,7 @@ struct RootView: View {
     private var shouldShowHouseholdSetupLoader: Bool {
         onboardingState.currentState == .householdSetup &&
             userSession.hasActiveSession &&
+            (hasTrustedLocalHouseholdSetupContext || hasPendingShareAcceptance) &&
             !shouldShowCreateHouseholdView
     }
 
@@ -537,14 +563,11 @@ enum LocalAppReset {
         onboardingState: OnboardingState,
         subscriptionManager: CloudKitSubscriptionManager,
         shareAcceptanceCoordinator: ShareAcceptanceCoordinator,
+        celebrationManager: CelebrationManager,
         userDefaults: UserDefaults = .standard
     ) async {
-        // Delete or leave household in CloudKit first so the next sign-in
-        // finds nothing and the user starts completely fresh.
-        if let userId = userSession.userId {
-            await householdStore.hardResetCloudHousehold(userId: userId)
-        }
-
+        // Local-only fresh-start reset. Remote CloudKit cleanup is exposed as a separate
+        // destructive debug action so startup/onboarding is never blocked by network work.
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
         NotificationService.shared.cancelDailyDigest()
@@ -552,10 +575,11 @@ enum LocalAppReset {
         NotificationService.shared.removeAllTaskReminders()
 
         clearAllData(context: modelContext)
-        shareAcceptanceCoordinator.resetForDevelopment()
-        AppTips.resetForDevelopment()
         clearUserDefaults(userDefaults)
         SwiftDataContainerFactory.requestStoreReset(userDefaults)
+        shareAcceptanceCoordinator.resetForDevelopment()
+        celebrationManager.resetForDevelopment()
+        AppTips.resetForDevelopment()
 
         householdStore.clearCurrentHousehold()
         householdStore.resetSetupResolution()

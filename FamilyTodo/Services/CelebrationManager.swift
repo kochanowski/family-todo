@@ -147,6 +147,13 @@ final class CelebrationManager: ObservableObject {
         confettiTrigger += 1
     }
 
+    /// Clears transient celebration UI and cadence state for fresh-start testing.
+    func resetForDevelopment() {
+        activeCelebration = nil
+        confettiTrigger = 0
+        userDefaults.removeObject(forKey: DefaultsKey.lastSurpriseAt)
+    }
+
     /// Notify partner about completion (local notification).
     func notifyPartner(completedBy memberName: String, action: String) {
         #if !targetEnvironment(simulator) && !CI

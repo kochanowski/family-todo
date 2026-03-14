@@ -77,6 +77,8 @@ private struct BacklogContent: View {
     private var hasCompletedIdeasAssignOwnerTip = false
     @AppStorage(AppTipProgressKey.ideasPromoteCompleted)
     private var hasCompletedIdeasPromoteTip = false
+    @AppStorage(AppTips.runtimeGenerationDefaultsKey)
+    private var appTipRuntimeGeneration = 0
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -118,6 +120,7 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
+                                    appTipRuntimeGeneration: appTipRuntimeGeneration,
                                     addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
                                     ideaAssignTipItemID: ideaAssignTipAnchorItemID,
                                     ideaPromotionTipItemID: ideaPromotionTipItemID,
@@ -504,7 +507,8 @@ private struct BacklogContent: View {
             .contextualPopoverTip(
                 activeIdeasTip == .createCategory,
                 IdeasCreateCategoryTip(),
-                arrowEdge: .top
+                arrowEdge: .top,
+                generation: appTipRuntimeGeneration
             )
         })
     }
@@ -946,6 +950,7 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let appTipRuntimeGeneration: Int
     let addIdeaTipCategoryID: UUID?
     let ideaAssignTipItemID: UUID?
     let ideaPromotionTipItemID: UUID?
@@ -1024,6 +1029,7 @@ struct CategoryCard: View {
                     BacklogItemRow(
                         item: item,
                         assignee: assigneeFor(item.assigneeId),
+                        appTipRuntimeGeneration: appTipRuntimeGeneration,
                         canPromote: canPromote,
                         isPromotionDisabled: isPromoting,
                         showsAssignOwnerTip: item.id == ideaAssignTipItemID,
@@ -1110,7 +1116,8 @@ struct CategoryCard: View {
                 .contextualPopoverTip(
                     addIdeaTipCategoryID == category.id,
                     IdeasAddIdeaTip(),
-                    arrowEdge: .top
+                    arrowEdge: .top,
+                    generation: appTipRuntimeGeneration
                 )
             }
         }
@@ -1204,6 +1211,7 @@ struct BacklogItemRow: View {
 
     let item: BacklogItem
     let assignee: Member?
+    let appTipRuntimeGeneration: Int
     let canPromote: Bool
     let isPromotionDisabled: Bool
     let showsAssignOwnerTip: Bool
@@ -1245,7 +1253,8 @@ struct BacklogItemRow: View {
                     .contextualPopoverTip(
                         showsIdeaPromotionTip,
                         IdeaPromotionTip(),
-                        arrowEdge: .trailing
+                        arrowEdge: .trailing,
+                        generation: appTipRuntimeGeneration
                     )
                     .transition(.opacity.combined(with: .scale))
                 }
@@ -1298,7 +1307,8 @@ struct BacklogItemRow: View {
         .contextualPopoverTip(
             showsAssignOwnerTip,
             IdeasAssignOwnerTip(),
-            arrowEdge: .trailing
+            arrowEdge: .trailing,
+            generation: appTipRuntimeGeneration
         )
     }
 }

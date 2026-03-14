@@ -7,12 +7,15 @@ struct SettingsView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
+    @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var notificationSettings = NotificationSettingsStore()
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
     @State private var showHardResetConfirmation = false
+    @State private var showCloudDeleteConfirmation = false
     @State private var isPerformingHardReset = false
+    @State private var isDeletingCloudHousehold = false
 
     var body: some View {
         List {
@@ -206,8 +209,33 @@ struct SettingsView: View {
                 }
                 .disabled(isPerformingHardReset)
             } footer: {
-                Text("Clears local cache, app defaults, onboarding state, and signs out locally.")
+                Text("Clears local cache, app defaults, TipKit/tutorial progress, and signs out locally.")
                     .font(themeStore.font(for: .bodySmall))
+            }
+
+            if userSession.syncMode == .cloud, householdStore.currentHousehold != nil {
+                Section {
+                    Button(role: .destructive) {
+                        showCloudDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isDeletingCloudHousehold {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Deleting iCloud household...")
+                            } else {
+                                Text("Delete Current Household in iCloud")
+                            }
+                            Spacer()
+                        }
+                        .font(themeStore.font(for: .buttonLabel))
+                    }
+                    .disabled(isDeletingCloudHousehold || isPerformingHardReset)
+                } footer: {
+                    Text("Debug only. Deletes the current household remotely, then resets the app locally.")
+                        .font(themeStore.font(for: .bodySmall))
+                }
             }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
@@ -249,7 +277,15 @@ struct SettingsView: View {
                 performHardReset()
             }
         } message: {
-            Text("This deletes your household from iCloud, clears local cache, resets all settings, and signs you out. The app will open as if installed fresh.")
+            Text("This clears local cache, resets app state, and signs you out locally. Your iCloud household stays untouched.")
+        }
+        .alert("Delete Current Household in iCloud?", isPresented: $showCloudDeleteConfirmation) {
+            Button("Maybe Later", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                performRemoteCloudHouseholdDelete()
+            }
+        } message: {
+            Text("This debug action removes the current household from iCloud and then resets the app locally.")
         }
     }
 
@@ -282,9 +318,31 @@ struct SettingsView: View {
                 householdStore: householdStore,
                 onboardingState: onboardingState,
                 subscriptionManager: subscriptionManager,
-                shareAcceptanceCoordinator: shareAcceptanceCoordinator
+                shareAcceptanceCoordinator: shareAcceptanceCoordinator,
+                celebrationManager: celebrationManager
             )
             isPerformingHardReset = false
+        }
+    }
+
+    private func performRemoteCloudHouseholdDelete() {
+        guard !isDeletingCloudHousehold else { return }
+        guard let userId = userSession.userId else { return }
+
+        isDeletingCloudHousehold = true
+
+        _Concurrency.Task { @MainActor in
+            await householdStore.hardResetCloudHousehold(userId: userId)
+            await LocalAppReset.performHardReset(
+                modelContext: modelContext,
+                userSession: userSession,
+                householdStore: householdStore,
+                onboardingState: onboardingState,
+                subscriptionManager: subscriptionManager,
+                shareAcceptanceCoordinator: shareAcceptanceCoordinator,
+                celebrationManager: celebrationManager
+            )
+            isDeletingCloudHousehold = false
         }
     }
 

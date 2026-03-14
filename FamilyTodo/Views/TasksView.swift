@@ -99,6 +99,8 @@ private struct TasksContent: View {
     @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
     @AppStorage(AppTipProgressKey.tasksSwipeActionsCompleted)
     private var hasCompletedTaskSwipeActionsTip = false
+    @AppStorage(AppTips.runtimeGenerationDefaultsKey)
+    private var appTipRuntimeGeneration = 0
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
@@ -348,6 +350,7 @@ private struct TasksContent: View {
                     assignee: assignee(for: task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
+                    appTipRuntimeGeneration: appTipRuntimeGeneration,
                     wipZone: wipZone(for: index),
                     showsSwipeActionsTip: shouldShowTaskSwipeActionsTip &&
                         task.id == taskSwipeActionsTipTaskID,
@@ -419,6 +422,7 @@ private struct TasksContent: View {
                 assignee: assignee(for: task),
                 categoryName: categoryName(for: task),
                 categoryColor: categoryColor(for: task),
+                appTipRuntimeGeneration: appTipRuntimeGeneration,
                 wipZone: .normal,
                 showsSwipeActionsTip: false,
                 onToggle: { toggleTask(task) },
@@ -1275,6 +1279,7 @@ struct TaskRow: View {
     let assignee: Member?
     let categoryName: String?
     let categoryColor: Color?
+    let appTipRuntimeGeneration: Int
     let wipZone: WipZone
     let showsSwipeActionsTip: Bool
     let onToggle: () -> Void
@@ -1344,7 +1349,8 @@ struct TaskRow: View {
             .contextualPopoverTip(
                 showsSwipeActionsTip,
                 TaskSwipeActionsTip(),
-                arrowEdge: .top
+                arrowEdge: .top,
+                generation: appTipRuntimeGeneration
             )
         }
         .padding(.vertical, 2)

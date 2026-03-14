@@ -649,4 +649,22 @@ final class CelebrationManagerTests: XCTestCase {
         XCTAssertEqual(decision.celebration.style, .normal)
         XCTAssertNil(defaults.object(forKey: "celebrations.lastSurpriseAt"))
     }
+
+    func testResetForDevelopmentClearsActiveCelebrationConfettiAndCadence() {
+        let defaults = makeUserDefaults()
+        defaults.set(Date(timeIntervalSince1970: 1_736_950_000), forKey: "celebrations.lastSurpriseAt")
+        let manager = CelebrationManager(userDefaults: defaults)
+
+        manager.triggerConfetti()
+        manager.celebrateAllTasksComplete()
+
+        XCTAssertNotNil(manager.activeCelebration)
+        XCTAssertGreaterThan(manager.confettiTrigger, 0)
+
+        manager.resetForDevelopment()
+
+        XCTAssertNil(manager.activeCelebration)
+        XCTAssertEqual(manager.confettiTrigger, 0)
+        XCTAssertNil(defaults.object(forKey: "celebrations.lastSurpriseAt"))
+    }
 }
