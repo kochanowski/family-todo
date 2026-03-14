@@ -249,7 +249,7 @@ struct SettingsView: View {
                 performHardReset()
             }
         } message: {
-            Text("This clears local cache, app defaults, onboarding progress, and signs you out locally. CloudKit data stays untouched.")
+            Text("This deletes your household from iCloud, clears local cache, resets all settings, and signs you out. The app will open as if installed fresh.")
         }
     }
 

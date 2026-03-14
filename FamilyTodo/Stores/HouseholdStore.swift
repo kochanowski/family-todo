@@ -622,6 +622,29 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    /// Removes the current household from CloudKit as part of a hard reset.
+    /// Owner → deletes the entire household. Participant → deactivates membership and leaves.
+    /// Errors are swallowed; local reset proceeds regardless of network state.
+    func hardResetCloudHousehold(userId: String) async {
+        guard syncMode == .cloud, let household = currentHousehold else { return }
+
+        do {
+            await cloudKit.ensureReady()
+            try await cloudKit.checkAvailability()
+
+            if household.ownerId == userId {
+                try await deleteRemoteOwnedHousehold(householdId: household.id)
+            } else {
+                try await leaveSharedHouseholdRemotely(
+                    householdId: household.id,
+                    userId: userId
+                )
+            }
+        } catch {
+            print("[HouseholdStore] Hard reset cloud cleanup non-fatal: \(error)")
+        }
+    }
+
     private func setCloudScope(for household: Household, userId: String) async {
         let scope: CloudKitManager.HouseholdDatabaseScope =
             household.ownerId == userId ? .ownerPrivate : .participantShared

@@ -539,6 +539,12 @@ enum LocalAppReset {
         shareAcceptanceCoordinator: ShareAcceptanceCoordinator,
         userDefaults: UserDefaults = .standard
     ) async {
+        // Delete or leave household in CloudKit first so the next sign-in
+        // finds nothing and the user starts completely fresh.
+        if let userId = userSession.userId {
+            await householdStore.hardResetCloudHousehold(userId: userId)
+        }
+
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
         NotificationService.shared.cancelDailyDigest()
