@@ -534,8 +534,13 @@ final class TaskStore: ObservableObject {
         modelContext.insert(cached)
         saveContextOrSetError(operation: "cache created task")
 
-        await syncReminder(for: task)
-        await syncDailyDigestSchedule()
+        // Fire-and-forget: notification scheduling must not block the caller.
+        // Promotion flow (promoteItemToTask) awaits createTask before removing the
+        // idea from the UI. Blocking here causes a visible ~13-second delay.
+        _ = _Concurrency.Task { [self] in
+            await syncReminder(for: task)
+            await syncDailyDigestSchedule()
+        }
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()
