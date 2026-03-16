@@ -49,6 +49,7 @@ private struct ShoppingListContent: View {
     @State private var inlineInsertRowToken = UUID()
     @State private var isKeyboardVisible = false
     @State private var didPerformInitialLoad = false
+    @State private var hasCompletedInitialLoad = false
     @State private var isScreenVisible = false
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
     @State private var activeToast: ShoppingToastState?
@@ -80,6 +81,7 @@ private struct ShoppingListContent: View {
                 guard !didPerformInitialLoad else { return }
                 didPerformInitialLoad = true
                 await loadShoppingData()
+                hasCompletedInitialLoad = true
             }
             .onChange(of: userSession.syncMode) { _, mode in
                 updateStoreCloudContext()
@@ -87,6 +89,7 @@ private struct ShoppingListContent: View {
                 bundleStore.setSyncMode(mode)
                 _ = _Concurrency.Task {
                     await loadShoppingData()
+                    hasCompletedInitialLoad = true
                 }
             }
             .onChange(of: userSession.userId) { _, _ in
@@ -119,6 +122,7 @@ private struct ShoppingListContent: View {
             ) { _ in
                 _ = _Concurrency.Task {
                     await loadShoppingData()
+                    hasCompletedInitialLoad = true
                 }
             }
             .onReceive(
@@ -178,7 +182,15 @@ private struct ShoppingListContent: View {
                 : AppChromeMetrics.compactCTAHeight + 28
         let floatingButtonInset: CGFloat = 16
         let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
-        let shouldShowEmptyState = store.toBuyItems.isEmpty && !isRapidEntryActive
+        let shouldShowLoadingState =
+            !hasCompletedInitialLoad &&
+            store.toBuyItems.isEmpty &&
+            quickAddBundles.isEmpty &&
+            !isRapidEntryActive
+        let shouldShowEmptyState =
+            hasCompletedInitialLoad &&
+            store.toBuyItems.isEmpty &&
+            !isRapidEntryActive
 
         return ZStack(alignment: .bottomTrailing) {
             rapidEntryDismissOverlay(maxHeight: rapidEntryTapHeight)
@@ -189,7 +201,12 @@ private struct ShoppingListContent: View {
                     .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
                     .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
-                if shouldShowEmptyState {
+                if shouldShowLoadingState {
+                    shoppingLoadingState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else if shouldShowEmptyState {
                     shoppingEmptyState
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
@@ -353,6 +370,12 @@ private struct ShoppingListContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .offset(y: -40)
+    }
+
+    private var shoppingLoadingState: some View {
+        ProgressView("Loading shopping...")
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 40)
     }
 
     // MARK: - Header

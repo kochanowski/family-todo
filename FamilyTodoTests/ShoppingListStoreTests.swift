@@ -200,6 +200,26 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Eggs", "Bread"])
     }
 
+    func testInitHydratesItemsFromCacheBeforeLoad() throws {
+        let cachedItem = ShoppingItem(
+            householdId: householdId,
+            title: "Pomidorki koktajlowe",
+            isBought: false,
+            sortOrder: 1
+        )
+        modelContainer.mainContext.insert(CachedShoppingItem(from: cachedItem))
+        try modelContainer.mainContext.save()
+
+        let hydratedStore = ShoppingListStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+
+        XCTAssertEqual(hydratedStore.items.count, 1)
+        XCTAssertEqual(hydratedStore.toBuyItems.count, 1)
+        XCTAssertEqual(hydratedStore.toBuyItems.first?.title, "Pomidorki koktajlowe")
+    }
+
     private func createBoughtItem(title: String) async {
         await store.createItem(title: title)
 

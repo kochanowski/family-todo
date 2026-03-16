@@ -7,6 +7,8 @@ struct BundlesManagementView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var presentedEditor: PresentedBundleEditor?
+    @State private var hasStartedInitialLoad = false
+    @State private var hasCompletedInitialLoad = false
 
     var body: some View {
         List {
@@ -40,7 +42,9 @@ struct BundlesManagementView: View {
             }
         }
         .overlay {
-            if store.bundles.isEmpty {
+            if !hasCompletedInitialLoad, store.bundles.isEmpty {
+                ProgressView("Loading bundles...")
+            } else if store.bundles.isEmpty {
                 ThemedEmptyStateView(
                     title: "No Bundles Yet",
                     systemImage: ShoppingBundle.defaultIcon,
@@ -71,17 +75,22 @@ struct BundlesManagementView: View {
             }
         }
         .task {
+            guard !hasStartedInitialLoad else { return }
+            hasStartedInitialLoad = true
             store.setSyncMode(userSession.syncMode)
             await store.loadBundles()
+            hasCompletedInitialLoad = true
         }
         .refreshable {
             store.setSyncMode(userSession.syncMode)
             await store.loadBundles()
+            hasCompletedInitialLoad = true
         }
         .onChange(of: userSession.syncMode) { _, mode in
             store.setSyncMode(mode)
             _ = _Concurrency.Task {
                 await store.loadBundles()
+                hasCompletedInitialLoad = true
             }
         }
         .sheet(item: $presentedEditor) { destination in
@@ -630,7 +639,7 @@ private struct ShoppingBundleItemRow: View {
             TextField("Item", text: $title)
                 .font(themeStore.font(for: .listRowTitle))
                 .textFieldStyle(.plain)
-                .textInputAutocapitalization(.words)
+                .textInputAutocapitalization(.sentences)
                 .autocorrectionDisabled()
                 .submitLabel(.next)
                 .focused(focusedField, equals: focusID)
@@ -666,7 +675,7 @@ private struct ShoppingBundleComposerRow: View {
             )
             .font(themeStore.font(for: .listRowTitle))
             .textFieldStyle(.plain)
-            .textInputAutocapitalization(.words)
+            .textInputAutocapitalization(.sentences)
             .autocorrectionDisabled()
             .submitLabel(.done)
             .focused(focusedField, equals: .composer)

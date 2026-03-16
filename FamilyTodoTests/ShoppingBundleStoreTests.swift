@@ -162,4 +162,24 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertTrue(merged.contains(where: { $0.id == cloudOnlyID }))
         XCTAssertFalse(merged.contains(where: { $0.id == deleteID }))
     }
+
+    func testInitHydratesBundlesFromCacheBeforeLoad() throws {
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Weekend breakfast",
+            icon: "shippingbox.fill",
+            items: ["Eggs", "Bread"]
+        )
+        modelContainer.mainContext.insert(CachedShoppingBundle(from: bundle))
+        try modelContainer.mainContext.save()
+
+        let hydratedStore = ShoppingBundleStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+
+        XCTAssertEqual(hydratedStore.bundles.count, 1)
+        XCTAssertEqual(hydratedStore.bundles.first?.name, "Weekend breakfast")
+        XCTAssertEqual(hydratedStore.bundles.first?.items, ["Eggs", "Bread"])
+    }
 }

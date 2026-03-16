@@ -160,6 +160,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
         return false
     }
 
+    private func triggerRefreshForAllDomains() {
+        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
+    }
+
     private func triggerRefresh(for recordType: String?) {
         switch recordType {
         case "ShoppingItem", "ShoppingBundle":
@@ -169,15 +175,13 @@ final class CloudKitSubscriptionManager: ObservableObject {
         case "Household", "Member":
             NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
         default:
-            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
+            return
         }
     }
 
     private func handleDatabaseNotification(_: CKDatabaseNotification) {
-        triggerRefresh(for: nil)
         guard !isLikelySelfNoise(recordName: nil) else { return }
+        triggerRefreshForAllDomains()
 
         pendingShoppingChanges.append("Shared Update")
         scheduleAggregatedNotification()
@@ -185,10 +189,15 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     private func handleQueryNotification(_ notification: CKQueryNotification) {
-        let recordType = notification.recordFields?["recordType"] as? String ?? "Unknown"
+        let recordType = (notification.recordFields?["recordType"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let recordName = notification.recordID?.recordName
-        triggerRefresh(for: recordType)
         guard !isLikelySelfNoise(recordName: recordName) else { return }
+        triggerRefresh(for: recordType)
+
+        guard let recordType, !recordType.isEmpty, recordType != "Unknown" else {
+            return
+        }
 
         if recordType == "Household" || recordType == "Member" {
             return

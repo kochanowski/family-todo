@@ -28,6 +28,9 @@ final class ShoppingBundleStore: ObservableObject {
     private var householdOwnerId: String?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
+    private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var shouldReloadAfterCurrentLoad = false
+    private var hasHydratedVisibleSnapshot = false
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -52,6 +55,7 @@ final class ShoppingBundleStore: ObservableObject {
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     @discardableResult
@@ -74,6 +78,7 @@ final class ShoppingBundleStore: ObservableObject {
 
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     var quickAddBundles: [ShoppingBundle] {
@@ -81,12 +86,36 @@ final class ShoppingBundleStore: ObservableObject {
     }
 
     func loadBundles() async {
+        if let activeLoadTask {
+            shouldReloadAfterCurrentLoad = true
+            await activeLoadTask.value
+            return
+        }
+
+        let loadTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            repeat {
+                shouldReloadAfterCurrentLoad = false
+                await performLoadBundlesPass()
+            } while shouldReloadAfterCurrentLoad
+
+            activeLoadTask = nil
+        }
+
+        activeLoadTask = loadTask
+        await loadTask.value
+    }
+
+    private func performLoadBundlesPass() async {
         guard let householdId else { return }
 
         isLoading = true
         error = nil
 
-        let cachedBundles = loadFromCache()
+        let cachedBundles = fetchCachedBundles(
+            updateVisibleState: !hasHydratedVisibleSnapshot || bundles.isEmpty
+        )
         let pendingSnapshot = pendingSyncSnapshot(from: cachedBundles)
 
         if !isCloudSyncEnabled {
@@ -110,7 +139,11 @@ final class ShoppingBundleStore: ObservableObject {
         isLoading = false
     }
 
-    private func loadFromCache() -> [CachedShoppingBundle] {
+    private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
+        _ = fetchCachedBundles(updateVisibleState: force || !hasHydratedVisibleSnapshot || bundles.isEmpty)
+    }
+
+    private func fetchCachedBundles(updateVisibleState: Bool) -> [CachedShoppingBundle] {
         guard let context = modelContext, let householdId else { return [] }
 
         let descriptor = FetchDescriptor<CachedShoppingBundle>(
@@ -119,9 +152,12 @@ final class ShoppingBundleStore: ObservableObject {
         )
 
         if let cachedBundles = try? context.fetch(descriptor) {
-            bundles = cachedBundles
-                .filter { $0.syncStatusRaw != BundleSyncStatus.pendingDelete }
-                .map { $0.toShoppingBundle() }
+            if updateVisibleState {
+                bundles = cachedBundles
+                    .filter { $0.syncStatusRaw != BundleSyncStatus.pendingDelete }
+                    .map { $0.toShoppingBundle() }
+                hasHydratedVisibleSnapshot = true
+            }
             return cachedBundles
         }
 

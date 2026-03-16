@@ -17,6 +17,9 @@ final class ShoppingListStore: ObservableObject {
     private var householdOwnerId: String?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
+    private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var shouldReloadAfterCurrentLoad = false
+    private var hasHydratedVisibleSnapshot = false
 
     struct PendingSyncSnapshot {
         var pendingUploadByID: [UUID: ShoppingItem]
@@ -46,6 +49,7 @@ final class ShoppingListStore: ObservableObject {
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     @discardableResult
@@ -69,6 +73,7 @@ final class ShoppingListStore: ObservableObject {
     /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     var toBuyItems: [ShoppingItem] {
@@ -108,13 +113,37 @@ final class ShoppingListStore: ObservableObject {
     // MARK: - Load Items
 
     func loadItems() async {
+        if let activeLoadTask {
+            shouldReloadAfterCurrentLoad = true
+            await activeLoadTask.value
+            return
+        }
+
+        let loadTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            repeat {
+                shouldReloadAfterCurrentLoad = false
+                await performLoadItemsPass()
+            } while shouldReloadAfterCurrentLoad
+
+            activeLoadTask = nil
+        }
+
+        activeLoadTask = loadTask
+        await loadTask.value
+    }
+
+    private func performLoadItemsPass() async {
         guard let householdId else { return }
 
         isLoading = true
         error = nil
 
         // 1. Load from cache first (instant UI)
-        let cachedItems = loadFromCache()
+        let cachedItems = fetchCachedItems(
+            updateVisibleState: !hasHydratedVisibleSnapshot || items.isEmpty
+        )
         let pendingSnapshot = pendingSyncSnapshot(from: cachedItems)
 
         if !isCloudSyncEnabled {
@@ -143,7 +172,11 @@ final class ShoppingListStore: ObservableObject {
         isLoading = false
     }
 
-    private func loadFromCache() -> [CachedShoppingItem] {
+    private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
+        _ = fetchCachedItems(updateVisibleState: force || !hasHydratedVisibleSnapshot || items.isEmpty)
+    }
+
+    private func fetchCachedItems(updateVisibleState: Bool) -> [CachedShoppingItem] {
         guard let context = modelContext, let householdId else { return [] }
 
         let descriptor = FetchDescriptor<CachedShoppingItem>(
@@ -151,9 +184,12 @@ final class ShoppingListStore: ObservableObject {
         )
 
         if let cachedItems = try? context.fetch(descriptor) {
-            items = cachedItems
-                .filter { $0.syncStatusRaw != "pendingDelete" }
-                .map { $0.toShoppingItem() }
+            if updateVisibleState {
+                items = cachedItems
+                    .filter { $0.syncStatusRaw != "pendingDelete" }
+                    .map { $0.toShoppingItem() }
+                hasHydratedVisibleSnapshot = true
+            }
             return cachedItems
         }
         return []

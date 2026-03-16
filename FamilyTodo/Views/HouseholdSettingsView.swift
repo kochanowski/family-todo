@@ -35,7 +35,7 @@ struct ProfileView: View {
     @StateObject private var uiState = HouseholdSettingsUIState()
 
     @State private var showEditProfile = false
-    @State private var showEditHousehold = false
+    @State private var householdBeingEdited: Household?
     @State private var didSaveHouseholdMetadata = false
     @State private var isPreparingShareInvite = false
     @State private var showLeaveConfirmation = false
@@ -62,19 +62,14 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(
-            isPresented: $showEditHousehold,
-            onDismiss: handleHouseholdEditDismiss
-        ) {
-            if let household = householdStore.currentHousehold {
-                NavigationStack {
-                    EditHouseholdView(
-                        household: household,
-                        onSaveSuccess: {
-                            didSaveHouseholdMetadata = true
-                        }
-                    )
-                }
+        .sheet(item: $householdBeingEdited, onDismiss: handleHouseholdEditDismiss) { household in
+            NavigationStack {
+                EditHouseholdView(
+                    household: household,
+                    onSaveSuccess: {
+                        didSaveHouseholdMetadata = true
+                    }
+                )
             }
         }
         .sheet(item: $uiState.route) { route in
@@ -162,26 +157,23 @@ struct ProfileView: View {
     private var householdSection: some View {
         Section {
             if let household = householdStore.currentHousehold {
-                Button {
-                    showEditHousehold = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: household.iconSymbol)
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(themeStore.accentTabColor)
-                            .frame(width: 28, height: 28)
-                        Text(household.name)
-                            .font(themeStore.font(for: .listRowTitle))
-                            .foregroundStyle(themeStore.contentPrimaryColor)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                if currentUserIsOwner {
+                    Button {
+                        householdBeingEdited = household
+                    } label: {
+                        householdRow(household: household, showsChevron: true)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        householdRow(household: household, showsChevron: false)
+
+                        Text("Only the household owner can edit the household name and icon.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             } else {
                 Text("No Household Selected")
                     .font(themeStore.font(for: .bodySmall))
@@ -190,6 +182,27 @@ struct ProfileView: View {
         } header: {
             sectionHeader("Household")
         }
+    }
+
+    private func householdRow(household: Household, showsChevron: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: household.iconSymbol)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+                .frame(width: 28, height: 28)
+            Text(household.name)
+                .font(themeStore.font(for: .listRowTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+            Spacer()
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var membersSection: some View {
@@ -770,6 +783,8 @@ private struct EditHouseholdView: View {
     let household: Household
     let onSaveSuccess: () -> Void
 
+    private let initialTrimmedName: String
+    private let initialIconSymbol: String
     @State private var name: String
     @State private var selectedIconSymbol: String
     @State private var errorMessage: String?
@@ -799,6 +814,8 @@ private struct EditHouseholdView: View {
     ) {
         self.household = household
         self.onSaveSuccess = onSaveSuccess
+        initialTrimmedName = household.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        initialIconSymbol = household.iconSymbol
         _name = State(initialValue: household.name)
         _selectedIconSymbol = State(initialValue: household.iconSymbol)
     }
@@ -866,7 +883,7 @@ private struct EditHouseholdView: View {
         .navigationTitle("Edit Household")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .cancellationAction) {
                 Button {
                     dismiss()
                 } label: {
@@ -874,17 +891,14 @@ private struct EditHouseholdView: View {
                         .font(themeStore.font(for: .buttonLabel))
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button {
                     saveHousehold()
                 } label: {
                     Text("Save")
                         .font(themeStore.font(for: .buttonLabel))
                 }
-                .disabled(
-                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                        isSaving
-                )
+                .disabled(!canSave || isSaving)
             }
             ToolbarItem(placement: .principal) {
                 Text("Edit Household")
@@ -902,8 +916,19 @@ private struct EditHouseholdView: View {
         }
     }
 
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasChanges: Bool {
+        trimmedName != initialTrimmedName || selectedIconSymbol != initialIconSymbol
+    }
+
+    private var canSave: Bool {
+        !trimmedName.isEmpty && hasChanges
+    }
+
     private func saveHousehold() {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         guard !isSaving else { return }
         guard let userId = userSession.userId else {

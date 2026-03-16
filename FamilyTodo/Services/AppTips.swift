@@ -127,6 +127,21 @@ enum AppTipStorageKey {
             hasConfigured = false
         }
 
+        static func resetForHardReset(userDefaults: UserDefaults = .standard) {
+            if #available(iOS 17, *) {
+                do {
+                    try Tips.resetDatastore()
+                } catch {
+                    print("TipKit hard reset failed: \(error.localizedDescription)")
+                }
+            }
+
+            clearOnboardingProgress(userDefaults: userDefaults)
+            userDefaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            bumpRuntimeGeneration(userDefaults: userDefaults)
+            hasConfigured = false
+        }
+
         static func resetForDevelopment() {
             if #available(iOS 17, *) {
                 do {
@@ -197,9 +212,9 @@ enum AppTipStorageKey {
             AppTipEvents.taskSwipeActionUsed.sendDonation()
         }
 
-        static func clearOnboardingProgress() {
+        static func clearOnboardingProgress(userDefaults: UserDefaults = .standard) {
             for key in AppTipProgressKey.all {
-                defaults.removeObject(forKey: key)
+                userDefaults.removeObject(forKey: key)
             }
         }
 
@@ -219,8 +234,11 @@ enum AppTipStorageKey {
             defaults.set(true, forKey: key)
         }
 
-        private static func bumpRuntimeGeneration() {
-            defaults.set(defaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1, forKey: AppTipStorageKey.runtimeGeneration)
+        private static func bumpRuntimeGeneration(userDefaults: UserDefaults = .standard) {
+            userDefaults.set(
+                userDefaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1,
+                forKey: AppTipStorageKey.runtimeGeneration
+            )
         }
 
         @available(iOS 17, *)
@@ -640,6 +658,12 @@ enum AppTipStorageKey {
             bumpRuntimeGeneration()
         }
 
+        static func resetForHardReset(userDefaults: UserDefaults = .standard) {
+            clearOnboardingProgress(userDefaults: userDefaults)
+            userDefaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            bumpRuntimeGeneration(userDefaults: userDefaults)
+        }
+
         static func resetForDevelopment() {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
@@ -682,14 +706,17 @@ enum AppTipStorageKey {
             defaults.set(true, forKey: AppTipProgressKey.tasksSwipeActionsCompleted)
         }
 
-        static func clearOnboardingProgress() {
+        static func clearOnboardingProgress(userDefaults: UserDefaults = .standard) {
             for key in AppTipProgressKey.all {
-                defaults.removeObject(forKey: key)
+                userDefaults.removeObject(forKey: key)
             }
         }
 
-        private static func bumpRuntimeGeneration() {
-            defaults.set(defaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1, forKey: AppTipStorageKey.runtimeGeneration)
+        private static func bumpRuntimeGeneration(userDefaults: UserDefaults = .standard) {
+            userDefaults.set(
+                userDefaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1,
+                forKey: AppTipStorageKey.runtimeGeneration
+            )
         }
     }
 

@@ -65,6 +65,9 @@ final class BacklogStore: ObservableObject {
     private var householdOwnerId: String?
     private var pendingMutationIDs: Set<UUID> = []
     private var isReplayingPendingMutations = false
+    private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var shouldReloadAfterCurrentLoad = false
+    private var hasHydratedVisibleSnapshot = false
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -89,6 +92,7 @@ final class BacklogStore: ObservableObject {
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     @discardableResult
@@ -112,6 +116,7 @@ final class BacklogStore: ObservableObject {
     /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     /// Get items for a specific category
@@ -124,13 +129,37 @@ final class BacklogStore: ObservableObject {
     // MARK: - Load Data
 
     func loadData() async {
+        if let activeLoadTask {
+            shouldReloadAfterCurrentLoad = true
+            await activeLoadTask.value
+            return
+        }
+
+        let loadTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            repeat {
+                shouldReloadAfterCurrentLoad = false
+                await performLoadDataPass()
+            } while shouldReloadAfterCurrentLoad
+
+            activeLoadTask = nil
+        }
+
+        activeLoadTask = loadTask
+        await loadTask.value
+    }
+
+    private func performLoadDataPass() async {
         guard let householdId else { return }
 
         isLoading = true
         error = nil
 
         // 1. Load from cache first
-        let cacheSnapshot = loadFromCache()
+        let cacheSnapshot = fetchCacheSnapshot(
+            updateVisibleState: !hasHydratedVisibleSnapshot || (categories.isEmpty && items.isEmpty)
+        )
         let pendingSnapshot = pendingSyncSnapshot(
             from: cacheSnapshot.items,
             cachedCategories: cacheSnapshot.categories
@@ -174,7 +203,13 @@ final class BacklogStore: ObservableObject {
         isLoading = false
     }
 
-    private func loadFromCache() -> CacheSnapshot {
+    private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
+        _ = fetchCacheSnapshot(
+            updateVisibleState: force || !hasHydratedVisibleSnapshot || (categories.isEmpty && items.isEmpty)
+        )
+    }
+
+    private func fetchCacheSnapshot(updateVisibleState: Bool) -> CacheSnapshot {
         guard let context = modelContext, let householdId else {
             return CacheSnapshot(categories: [], items: [])
         }
@@ -187,7 +222,9 @@ final class BacklogStore: ObservableObject {
         )
         if let fetchedCategories = try? context.fetch(categoryDescriptor) {
             cachedCategories = fetchedCategories
-            categories = fetchedCategories.map { $0.toBacklogCategory() }
+            if updateVisibleState {
+                categories = fetchedCategories.map { $0.toBacklogCategory() }
+            }
         }
 
         // Load Items
@@ -197,9 +234,12 @@ final class BacklogStore: ObservableObject {
         )
         if let fetchedItems = try? context.fetch(itemDescriptor) {
             cachedItems = fetchedItems
-            items = fetchedItems
-                .filter { $0.syncStatusRaw != BacklogSyncStatus.pendingDelete }
-                .map { $0.toBacklogItem() }
+            if updateVisibleState {
+                items = fetchedItems
+                    .filter { $0.syncStatusRaw != BacklogSyncStatus.pendingDelete }
+                    .map { $0.toBacklogItem() }
+                hasHydratedVisibleSnapshot = true
+            }
         }
         return CacheSnapshot(categories: cachedCategories, items: cachedItems)
     }

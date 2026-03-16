@@ -579,7 +579,7 @@ enum LocalAppReset {
         SwiftDataContainerFactory.requestStoreReset(userDefaults)
         shareAcceptanceCoordinator.resetForDevelopment()
         celebrationManager.resetForDevelopment()
-        AppTips.resetForDevelopment()
+        AppTips.resetForHardReset(userDefaults: userDefaults)
 
         householdStore.clearCurrentHousehold()
         householdStore.resetSetupResolution()

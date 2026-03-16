@@ -128,6 +128,11 @@ private struct TasksContent: View {
         let shouldShowActiveEmptyState = activeFilter == .active && filteredActiveTasks.isEmpty
         let shouldShowCompletedEmptyState =
             activeFilter == .completed && filteredCompletedTasks.isEmpty
+        let hasRenderableSnapshot =
+            hasInitialMetadataLoaded ||
+            !store.tasks.isEmpty ||
+            !memberStore.members.isEmpty ||
+            !backlogStore.categories.isEmpty
 
         VStack(spacing: 0) {
             header
@@ -154,7 +159,7 @@ private struct TasksContent: View {
                 }
             }
 
-            if hasInitialMetadataLoaded {
+            if hasRenderableSnapshot {
                 if shouldShowActiveEmptyState {
                     activeTasksEmptyState
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -193,8 +198,8 @@ private struct TasksContent: View {
         .task {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
-            hasInitialMetadataLoaded = true
             await refreshData()
+            hasInitialMetadataLoaded = true
             markTasksTutorialAsSeenIfNeeded()
         }
         .onChange(of: selectedTab) { _, newTab in

@@ -67,6 +67,8 @@ private struct BacklogContent: View {
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
     @State private var processingPromotionItemIds: Set<UUID> = []
+    @State private var hasStartedInitialLoad = false
+    @State private var hasCompletedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
     @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
@@ -108,9 +110,15 @@ private struct BacklogContent: View {
             }
 
             if store.categories.isEmpty {
-                emptyState
-                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                    .padding(.bottom, listBottomInset)
+                if hasCompletedInitialLoad {
+                    emptyState
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else {
+                    backlogLoadingState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 40)
+                }
             } else {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
@@ -184,12 +192,16 @@ private struct BacklogContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
+            guard !hasStartedInitialLoad else { return }
+            hasStartedInitialLoad = true
             await loadBacklogData()
+            hasCompletedInitialLoad = true
             markIdeasTutorialAsSeenIfNeeded()
         }
         .onChange(of: userSession.syncMode) { _, _ in
             _ = _Concurrency.Task {
                 await loadBacklogData()
+                hasCompletedInitialLoad = true
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
@@ -206,8 +218,8 @@ private struct BacklogContent: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
             _ = _Concurrency.Task {
-                updateStoreCloudContext()
-                await store.loadData()
+                await loadBacklogData()
+                hasCompletedInitialLoad = true
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
@@ -443,6 +455,10 @@ private struct BacklogContent: View {
         memberStore.setSyncMode(userSession.syncMode)
         await store.loadData()
         await memberStore.loadMembers()
+    }
+
+    private var backlogLoadingState: some View {
+        ProgressView("Loading ideas...")
     }
 
     private func updateStoreCloudContext() {

@@ -223,6 +223,25 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(store.tasks.isEmpty)
     }
 
+    func testSetHouseholdHydratesTasksFromCacheBeforeLoad() throws {
+        let task = Task(
+            householdId: householdId,
+            title: "Cache-first task",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        let hydratedStore = TaskStore(modelContext: modelContainer.mainContext)
+        hydratedStore.setHousehold(householdId)
+
+        XCTAssertEqual(hydratedStore.tasks.count, 1)
+        XCTAssertEqual(hydratedStore.tasks.first?.title, "Cache-first task")
+    }
+
     func testArchiveTaskMovesTaskFromRecentlyDoneToArchivedDone() async {
         let task = Task(
             id: UUID(),

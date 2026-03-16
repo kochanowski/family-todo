@@ -230,4 +230,29 @@ final class BacklogStoreTests: XCTestCase {
             .tasks(count: 1)
         )
     }
+
+    func testInitHydratesCategoriesAndItemsFromCacheBeforeLoad() throws {
+        let category = BacklogCategory(
+            householdId: householdId,
+            title: "Home"
+        )
+        let item = BacklogItem(
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Water plants"
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
+        modelContainer.mainContext.insert(CachedBacklogItem(from: item))
+        try modelContainer.mainContext.save()
+
+        let hydratedStore = BacklogStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+
+        XCTAssertEqual(hydratedStore.categories.count, 1)
+        XCTAssertEqual(hydratedStore.categories.first?.title, "Home")
+        XCTAssertEqual(hydratedStore.items(for: category.id).count, 1)
+        XCTAssertEqual(hydratedStore.items(for: category.id).first?.title, "Water plants")
+    }
 }
