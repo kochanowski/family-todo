@@ -68,7 +68,6 @@ private struct BacklogContent: View {
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
     @State private var processingPromotionItemIds: Set<UUID> = []
     @State private var hasStartedInitialLoad = false
-    @State private var hasCompletedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
     @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
@@ -110,7 +109,7 @@ private struct BacklogContent: View {
             }
 
             if store.categories.isEmpty {
-                if hasCompletedInitialLoad {
+                if store.hasHydratedLocalSnapshot {
                     emptyState
                         .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                         .padding(.bottom, listBottomInset)
@@ -195,13 +194,11 @@ private struct BacklogContent: View {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
             await loadBacklogData()
-            hasCompletedInitialLoad = true
             markIdeasTutorialAsSeenIfNeeded()
         }
         .onChange(of: userSession.syncMode) { _, _ in
             _ = _Concurrency.Task {
                 await loadBacklogData()
-                hasCompletedInitialLoad = true
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
@@ -219,7 +216,6 @@ private struct BacklogContent: View {
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
             _ = _Concurrency.Task {
                 await loadBacklogData()
-                hasCompletedInitialLoad = true
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
@@ -453,8 +449,8 @@ private struct BacklogContent: View {
         updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         memberStore.setSyncMode(userSession.syncMode)
-        await store.loadData()
-        await memberStore.loadMembers()
+        await store.loadDataForDisplay()
+        await memberStore.loadMembersForDisplay()
     }
 
     private var backlogLoadingState: some View {

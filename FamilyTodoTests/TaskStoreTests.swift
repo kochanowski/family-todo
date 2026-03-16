@@ -238,6 +238,7 @@ final class TaskStoreTests: XCTestCase {
         let hydratedStore = TaskStore(modelContext: modelContainer.mainContext)
         hydratedStore.setHousehold(householdId)
 
+        XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
         XCTAssertEqual(hydratedStore.tasks.count, 1)
         XCTAssertEqual(hydratedStore.tasks.first?.title, "Cache-first task")
     }

@@ -90,7 +90,6 @@ private struct TasksContent: View {
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
-    @State private var hasInitialMetadataLoaded = false
     @State private var hasStartedInitialLoad = false
     @State private var editMode: EditMode = .inactive
     @State private var showRecommendedLimitInfo = false
@@ -128,11 +127,7 @@ private struct TasksContent: View {
         let shouldShowActiveEmptyState = activeFilter == .active && filteredActiveTasks.isEmpty
         let shouldShowCompletedEmptyState =
             activeFilter == .completed && filteredCompletedTasks.isEmpty
-        let hasRenderableSnapshot =
-            hasInitialMetadataLoaded ||
-            !store.tasks.isEmpty ||
-            !memberStore.members.isEmpty ||
-            !backlogStore.categories.isEmpty
+        let hasRenderableSnapshot = store.hasHydratedLocalSnapshot
 
         VStack(spacing: 0) {
             header
@@ -199,7 +194,6 @@ private struct TasksContent: View {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
             await refreshData()
-            hasInitialMetadataLoaded = true
             markTasksTutorialAsSeenIfNeeded()
         }
         .onChange(of: selectedTab) { _, newTab in
@@ -1040,9 +1034,9 @@ private struct TasksContent: View {
         memberStore.setSyncMode(userSession.syncMode)
         backlogStore.setSyncMode(userSession.syncMode)
 
-        async let loadTasks = store.loadTasks()
-        async let loadMembers = memberStore.loadMembers()
-        async let loadBacklog = backlogStore.loadData()
+        async let loadTasks = store.loadTasksForDisplay()
+        async let loadMembers = memberStore.loadMembersForDisplay()
+        async let loadBacklog = backlogStore.loadDataForDisplay()
 
         _ = await (loadTasks, loadMembers, loadBacklog)
         normalizeAssigneeFilterSelection()

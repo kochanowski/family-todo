@@ -215,6 +215,7 @@ final class ShoppingListStoreTests: XCTestCase {
             modelContext: modelContainer.mainContext
         )
 
+        XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
         XCTAssertEqual(hydratedStore.items.count, 1)
         XCTAssertEqual(hydratedStore.toBuyItems.count, 1)
         XCTAssertEqual(hydratedStore.toBuyItems.first?.title, "Pomidorki koktajlowe")

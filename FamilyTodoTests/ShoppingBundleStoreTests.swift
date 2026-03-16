@@ -178,6 +178,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
             modelContext: modelContainer.mainContext
         )
 
+        XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
         XCTAssertEqual(hydratedStore.bundles.count, 1)
         XCTAssertEqual(hydratedStore.bundles.first?.name, "Weekend breakfast")
         XCTAssertEqual(hydratedStore.bundles.first?.items, ["Eggs", "Bread"])

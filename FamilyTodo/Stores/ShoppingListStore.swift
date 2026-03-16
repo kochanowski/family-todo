@@ -6,7 +6,9 @@ import SwiftUI
 @MainActor
 final class ShoppingListStore: ObservableObject {
     @Published private(set) var items: [ShoppingItem] = []
+    @Published private(set) var hasHydratedLocalSnapshot = false
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshingInBackground = false
     @Published private(set) var error: Error?
 
     private lazy var cloudKit = CloudKitManager.shared
@@ -112,11 +114,27 @@ final class ShoppingListStore: ObservableObject {
 
     // MARK: - Load Items
 
+    func loadItemsForDisplay() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || items.isEmpty)
+        guard isCloudSyncEnabled else { return }
+        scheduleBackgroundRefresh()
+    }
+
     func loadItems() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || items.isEmpty)
+        guard isCloudSyncEnabled else { return }
+        let loadTask = ensureBackgroundRefreshTask()
+        await loadTask.value
+    }
+
+    private func scheduleBackgroundRefresh() {
+        _ = ensureBackgroundRefreshTask()
+    }
+
+    private func ensureBackgroundRefreshTask() -> _Concurrency.Task<Void, Never> {
         if let activeLoadTask {
             shouldReloadAfterCurrentLoad = true
-            await activeLoadTask.value
-            return
+            return activeLoadTask
         }
 
         let loadTask = _Concurrency.Task { @MainActor [weak self] in
@@ -131,23 +149,24 @@ final class ShoppingListStore: ObservableObject {
         }
 
         activeLoadTask = loadTask
-        await loadTask.value
+        return loadTask
     }
 
     private func performLoadItemsPass() async {
         guard let householdId else { return }
 
         isLoading = true
+        isRefreshingInBackground = true
         error = nil
+        defer {
+            isLoading = false
+            isRefreshingInBackground = false
+        }
 
         // 1. Load from cache first (instant UI)
-        let cachedItems = fetchCachedItems(
-            updateVisibleState: !hasHydratedVisibleSnapshot || items.isEmpty
-        )
-        let pendingSnapshot = pendingSyncSnapshot(from: cachedItems)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || items.isEmpty)
 
         if !isCloudSyncEnabled {
-            isLoading = false
             return
         }
 
@@ -159,7 +178,9 @@ final class ShoppingListStore: ObservableObject {
                 householdId: householdId,
                 scope: cloudScope
             )
-            items = mergeCloudSnapshot(fetchedItems, with: pendingSnapshot)
+            let latestCachedItems = fetchCachedItems(updateVisibleState: false)
+            let latestPendingSnapshot = pendingSyncSnapshot(from: latestCachedItems)
+            items = mergeCloudSnapshot(fetchedItems, with: latestPendingSnapshot)
 
             // 3. Update cache
             syncToCache(fetchedItems)
@@ -168,8 +189,6 @@ final class ShoppingListStore: ObservableObject {
             // Keep cached data on error
             self.error = error
         }
-
-        isLoading = false
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
@@ -177,22 +196,28 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private func fetchCachedItems(updateVisibleState: Bool) -> [CachedShoppingItem] {
-        guard let context = modelContext, let householdId else { return [] }
+        guard let context = modelContext, let householdId else {
+            if updateVisibleState {
+                items = []
+                hasHydratedVisibleSnapshot = true
+                hasHydratedLocalSnapshot = true
+            }
+            return []
+        }
 
         let descriptor = FetchDescriptor<CachedShoppingItem>(
             predicate: #Predicate { $0.householdId == householdId }
         )
 
-        if let cachedItems = try? context.fetch(descriptor) {
-            if updateVisibleState {
-                items = cachedItems
-                    .filter { $0.syncStatusRaw != "pendingDelete" }
-                    .map { $0.toShoppingItem() }
-                hasHydratedVisibleSnapshot = true
-            }
-            return cachedItems
+        let cachedItems = (try? context.fetch(descriptor)) ?? []
+        if updateVisibleState {
+            items = cachedItems
+                .filter { $0.syncStatusRaw != "pendingDelete" }
+                .map { $0.toShoppingItem() }
+            hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
         }
-        return []
+        return cachedItems
     }
 
     private func syncToCache(_ items: [ShoppingItem]) {
@@ -601,7 +626,7 @@ final class ShoppingListStore: ObservableObject {
             items.removeAll(where: \.isBought)
         }
 
-        // Delete from cache/cloud
+        // Keep tombstones locally so a delayed cloud snapshot cannot resurrect bought items.
         for item in boughtItems {
             if let context = modelContext {
                 let itemId = item.id
@@ -609,7 +634,12 @@ final class ShoppingListStore: ObservableObject {
                     predicate: #Predicate { $0.id == itemId }
                 )
                 if let cached = try? context.fetch(descriptor).first {
-                    context.delete(cached)
+                    if isCloudSyncEnabled {
+                        cached.syncStatusRaw = "pendingDelete"
+                        cached.lastSyncedAt = nil
+                    } else {
+                        context.delete(cached)
+                    }
                 }
             }
         }
@@ -623,6 +653,7 @@ final class ShoppingListStore: ObservableObject {
                         householdId: householdId,
                         scope: cloudScope
                     )
+                    removeCachedItems(ids: boughtIDs)
                 } catch {
                     self.error = error
                     for item in boughtItems {
@@ -632,6 +663,7 @@ final class ShoppingListStore: ObservableObject {
                                 householdId: item.householdId,
                                 scope: cloudScope
                             )
+                            removeCachedItems(ids: Set([item.id]))
                         } catch {
                             self.error = error
                         }
@@ -645,6 +677,7 @@ final class ShoppingListStore: ObservableObject {
                             householdId: item.householdId,
                             scope: cloudScope
                         )
+                        removeCachedItems(ids: Set([item.id]))
                     } catch {
                         self.error = error
                     }
@@ -692,16 +725,20 @@ final class ShoppingListStore: ObservableObject {
             items.removeAll { !$0.isBought }
         }
 
-        // Delete from CloudKit and cache
+        // Keep tombstones locally so background refresh cannot re-add removed rows.
         for item in itemsToClear {
-            // Mark as pending delete in cache
             if let context = modelContext {
                 let itemId = item.id
                 let descriptor = FetchDescriptor<CachedShoppingItem>(
                     predicate: #Predicate { $0.id == itemId }
                 )
                 if let cached = try? context.fetch(descriptor).first {
-                    context.delete(cached)
+                    if isCloudSyncEnabled {
+                        cached.syncStatusRaw = "pendingDelete"
+                        cached.lastSyncedAt = nil
+                    } else {
+                        context.delete(cached)
+                    }
                 }
             }
 
@@ -719,6 +756,7 @@ final class ShoppingListStore: ObservableObject {
                         householdId: householdId,
                         scope: cloudScope
                     )
+                    removeCachedItems(ids: idsToDelete)
                 } catch {
                     self.error = error
                     for item in itemsToClear {
@@ -728,6 +766,7 @@ final class ShoppingListStore: ObservableObject {
                                 householdId: item.householdId,
                                 scope: cloudScope
                             )
+                            removeCachedItems(ids: Set([item.id]))
                         } catch {
                             self.error = error
                         }
@@ -741,6 +780,7 @@ final class ShoppingListStore: ObservableObject {
                             householdId: item.householdId,
                             scope: cloudScope
                         )
+                        removeCachedItems(ids: Set([item.id]))
                     } catch {
                         self.error = error
                     }
@@ -914,5 +954,18 @@ final class ShoppingListStore: ObservableObject {
         }
 
         saveContextOrSetError(context, operation: "upsert shopping cache items")
+    }
+
+    private func removeCachedItems(ids: Set<UUID>) {
+        guard let context = modelContext, !ids.isEmpty else { return }
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>(
+            predicate: #Predicate { ids.contains($0.id) }
+        )
+        let cachedItems = (try? context.fetch(descriptor)) ?? []
+        for cached in cachedItems {
+            context.delete(cached)
+        }
+        saveContextOrSetError(context, operation: "remove deleted shopping cache items")
     }
 }

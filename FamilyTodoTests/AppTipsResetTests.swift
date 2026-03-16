@@ -28,6 +28,7 @@ final class AppTipsResetTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: AppTipProgressKey.shoppingFirstAddCompleted))
         XCTAssertNil(defaults.object(forKey: AppTipProgressKey.ideasPromoteCompleted))
         XCTAssertNil(defaults.object(forKey: AppTipStorageKey.contextSignature))
+        XCTAssertEqual(defaults.bool(forKey: AppTipStorageKey.pendingHardResetBootstrap), true)
         XCTAssertEqual(defaults.integer(forKey: AppTips.runtimeGenerationDefaultsKey), 5)
     }
 }

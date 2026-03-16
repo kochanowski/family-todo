@@ -67,7 +67,9 @@ final class TaskStore: ObservableObject {
     }
 
     @Published private(set) var tasks: [Task] = []
+    @Published private(set) var hasHydratedLocalSnapshot = false
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshingInBackground = false
     @Published private(set) var error: Error?
     @Published private(set) var pendingTaskMutations: Set<UUID> = []
 
@@ -254,15 +256,38 @@ final class TaskStore: ObservableObject {
         householdId = id
         if didChangeHousehold {
             hasHydratedVisibleSnapshot = false
+            hasHydratedLocalSnapshot = false
         }
         hydrateVisibleSnapshotFromCacheIfNeeded(force: didChangeHousehold || !hasHydratedVisibleSnapshot)
     }
 
+    func loadTasksForDisplay() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || tasks.isEmpty)
+        guard isCloudSyncEnabled else { return }
+        scheduleBackgroundRefresh()
+    }
+
     func loadTasks() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || tasks.isEmpty)
+        guard isCloudSyncEnabled else {
+            await notificationService.refreshScheduledNotifications(
+                householdId: householdId,
+                modelContext: modelContext
+            )
+            return
+        }
+        let loadTask = ensureBackgroundRefreshTask()
+        await loadTask.value
+    }
+
+    private func scheduleBackgroundRefresh() {
+        _ = ensureBackgroundRefreshTask()
+    }
+
+    private func ensureBackgroundRefreshTask() -> _Concurrency.Task<Void, Never> {
         if let activeLoadTask {
             shouldReloadAfterCurrentLoad = true
-            await activeLoadTask.value
-            return
+            return activeLoadTask
         }
 
         let loadTask = _Concurrency.Task { @MainActor [weak self] in
@@ -277,27 +302,28 @@ final class TaskStore: ObservableObject {
         }
 
         activeLoadTask = loadTask
-        await loadTask.value
+        return loadTask
     }
 
     private func performLoadTasksPass() async {
         guard let householdId else { return }
 
         isLoading = true
+        isRefreshingInBackground = true
         error = nil
+        defer {
+            isLoading = false
+            isRefreshingInBackground = false
+        }
 
         // First, load from local cache
-        let cachedTasks = fetchCachedTasks(
-            updateVisibleState: !hasHydratedVisibleSnapshot || tasks.isEmpty
-        )
-        let pendingSnapshot = pendingSyncSnapshot(from: cachedTasks)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || tasks.isEmpty)
 
         if !isCloudSyncEnabled {
             await notificationService.refreshScheduledNotifications(
                 householdId: householdId,
                 modelContext: modelContext
             )
-            isLoading = false
             return
         }
 
@@ -309,7 +335,9 @@ final class TaskStore: ObservableObject {
                 householdId: householdId,
                 scope: cloudScope
             )
-            tasks = mergeCloudSnapshot(cloudTasks, with: pendingSnapshot)
+            let latestCachedTasks = fetchCachedTasks(updateVisibleState: false)
+            let latestPendingSnapshot = pendingSyncSnapshot(from: latestCachedTasks)
+            tasks = mergeCloudSnapshot(cloudTasks, with: latestPendingSnapshot)
             syncToCache(cloudTasks, cloudTaskIDs: Set(cloudTasks.map(\.id)))
             replayPendingMutationsInBackground()
         } catch {
@@ -321,7 +349,6 @@ final class TaskStore: ObservableObject {
             householdId: householdId,
             modelContext: modelContext
         )
-        isLoading = false
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
@@ -329,17 +356,25 @@ final class TaskStore: ObservableObject {
     }
 
     private func fetchCachedTasks(updateVisibleState: Bool) -> [CachedTask] {
-        guard let householdId else { return [] }
+        guard let householdId else {
+            if updateVisibleState {
+                tasks = []
+                hasHydratedVisibleSnapshot = true
+                hasHydratedLocalSnapshot = true
+            }
+            return []
+        }
 
         let descriptor = FetchDescriptor<CachedTask>(
             predicate: #Predicate { $0.householdId == householdId }
         )
-        guard let cached = try? modelContext.fetch(descriptor) else { return [] }
+        let cached = (try? modelContext.fetch(descriptor)) ?? []
         if updateVisibleState {
             tasks = cached
                 .filter { $0.syncStatusRaw != TaskSyncStatus.pendingDelete }
                 .map { $0.toTask() }
             hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
         }
         return cached
     }

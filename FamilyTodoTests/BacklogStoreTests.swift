@@ -250,6 +250,7 @@ final class BacklogStoreTests: XCTestCase {
             modelContext: modelContainer.mainContext
         )
 
+        XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
         XCTAssertEqual(hydratedStore.categories.count, 1)
         XCTAssertEqual(hydratedStore.categories.first?.title, "Home")
         XCTAssertEqual(hydratedStore.items(for: category.id).count, 1)

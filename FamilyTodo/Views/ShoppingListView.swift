@@ -49,7 +49,6 @@ private struct ShoppingListContent: View {
     @State private var inlineInsertRowToken = UUID()
     @State private var isKeyboardVisible = false
     @State private var didPerformInitialLoad = false
-    @State private var hasCompletedInitialLoad = false
     @State private var isScreenVisible = false
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
     @State private var activeToast: ShoppingToastState?
@@ -81,7 +80,6 @@ private struct ShoppingListContent: View {
                 guard !didPerformInitialLoad else { return }
                 didPerformInitialLoad = true
                 await loadShoppingData()
-                hasCompletedInitialLoad = true
             }
             .onChange(of: userSession.syncMode) { _, mode in
                 updateStoreCloudContext()
@@ -89,7 +87,6 @@ private struct ShoppingListContent: View {
                 bundleStore.setSyncMode(mode)
                 _ = _Concurrency.Task {
                     await loadShoppingData()
-                    hasCompletedInitialLoad = true
                 }
             }
             .onChange(of: userSession.userId) { _, _ in
@@ -122,7 +119,6 @@ private struct ShoppingListContent: View {
             ) { _ in
                 _ = _Concurrency.Task {
                     await loadShoppingData()
-                    hasCompletedInitialLoad = true
                 }
             }
             .onReceive(
@@ -183,12 +179,11 @@ private struct ShoppingListContent: View {
         let floatingButtonInset: CGFloat = 16
         let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
         let shouldShowLoadingState =
-            !hasCompletedInitialLoad &&
+            !store.hasHydratedLocalSnapshot &&
             store.toBuyItems.isEmpty &&
-            quickAddBundles.isEmpty &&
             !isRapidEntryActive
         let shouldShowEmptyState =
-            hasCompletedInitialLoad &&
+            store.hasHydratedLocalSnapshot &&
             store.toBuyItems.isEmpty &&
             !isRapidEntryActive
 
@@ -761,8 +756,8 @@ private struct ShoppingListContent: View {
         updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         bundleStore.setSyncMode(userSession.syncMode)
-        await store.loadItems()
-        await bundleStore.loadBundles()
+        await store.loadItemsForDisplay()
+        await bundleStore.loadBundlesForDisplay()
         markShoppingTutorialAsSeenIfNeeded()
     }
 

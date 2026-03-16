@@ -70,6 +70,7 @@ struct ProfileView: View {
                         didSaveHouseholdMetadata = true
                     }
                 )
+                .id(household.id)
             }
         }
         .sheet(item: $uiState.route) { route in
@@ -774,6 +775,15 @@ private struct EditProfileView: View {
 }
 
 private struct EditHouseholdView: View {
+    private struct HouseholdMetadataDraft: Equatable {
+        var name: String
+        var iconSymbol: String
+
+        var trimmedName: String {
+            name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
@@ -783,10 +793,8 @@ private struct EditHouseholdView: View {
     let household: Household
     let onSaveSuccess: () -> Void
 
-    private let initialTrimmedName: String
-    private let initialIconSymbol: String
-    @State private var name: String
-    @State private var selectedIconSymbol: String
+    private let initialDraft: HouseholdMetadataDraft
+    @State private var draft: HouseholdMetadataDraft
     @State private var errorMessage: String?
     @State private var isSaving = false
 
@@ -814,16 +822,18 @@ private struct EditHouseholdView: View {
     ) {
         self.household = household
         self.onSaveSuccess = onSaveSuccess
-        initialTrimmedName = household.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        initialIconSymbol = household.iconSymbol
-        _name = State(initialValue: household.name)
-        _selectedIconSymbol = State(initialValue: household.iconSymbol)
+        let initialDraft = HouseholdMetadataDraft(
+            name: household.name,
+            iconSymbol: household.iconSymbol
+        )
+        self.initialDraft = initialDraft
+        _draft = State(initialValue: initialDraft)
     }
 
     var body: some View {
         Form {
             Section {
-                TextField("Household name", text: $name)
+                TextField("Household name", text: $draft.name)
                     .font(themeStore.font(for: .bodyStrong))
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
@@ -840,12 +850,12 @@ private struct EditHouseholdView: View {
                 ) {
                     ForEach(iconOptions, id: \.self) { icon in
                         Button {
-                            selectedIconSymbol = icon
+                            draft.iconSymbol = icon
                         } label: {
                             ZStack {
                                 Circle()
                                     .fill(
-                                        selectedIconSymbol == icon
+                                        draft.iconSymbol == icon
                                             ? themeStore.accentTabColor.opacity(0.18)
                                             : Color.secondary.opacity(0.12)
                                     )
@@ -853,7 +863,7 @@ private struct EditHouseholdView: View {
                                 Image(systemName: icon)
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(
-                                        selectedIconSymbol == icon
+                                        draft.iconSymbol == icon
                                             ? themeStore.foregroundOnAccent(
                                                 for: themeStore.accentTabColor,
                                                 colorScheme: colorScheme
@@ -862,7 +872,7 @@ private struct EditHouseholdView: View {
                                     )
                             }
                             .overlay {
-                                if selectedIconSymbol == icon {
+                                if draft.iconSymbol == icon {
                                     Circle()
                                         .stroke(themeStore.accentTabColor, lineWidth: 2)
                                         .frame(width: 40, height: 40)
@@ -898,7 +908,7 @@ private struct EditHouseholdView: View {
                     Text("Save")
                         .font(themeStore.font(for: .buttonLabel))
                 }
-                .disabled(!canSave || isSaving)
+                .disabled(!canSave)
             }
             ToolbarItem(placement: .principal) {
                 Text("Edit Household")
@@ -917,15 +927,15 @@ private struct EditHouseholdView: View {
     }
 
     private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.trimmedName
     }
 
     private var hasChanges: Bool {
-        trimmedName != initialTrimmedName || selectedIconSymbol != initialIconSymbol
+        trimmedName != initialDraft.trimmedName || draft.iconSymbol != initialDraft.iconSymbol
     }
 
     private var canSave: Bool {
-        !trimmedName.isEmpty && hasChanges
+        !trimmedName.isEmpty && hasChanges && !isSaving
     }
 
     private func saveHousehold() {
@@ -942,7 +952,7 @@ private struct EditHouseholdView: View {
                 try await householdStore.updateCurrentHousehold(
                     name: trimmedName,
                     userId: userId,
-                    iconSymbol: selectedIconSymbol
+                    iconSymbol: draft.iconSymbol
                 )
                 onSaveSuccess()
                 dismiss()

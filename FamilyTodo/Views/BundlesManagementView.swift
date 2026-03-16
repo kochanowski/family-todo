@@ -8,7 +8,6 @@ struct BundlesManagementView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var presentedEditor: PresentedBundleEditor?
     @State private var hasStartedInitialLoad = false
-    @State private var hasCompletedInitialLoad = false
 
     var body: some View {
         List {
@@ -42,7 +41,7 @@ struct BundlesManagementView: View {
             }
         }
         .overlay {
-            if !hasCompletedInitialLoad, store.bundles.isEmpty {
+            if !store.hasHydratedLocalSnapshot, store.bundles.isEmpty {
                 ProgressView("Loading bundles...")
             } else if store.bundles.isEmpty {
                 ThemedEmptyStateView(
@@ -78,19 +77,16 @@ struct BundlesManagementView: View {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
             store.setSyncMode(userSession.syncMode)
-            await store.loadBundles()
-            hasCompletedInitialLoad = true
+            await store.loadBundlesForDisplay()
         }
         .refreshable {
             store.setSyncMode(userSession.syncMode)
-            await store.loadBundles()
-            hasCompletedInitialLoad = true
+            await store.loadBundlesForDisplay()
         }
         .onChange(of: userSession.syncMode) { _, mode in
             store.setSyncMode(mode)
             _ = _Concurrency.Task {
-                await store.loadBundles()
-                hasCompletedInitialLoad = true
+                await store.loadBundlesForDisplay()
             }
         }
         .sheet(item: $presentedEditor) { destination in

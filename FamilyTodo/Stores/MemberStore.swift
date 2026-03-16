@@ -6,7 +6,9 @@ import SwiftUI
 @MainActor
 class MemberStore: ObservableObject {
     @Published var members: [Member] = []
+    @Published private(set) var hasHydratedLocalSnapshot = false
     @Published var isLoading = false
+    @Published private(set) var isRefreshingInBackground = false
     @Published var error: Error?
 
     private var modelContext: ModelContext?
@@ -15,18 +17,29 @@ class MemberStore: ObservableObject {
     private var syncMode: SyncMode = .cloud
     private var currentUserId: String?
     private var householdOwnerId: String?
+    private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var shouldReloadAfterCurrentLoad = false
+    private var hasHydratedVisibleSnapshot = false
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     func setHousehold(_ id: UUID?) {
+        let didChangeHousehold = householdId != id
         householdId = id
+        if didChangeHousehold {
+            hasHydratedVisibleSnapshot = false
+            hasHydratedLocalSnapshot = false
+        }
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: didChangeHousehold || !hasHydratedVisibleSnapshot)
     }
 
     func setSyncMode(_ mode: SyncMode) {
@@ -65,35 +78,88 @@ class MemberStore: ObservableObject {
 
     // MARK: - Data Loading
 
-    func loadMembers() async {
-        guard let householdId else { return }
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+    func loadMembersForDisplay() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || members.isEmpty)
+        guard syncMode == .cloud else { return }
+        scheduleBackgroundRefresh()
+    }
 
-        // 1. Load from cache
-        members = fetchCachedMembers(householdId: householdId)
+    func loadMembers() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || members.isEmpty)
+        guard syncMode == .cloud else { return }
+        let loadTask = ensureBackgroundRefreshTask()
+        await loadTask.value
+    }
+
+    private func scheduleBackgroundRefresh() {
+        _ = ensureBackgroundRefreshTask()
+    }
+
+    private func ensureBackgroundRefreshTask() -> _Concurrency.Task<Void, Never> {
+        if let activeLoadTask {
+            shouldReloadAfterCurrentLoad = true
+            return activeLoadTask
+        }
+
+        let loadTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            repeat {
+                shouldReloadAfterCurrentLoad = false
+                await performLoadMembersPass()
+            } while shouldReloadAfterCurrentLoad
+
+            activeLoadTask = nil
+        }
+
+        activeLoadTask = loadTask
+        return loadTask
+    }
+
+    private func performLoadMembersPass() async {
+        guard let householdId else {
+            hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
+            return
+        }
+
+        isLoading = true
+        isRefreshingInBackground = true
+        defer {
+            isLoading = false
+            isRefreshingInBackground = false
+        }
+
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || members.isEmpty)
 
         guard syncMode == .cloud else { return }
 
-        // 2. Load from CloudKit
         do {
-            // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
             let fetchedMembers = try await cloudKit.fetchMembers(
                 householdId: householdId,
                 scope: cloudScope
             )
-
-            // Update cache
             updateCache(with: fetchedMembers, for: householdId)
-
-            // Update UI
             members = fetchedMembers
         } catch {
             print("Error loading members: \(error)")
             self.error = error
         }
+    }
+
+    private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
+        guard force || !hasHydratedVisibleSnapshot || members.isEmpty else { return }
+
+        guard let householdId else {
+            members = []
+            hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
+            return
+        }
+
+        members = fetchCachedMembers(householdId: householdId)
+        hasHydratedVisibleSnapshot = true
+        hasHydratedLocalSnapshot = true
     }
 
     func activeMember(for userId: String?) -> Member? {

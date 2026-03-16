@@ -54,7 +54,9 @@ final class BacklogStore: ObservableObject {
 
     @Published private(set) var categories: [BacklogCategory] = []
     @Published private(set) var items: [BacklogItem] = []
+    @Published private(set) var hasHydratedLocalSnapshot = false
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshingInBackground = false
     @Published private(set) var error: Error?
 
     private lazy var cloudKit = CloudKitManager.shared
@@ -128,11 +130,31 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Load Data
 
+    func loadDataForDisplay() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(
+            force: !hasHydratedVisibleSnapshot || (categories.isEmpty && items.isEmpty)
+        )
+        guard isCloudSyncEnabled else { return }
+        scheduleBackgroundRefresh()
+    }
+
     func loadData() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(
+            force: !hasHydratedVisibleSnapshot || (categories.isEmpty && items.isEmpty)
+        )
+        guard isCloudSyncEnabled else { return }
+        let loadTask = ensureBackgroundRefreshTask()
+        await loadTask.value
+    }
+
+    private func scheduleBackgroundRefresh() {
+        _ = ensureBackgroundRefreshTask()
+    }
+
+    private func ensureBackgroundRefreshTask() -> _Concurrency.Task<Void, Never> {
         if let activeLoadTask {
             shouldReloadAfterCurrentLoad = true
-            await activeLoadTask.value
-            return
+            return activeLoadTask
         }
 
         let loadTask = _Concurrency.Task { @MainActor [weak self] in
@@ -147,26 +169,26 @@ final class BacklogStore: ObservableObject {
         }
 
         activeLoadTask = loadTask
-        await loadTask.value
+        return loadTask
     }
 
     private func performLoadDataPass() async {
         guard let householdId else { return }
 
         isLoading = true
+        isRefreshingInBackground = true
         error = nil
+        defer {
+            isLoading = false
+            isRefreshingInBackground = false
+        }
 
         // 1. Load from cache first
-        let cacheSnapshot = fetchCacheSnapshot(
-            updateVisibleState: !hasHydratedVisibleSnapshot || (categories.isEmpty && items.isEmpty)
-        )
-        let pendingSnapshot = pendingSyncSnapshot(
-            from: cacheSnapshot.items,
-            cachedCategories: cacheSnapshot.categories
+        hydrateVisibleSnapshotFromCacheIfNeeded(
+            force: !hasHydratedVisibleSnapshot || (categories.isEmpty && items.isEmpty)
         )
 
         if !isCloudSyncEnabled {
-            isLoading = false
             return
         }
 
@@ -184,9 +206,14 @@ final class BacklogStore: ObservableObject {
             )
 
             let (categoriesResult, itemsResult) = try await (fetchedCategories, fetchedItems)
+            let latestCacheSnapshot = fetchCacheSnapshot(updateVisibleState: false)
+            let latestPendingSnapshot = pendingSyncSnapshot(
+                from: latestCacheSnapshot.items,
+                cachedCategories: latestCacheSnapshot.categories
+            )
 
-            categories = mergeCloudCategories(categoriesResult, with: pendingSnapshot)
-            items = mergeCloudSnapshot(itemsResult, with: pendingSnapshot)
+            categories = mergeCloudCategories(categoriesResult, with: latestPendingSnapshot)
+            items = mergeCloudSnapshot(itemsResult, with: latestPendingSnapshot)
 
             // 3. Update cache
             syncToCache(
@@ -199,8 +226,6 @@ final class BacklogStore: ObservableObject {
         } catch {
             self.error = error
         }
-
-        isLoading = false
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
@@ -211,6 +236,12 @@ final class BacklogStore: ObservableObject {
 
     private func fetchCacheSnapshot(updateVisibleState: Bool) -> CacheSnapshot {
         guard let context = modelContext, let householdId else {
+            if updateVisibleState {
+                categories = []
+                items = []
+                hasHydratedVisibleSnapshot = true
+                hasHydratedLocalSnapshot = true
+            }
             return CacheSnapshot(categories: [], items: [])
         }
 
@@ -225,6 +256,8 @@ final class BacklogStore: ObservableObject {
             if updateVisibleState {
                 categories = fetchedCategories.map { $0.toBacklogCategory() }
             }
+        } else if updateVisibleState {
+            categories = []
         }
 
         // Load Items
@@ -238,8 +271,14 @@ final class BacklogStore: ObservableObject {
                 items = fetchedItems
                     .filter { $0.syncStatusRaw != BacklogSyncStatus.pendingDelete }
                     .map { $0.toBacklogItem() }
-                hasHydratedVisibleSnapshot = true
             }
+        } else if updateVisibleState {
+            items = []
+        }
+
+        if updateVisibleState {
+            hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
         }
         return CacheSnapshot(categories: cachedCategories, items: cachedItems)
     }

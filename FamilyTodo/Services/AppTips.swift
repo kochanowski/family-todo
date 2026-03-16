@@ -44,6 +44,7 @@ enum AppTipProgressKey {
 enum AppTipStorageKey {
     static let contextSignature = "appTips.contextSignature"
     static let runtimeGeneration = "appTips.runtimeGeneration"
+    static let pendingHardResetBootstrap = "appTips.pendingHardResetBootstrap"
 }
 
 #if canImport(TipKit)
@@ -85,11 +86,13 @@ enum AppTipStorageKey {
                 householdId: householdId
             )
             let previousSignature = defaults.string(forKey: AppTipStorageKey.contextSignature)
-            guard previousSignature != newSignature else { return }
+            let shouldForceBootstrap = defaults.bool(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            guard shouldForceBootstrap || previousSignature != newSignature else { return }
 
             guard #available(iOS 17, *) else {
                 clearOnboardingProgress()
                 defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+                defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
                 return
             }
 
@@ -102,6 +105,7 @@ enum AppTipStorageKey {
             clearOnboardingProgress()
             bumpRuntimeGeneration()
             defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
             hasConfigured = false
             configureIfNeeded(launchArguments: launchArguments)
             configureTestingOverridesIfNeeded(launchArguments: launchArguments)
@@ -123,6 +127,7 @@ enum AppTipStorageKey {
 
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
             bumpRuntimeGeneration()
             hasConfigured = false
         }
@@ -138,8 +143,10 @@ enum AppTipStorageKey {
 
             clearOnboardingProgress(userDefaults: userDefaults)
             userDefaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            userDefaults.set(true, forKey: AppTipStorageKey.pendingHardResetBootstrap)
             bumpRuntimeGeneration(userDefaults: userDefaults)
             hasConfigured = false
+            configureIfNeeded()
         }
 
         static func resetForDevelopment() {
@@ -153,6 +160,7 @@ enum AppTipStorageKey {
 
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
             bumpRuntimeGeneration()
             hasConfigured = false
             configureIfNeeded()
@@ -643,11 +651,13 @@ enum AppTipStorageKey {
                 householdId?.uuidString ?? "none",
             ].joined(separator: "|")
             let previousSignature = defaults.string(forKey: AppTipStorageKey.contextSignature)
-            guard previousSignature != newSignature else { return }
+            let shouldForceBootstrap = defaults.bool(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            guard shouldForceBootstrap || previousSignature != newSignature else { return }
 
             clearOnboardingProgress()
             bumpRuntimeGeneration()
             defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
         }
 
         static func resetDatastoreForTestingIfNeeded(
@@ -655,18 +665,21 @@ enum AppTipStorageKey {
         ) {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
             bumpRuntimeGeneration()
         }
 
         static func resetForHardReset(userDefaults: UserDefaults = .standard) {
             clearOnboardingProgress(userDefaults: userDefaults)
             userDefaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            userDefaults.set(true, forKey: AppTipStorageKey.pendingHardResetBootstrap)
             bumpRuntimeGeneration(userDefaults: userDefaults)
         }
 
         static func resetForDevelopment() {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
             bumpRuntimeGeneration()
         }
 
