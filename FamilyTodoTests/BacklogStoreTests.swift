@@ -75,6 +75,14 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(cachedTasks.count, 1)
         XCTAssertEqual(cachedTasks.first?.assigneeId, assigneeId)
         XCTAssertEqual(cachedTasks.first?.statusRaw, Task.TaskStatus.next.rawValue)
+
+        let hydratedTaskStore = TaskStore(modelContext: modelContainer.mainContext)
+        hydratedTaskStore.setHousehold(householdId)
+        hydratedTaskStore.setSyncMode(.localOnly)
+        await hydratedTaskStore.loadTasksForDisplay()
+
+        XCTAssertEqual(hydratedTaskStore.tasks.count, 1)
+        XCTAssertEqual(hydratedTaskStore.tasks.first?.title, "Vacuum living room")
     }
 
     func testDeleteItemInCloudModeReplacesVisibleCacheRowWithPendingDeleteTombstone() async throws {
@@ -187,6 +195,59 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(cachedItems.first?.title, "Local tombstone title")
     }
 
+    func testSyncToCacheDoesNotAcceptSemanticStaleBacklogEcho() throws {
+        let category = BacklogCategory(
+            householdId: householdId,
+            title: "Home",
+            sortOrder: 0
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
+
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_736_910_000)
+        let localItem = BacklogItem(
+            id: UUID(),
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Moved locally",
+            assigneeId: UUID(),
+            notes: "local notes",
+            updatedAt: localUpdatedAt
+        )
+        let cached = CachedBacklogItem(from: localItem)
+        cached.syncStatusRaw = "awaitingCloudEcho"
+        cached.lastSyncedAt = Date()
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let staleCloudItem = BacklogItem(
+            id: localItem.id,
+            categoryId: category.id,
+            householdId: householdId,
+            title: localItem.title,
+            assigneeId: localItem.assigneeId,
+            notes: "stale notes",
+            updatedAt: localUpdatedAt.addingTimeInterval(30)
+        )
+
+        store.syncToCache(
+            categories: [category],
+            items: [staleCloudItem],
+            cloudCategoryIDs: [category.id],
+            cloudItemIDs: [localItem.id]
+        )
+
+        let descriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.id == localItem.id }
+        )
+        guard let persisted = try modelContainer.mainContext.fetch(descriptor).first else {
+            XCTFail("Expected cached backlog item after sync")
+            return
+        }
+
+        XCTAssertEqual(persisted.notes, "local notes")
+        XCTAssertEqual(persisted.syncStatusRaw, "awaitingCloudEcho")
+    }
+
     func testDeleteCategoryIsBlockedWhenIdeasStillExist() async {
         await store.addCategory("Projects")
 
@@ -255,5 +316,52 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(hydratedStore.categories.first?.title, "Home")
         XCTAssertEqual(hydratedStore.items(for: category.id).count, 1)
         XCTAssertEqual(hydratedStore.items(for: category.id).first?.title, "Water plants")
+    }
+
+    func testLoadDataForDisplayRehydratesWhenSnapshotMarkedStale() async throws {
+        let originalCategory = BacklogCategory(
+            householdId: householdId,
+            title: "Original"
+        )
+        let originalItem = BacklogItem(
+            categoryId: originalCategory.id,
+            householdId: householdId,
+            title: "Original idea"
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: originalCategory))
+        modelContainer.mainContext.insert(CachedBacklogItem(from: originalItem))
+        try modelContainer.mainContext.save()
+
+        await store.loadDataForDisplay()
+        XCTAssertEqual(store.categories.map(\.title), ["Original"])
+
+        let replacementCategory = BacklogCategory(
+            householdId: householdId,
+            title: "Updated",
+            sortOrder: 0
+        )
+        let replacementItem = BacklogItem(
+            categoryId: replacementCategory.id,
+            householdId: householdId,
+            title: "Updated idea"
+        )
+
+        let categoryDescriptor = FetchDescriptor<CachedBacklogCategory>()
+        let itemDescriptor = FetchDescriptor<CachedBacklogItem>()
+        for cachedCategory in try modelContainer.mainContext.fetch(categoryDescriptor) {
+            modelContainer.mainContext.delete(cachedCategory)
+        }
+        for cachedItem in try modelContainer.mainContext.fetch(itemDescriptor) {
+            modelContainer.mainContext.delete(cachedItem)
+        }
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: replacementCategory))
+        modelContainer.mainContext.insert(CachedBacklogItem(from: replacementItem))
+        try modelContainer.mainContext.save()
+
+        store.markLocalSnapshotStale()
+        await store.loadDataForDisplay()
+
+        XCTAssertEqual(store.categories.map(\.title), ["Updated"])
+        XCTAssertEqual(store.items(for: replacementCategory.id).map(\.title), ["Updated idea"])
     }
 }

@@ -214,6 +214,14 @@ private struct BacklogContent: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+            store.markLocalSnapshotStale()
+            _ = _Concurrency.Task {
+                await loadBacklogData()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { _ in
+            store.markLocalSnapshotStale()
             _ = _Concurrency.Task {
                 await loadBacklogData()
                 markIdeasTutorialAsSeenIfNeeded()

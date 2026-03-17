@@ -29,7 +29,11 @@ final class TaskStoreTests: XCTestCase {
         defaults.set(3, forKey: recommendedWipDefaultsKey)
 
         // Create in-memory model container for testing
-        let schema = Schema([CachedTask.self])
+        let schema = Schema([
+            CachedTask.self,
+            CachedBacklogItem.self,
+            CachedBacklogCategory.self,
+        ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         modelContainer = try ModelContainer(for: schema, configurations: [config])
 
@@ -202,6 +206,51 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(merged.first?.title, "Local Task")
     }
 
+    func testSyncToCacheDoesNotAcceptSemanticStaleCompletionEcho() throws {
+        let completedAt = Date(timeIntervalSince1970: 1_736_900_000)
+        let localTask = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Completed locally",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: completedAt,
+            taskType: .oneOff,
+            updatedAt: completedAt
+        )
+
+        let cached = CachedTask(from: localTask)
+        cached.syncStatusRaw = "awaitingCloudEcho"
+        cached.lastSyncedAt = Date()
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let staleCloudTask = Task(
+            id: localTask.id,
+            householdId: householdId,
+            title: localTask.title,
+            status: .next,
+            assigneeId: assigneeId,
+            completedAt: nil,
+            taskType: .oneOff,
+            updatedAt: completedAt.addingTimeInterval(30)
+        )
+
+        store.syncToCache([staleCloudTask], cloudTaskIDs: [localTask.id])
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == localTask.id }
+        )
+        guard let persisted = try modelContainer.mainContext.fetch(descriptor).first else {
+            XCTFail("Expected cached task after stale cloud sync")
+            return
+        }
+
+        XCTAssertEqual(persisted.statusRaw, Task.TaskStatus.done.rawValue)
+        XCTAssertEqual(persisted.completedAt, completedAt)
+        XCTAssertEqual(persisted.syncStatusRaw, "awaitingCloudEcho")
+    }
+
     func testLoadFromCache_HidesPendingDeleteTasks() async {
         let task = Task(
             id: UUID(),
@@ -241,6 +290,87 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
         XCTAssertEqual(hydratedStore.tasks.count, 1)
         XCTAssertEqual(hydratedStore.tasks.first?.title, "Cache-first task")
+    }
+
+    func testLoadTasksForDisplayRehydratesWhenSnapshotMarkedStale() async throws {
+        let cachedTask = Task(
+            householdId: householdId,
+            title: "Original task",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: cachedTask))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasksForDisplay()
+        XCTAssertEqual(store.tasks.map(\.title), ["Original task"])
+
+        let replacementTask = Task(
+            householdId: householdId,
+            title: "Updated from cache",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        let descriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == cachedTask.id }
+        )
+        if let cached = try modelContainer.mainContext.fetch(descriptor).first {
+            modelContainer.mainContext.delete(cached)
+        }
+        modelContainer.mainContext.insert(CachedTask(from: replacementTask))
+        try modelContainer.mainContext.save()
+
+        store.markLocalSnapshotStale()
+        await store.loadTasksForDisplay()
+
+        XCTAssertEqual(store.tasks.map(\.title), ["Updated from cache"])
+    }
+
+    func testMoveTaskToIdeasPersistsBacklogItemImmediatelyLocally() async throws {
+        let category = BacklogCategory(
+            householdId: householdId,
+            title: "Ideas",
+            sortOrder: 0
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
+
+        let task = Task(
+            householdId: householdId,
+            title: "Move me back",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: category.id)
+
+        XCTAssertTrue(didMove)
+        XCTAssertTrue(store.tasks.isEmpty)
+
+        let backlogDescriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedIdeas = try modelContainer.mainContext.fetch(backlogDescriptor)
+        XCTAssertEqual(cachedIdeas.count, 1)
+        XCTAssertEqual(cachedIdeas.first?.title, "Move me back")
+        XCTAssertEqual(cachedIdeas.first?.categoryId, category.id)
+        XCTAssertEqual(cachedIdeas.first?.syncStatusRaw, "synced")
+
+        let taskDescriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.id == task.id }
+        )
+        let cachedTasks = try modelContainer.mainContext.fetch(taskDescriptor)
+        XCTAssertTrue(cachedTasks.isEmpty)
     }
 
     func testArchiveTaskMovesTaskFromRecentlyDoneToArchivedDone() async {

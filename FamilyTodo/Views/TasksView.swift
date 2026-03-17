@@ -241,10 +241,14 @@ private struct TasksContent: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
-            guard selectedTab == .tasks else { return }
-            _ = _Concurrency.Task {
-                await refreshData()
-                markTasksTutorialAsSeenIfNeeded()
+            store.markLocalSnapshotStale()
+            if selectedTab == .tasks {
+                _ = _Concurrency.Task {
+                    await refreshData()
+                    markTasksTutorialAsSeenIfNeeded()
+                }
+            } else {
+                store.replayPendingMutationsIfNeeded()
             }
         }
         .sheet(item: $pendingCleanupAction) { action in
@@ -766,7 +770,7 @@ private struct TasksContent: View {
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 _ = _Concurrency.Task {
-                    let validation = await store.moveTask(task, to: newStatus)
+                    let validation = await store.toggleTaskCompletion(task)
                     taskBeingCompleted = nil
                     handleNextTransitionValidation(validation)
 
@@ -801,7 +805,7 @@ private struct TasksContent: View {
             }
         } else {
             _ = _Concurrency.Task {
-                let validation = await store.moveTask(task, to: newStatus)
+                let validation = await store.toggleTaskCompletion(task)
                 handleNextTransitionValidation(validation)
                 if validation == .ok {
                     HapticManager.lightTap()
@@ -1085,41 +1089,23 @@ private struct TasksContent: View {
         }
 
         _ = _Concurrency.Task {
-            if userSession.syncMode == .localOnly {
-                do {
-                    _ = try await backlogStore.createFromTask(task)
-                    await store.deleteTask(task)
-                } catch {
-                    await MainActor.run {
-                        showBanner(.moveToIdeasFailed)
-                    }
-                    HapticManager.warning()
-                }
-
+            guard let destinationCategoryId = backlogStore.resolveDestinationCategoryIdForTaskMove(task) else {
                 await MainActor.run {
                     hiddenMovedToIdeasIds.remove(task.id)
-                }
-                return
-            }
-
-            await MainActor.run {
-                store.removeTaskLocally(task)
-            }
-
-            do {
-                let createdBacklogItem = try await backlogStore.createFromTask(task)
-                do {
-                    try await store.deleteTaskRemote(id: task.id, householdId: task.householdId)
-                } catch {
-                    _ = await backlogStore.deleteItem(createdBacklogItem)
-                    throw error
-                }
-            } catch {
-                await MainActor.run {
-                    store.restoreTaskLocally(task)
                     showBanner(.moveToIdeasFailed)
                 }
                 HapticManager.warning()
+                return
+            }
+
+            let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: destinationCategoryId)
+            if !didMove {
+                await MainActor.run {
+                    hiddenMovedToIdeasIds.remove(task.id)
+                    showBanner(.moveToIdeasFailed)
+                }
+                HapticManager.warning()
+                return
             }
 
             await MainActor.run {
