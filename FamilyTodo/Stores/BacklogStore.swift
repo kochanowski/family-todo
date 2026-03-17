@@ -1020,7 +1020,7 @@ final class BacklogStore: ObservableObject {
         assigneeId: UUID?,
         preferredStatus: Task.TaskStatus = .next
     ) async -> PromotionResult {
-        guard let modelContext, let householdId else {
+        guard let modelContext else {
             return .failed("Missing local context.")
         }
         let resolvedAssigneeId = assigneeId ?? item.assigneeId

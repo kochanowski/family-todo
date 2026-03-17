@@ -1451,7 +1451,7 @@ final class TaskStore: ObservableObject {
             )
         }
 
-        BacklogItem(
+        return BacklogItem(
             logicalItemID: task.logicalItemID,
             categoryId: destinationCategoryId,
             householdId: householdId,
