@@ -406,7 +406,7 @@ final class TaskStore: ObservableObject {
         replayPendingMutationsInBackground()
     }
 
-    private func syncToCache(_ cloudTasks: [Task], cloudTaskIDs _: Set<UUID>) {
+    func syncToCache(_ cloudTasks: [Task], cloudTaskIDs _: Set<UUID>) {
         guard let householdId else { return }
 
         let cacheDescriptor = FetchDescriptor<CachedTask>(

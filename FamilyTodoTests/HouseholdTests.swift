@@ -196,7 +196,7 @@ final class MemberStoreProfileTests: XCTestCase {
             userId: userId,
             displayName: "Wojtek",
             role: .owner,
-            colorHex: MemberColorToken.pastelPink.hex
+            colorHex: MemberColorToken.systemPink.hex
         )
         modelContainer.mainContext.insert(CachedMember(from: initialMember))
         try modelContainer.mainContext.save()
@@ -215,17 +215,17 @@ final class MemberStoreProfileTests: XCTestCase {
     func testUpdateCurrentUserProfilePersistsDisplayNameAndColorToCache() async throws {
         try await store.updateCurrentUserProfile(
             displayName: "Wojciech",
-            colorHex: MemberColorToken.pastelBlue.hex,
+            colorHex: MemberColorToken.systemBlue.hex,
             currentUserId: userId
         )
 
         XCTAssertEqual(store.members.first?.displayName, "Wojciech")
-        XCTAssertEqual(store.members.first?.colorHex, MemberColorToken.pastelBlue.hex)
+        XCTAssertEqual(store.members.first?.colorHex, MemberColorToken.systemBlue.hex)
 
         let descriptor = FetchDescriptor<CachedMember>()
         let cachedMembers = try modelContainer.mainContext.fetch(descriptor)
         XCTAssertEqual(cachedMembers.first?.displayName, "Wojciech")
-        XCTAssertEqual(cachedMembers.first?.colorHex, MemberColorToken.pastelBlue.hex)
+        XCTAssertEqual(cachedMembers.first?.colorHex, MemberColorToken.systemBlue.hex)
     }
 }
 
@@ -352,8 +352,8 @@ final class HouseholdStoreTests: XCTestCase {
 
         let household = Household(
             name: "Original Home",
-            ownerId: "household-owner",
-            iconSymbol: "house.fill"
+            iconSymbol: "house.fill",
+            ownerId: "household-owner"
         )
         container.mainContext.insert(CachedHousehold(from: household))
         try container.mainContext.save()
