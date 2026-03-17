@@ -112,6 +112,33 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(foreground, matches: .black)
     }
 
+    func testInactiveTabBarColorUsesPrimaryContentColorForLightTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .light
+
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(themeStore: store)
+
+        assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
+    }
+
+    func testInactiveTabBarColorUsesPrimaryContentColorForDarkTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .dark
+
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(themeStore: store)
+
+        assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
+    }
+
+    func testInactiveTabBarColorUsesPaperInkColorForPaperTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .paper
+
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(themeStore: store)
+
+        assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
+    }
+
     private func assertColor(
         _ actual: UIColor,
         matches expected: UIColor,

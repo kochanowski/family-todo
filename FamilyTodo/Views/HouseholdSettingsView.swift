@@ -924,6 +924,12 @@ private struct EditHouseholdView: View {
         } message: {
             Text(errorMessage ?? "Unknown error")
         }
+        .onAppear {
+            NotificationCenter.default.post(
+                name: .tabBarAppearanceRefreshRequested,
+                object: nil
+            )
+        }
     }
 
     private var trimmedName: String {

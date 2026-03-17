@@ -61,6 +61,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
     func testCuratedIconsExposeGroupedPickerChoicesAndKeepValidLegacySymbols() {
         let expectedCuratedIcons = [
             "fork.knife",
+            "fork.knife.circle.fill",
             "takeoutbag.and.cup.and.straw.fill",
             "carrot.fill",
             "house.fill",
@@ -76,6 +77,17 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertEqual(ShoppingBundle.genericIcons.count, 12)
         XCTAssertEqual(ShoppingBundle.resolvedIconName("cube.box.fill"), "cube.box.fill")
         XCTAssertEqual(ShoppingBundle.resolvedIconName("not-a-real-symbol"), ShoppingBundle.defaultIcon)
+    }
+
+    func testDefaultBundleIconUsesForkKnifeCircleFill() {
+        XCTAssertEqual(ShoppingBundle.defaultIcon, "fork.knife.circle.fill")
+
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Dinner"
+        )
+
+        XCTAssertEqual(bundle.icon, "fork.knife.circle.fill")
     }
 
     func testCreateUpdateDeleteBundleLocalOnlyPersistsCache() async throws {

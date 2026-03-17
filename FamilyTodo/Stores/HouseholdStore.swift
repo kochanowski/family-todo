@@ -25,6 +25,11 @@ class HouseholdStore: ObservableObject {
         let userId: String?
     }
 
+    private struct PendingHouseholdMetadataSync {
+        let household: Household
+        let userId: String
+    }
+
     enum LeaveResolution: Equatable {
         case deleteHousehold
         case requireTransfer
@@ -76,6 +81,8 @@ class HouseholdStore: ObservableObject {
     private let recoverySuppressionDuration: TimeInterval
     private var isRefreshingCloudHousehold = false
     private var isReplayingPendingExitOperations = false
+    private var pendingHouseholdMetadataSync: PendingHouseholdMetadataSync?
+    private var isReplayingPendingHouseholdMetadataSync = false
 
     // Cache for sharing controller
     private var activeShare: CKShare?
@@ -484,7 +491,7 @@ class HouseholdStore: ObservableObject {
         userId: String,
         iconSymbol: String? = nil
     ) async throws {
-        guard var household = currentHousehold else {
+        guard let household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
         guard household.ownerId == userId else {
@@ -501,27 +508,62 @@ class HouseholdStore: ObservableObject {
             return
         }
 
-        household.name = trimmedName
-        household.iconSymbol = resolvedIconSymbol
-        household.updatedAt = Date()
-        updateCache(with: household)
-        currentHousehold = household
+        error = nil
 
-        if syncMode == .cloud {
-            do {
-                await setCloudScope(for: household, userId: userId)
-                let members = try await cloudKit.fetchMembers(householdId: household.id)
-                guard members.contains(where: { $0.userId == userId && $0.isActive }) else {
-                    throw HouseholdError.notAuthorized
+        let previousHousehold = household
+        var updatedHousehold = household
+        updatedHousehold.name = trimmedName
+        updatedHousehold.iconSymbol = resolvedIconSymbol
+        updatedHousehold.updatedAt = Date()
+
+        currentHousehold = updatedHousehold
+        guard updateCache(with: updatedHousehold) else {
+            currentHousehold = previousHousehold
+            _ = updateCache(with: previousHousehold)
+            throw error ?? HouseholdError.cacheNotAvailable
+        }
+
+        guard syncMode == .cloud else {
+            return
+        }
+
+        queueHouseholdMetadataSync(updatedHousehold, userId: userId)
+    }
+
+    private func queueHouseholdMetadataSync(_ household: Household, userId: String) {
+        guard syncMode == .cloud else { return }
+        pendingHouseholdMetadataSync = PendingHouseholdMetadataSync(
+            household: household,
+            userId: userId
+        )
+        replayPendingHouseholdMetadataSyncInBackground()
+    }
+
+    private func replayPendingHouseholdMetadataSyncInBackground() {
+        guard syncMode == .cloud else {
+            pendingHouseholdMetadataSync = nil
+            return
+        }
+        guard !isReplayingPendingHouseholdMetadataSync else { return }
+
+        isReplayingPendingHouseholdMetadataSync = true
+        _ = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { isReplayingPendingHouseholdMetadataSync = false }
+
+            while let pendingSync = pendingHouseholdMetadataSync {
+                pendingHouseholdMetadataSync = nil
+
+                do {
+                    await setCloudScope(for: pendingSync.household, userId: pendingSync.userId)
+                    _ = try await cloudKit.updateHouseholdMetadata(
+                        householdId: pendingSync.household.id,
+                        newName: pendingSync.household.name,
+                        newIconSymbol: pendingSync.household.iconSymbol
+                    )
+                } catch {
+                    self.error = error
                 }
-                _ = try await cloudKit.updateHouseholdMetadata(
-                    householdId: household.id,
-                    newName: household.name,
-                    newIconSymbol: resolvedIconSymbol
-                )
-            } catch {
-                self.error = error
-                throw error
             }
         }
     }
@@ -1414,8 +1456,9 @@ class HouseholdStore: ObservableObject {
         count > 0 ? 1 : 0
     }
 
-    private func updateCache(with household: Household) {
-        guard let context = modelContext else { return }
+    @discardableResult
+    private func updateCache(with household: Household) -> Bool {
+        guard let context = modelContext else { return true }
 
         let descriptor = FetchDescriptor<CachedHousehold>(
             predicate: #Predicate { $0.id == household.id }
@@ -1428,10 +1471,11 @@ class HouseholdStore: ObservableObject {
             } else {
                 context.insert(CachedHousehold(from: household))
             }
-            saveContextOrSetError(context, operation: "upsert cached household")
+            return saveContextOrSetError(context, operation: "upsert cached household")
         } catch {
             print("Cache update error: \(error)")
             self.error = error
+            return false
         }
     }
 

@@ -2,10 +2,10 @@ import Foundation
 import UIKit
 
 struct ShoppingBundle: Identifiable, Codable, Hashable {
-    static let defaultIcon = "shippingbox.fill"
+    static let defaultIcon = "fork.knife.circle.fill"
     static let foodIcons = [
-        "fork.knife",
         "fork.knife.circle.fill",
+        "fork.knife",
         "takeoutbag.and.cup.and.straw.fill",
         "cup.and.saucer.fill",
         "mug.fill",

@@ -8,7 +8,7 @@ enum TabBarTypographyManager {
         tabBarController: UITabBarController? = nil,
         selectedIndex: Int? = nil
     ) {
-        let normalColor = UIColor.secondaryLabel
+        let normalColor = inactiveItemColor(themeStore: themeStore)
         let normalAttributes = makeAttributes(
             font: themeStore.uiFont(for: .tabLabel),
             color: normalColor
@@ -55,6 +55,10 @@ enum TabBarTypographyManager {
         }
     }
 
+    static func inactiveItemColor(themeStore: ThemeStore) -> UIColor {
+        UIColor(themeStore.contentPrimaryColor)
+    }
+
     private static func makeAttributes(
         font: UIFont,
         color: UIColor
@@ -70,7 +74,7 @@ enum TabBarTypographyManager {
         selectedAttributes: [NSAttributedString.Key: Any],
         to appearance: inout UITabBarAppearance
     ) {
-        let normalColor = UIColor.secondaryLabel
+        let normalColor = (normalAttributes[.foregroundColor] as? UIColor) ?? UIColor.label
         let selectedColor = (selectedAttributes[.foregroundColor] as? UIColor) ?? UIColor.label
 
         let stacked = appearance.stackedLayoutAppearance

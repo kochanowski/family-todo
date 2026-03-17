@@ -345,6 +345,38 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedMember>()).isEmpty)
     }
 
+    func testUpdateCurrentHouseholdPersistsNameAndIconLocally() async throws {
+        let schema = Schema([CachedHousehold.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let household = Household(
+            name: "Original Home",
+            ownerId: "household-owner",
+            iconSymbol: "house.fill"
+        )
+        container.mainContext.insert(CachedHousehold(from: household))
+        try container.mainContext.save()
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(.localOnly)
+        localStore.currentHousehold = household
+
+        try await localStore.updateCurrentHousehold(
+            name: "Updated Home",
+            userId: household.ownerId,
+            iconSymbol: "star.fill"
+        )
+
+        XCTAssertEqual(localStore.currentHousehold?.name, "Updated Home")
+        XCTAssertEqual(localStore.currentHousehold?.iconSymbol, "star.fill")
+
+        let cachedHouseholds = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
+        XCTAssertEqual(cachedHouseholds.count, 1)
+        XCTAssertEqual(cachedHouseholds.first?.name, "Updated Home")
+        XCTAssertEqual(cachedHouseholds.first?.iconSymbol, "star.fill")
+    }
+
     func testRestoreCachedHouseholdIgnoresCloudCacheWithoutCurrentUserMembership() throws {
         let schema = Schema([
             CachedHousehold.self,

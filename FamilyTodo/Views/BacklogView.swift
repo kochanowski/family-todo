@@ -512,7 +512,12 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        AppScreenHeader(title: "Ideas", trailing: {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("Ideas")
+                .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             Button {
                 newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
@@ -530,7 +535,8 @@ private struct BacklogContent: View {
                 arrowEdge: .top,
                 generation: appTipRuntimeGeneration
             )
-        })
+        }
+        .frame(minHeight: 44, alignment: .center)
     }
 
     private var emptyState: some View {
