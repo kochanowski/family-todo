@@ -161,7 +161,7 @@ final class FamilyTodoUITests: XCTestCase {
         )
 
         XCTAssertTrue(
-            app.staticTexts["Tap Add item to create your first shopping entry."]
+            app.staticTexts["Tap Add item to create your first shopping entry. Later, long-press it to quickly add a saved bundle."]
                 .waitForExistence(timeout: 5.0)
         )
     }

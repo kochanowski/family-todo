@@ -90,6 +90,7 @@ private struct TasksContent: View {
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
+    @State private var processingMovedToIdeasIds: Set<UUID> = []
     @State private var hasStartedInitialLoad = false
     @State private var editMode: EditMode = .inactive
     @State private var showRecommendedLimitInfo = false
@@ -1083,6 +1084,7 @@ private struct TasksContent: View {
     }
 
     private func demoteTaskToBacklog(_ task: Task) {
+        guard processingMovedToIdeasIds.insert(task.id).inserted else { return }
         AppTips.donateTaskSwipeActionUsed()
         withAnimation(.easeInOut(duration: 0.18)) {
             hiddenMovedToIdeasIds.insert(task.id)
@@ -1091,6 +1093,7 @@ private struct TasksContent: View {
         _ = _Concurrency.Task {
             guard let destinationCategoryId = backlogStore.resolveDestinationCategoryIdForTaskMove(task) else {
                 await MainActor.run {
+                    processingMovedToIdeasIds.remove(task.id)
                     hiddenMovedToIdeasIds.remove(task.id)
                     showBanner(.moveToIdeasFailed)
                 }
@@ -1101,6 +1104,7 @@ private struct TasksContent: View {
             let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: destinationCategoryId)
             if !didMove {
                 await MainActor.run {
+                    processingMovedToIdeasIds.remove(task.id)
                     hiddenMovedToIdeasIds.remove(task.id)
                     showBanner(.moveToIdeasFailed)
                 }
@@ -1109,6 +1113,7 @@ private struct TasksContent: View {
             }
 
             await MainActor.run {
+                processingMovedToIdeasIds.remove(task.id)
                 hiddenMovedToIdeasIds.remove(task.id)
             }
         }

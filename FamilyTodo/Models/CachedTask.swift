@@ -6,6 +6,7 @@ import SwiftData
 @Model
 final class CachedTask {
     @Attribute(.unique) var id: UUID
+    var logicalItemID: UUID?
     var householdId: UUID
     var title: String
     var statusRaw: String
@@ -32,6 +33,7 @@ final class CachedTask {
 
     init(from task: Task) {
         id = task.id
+        logicalItemID = task.logicalItemID
         householdId = task.householdId
         title = task.title
         statusRaw = task.status.rawValue
@@ -54,6 +56,7 @@ final class CachedTask {
     }
 
     func update(from task: Task) {
+        logicalItemID = task.logicalItemID
         title = task.title
         statusRaw = task.status.rawValue
         assigneeId = task.assigneeId
@@ -73,6 +76,7 @@ final class CachedTask {
     func toTask() -> Task {
         Task(
             id: id,
+            logicalItemID: logicalItemID ?? id,
             householdId: householdId,
             title: title,
             status: Task.TaskStatus(rawValue: statusRaw) ?? .backlog,

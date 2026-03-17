@@ -413,7 +413,7 @@ enum AppTipStorageKey {
         }
 
         var message: Text? {
-            Text("Tap Add item to create your first shopping entry.")
+            Text("Tap Add item to create your first shopping entry. Later, long-press it to quickly add a saved bundle.")
         }
 
         var image: Image? {

@@ -364,6 +364,7 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(cachedIdeas.count, 1)
         XCTAssertEqual(cachedIdeas.first?.title, "Move me back")
         XCTAssertEqual(cachedIdeas.first?.categoryId, category.id)
+        XCTAssertEqual(cachedIdeas.first?.logicalItemID, task.logicalItemID)
         XCTAssertEqual(cachedIdeas.first?.syncStatusRaw, "synced")
 
         let taskDescriptor = FetchDescriptor<CachedTask>(
@@ -371,6 +372,56 @@ final class TaskStoreTests: XCTestCase {
         )
         let cachedTasks = try modelContainer.mainContext.fetch(taskDescriptor)
         XCTAssertTrue(cachedTasks.isEmpty)
+    }
+
+    func testMoveTaskToIdeasReusesExistingIdeaWithSameLogicalItemID() async throws {
+        let category = BacklogCategory(
+            householdId: householdId,
+            title: "Ideas",
+            sortOrder: 0
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
+
+        let logicalItemID = UUID()
+        let task = Task(
+            id: UUID(),
+            logicalItemID: logicalItemID,
+            householdId: householdId,
+            title: "Move me once",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+        let existingIdea = BacklogItem(
+            id: UUID(),
+            logicalItemID: logicalItemID,
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Move me once",
+            assigneeId: assigneeId
+        )
+
+        modelContainer.mainContext.insert(CachedTask(from: task))
+        modelContainer.mainContext.insert(CachedBacklogItem(from: existingIdea))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadTasks()
+
+        let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: category.id)
+
+        XCTAssertTrue(didMove)
+        XCTAssertTrue(store.tasks.isEmpty)
+
+        let backlogDescriptor = FetchDescriptor<CachedBacklogItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedIdeas = try modelContainer.mainContext.fetch(backlogDescriptor)
+        XCTAssertEqual(
+            cachedIdeas.filter { ($0.logicalItemID ?? $0.id) == logicalItemID }.count,
+            1
+        )
+        XCTAssertEqual(cachedIdeas.first?.id, existingIdea.id)
     }
 
     func testArchiveTaskMovesTaskFromRecentlyDoneToArchivedDone() async {

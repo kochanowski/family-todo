@@ -31,7 +31,9 @@ final class BacklogStoreTests: XCTestCase {
 
     func testCachedBacklogItemRoundTripPreservesAssignee() {
         let assigneeId = UUID()
+        let logicalItemID = UUID()
         let item = BacklogItem(
+            logicalItemID: logicalItemID,
             categoryId: UUID(),
             householdId: householdId,
             title: "Laundry",
@@ -43,6 +45,7 @@ final class BacklogStoreTests: XCTestCase {
         let restored = cached.toBacklogItem()
 
         XCTAssertEqual(restored.assigneeId, assigneeId)
+        XCTAssertEqual(restored.logicalItemID, logicalItemID)
         XCTAssertEqual(restored.title, "Laundry")
     }
 
@@ -83,6 +86,63 @@ final class BacklogStoreTests: XCTestCase {
 
         XCTAssertEqual(hydratedTaskStore.tasks.count, 1)
         XCTAssertEqual(hydratedTaskStore.tasks.first?.title, "Vacuum living room")
+    }
+
+    func testPromoteReusesExistingTaskWithSameLogicalItemID() async throws {
+        let category = BacklogCategory(
+            householdId: householdId,
+            title: "Projects",
+            sortOrder: 0
+        )
+        modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
+
+        let logicalItemID = UUID()
+        let backlogItem = BacklogItem(
+            id: UUID(),
+            logicalItemID: logicalItemID,
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Promote once",
+            assigneeId: UUID()
+        )
+        let existingTask = Task(
+            id: UUID(),
+            logicalItemID: logicalItemID,
+            householdId: householdId,
+            title: "Promote once",
+            status: .next,
+            assigneeId: backlogItem.assigneeId,
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(CachedBacklogItem(from: backlogItem))
+        modelContainer.mainContext.insert(CachedTask(from: existingTask))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        await store.loadDataForDisplay()
+
+        let result = await store.promoteItemToTask(backlogItem, assigneeId: backlogItem.assigneeId)
+
+        switch result {
+        case let .success(createdTaskId):
+            XCTAssertEqual(createdTaskId, existingTask.id)
+        default:
+            XCTFail("Expected promotion success, got \(result)")
+            return
+        }
+
+        XCTAssertTrue(store.items(for: category.id).isEmpty)
+
+        let taskDescriptor = FetchDescriptor<CachedTask>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedTasks = try modelContainer.mainContext.fetch(taskDescriptor)
+        XCTAssertEqual(
+            cachedTasks.filter { ($0.logicalItemID ?? $0.id) == logicalItemID }.count,
+            1
+        )
+        XCTAssertEqual(cachedTasks.first?.id, existingTask.id)
     }
 
     func testDeleteItemInCloudModeReplacesVisibleCacheRowWithPendingDeleteTombstone() async throws {

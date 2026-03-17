@@ -170,6 +170,7 @@ extension CloudKitManager {
     func taskRecord(from task: Task) -> CKRecord {
         let record = CKRecord(recordType: "Task", recordID: recordID(for: task.id))
         record["id"] = task.id.uuidString as CKRecordValue
+        record["logicalItemId"] = task.logicalItemID.uuidString as CKRecordValue
         record["householdId"] = reference(for: task.householdId)
         record["title"] = task.title as CKRecordValue
         record["status"] = task.status.rawValue as CKRecordValue
@@ -229,6 +230,7 @@ extension CloudKitManager {
 
         return Task(
             id: id,
+            logicalItemID: UUID(uuidString: record["logicalItemId"] as? String ?? "") ?? id,
             householdId: householdId,
             title: title,
             status: status,
@@ -499,6 +501,7 @@ extension CloudKitManager {
     func backlogItemRecord(from item: BacklogItem) -> CKRecord {
         let record = CKRecord(recordType: "BacklogItem", recordID: recordID(for: item.id))
         record["id"] = item.id.uuidString as CKRecordValue
+        record["logicalItemId"] = item.logicalItemID.uuidString as CKRecordValue
         record["categoryId"] = reference(for: item.categoryId)
         record["householdId"] = reference(for: item.householdId)
         record["title"] = item.title as CKRecordValue
@@ -530,6 +533,7 @@ extension CloudKitManager {
 
         return BacklogItem(
             id: id,
+            logicalItemID: UUID(uuidString: record["logicalItemId"] as? String ?? "") ?? id,
             categoryId: categoryId,
             householdId: householdId,
             title: title,
