@@ -46,7 +46,7 @@ struct BundlesManagementView: View {
             } else if store.bundles.isEmpty {
                 ThemedEmptyStateView(
                     title: "No Bundles Yet",
-                    systemImage: ShoppingBundle.defaultIcon,
+                    systemImage: ShoppingBundle.featureIcon,
                     description: "Create reusable shopping bundles for quick add from the main Shopping button."
                 )
                 .offset(y: -24)
@@ -181,7 +181,7 @@ private struct ShoppingBundleEditorSheet: View {
         self.shoppingStore = shoppingStore
         self.bundle = bundle
         _name = State(initialValue: bundle?.name ?? "")
-        _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.defaultIcon)
+        _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.creationDefaultIcon)
 
         let initialItems = bundle?.normalizedItems ?? []
         _itemDrafts = State(initialValue: initialItems.map { BundleItemDraft(title: $0) })

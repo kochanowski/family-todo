@@ -76,18 +76,20 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertEqual(ShoppingBundle.foodIcons.count, 12)
         XCTAssertEqual(ShoppingBundle.genericIcons.count, 12)
         XCTAssertEqual(ShoppingBundle.resolvedIconName("cube.box.fill"), "cube.box.fill")
-        XCTAssertEqual(ShoppingBundle.resolvedIconName("not-a-real-symbol"), ShoppingBundle.defaultIcon)
+        XCTAssertEqual(ShoppingBundle.resolvedIconName("not-a-real-symbol"), ShoppingBundle.fallbackIcon)
     }
 
-    func testDefaultBundleIconUsesForkKnifeCircleFill() {
-        XCTAssertEqual(ShoppingBundle.defaultIcon, "fork.knife.circle.fill")
+    func testBundleIconRolesKeepFeatureAndCreationDefaultsSeparate() {
+        XCTAssertEqual(ShoppingBundle.featureIcon, "shippingbox.fill")
+        XCTAssertEqual(ShoppingBundle.fallbackIcon, "shippingbox.fill")
+        XCTAssertEqual(ShoppingBundle.creationDefaultIcon, "fork.knife")
 
         let bundle = ShoppingBundle(
             householdId: householdId,
             name: "Dinner"
         )
 
-        XCTAssertEqual(bundle.icon, "fork.knife.circle.fill")
+        XCTAssertEqual(bundle.icon, "fork.knife")
     }
 
     func testCreateUpdateDeleteBundleLocalOnlyPersistsCache() async throws {

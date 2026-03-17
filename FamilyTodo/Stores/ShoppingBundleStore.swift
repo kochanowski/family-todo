@@ -291,7 +291,7 @@ final class ShoppingBundleStore: ObservableObject {
 
     func createBundle(
         name: String,
-        icon: String = ShoppingBundle.defaultIcon,
+        icon: String = ShoppingBundle.creationDefaultIcon,
         items: [String]
     ) async {
         guard let householdId else { return }

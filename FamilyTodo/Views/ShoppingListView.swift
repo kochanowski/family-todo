@@ -400,7 +400,7 @@ private struct ShoppingListContent: View {
                 NavigationLink {
                     BundlesManagementView(store: bundleStore, shoppingStore: store)
                 } label: {
-                    Image(systemName: ShoppingBundle.defaultIcon)
+                    Image(systemName: ShoppingBundle.featureIcon)
                         .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(themeStore.accentTabColor)
                         .frame(width: 44, height: 44)

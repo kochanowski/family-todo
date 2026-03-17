@@ -112,29 +112,55 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(foreground, matches: .black)
     }
 
-    func testInactiveTabBarColorUsesPrimaryContentColorForLightTheme() {
+    func testInactiveTabBarColorUsesBlackForLightTheme() {
         let store = ThemeStore()
         store.unifiedTheme = .light
 
-        let inactiveColor = TabBarTypographyManager.inactiveItemColor(themeStore: store)
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
 
-        assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
+        assertColor(inactiveColor, matches: .black)
     }
 
-    func testInactiveTabBarColorUsesPrimaryContentColorForDarkTheme() {
+    func testInactiveTabBarColorUsesWhiteForDarkTheme() {
         let store = ThemeStore()
         store.unifiedTheme = .dark
 
-        let inactiveColor = TabBarTypographyManager.inactiveItemColor(themeStore: store)
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .dark)
+        )
 
-        assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
+        assertColor(inactiveColor, matches: .white)
+    }
+
+    func testInactiveTabBarColorUsesTraitCollectionForAutoTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .auto
+
+        let lightInactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
+        let darkInactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .dark)
+        )
+
+        assertColor(lightInactiveColor, matches: .black)
+        assertColor(darkInactiveColor, matches: .white)
     }
 
     func testInactiveTabBarColorUsesPaperInkColorForPaperTheme() {
         let store = ThemeStore()
         store.unifiedTheme = .paper
 
-        let inactiveColor = TabBarTypographyManager.inactiveItemColor(themeStore: store)
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
 
         assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
     }

@@ -36,7 +36,6 @@ struct ProfileView: View {
 
     @State private var showEditProfile = false
     @State private var householdBeingEdited: Household?
-    @State private var didSaveHouseholdMetadata = false
     @State private var isPreparingShareInvite = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
@@ -64,13 +63,8 @@ struct ProfileView: View {
         }
         .sheet(item: $householdBeingEdited, onDismiss: handleHouseholdEditDismiss) { household in
             NavigationStack {
-                EditHouseholdView(
-                    household: household,
-                    onSaveSuccess: {
-                        didSaveHouseholdMetadata = true
-                    }
-                )
-                .id(household.id)
+                EditHouseholdView(household: household)
+                    .id(household.id)
             }
         }
         .sheet(item: $uiState.route) { route in
@@ -470,8 +464,6 @@ struct ProfileView: View {
     }
 
     private func handleHouseholdEditDismiss() {
-        guard didSaveHouseholdMetadata else { return }
-        didSaveHouseholdMetadata = false
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: .tabBarAppearanceRefreshRequested,
@@ -791,7 +783,6 @@ private struct EditHouseholdView: View {
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
-    let onSaveSuccess: () -> Void
 
     private let initialDraft: HouseholdMetadataDraft
     @State private var draft: HouseholdMetadataDraft
@@ -817,11 +808,9 @@ private struct EditHouseholdView: View {
     ]
 
     init(
-        household: Household,
-        onSaveSuccess: @escaping () -> Void
+        household: Household
     ) {
         self.household = household
-        self.onSaveSuccess = onSaveSuccess
         let initialDraft = HouseholdMetadataDraft(
             name: household.name,
             iconSymbol: household.iconSymbol
@@ -924,12 +913,6 @@ private struct EditHouseholdView: View {
         } message: {
             Text(errorMessage ?? "Unknown error")
         }
-        .onAppear {
-            NotificationCenter.default.post(
-                name: .tabBarAppearanceRefreshRequested,
-                object: nil
-            )
-        }
     }
 
     private var trimmedName: String {
@@ -960,7 +943,6 @@ private struct EditHouseholdView: View {
                     userId: userId,
                     iconSymbol: draft.iconSymbol
                 )
-                onSaveSuccess()
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

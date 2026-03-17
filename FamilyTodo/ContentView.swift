@@ -26,9 +26,8 @@ struct MainAppView: View {
                 TabBarControllerAccessor { controller in
                     if tabBarController !== controller {
                         tabBarController = controller
+                        applyTabBarAppearance()
                     }
-                    // UIKit can temporarily drop the live tab bar styling after modal save/dismiss flows.
-                    applyTabBarAppearance()
                 }
             )
             .background(AppBackgroundView())

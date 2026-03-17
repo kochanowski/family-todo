@@ -8,7 +8,13 @@ enum TabBarTypographyManager {
         tabBarController: UITabBarController? = nil,
         selectedIndex: Int? = nil
     ) {
-        let normalColor = inactiveItemColor(themeStore: themeStore)
+        guard let tabBarController else { return }
+
+        let traitCollection = tabBarController.traitCollection
+        let normalColor = inactiveItemColor(
+            themeStore: themeStore,
+            traitCollection: traitCollection
+        )
         let normalAttributes = makeAttributes(
             font: themeStore.uiFont(for: .tabLabel),
             color: normalColor
@@ -18,45 +24,46 @@ enum TabBarTypographyManager {
             font: themeStore.uiFont(for: .tabLabel),
             color: selectedColor
         )
-
-        let tabBarAppearance = UITabBar.appearance()
-
-        var standard = tabBarAppearance.standardAppearance
-        apply(
+        let standardAppearance = makeAppearance(
+            base: tabBarController.tabBar.standardAppearance,
             normalAttributes: normalAttributes,
-            selectedAttributes: selectedAttributes,
-            to: &standard
+            selectedAttributes: selectedAttributes
         )
-        tabBarAppearance.standardAppearance = standard
-        tabBarAppearance.tintColor = selectedColor
-        tabBarAppearance.unselectedItemTintColor = normalColor
 
         var resolvedScrollEdgeAppearance: UITabBarAppearance?
         if #available(iOS 15.0, *) {
-            var scrollEdge = tabBarAppearance.scrollEdgeAppearance ?? standard
-            apply(
+            resolvedScrollEdgeAppearance = makeAppearance(
+                base: tabBarController.tabBar.scrollEdgeAppearance ?? standardAppearance,
                 normalAttributes: normalAttributes,
-                selectedAttributes: selectedAttributes,
-                to: &scrollEdge
+                selectedAttributes: selectedAttributes
             )
-            tabBarAppearance.scrollEdgeAppearance = scrollEdge
-            resolvedScrollEdgeAppearance = scrollEdge
         }
 
-        if let tabBarController {
-            updateLiveTabBar(
-                tabBarController: tabBarController,
-                standardAppearance: standard,
-                scrollEdgeAppearance: resolvedScrollEdgeAppearance,
-                selectedColor: selectedColor,
-                normalColor: normalColor,
-                selectedIndex: selectedIndex
-            )
-        }
+        updateLiveTabBar(
+            tabBarController: tabBarController,
+            standardAppearance: standardAppearance,
+            scrollEdgeAppearance: resolvedScrollEdgeAppearance,
+            selectedColor: selectedColor,
+            normalColor: normalColor,
+            selectedIndex: selectedIndex
+        )
     }
 
-    static func inactiveItemColor(themeStore: ThemeStore) -> UIColor {
-        UIColor(themeStore.contentPrimaryColor)
+    static func inactiveItemColor(
+        themeStore: ThemeStore,
+        traitCollection: UITraitCollection? = nil
+    ) -> UIColor {
+        switch themeStore.unifiedTheme {
+        case .light:
+            return .black
+        case .dark:
+            return .white
+        case .auto:
+            let interfaceStyle = traitCollection?.userInterfaceStyle ?? UIScreen.main.traitCollection.userInterfaceStyle
+            return interfaceStyle == .dark ? .white : .black
+        case .retroDark, .retroLight, .paper:
+            return UIColor(themeStore.contentPrimaryColor)
+        }
     }
 
     private static func makeAttributes(
@@ -69,11 +76,16 @@ enum TabBarTypographyManager {
         ]
     }
 
-    private static func apply(
+    private static func makeAppearance(
+        base: UITabBarAppearance?,
         normalAttributes: [NSAttributedString.Key: Any],
-        selectedAttributes: [NSAttributedString.Key: Any],
-        to appearance: inout UITabBarAppearance
-    ) {
+        selectedAttributes: [NSAttributedString.Key: Any]
+    ) -> UITabBarAppearance {
+        let appearance = (base?.copy() as? UITabBarAppearance) ?? UITabBarAppearance()
+        if base == nil {
+            appearance.configureWithDefaultBackground()
+        }
+
         let normalColor = (normalAttributes[.foregroundColor] as? UIColor) ?? UIColor.label
         let selectedColor = (selectedAttributes[.foregroundColor] as? UIColor) ?? UIColor.label
 
@@ -94,6 +106,8 @@ enum TabBarTypographyManager {
         compactInline.selected.titleTextAttributes = selectedAttributes
         compactInline.normal.iconColor = normalColor
         compactInline.selected.iconColor = selectedColor
+
+        return appearance
     }
 
     private static func updateLiveTabBar(

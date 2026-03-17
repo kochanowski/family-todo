@@ -463,7 +463,7 @@ enum AppTipStorageKey {
         }
 
         var image: Image? {
-            Image(systemName: ShoppingBundle.defaultIcon)
+            Image(systemName: ShoppingBundle.featureIcon)
         }
 
         var rules: [Rule] {
@@ -486,7 +486,7 @@ enum AppTipStorageKey {
         }
 
         var image: Image? {
-            Image(systemName: ShoppingBundle.defaultIcon)
+            Image(systemName: ShoppingBundle.featureIcon)
         }
 
         var rules: [Rule] {
