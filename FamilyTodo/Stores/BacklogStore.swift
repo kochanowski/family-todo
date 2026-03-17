@@ -1002,6 +1002,7 @@ final class BacklogStore: ObservableObject {
             assigneeId: resolvedAssigneeId,
             assigneeIds: resolvedAssigneeId.map { [$0] } ?? [],
             backlogCategoryId: item.categoryId,
+            taskType: .oneOff,
             notes: item.notes,
             order: preferredStatus == .next ? nextTaskOrderBaselineFromCache() + 1 : 0,
             createdAt: item.createdAt,
