@@ -220,11 +220,11 @@ enum TabBarTypographyManager {
         attributes[.font] as? UIFont
     }
 
-    private static func fontsMatch(_ lhs: UIFont, _ rhs: UIFont) -> Bool {
+    private nonisolated static func fontsMatch(_ lhs: UIFont, _ rhs: UIFont) -> Bool {
         lhs.fontName == rhs.fontName && abs(lhs.pointSize - rhs.pointSize) < 0.01
     }
 
-    private static func colorsMatch(_ lhs: UIColor?, _ rhs: UIColor?) -> Bool {
+    private nonisolated static func colorsMatch(_ lhs: UIColor?, _ rhs: UIColor?) -> Bool {
         guard let lhs, let rhs else { return lhs == nil && rhs == nil }
 
         var lhsRed = CGFloat.zero
