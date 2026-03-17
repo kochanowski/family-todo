@@ -14,12 +14,6 @@ final class BacklogStore: ObservableObject {
         static let awaitingCloudEcho = "awaitingCloudEcho"
     }
 
-    private struct CachedTaskSnapshot {
-        var task: Task
-        var syncStatusRaw: String
-        var lastSyncedAt: Date?
-    }
-
     enum PromotionResult: Equatable {
         case success(createdTaskId: UUID)
         case assigneeRequired
@@ -125,6 +119,74 @@ final class BacklogStore: ObservableObject {
         }
     }
 
+    private func persistIdeaWorkItem(
+        _ item: BacklogItem,
+        syncStatusRaw: String,
+        lastSyncedAt: Date?,
+        shouldSave: Bool,
+        operation: String
+    ) {
+        guard let context = modelContext else { return }
+        WorkItemCacheStoreSupport.upsert(
+            WorkItem(idea: item),
+            syncStatusRaw: syncStatusRaw,
+            lastSyncedAt: lastSyncedAt,
+            context: context,
+            shouldSave: shouldSave
+        ) { [self] defaultOperation in
+            saveContextOrSetError(
+                context,
+                operation: operation.isEmpty ? defaultOperation : operation
+            )
+        }
+    }
+
+    private func markIdeaWorkItemPendingDelete(
+        _ item: BacklogItem,
+        shouldSave: Bool,
+        operation: String
+    ) {
+        guard let context = modelContext else { return }
+        WorkItemCacheStoreSupport.markPendingDelete(
+            WorkItem(idea: item),
+            context: context,
+            shouldSave: shouldSave
+        ) { [self] defaultOperation in
+            saveContextOrSetError(
+                context,
+                operation: operation.isEmpty ? defaultOperation : operation
+            )
+        }
+    }
+
+    private func markIdeaWorkItemAwaitingCloudEcho(id: UUID, operation: String) {
+        guard let context = modelContext else { return }
+        WorkItemCacheStoreSupport.markAwaitingCloudEcho(
+            id: id,
+            context: context,
+            shouldSave: true
+        ) { [self] defaultOperation in
+            saveContextOrSetError(
+                context,
+                operation: operation.isEmpty ? defaultOperation : operation
+            )
+        }
+    }
+
+    private func removeIdeaWorkItem(id: UUID, shouldSave: Bool, operation: String) {
+        guard let context = modelContext else { return }
+        WorkItemCacheStoreSupport.remove(
+            id: id,
+            context: context,
+            shouldSave: shouldSave
+        ) { [self] defaultOperation in
+            saveContextOrSetError(
+                context,
+                operation: operation.isEmpty ? defaultOperation : operation
+            )
+        }
+    }
+
     /// Set model context for offline caching
     func setModelContext(_ context: ModelContext) {
         modelContext = context
@@ -204,28 +266,16 @@ final class BacklogStore: ObservableObject {
                 householdId: householdId,
                 scope: cloudScope
             )
-            async let fetchedItems = cloudKit.fetchBacklogItems(
+
+            let categoriesResult = try await fetchedCategories
+            let cloudWorkItems = try await cloudKit.fetchUnifiedWorkItems(
                 householdId: householdId,
                 scope: cloudScope
             )
 
-            let (categoriesResult, itemsResult) = try await (fetchedCategories, fetchedItems)
-            let latestCacheSnapshot = fetchCacheSnapshot(updateVisibleState: false)
-            let latestPendingSnapshot = pendingSyncSnapshot(
-                from: latestCacheSnapshot.items,
-                cachedCategories: latestCacheSnapshot.categories
-            )
-
-            categories = mergeCloudCategories(categoriesResult, with: latestPendingSnapshot)
-            items = mergeCloudSnapshot(itemsResult, with: latestPendingSnapshot)
-
-            // 3. Update cache
-            syncToCache(
-                categories: categoriesResult,
-                items: itemsResult,
-                cloudCategoryIDs: Set(categoriesResult.map(\.id)),
-                cloudItemIDs: Set(itemsResult.map(\.id))
-            )
+            syncCategoriesToCache(categoriesResult)
+            syncCloudIdeaWorkItemsToCache(cloudWorkItems)
+            _ = fetchIdeaWorkItems(updateVisibleState: true)
             replayPendingMutationsInBackground()
         } catch {
             self.error = error
@@ -233,7 +283,106 @@ final class BacklogStore: ObservableObject {
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
-        _ = fetchCacheSnapshot(updateVisibleState: force || shouldForceVisibleHydration())
+        _ = fetchIdeaWorkItems(updateVisibleState: force || shouldForceVisibleHydration())
+    }
+
+    private func fetchIdeaWorkItems(updateVisibleState: Bool) -> [CachedWorkItem] {
+        guard let context = modelContext, let householdId else {
+            if updateVisibleState {
+                categories = []
+                items = []
+                hasHydratedVisibleSnapshot = true
+                hasHydratedLocalSnapshot = true
+                needsLocalRehydrate = false
+            }
+            return []
+        }
+
+        let categoryDescriptor = FetchDescriptor<CachedBacklogCategory>(
+            predicate: #Predicate { $0.householdId == householdId },
+            sortBy: [SortDescriptor(\.sortOrder)]
+        )
+        let cachedCategories = (try? context.fetch(categoryDescriptor)) ?? []
+        let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: context
+        )
+
+        if updateVisibleState {
+            categories = cachedCategories.map { $0.toBacklogCategory() }
+            items = visibleBacklogItems(from: cachedWorkItems)
+            hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
+            needsLocalRehydrate = false
+        }
+
+        return cachedWorkItems
+    }
+
+    private func syncCategoriesToCache(_ cloudCategories: [BacklogCategory]) {
+        guard let context = modelContext, let householdId else { return }
+        let descriptor = FetchDescriptor<CachedBacklogCategory>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedCategories = (try? context.fetch(descriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedCategories.map { ($0.id, $0) })
+
+        for category in cloudCategories {
+            if let cached = cachedByID[category.id] {
+                cached.update(from: category)
+            } else {
+                context.insert(CachedBacklogCategory(from: category))
+            }
+        }
+
+        saveContextOrSetError(context, operation: "sync backlog categories to cache")
+    }
+
+    private func syncCloudIdeaWorkItemsToCache(_ cloudItems: [WorkItem]) {
+        guard let context = modelContext, let householdId else { return }
+        let descriptor = FetchDescriptor<CachedWorkItem>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedWorkItems = (try? context.fetch(descriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedWorkItems.map { ($0.id, $0) })
+
+        for item in cloudItems {
+            if let cached = cachedByID[item.id] {
+                let local = cached.toWorkItem()
+                if cached.syncStatusRaw == BacklogSyncStatus.pendingDelete {
+                    continue
+                }
+                if cached.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
+                    cached.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho,
+                    !cloudWorkItemMatchesLocalMutationEcho(item, localItem: local)
+                {
+                    continue
+                }
+                cached.update(from: item)
+                cached.syncStatusRaw = BacklogSyncStatus.synced
+                cached.lastSyncedAt = Date()
+            } else {
+                let cached = CachedWorkItem(from: item)
+                cached.syncStatusRaw = BacklogSyncStatus.synced
+                cached.lastSyncedAt = Date()
+                context.insert(cached)
+            }
+        }
+
+        saveContextOrSetError(context, operation: "sync backlog work items to cache")
+    }
+
+    private func visibleBacklogItems(from cachedWorkItems: [CachedWorkItem]) -> [BacklogItem] {
+        WorkItemCacheStoreSupport.visibleIdeas(from: cachedWorkItems)
+    }
+
+    private func cloudWorkItemMatchesLocalMutationEcho(_ cloudItem: WorkItem, localItem: WorkItem) -> Bool {
+        cloudItem.id == localItem.id &&
+            cloudItem.logicalItemID == localItem.logicalItemID &&
+            cloudItem.status == localItem.status &&
+            cloudItem.categoryId == localItem.categoryId &&
+            cloudItem.assigneeId == localItem.assigneeId &&
+            cloudItem.updatedAt >= localItem.updatedAt
     }
 
     private func fetchCacheSnapshot(updateVisibleState: Bool) -> CacheSnapshot {
@@ -304,100 +453,9 @@ final class BacklogStore: ObservableObject {
         cloudCategoryIDs: Set<UUID>,
         cloudItemIDs _: Set<UUID>
     ) {
-        guard let context = modelContext, let householdId else { return }
-
-        let categoryCacheDescriptor = FetchDescriptor<CachedBacklogCategory>(
-            predicate: #Predicate { $0.householdId == householdId }
-        )
-        let itemCacheDescriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.householdId == householdId }
-        )
-
-        let cachedCategories = (try? context.fetch(categoryCacheDescriptor)) ?? []
-        let cachedItems = (try? context.fetch(itemCacheDescriptor)) ?? []
-        let cachedCategoryByID = Dictionary(uniqueKeysWithValues: cachedCategories.map { ($0.id, $0) })
-        let cachedItemByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
-        let cachedItemByLogicalID = canonicalCachedBacklogItemsByLogicalItemID(cachedItems)
-        let tombstonedItemIDs = Set(
-            cachedItems.compactMap { cachedItem in
-                cachedItem.syncStatusRaw == BacklogSyncStatus.pendingDelete ? cachedItem.id : nil
-            }
-        )
-        let tombstonedItemLogicalIDs = Set(
-            cachedItems.compactMap { cachedItem in
-                cachedItem.syncStatusRaw == BacklogSyncStatus.pendingDelete
-                    ? resolvedLogicalItemID(for: cachedItem) : nil
-            }
-        )
-        let resolvedCloudItems = deduplicatedCloudBacklogItems(items)
-
-        // Sync Categories
-        for category in categories {
-            if let existing = cachedCategoryByID[category.id] {
-                if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload {
-                    continue
-                }
-                if existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho,
-                   !cloudCategoryIDs.contains(category.id)
-                {
-                    continue
-                }
-                existing.update(from: category)
-            } else {
-                let cached = CachedBacklogCategory(from: category)
-                context.insert(cached)
-            }
-        }
-
-        // Sync Items
-        for item in resolvedCloudItems {
-            if tombstonedItemIDs.contains(item.id) || tombstonedItemLogicalIDs.contains(item.logicalItemID) {
-                continue
-            }
-            if let existing = cachedItemByID[item.id] {
-                if existing.syncStatusRaw == BacklogSyncStatus.pendingDelete {
-                    continue
-                }
-                if existing.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
-                    existing.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho
-                {
-                    let localItem = existing.toBacklogItem()
-                    guard cloudBacklogItemMatchesLocalMutationEcho(item, localItem: localItem) else {
-                        continue
-                    }
-                }
-                existing.update(from: item)
-                existing.syncStatusRaw = BacklogSyncStatus.synced
-                existing.lastSyncedAt = Date()
-            } else if let lineageExisting = cachedItemByLogicalID[item.logicalItemID] {
-                if lineageExisting.syncStatusRaw == BacklogSyncStatus.pendingDelete {
-                    continue
-                }
-                if lineageExisting.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
-                    lineageExisting.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho
-                {
-                    let localItem = lineageExisting.toBacklogItem()
-                    guard cloudBacklogItemMatchesLocalMutationEcho(item, localItem: localItem) else {
-                        continue
-                    }
-                }
-                guard shouldReplaceBacklogLineageConflict(with: item, existing: lineageExisting.toBacklogItem()) else {
-                    continue
-                }
-                context.delete(lineageExisting)
-                let cached = CachedBacklogItem(from: item)
-                cached.syncStatusRaw = BacklogSyncStatus.synced
-                cached.lastSyncedAt = Date()
-                context.insert(cached)
-            } else {
-                let cached = CachedBacklogItem(from: item)
-                cached.syncStatusRaw = BacklogSyncStatus.synced
-                cached.lastSyncedAt = Date()
-                context.insert(cached)
-            }
-        }
-
-        saveContextOrSetError(context, operation: "persist backlog cache")
+        _ = cloudCategoryIDs
+        syncCategoriesToCache(categories)
+        syncCloudIdeaWorkItemsToCache(items.map(WorkItem.init(idea:)))
     }
 
     private func replayPendingMutationsInBackground() {
@@ -416,12 +474,12 @@ final class BacklogStore: ObservableObject {
         let categoryDescriptor = FetchDescriptor<CachedBacklogCategory>(
             predicate: #Predicate { $0.householdId == householdId }
         )
-        let itemDescriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.householdId == householdId }
-        )
 
         let cachedCategories = (try? context.fetch(categoryDescriptor)) ?? []
-        let cachedItems = (try? context.fetch(itemDescriptor)) ?? []
+        let cachedItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: context
+        )
 
         let pendingCategoryUploads = cachedCategories.filter {
             $0.syncStatusRaw == BacklogSyncStatus.pendingUpload
@@ -459,10 +517,7 @@ final class BacklogStore: ObservableObject {
 
         for cached in pendingItemUploads {
             do {
-                _ = try await cloudKit.saveBacklogItem(
-                    cached.toBacklogItem(),
-                    scope: cloudScope
-                )
+                _ = try await cloudKit.saveWorkItem(cached.toWorkItem(), scope: cloudScope)
                 cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -473,7 +528,7 @@ final class BacklogStore: ObservableObject {
 
         for cached in pendingItemDeletes {
             do {
-                try await cloudKit.deleteBacklogItem(
+                try await cloudKit.deleteWorkItem(
                     id: cached.id,
                     householdId: cached.householdId,
                     scope: cloudScope
@@ -571,15 +626,12 @@ final class BacklogStore: ObservableObject {
                 context.delete(cached)
             }
 
-            // Delete items in category
-            let categoryId = category.id
-            let itemDescriptor = FetchDescriptor<CachedBacklogItem>(
-                predicate: #Predicate { $0.categoryId == categoryId } // Note: Check if predicate supports this variable capture
+            let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+                householdId: category.householdId,
+                context: context
             )
-            if let cachedItems = try? context.fetch(itemDescriptor) {
-                for item in cachedItems {
-                    context.delete(item)
-                }
+            for cached in cachedWorkItems where cached.categoryId == category.id {
+                context.delete(cached)
             }
             saveContextOrSetError(context, operation: "persist backlog cache")
         }
@@ -796,31 +848,21 @@ final class BacklogStore: ObservableObject {
             items.insert(item, at: 0)
         }
 
-        if let context = modelContext {
-            let cached = CachedBacklogItem(from: item)
-            cached.syncStatusRaw = isCloudSyncEnabled
-                ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            context.insert(cached)
-            saveContextOrSetError(context, operation: "persist backlog cache")
-        }
+        persistIdeaWorkItem(
+            item,
+            syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            shouldSave: true,
+            operation: "persist backlog cache"
+        )
 
         guard isCloudSyncEnabled else {
             return item
         }
 
         do {
-            _ = try await cloudKit.saveBacklogItem(item, scope: cloudScope)
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedBacklogItem>(
-                    predicate: #Predicate { $0.id == item.id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "persist backlog cache")
-                }
-            }
+            _ = try await cloudKit.saveWorkItem(WorkItem(idea: item), scope: cloudScope)
+            markIdeaWorkItemAwaitingCloudEcho(id: item.id, operation: "persist backlog cache")
             return item
         } catch {
             self.error = error
@@ -849,31 +891,19 @@ final class BacklogStore: ObservableObject {
         }
 
         // Cache
-        if let context = modelContext {
-            let cached = CachedBacklogItem(from: item)
-            cached.syncStatusRaw = isCloudSyncEnabled
-                ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            context.insert(cached)
-            saveContextOrSetError(context, operation: "persist backlog cache")
-        }
+        persistIdeaWorkItem(
+            item,
+            syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            shouldSave: true,
+            operation: "persist backlog cache"
+        )
 
         if !isCloudSyncEnabled { return }
 
         do {
-            _ = try await cloudKit.saveBacklogItem(item, scope: cloudScope)
-
-            // Mark synced
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedBacklogItem>(
-                    predicate: #Predicate { $0.id == item.id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "persist backlog cache")
-                }
-            }
+            _ = try await cloudKit.saveWorkItem(WorkItem(idea: item), scope: cloudScope)
+            markIdeaWorkItemAwaitingCloudEcho(id: item.id, operation: "persist backlog cache")
         } catch {
             self.error = error
             // Do NOT remove item from the visible list on failure — the local cache already
@@ -924,21 +954,11 @@ final class BacklogStore: ObservableObject {
     @discardableResult
     private func markCachedItemPendingDelete(_ item: BacklogItem, shouldSave: Bool) -> Bool {
         guard let context = modelContext else { return false }
-
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.id == item.id }
+        markIdeaWorkItemPendingDelete(
+            item,
+            shouldSave: false,
+            operation: ""
         )
-
-        if let cached = try? context.fetch(descriptor).first {
-            // Replace the visible cache row with a tombstone so SwiftData-backed reloads
-            // cannot resurrect the promoted idea in the same session.
-            context.delete(cached)
-        }
-
-        let tombstone = CachedBacklogItem(from: item)
-        tombstone.syncStatusRaw = BacklogSyncStatus.pendingDelete
-        tombstone.lastSyncedAt = nil
-        context.insert(tombstone)
         if shouldSave {
             return saveContextOrSetError(context, operation: "insert backlog tombstone")
         }
@@ -951,14 +971,9 @@ final class BacklogStore: ObservableObject {
 
     private func removeCachedItem(id: UUID, shouldSave: Bool) {
         guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            context.delete(cached)
-            if shouldSave {
-                saveContextOrSetError(context, operation: "persist backlog cache")
-            }
+        removeIdeaWorkItem(id: id, shouldSave: false, operation: "")
+        if shouldSave {
+            saveContextOrSetError(context, operation: "persist backlog cache")
         }
     }
 
@@ -983,31 +998,18 @@ final class BacklogStore: ObservableObject {
             items[index] = updatedItem
         }
 
-        if let context = modelContext {
-            let itemId = updatedItem.id
-            let descriptor = FetchDescriptor<CachedBacklogItem>(
-                predicate: #Predicate { $0.id == itemId }
-            )
-            if let cached = try? context.fetch(descriptor).first {
-                cached.update(from: updatedItem)
-                cached.syncStatusRaw = isCloudSyncEnabled
-                    ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                saveContextOrSetError(context, operation: "persist backlog cache")
-            } else {
-                let cached = CachedBacklogItem(from: updatedItem)
-                cached.syncStatusRaw = isCloudSyncEnabled
-                    ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                context.insert(cached)
-                saveContextOrSetError(context, operation: "persist backlog cache")
-            }
-        }
+        persistIdeaWorkItem(
+            updatedItem,
+            syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            shouldSave: true,
+            operation: "persist backlog cache"
+        )
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveBacklogItem(updatedItem, scope: cloudScope)
-            markCachedItemAwaitingCloudEcho(id: updatedItem.id)
+            _ = try await cloudKit.saveWorkItem(WorkItem(idea: updatedItem), scope: cloudScope)
+            markIdeaWorkItemAwaitingCloudEcho(id: updatedItem.id, operation: "persist backlog cache")
         } catch {
             self.error = error
             // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
@@ -1029,72 +1031,63 @@ final class BacklogStore: ObservableObject {
             return .assigneeRequired
         }
 
-        let existingTask = existingDestinationTask(for: item.logicalItemID)
-        let previousDestinationSnapshot = existingTask.flatMap { cachedTaskSnapshot(for: $0.id) }
-        let destinationTask = promotedTaskDestination(
-            from: item,
-            assigneeId: resolvedAssigneeId,
-            preferredStatus: preferredStatus,
-            existing: existingTask
-        )
-
-        guard existingTask != nil || !pendingMutationIDs.contains(item.id) else {
+        guard !pendingMutationIDs.contains(item.id) else {
             return .failed("This idea is already being promoted.")
         }
 
         beginMutation(item.id)
         defer { endMutation(item.id) }
 
+        var promotedItem = WorkItem(idea: item)
+        promotedItem.status = WorkItem.Status(taskStatus: preferredStatus)
+        promotedItem.assigneeId = resolvedAssigneeId
+        promotedItem.assigneeIds = resolvedAssigneeId.map { [$0] } ?? []
+        promotedItem.order = preferredStatus == .next ? nextTaskOrderBaselineFromCache() + 1 : 0
+        promotedItem.updatedAt = Date()
+        if preferredStatus == .done {
+            promotedItem.completedAt = Date()
+        } else {
+            promotedItem.completedAt = nil
+            promotedItem.completedById = nil
+        }
+
         withAnimation {
             items.removeAll { $0.id == item.id }
         }
 
-        upsertCachedTask(
-            destinationTask,
+        WorkItemCacheStoreSupport.upsert(
+            promotedItem,
             syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
             lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            context: modelContext,
             shouldSave: false
-        )
-
-        if isCloudSyncEnabled {
-            guard markCachedItemPendingDelete(item, shouldSave: false) else {
-                withAnimation {
-                    items.insert(item, at: 0)
-                }
-                if let previousDestinationSnapshot {
-                    restoreCachedTask(previousDestinationSnapshot, shouldSave: false)
-                } else {
-                    removeCachedTask(id: destinationTask.id, shouldSave: false)
-                }
-                _ = saveContextOrSetError(modelContext, operation: "rollback idea promotion")
-                return .failed("Couldn't remove item from Ideas.")
-            }
-        } else {
-            removeCachedItem(id: item.id, shouldSave: false)
+        ) { [self] _ in
+            saveContextOrSetError(modelContext, operation: "persist promoted idea work item")
         }
 
         guard saveContextOrSetError(modelContext, operation: "promote idea to task locally") else {
             withAnimation {
                 items.insert(item, at: 0)
             }
-            if let previousDestinationSnapshot {
-                restoreCachedTask(previousDestinationSnapshot, shouldSave: false)
-            } else {
-                removeCachedTask(id: destinationTask.id, shouldSave: false)
-            }
+            persistIdeaWorkItem(
+                item,
+                syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
+                lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+                shouldSave: false,
+                operation: "rollback promoted idea work item"
+            )
             _ = saveContextOrSetError(modelContext, operation: "rollback idea promotion")
             return .failed("Couldn't save the task locally.")
         }
 
-        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
-        NotificationCenter.default.post(name: .backlogDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
+        NotificationCenter.default.post(name: .backlogDataDidChange, object: "local")
 
         if isCloudSyncEnabled {
-            syncPromotedTaskDestinationInBackground(destinationTask)
             replayPendingMutationsInBackground()
         }
 
-        return .success(createdTaskId: destinationTask.id)
+        return .success(createdTaskId: promotedItem.id)
     }
 
     private func beginMutation(_ id: UUID) {
@@ -1233,14 +1226,17 @@ final class BacklogStore: ObservableObject {
 
     private func activeOrCompletedTaskCount(for categoryId: UUID) -> Int {
         guard let context = modelContext, let householdId else { return 0 }
-
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate {
-                $0.householdId == householdId && $0.backlogCategoryId == categoryId
-            }
+        let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: context
         )
-        let cachedTasks = (try? context.fetch(descriptor)) ?? []
-        return cachedTasks.filter { $0.syncStatusRaw != SyncStatus.pendingDelete.rawValue }.count
+
+        return cachedWorkItems.filter { cached in
+            let workItem = cached.toWorkItem()
+            guard workItem.status != .idea else { return false }
+            guard workItem.categoryId == categoryId else { return false }
+            return cached.syncStatusRaw != BacklogSyncStatus.pendingDelete
+        }.count
     }
 
     func resolveDestinationCategoryIdForTaskMove(
@@ -1271,101 +1267,16 @@ final class BacklogStore: ObservableObject {
         return (try? context.fetch(descriptor))?.first?.id
     }
 
-    private func upsertCachedTask(
-        _ task: Task,
-        syncStatusRaw: String,
-        lastSyncedAt: Date?,
-        shouldSave: Bool
-    ) {
-        guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == task.id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            cached.update(from: task)
-            cached.syncStatusRaw = syncStatusRaw
-            cached.lastSyncedAt = lastSyncedAt
-        } else {
-            let cached = CachedTask(from: task)
-            cached.syncStatusRaw = syncStatusRaw
-            cached.lastSyncedAt = lastSyncedAt
-            context.insert(cached)
-        }
-
-        if shouldSave {
-            saveContextOrSetError(context, operation: "persist promoted task cache")
-        }
-    }
-
-    private func cachedTaskSnapshot(for id: UUID) -> CachedTaskSnapshot? {
-        guard let context = modelContext else { return nil }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == id }
-        )
-        guard let cached = try? context.fetch(descriptor).first else { return nil }
-        return CachedTaskSnapshot(
-            task: cached.toTask(),
-            syncStatusRaw: cached.syncStatusRaw,
-            lastSyncedAt: cached.lastSyncedAt
-        )
-    }
-
-    private func restoreCachedTask(_ snapshot: CachedTaskSnapshot, shouldSave: Bool) {
-        upsertCachedTask(
-            snapshot.task,
-            syncStatusRaw: snapshot.syncStatusRaw,
-            lastSyncedAt: snapshot.lastSyncedAt,
-            shouldSave: shouldSave
-        )
-    }
-
-    private func removeCachedTask(id: UUID, shouldSave: Bool) {
-        guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            context.delete(cached)
-        }
-
-        if shouldSave {
-            saveContextOrSetError(context, operation: "remove promoted task cache")
-        }
-    }
-
-    private func markCachedTaskAwaitingCloudEcho(id: UUID) {
-        guard let context = modelContext else { return }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            cached.syncStatusRaw = "awaitingCloudEcho"
-            cached.lastSyncedAt = Date()
-            saveContextOrSetError(context, operation: "mark promoted task awaiting cloud echo")
-        }
-    }
-
-    private func syncPromotedTaskDestinationInBackground(_ task: Task) {
-        _ = _Concurrency.Task { [self] in
-            do {
-                _ = try await cloudKit.saveTask(task, scope: cloudScope)
-                markCachedTaskAwaitingCloudEcho(id: task.id)
-            } catch {
-                self.error = error
-            }
-        }
-    }
-
     private func nextTaskOrderBaselineFromCache() -> Int {
         guard let context = modelContext, let householdId else { return -1 }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.householdId == householdId }
+        let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: context
         )
-        let cachedTasks = (try? context.fetch(descriptor)) ?? []
-        return cachedTasks
+        return cachedWorkItems
             .filter {
-                $0.statusRaw == Task.TaskStatus.next.rawValue &&
-                    $0.syncStatusRaw != SyncStatus.pendingDelete.rawValue
+                $0.statusRaw == WorkItem.Status.next.rawValue &&
+                    $0.syncStatusRaw != BacklogSyncStatus.pendingDelete
             }
             .map(\.order)
             .max() ?? -1
@@ -1497,15 +1408,16 @@ final class BacklogStore: ObservableObject {
 
     private func existingDestinationTask(for logicalItemID: UUID) -> Task? {
         guard let context = modelContext, let householdId else { return nil }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.householdId == householdId }
+        let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: context
         )
-        let cachedTasks = (try? context.fetch(descriptor)) ?? []
 
-        return cachedTasks
+        return cachedWorkItems
             .filter {
-                ($0.logicalItemID ?? $0.id) == logicalItemID &&
-                    $0.syncStatusRaw != SyncStatus.pendingDelete.rawValue
+                $0.logicalItemID == logicalItemID &&
+                    $0.syncStatusRaw != BacklogSyncStatus.pendingDelete &&
+                    $0.toWorkItem().status != .idea
             }
             .max { lhs, rhs in
                 if lhs.updatedAt != rhs.updatedAt {
@@ -1513,7 +1425,8 @@ final class BacklogStore: ObservableObject {
                 }
                 return lhs.id.uuidString > rhs.id.uuidString
             }?
-            .toTask()
+            .toWorkItem()
+            .asTask()
     }
 
     private func promotedTaskDestination(

@@ -213,18 +213,28 @@ private struct BacklogContent: View {
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { notification in
             store.markLocalSnapshotStale()
-            _ = _Concurrency.Task {
-                await loadBacklogData()
+            if selectedNotificationIsLocal(notification) {
+                store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else {
+                _ = _Concurrency.Task {
+                    await loadBacklogData()
+                    markIdeasTutorialAsSeenIfNeeded()
+                }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { notification in
             store.markLocalSnapshotStale()
-            _ = _Concurrency.Task {
-                await loadBacklogData()
+            if selectedNotificationIsLocal(notification) {
+                store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else {
+                _ = _Concurrency.Task {
+                    await loadBacklogData()
+                    markIdeasTutorialAsSeenIfNeeded()
+                }
             }
         }
         .sheet(isPresented: $isAddingCategory) {
@@ -680,6 +690,10 @@ private struct BacklogContent: View {
                 }
             }
         }
+    }
+
+    private func selectedNotificationIsLocal(_ notification: Notification) -> Bool {
+        (notification.object as? String) == "local"
     }
 
     private func activateComposer(for categoryId: UUID, scrollProxy: ScrollViewProxy) {

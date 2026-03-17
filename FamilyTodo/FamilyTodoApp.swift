@@ -21,6 +21,7 @@ struct FamilyTodoApp: App {
     private let sharedModelContainer: ModelContainer?
 
     private static let appSchema = Schema([
+        CachedWorkItem.self,
         CachedTask.self,
         CachedMember.self,
         CachedShoppingItem.self,
@@ -144,6 +145,9 @@ struct FamilyTodoApp: App {
                             .task {
                                 appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
                                 appDelegate.flushPendingInviteIfNeeded()
+                                WorkItemCacheMigrator.migrateIfNeeded(
+                                    context: sharedModelContainer.mainContext
+                                )
                                 householdStore.setModelContext(sharedModelContainer.mainContext)
                                 householdStore.setSyncMode(userSession.syncMode)
 
@@ -560,6 +564,7 @@ enum LocalAppReset {
         do {
             try context.delete(model: CachedShoppingItem.self)
             try context.delete(model: CachedShoppingBundle.self)
+            try context.delete(model: CachedWorkItem.self)
             try context.delete(model: CachedTask.self)
             try context.delete(model: CachedBacklogItem.self)
             try context.delete(model: CachedBacklogCategory.self)
@@ -819,6 +824,7 @@ struct UITestHelper {
             Task(householdId: householdId, title: "Call mom", status: .next, taskType: .oneOff),
             Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff),
         ]
+        tasks.map(WorkItem.init(task:)).forEach { context.insert(CachedWorkItem(from: $0)) }
         tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
 
@@ -836,6 +842,7 @@ struct UITestHelper {
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Olive Oil"),
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
+        items.map(WorkItem.init(idea:)).forEach { context.insert(CachedWorkItem(from: $0)) }
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
     }
 
@@ -858,6 +865,7 @@ struct UITestHelper {
             title: "Paint guest room",
             assigneeId: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")
         )
+        context.insert(CachedWorkItem(from: WorkItem(idea: assignedIdea)))
         context.insert(CachedBacklogItem(from: assignedIdea))
     }
 
@@ -891,6 +899,7 @@ struct UITestHelper {
             householdId: householdId,
             title: "Replace hallway lamp"
         )
+        context.insert(CachedWorkItem(from: WorkItem(idea: idea)))
         context.insert(CachedBacklogItem(from: idea))
     }
 
@@ -907,6 +916,7 @@ struct UITestHelper {
         for i in 1 ... 50 {
             let status: Task.TaskStatus = (i % 3 == 0) ? .done : .next
             let task = Task(householdId: householdId, title: "Task \(i)", status: status, taskType: .oneOff)
+            context.insert(CachedWorkItem(from: WorkItem(task: task)))
             context.insert(CachedTask(from: task))
         }
     }

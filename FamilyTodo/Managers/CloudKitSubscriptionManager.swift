@@ -160,20 +160,24 @@ final class CloudKitSubscriptionManager: ObservableObject {
         return false
     }
 
-    private func triggerRefreshForAllDomains() {
-        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
-        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
-        NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
+    private func triggerRefreshForAllDomains(source: String) {
+        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+        NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+        NotificationCenter.default.post(name: .householdDataDidChange, object: source)
     }
 
-    private func triggerRefresh(for recordType: String?) {
+    private func triggerRefresh(for recordType: String?, source: String) {
         switch recordType {
         case "ShoppingItem", "ShoppingBundle":
-            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
+        case "WorkItem":
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
         case "Task", "BacklogItem", "BacklogCategory":
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
         case "Household", "Member":
-            NotificationCenter.default.post(name: .householdDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .householdDataDidChange, object: source)
         default:
             return
         }
@@ -181,7 +185,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     private func handleDatabaseNotification(_: CKDatabaseNotification) {
         guard !isLikelySelfNoise(recordName: nil) else { return }
-        triggerRefreshForAllDomains()
+        triggerRefreshForAllDomains(source: "remote")
 
         pendingShoppingChanges.append("Shared Update")
         scheduleAggregatedNotification()
@@ -193,7 +197,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let recordName = notification.recordID?.recordName
         guard !isLikelySelfNoise(recordName: recordName) else { return }
-        triggerRefresh(for: recordType)
+        triggerRefresh(for: recordType, source: "remote")
 
         guard let recordType, !recordType.isEmpty, recordType != "Unknown" else {
             return
@@ -206,7 +210,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         // Add to pending notifications for aggregation
         if recordType == "ShoppingItem" || recordType == "ShoppingBundle" {
             pendingShoppingChanges.append(recordType)
-        } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" {
+        } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" || recordType == "WorkItem" {
             pendingTaskChanges.append(recordType)
         } else {
             pendingTaskChanges.append(recordType)

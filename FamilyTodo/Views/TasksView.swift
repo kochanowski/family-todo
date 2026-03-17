@@ -241,9 +241,12 @@ private struct TasksContent: View {
                 markTasksTutorialAsSeenIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { notification in
             store.markLocalSnapshotStale()
-            if selectedTab == .tasks {
+            if isLocalStoreNotification(notification) {
+                store.rehydrateVisibleSnapshotFromCache()
+                markTasksTutorialAsSeenIfNeeded()
+            } else if selectedTab == .tasks {
                 _ = _Concurrency.Task {
                     await refreshData()
                     markTasksTutorialAsSeenIfNeeded()
@@ -1128,6 +1131,10 @@ private struct TasksContent: View {
                 visibleTaskIDs: visibleIds
             )
         }
+    }
+
+    private func isLocalStoreNotification(_ notification: Notification) -> Bool {
+        (notification.object as? String) == "local"
     }
 
     private func queueDeleteTask(_ task: Task) {

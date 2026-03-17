@@ -100,6 +100,7 @@ enum SwiftDataContainerFactory {
     }
 
     private static let runtimeModelProbes: [ModelSchemaProbe] = [
+        .init(name: "CachedWorkItem", makeSchema: { Schema([CachedWorkItem.self]) }),
         .init(name: "CachedTask", makeSchema: { Schema([CachedTask.self]) }),
         .init(name: "CachedMember", makeSchema: { Schema([CachedMember.self]) }),
         .init(name: "CachedShoppingItem", makeSchema: { Schema([CachedShoppingItem.self]) }),

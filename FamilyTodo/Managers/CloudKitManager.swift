@@ -2447,6 +2447,134 @@ actor CloudKitManager {
         try await fetchNextTasks(assigneeId: assigneeId, scope: explicitScope).count
     }
 
+    // MARK: - WorkItem
+
+    func saveWorkItem(
+        _ item: WorkItem,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
+        let record = workItemRecord(from: item)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: item.householdId,
+            scope: scope
+        )
+    }
+
+    func fetchWorkItem(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> WorkItem {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
+        return try workItem(from: record)
+    }
+
+    func deleteWorkItem(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
+    }
+
+    func deleteWorkItem(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
+    }
+
+    func fetchWorkItems(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [WorkItem] {
+        let scope = resolvedScope(explicitScope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "WorkItem",
+                predicate: self.referenceMatchPredicate(
+                    field: "householdId",
+                    id: householdId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+            return query
+        }
+        return try records.map(workItem(from:))
+    }
+
+    func fetchUnifiedWorkItems(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [WorkItem] {
+        async let fetchedWorkItems = fetchWorkItems(householdId: householdId, scope: explicitScope)
+        async let fetchedTasks = fetchTasks(householdId: householdId, scope: explicitScope)
+        async let fetchedIdeas = fetchBacklogItems(householdId: householdId, scope: explicitScope)
+
+        let (workItems, tasks, ideas) = try await (fetchedWorkItems, fetchedTasks, fetchedIdeas)
+        return mergeUnifiedWorkItems(workItems: workItems, tasks: tasks, ideas: ideas)
+    }
+
+    private func mergeUnifiedWorkItems(
+        workItems: [WorkItem],
+        tasks: [Task],
+        ideas: [BacklogItem]
+    ) -> [WorkItem] {
+        var mergedByLogicalID = Dictionary(uniqueKeysWithValues: workItems.map { ($0.logicalItemID, $0) })
+
+        for task in tasks {
+            let candidate = WorkItem(task: task)
+            guard mergedByLogicalID[candidate.logicalItemID] == nil else { continue }
+            mergedByLogicalID[candidate.logicalItemID] = candidate
+        }
+
+        for idea in ideas {
+            let candidate = WorkItem(idea: idea)
+            if let existing = mergedByLogicalID[candidate.logicalItemID] {
+                guard shouldReplaceUnifiedWorkItem(existing: existing, with: candidate) else {
+                    continue
+                }
+            }
+            mergedByLogicalID[candidate.logicalItemID] = candidate
+        }
+
+        return mergedByLogicalID.values.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
+    private func shouldReplaceUnifiedWorkItem(existing: WorkItem, with candidate: WorkItem) -> Bool {
+        let existingPriority = unifiedWorkItemStatusPriority(existing.status)
+        let candidatePriority = unifiedWorkItemStatusPriority(candidate.status)
+
+        if candidatePriority != existingPriority {
+            return candidatePriority > existingPriority
+        }
+
+        return candidate.updatedAt > existing.updatedAt
+    }
+
+    private func unifiedWorkItemStatusPriority(_ status: WorkItem.Status) -> Int {
+        switch status {
+        case .done:
+            4
+        case .next:
+            3
+        case .backlog:
+            2
+        case .idea:
+            1
+        }
+    }
+
     // MARK: - Recurring Chore
 
     func saveRecurringChore(_ chore: RecurringChore) async throws -> CKRecord {

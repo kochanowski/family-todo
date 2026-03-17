@@ -296,6 +296,18 @@ enum NotificationSchedulePlanner {
             householdId: UUID,
             modelContext: ModelContext
         ) -> [Task] {
+            let workItemDescriptor = FetchDescriptor<CachedWorkItem>(
+                predicate: #Predicate { $0.householdId == householdId }
+            )
+
+            if let cachedWorkItems = try? modelContext.fetch(workItemDescriptor),
+               !cachedWorkItems.isEmpty
+            {
+                return cachedWorkItems
+                    .filter { $0.syncStatusRaw != SyncStatus.pendingDelete.rawValue }
+                    .compactMap { $0.toWorkItem().asTask() }
+            }
+
             let descriptor = FetchDescriptor<CachedTask>(
                 predicate: #Predicate { $0.householdId == householdId }
             )

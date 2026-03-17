@@ -69,12 +69,6 @@ final class TaskStore: ObservableObject {
         static let awaitingCloudEcho = "awaitingCloudEcho"
     }
 
-    private struct CachedBacklogItemSnapshot {
-        var item: BacklogItem
-        var syncStatusRaw: String
-        var lastSyncedAt: Date?
-    }
-
     @Published private(set) var tasks: [Task] = []
     @Published private(set) var hasHydratedLocalSnapshot = false
     @Published private(set) var isLoading = false
@@ -163,6 +157,62 @@ final class TaskStore: ObservableObject {
             line: line
         ) { [self] saveError in
             error = saveError
+        }
+    }
+
+    private func persistTaskWorkItem(
+        _ task: Task,
+        syncStatusRaw: String,
+        lastSyncedAt: Date?,
+        shouldSave: Bool,
+        operation: String
+    ) {
+        WorkItemCacheStoreSupport.upsert(
+            WorkItem(task: task),
+            syncStatusRaw: syncStatusRaw,
+            lastSyncedAt: lastSyncedAt,
+            context: modelContext,
+            shouldSave: shouldSave
+        ) { [self] defaultOperation in
+            saveContextOrSetError(operation: operation.isEmpty ? defaultOperation : operation)
+        }
+    }
+
+    private func markTaskWorkItemPendingDelete(
+        _ task: Task,
+        shouldSave: Bool,
+        operation: String
+    ) {
+        WorkItemCacheStoreSupport.markPendingDelete(
+            WorkItem(task: task),
+            context: modelContext,
+            shouldSave: shouldSave
+        ) { [self] defaultOperation in
+            saveContextOrSetError(operation: operation.isEmpty ? defaultOperation : operation)
+        }
+    }
+
+    private func removeTaskWorkItem(
+        id: UUID,
+        shouldSave: Bool,
+        operation: String
+    ) {
+        WorkItemCacheStoreSupport.remove(
+            id: id,
+            context: modelContext,
+            shouldSave: shouldSave
+        ) { [self] defaultOperation in
+            saveContextOrSetError(operation: operation.isEmpty ? defaultOperation : operation)
+        }
+    }
+
+    private func markTaskWorkItemAwaitingCloudEcho(id: UUID, operation: String) {
+        WorkItemCacheStoreSupport.markAwaitingCloudEcho(
+            id: id,
+            context: modelContext,
+            shouldSave: true
+        ) { [self] defaultOperation in
+            saveContextOrSetError(operation: operation.isEmpty ? defaultOperation : operation)
         }
     }
 
@@ -345,14 +395,13 @@ final class TaskStore: ObservableObject {
         do {
             // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
-            let cloudTasks = try await cloudKit.fetchTasks(
+            let cloudWorkItems = try await cloudKit.fetchUnifiedWorkItems(
                 householdId: householdId,
                 scope: cloudScope
             )
-            let latestCachedTasks = fetchCachedTasks(updateVisibleState: false)
-            let latestPendingSnapshot = pendingSyncSnapshot(from: latestCachedTasks)
-            tasks = mergeCloudSnapshot(cloudTasks, with: latestPendingSnapshot)
-            syncToCache(cloudTasks, cloudTaskIDs: Set(cloudTasks.map(\.id)))
+
+            syncCloudWorkItemsToCache(cloudWorkItems)
+            _ = fetchCachedTaskWorkItems(updateVisibleState: true)
             replayPendingMutationsInBackground()
         } catch {
             // If CloudKit fails, we already have cached data
@@ -366,10 +415,10 @@ final class TaskStore: ObservableObject {
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
-        _ = fetchCachedTasks(updateVisibleState: force || shouldForceVisibleHydration())
+        _ = fetchCachedTaskWorkItems(updateVisibleState: force || shouldForceVisibleHydration())
     }
 
-    private func fetchCachedTasks(updateVisibleState: Bool) -> [CachedTask] {
+    private func fetchCachedTaskWorkItems(updateVisibleState: Bool) -> [CachedWorkItem] {
         guard let householdId else {
             if updateVisibleState {
                 tasks = []
@@ -380,12 +429,12 @@ final class TaskStore: ObservableObject {
             return []
         }
 
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.householdId == householdId }
+        let cached = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: modelContext
         )
-        let cached = (try? modelContext.fetch(descriptor)) ?? []
         if updateVisibleState {
-            tasks = deduplicatedVisibleTasks(from: cached)
+            tasks = visibleTasks(from: cached)
             hasHydratedVisibleSnapshot = true
             hasHydratedLocalSnapshot = true
             needsLocalRehydrate = false
@@ -406,76 +455,62 @@ final class TaskStore: ObservableObject {
         replayPendingMutationsInBackground()
     }
 
-    func syncToCache(_ cloudTasks: [Task], cloudTaskIDs _: Set<UUID>) {
+    private func syncCloudWorkItemsToCache(_ cloudItems: [WorkItem]) {
         guard let householdId else { return }
 
-        let cacheDescriptor = FetchDescriptor<CachedTask>(
+        let descriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.householdId == householdId }
         )
-        let cachedTasks = (try? modelContext.fetch(cacheDescriptor)) ?? []
-        let cachedByID = Dictionary(uniqueKeysWithValues: cachedTasks.map { ($0.id, $0) })
-        let cachedByLogicalID = canonicalCachedTasksByLogicalItemID(cachedTasks)
-        let tombstonedTaskIDs = Set(
-            cachedTasks.compactMap { cachedTask in
-                cachedTask.syncStatusRaw == TaskSyncStatus.pendingDelete ? cachedTask.id : nil
-            }
-        )
-        let tombstonedTaskLogicalIDs = Set(
-            cachedTasks.compactMap { cachedTask in
-                cachedTask.syncStatusRaw == TaskSyncStatus.pendingDelete
-                    ? resolvedLogicalItemID(for: cachedTask) : nil
-            }
-        )
-        let resolvedCloudTasks = deduplicatedCloudTasks(cloudTasks)
+        let cachedWorkItems = (try? modelContext.fetch(descriptor)) ?? []
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedWorkItems.map { ($0.id, $0) })
 
-        // Update local cache with cloud data
-        for task in resolvedCloudTasks {
-            if tombstonedTaskIDs.contains(task.id) || tombstonedTaskLogicalIDs.contains(task.logicalItemID) {
-                continue
-            }
-            if let existing = cachedByID[task.id] {
-                if existing.syncStatusRaw == TaskSyncStatus.pendingDelete {
+        for item in cloudItems {
+            if let cached = cachedByID[item.id] {
+                let local = cached.toWorkItem()
+                if cached.syncStatusRaw == TaskSyncStatus.pendingDelete {
                     continue
                 }
-                if existing.syncStatusRaw == TaskSyncStatus.pendingUpload ||
-                    existing.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho
+                if cached.syncStatusRaw == TaskSyncStatus.pendingUpload ||
+                    cached.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho,
+                    !cloudWorkItemMatchesLocalMutationEcho(item, localItem: local)
                 {
-                    let localTask = existing.toTask()
-                    guard cloudTaskMatchesLocalMutationEcho(task, localTask: localTask) else {
-                        continue
-                    }
-                }
-                existing.update(from: task)
-                existing.syncStatusRaw = TaskSyncStatus.synced
-                existing.lastSyncedAt = Date()
-            } else if let lineageExisting = cachedByLogicalID[task.logicalItemID] {
-                if lineageExisting.syncStatusRaw == TaskSyncStatus.pendingDelete {
                     continue
                 }
-                if lineageExisting.syncStatusRaw == TaskSyncStatus.pendingUpload ||
-                    lineageExisting.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho
-                {
-                    let localTask = lineageExisting.toTask()
-                    guard cloudTaskMatchesLocalMutationEcho(task, localTask: localTask) else {
-                        continue
-                    }
-                }
-                guard shouldReplaceTaskLineageConflict(with: task, existing: lineageExisting.toTask()) else {
-                    continue
-                }
-                modelContext.delete(lineageExisting)
-                let cached = CachedTask(from: task)
+                cached.update(from: item)
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
-                modelContext.insert(cached)
             } else {
-                let cached = CachedTask(from: task)
+                let cached = CachedWorkItem(from: item)
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
                 modelContext.insert(cached)
             }
         }
-        saveContextOrSetError(operation: "sync tasks cache from cloud")
+
+        saveContextOrSetError(operation: "sync task work items to cache")
+    }
+
+    private func visibleTasks(from cachedWorkItems: [CachedWorkItem]) -> [Task] {
+        WorkItemCacheStoreSupport.visibleTasks(from: cachedWorkItems)
+    }
+
+    private func cloudWorkItemMatchesLocalMutationEcho(_ cloudItem: WorkItem, localItem: WorkItem) -> Bool {
+        cloudItem.id == localItem.id &&
+            cloudItem.logicalItemID == localItem.logicalItemID &&
+            cloudItem.status == localItem.status &&
+            cloudItem.assigneeId == localItem.assigneeId &&
+            cloudItem.categoryId == localItem.categoryId &&
+            cloudItem.updatedAt >= localItem.updatedAt
+    }
+
+    private static func workItemTaskSort(_ lhs: WorkItem, _ rhs: WorkItem) -> Bool {
+        let lhsTask = lhs.toTask()
+        let rhsTask = rhs.toTask()
+        return activeTaskSort(lhsTask, rhsTask)
+    }
+
+    func syncToCache(_ cloudTasks: [Task], cloudTaskIDs _: Set<UUID>) {
+        syncCloudWorkItemsToCache(cloudTasks.map(WorkItem.init(task:)))
     }
 
     private func replayPendingMutationsInBackground() {
@@ -510,7 +545,7 @@ final class TaskStore: ObservableObject {
 
         for cached in pendingUploads where !pendingTaskMutations.contains(cached.id) {
             do {
-                _ = try await cloudKit.saveTask(cached.toTask(), scope: cloudScope)
+                _ = try await cloudKit.saveWorkItem(cached.toWorkItem(), scope: cloudScope)
                 cached.syncStatusRaw = TaskSyncStatus.awaitingCloudEcho
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -521,7 +556,7 @@ final class TaskStore: ObservableObject {
 
         for cached in pendingDeletes where !pendingTaskMutations.contains(cached.id) {
             do {
-                try await cloudKit.deleteTask(
+                try await cloudKit.deleteWorkItem(
                     id: cached.id,
                     householdId: cached.householdId,
                     scope: cloudScope
@@ -574,21 +609,13 @@ final class TaskStore: ObservableObject {
         updatedTask.updatedAt = now
         tasks[index] = updatedTask
 
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == updatedTask.id }
+        persistTaskWorkItem(
+            updatedTask,
+            syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
+            lastSyncedAt: isCloudSyncEnabled ? nil : now,
+            shouldSave: true,
+            operation: "cache poked task"
         )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            cached.update(from: updatedTask)
-            cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : now
-            saveContextOrSetError(operation: "cache poked task")
-        } else {
-            let cached = CachedTask(from: updatedTask)
-            cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : now
-            modelContext.insert(cached)
-            saveContextOrSetError(operation: "cache inserted poked task")
-        }
 
         guard isCloudSyncEnabled else { return true }
 
@@ -661,12 +688,13 @@ final class TaskStore: ObservableObject {
             tasks.append(task)
         }
 
-        // Save to cache
-        let cached = CachedTask(from: task)
-        cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-        cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-        modelContext.insert(cached)
-        saveContextOrSetError(operation: "cache created task")
+        persistTaskWorkItem(
+            task,
+            syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            shouldSave: true,
+            operation: "persist created task work item"
+        )
 
         // Fire-and-forget: notification scheduling must not block the caller.
         // Promotion flow (promoteItemToTask) awaits createTask before removing the
@@ -708,21 +736,13 @@ final class TaskStore: ObservableObject {
         }
 
         // Update cache
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == task.id }
+        persistTaskWorkItem(
+            updatedTask,
+            syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
+            lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            shouldSave: true,
+            operation: "persist updated task work item"
         )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            cached.update(from: updatedTask)
-            cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            saveContextOrSetError(operation: "cache updated task")
-        } else {
-            let cached = CachedTask(from: updatedTask)
-            cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-            cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            modelContext.insert(cached)
-            saveContextOrSetError(operation: "cache inserted updated task")
-        }
 
         await syncReminder(for: updatedTask)
         await syncDailyDigestSchedule()
@@ -760,62 +780,53 @@ final class TaskStore: ObservableObject {
 
     @discardableResult
     func moveTaskToIdeas(_ task: Task, destinationCategoryId: UUID) async -> Bool {
-        guard let householdId else { return false }
-        let existingDestination = existingDestinationBacklogItem(for: task.logicalItemID)
-        let previousDestinationSnapshot = existingDestination.flatMap {
-            cachedBacklogItemSnapshot(for: $0.id)
-        }
-        let backlogItem = demotedBacklogDestination(
-            from: task,
-            destinationCategoryId: destinationCategoryId,
-            householdId: householdId,
-            existing: existingDestination
-        )
-        let shouldSyncDestinationInBackground = true
-
-        guard existingDestination != nil || !pendingTaskMutations.contains(task.id) else { return false }
+        guard !pendingTaskMutations.contains(task.id) else { return false }
 
         beginMutation(task.id)
         defer { endMutation(task.id) }
+
+        var demotedItem = WorkItem(task: task)
+        demotedItem.status = .idea
+        demotedItem.categoryId = destinationCategoryId
+        demotedItem.completedAt = nil
+        demotedItem.completedById = nil
+        demotedItem.order = 0
+        demotedItem.updatedAt = Date()
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             tasks.removeAll { $0.id == task.id }
         }
 
-        upsertCachedBacklogItem(
-            backlogItem,
+        WorkItemCacheStoreSupport.upsert(
+            demotedItem,
             syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
             lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+            context: modelContext,
             shouldSave: false
-        )
-
-        if isCloudSyncEnabled {
-            markCachedTaskPendingDelete(task, shouldSave: false)
-        } else {
-            removeCachedTask(id: task.id, shouldSave: false)
+        ) { [self] _ in
+            saveContextOrSetError(operation: "persist demoted task work item")
         }
 
         guard saveContextOrSetError(operation: "move task to ideas locally") else {
             restoreTaskLocally(task)
-            if let previousDestinationSnapshot {
-                restoreCachedBacklogItem(previousDestinationSnapshot, shouldSave: false)
-            } else {
-                removeCachedBacklogItem(id: backlogItem.id, shouldSave: false)
-            }
+            persistTaskWorkItem(
+                task,
+                syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
+                lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+                shouldSave: false,
+                operation: "rollback demoted task work item"
+            )
             _ = saveContextOrSetError(operation: "rollback move task to ideas")
             return false
         }
 
-        NotificationCenter.default.post(name: .backlogDataDidChange, object: nil)
-        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+        NotificationCenter.default.post(name: .backlogDataDidChange, object: "local")
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
 
         await notificationService.removeTaskReminder(for: task)
         await syncDailyDigestSchedule()
 
         if isCloudSyncEnabled {
-            if shouldSyncDestinationInBackground {
-                syncDemotedTaskDestinationInBackground(backlogItem)
-            }
             replayPendingMutationsInBackground()
         }
 
@@ -866,27 +877,20 @@ final class TaskStore: ObservableObject {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             tasks.append(task)
         }
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == task.id }
+        persistTaskWorkItem(
+            task,
+            syncStatusRaw: TaskSyncStatus.pendingUpload,
+            lastSyncedAt: nil,
+            shouldSave: true,
+            operation: "restore task locally"
         )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            cached.update(from: task)
-            cached.syncStatusRaw = TaskSyncStatus.pendingUpload
-            cached.lastSyncedAt = nil
-        } else {
-            let cached = CachedTask(from: task)
-            cached.syncStatusRaw = TaskSyncStatus.pendingUpload
-            cached.lastSyncedAt = nil
-            modelContext.insert(cached)
-        }
-        saveContextOrSetError(operation: "restore task locally")
         _ = _Concurrency.Task {
             await self.syncDailyDigestSchedule()
         }
     }
 
     func deleteTaskRemote(id: UUID, householdId: UUID) async throws {
-        try await cloudKit.deleteTask(id: id, householdId: householdId, scope: cloudScope)
+        try await cloudKit.deleteWorkItem(id: id, householdId: householdId, scope: cloudScope)
         removeCachedTask(id: id)
     }
 
@@ -935,19 +939,13 @@ final class TaskStore: ObservableObject {
         }
 
         for updatedTask in updatedByID.values {
-            let descriptor = FetchDescriptor<CachedTask>(
-                predicate: #Predicate { $0.id == updatedTask.id }
+            persistTaskWorkItem(
+                updatedTask,
+                syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
+                lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+                shouldSave: false,
+                operation: ""
             )
-            if let cached = try? modelContext.fetch(descriptor).first {
-                cached.update(from: updatedTask)
-                cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-            } else {
-                let cached = CachedTask(from: updatedTask)
-                cached.syncStatusRaw = isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced
-                cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                modelContext.insert(cached)
-            }
         }
         saveContextOrSetError(operation: "persist reordered tasks")
 
@@ -1025,19 +1023,12 @@ final class TaskStore: ObservableObject {
 
     private func markCachedTasksPendingDelete(_ tasksToDelete: [Task]) {
         guard !tasksToDelete.isEmpty else { return }
-        let cachedTasks = fetchCachedTasksForCurrentHousehold()
-        let cachedByID = Dictionary(uniqueKeysWithValues: cachedTasks.map { ($0.id, $0) })
-
         for task in tasksToDelete {
-            if let cached = cachedByID[task.id] {
-                cached.syncStatusRaw = TaskSyncStatus.pendingDelete
-                cached.lastSyncedAt = nil
-            } else {
-                let cached = CachedTask(from: task)
-                cached.syncStatusRaw = TaskSyncStatus.pendingDelete
-                cached.lastSyncedAt = nil
-                modelContext.insert(cached)
-            }
+            markTaskWorkItemPendingDelete(
+                task,
+                shouldSave: false,
+                operation: "batch mark tasks pending delete"
+            )
         }
         saveContextOrSetError(operation: "batch mark tasks pending delete")
     }
@@ -1051,16 +1042,12 @@ final class TaskStore: ObservableObject {
         saveContextOrSetError(operation: "batch remove cached tasks")
     }
 
-    private func fetchCachedTasksForCurrentHousehold() -> [CachedTask] {
-        if let householdId {
-            let descriptor = FetchDescriptor<CachedTask>(
-                predicate: #Predicate { $0.householdId == householdId }
-            )
-            return (try? modelContext.fetch(descriptor)) ?? []
-        }
-
-        let descriptor = FetchDescriptor<CachedTask>()
-        return (try? modelContext.fetch(descriptor)) ?? []
+    private func fetchCachedTasksForCurrentHousehold() -> [CachedWorkItem] {
+        let cachedItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: modelContext
+        )
+        return cachedItems.filter { $0.toWorkItem().status != .idea }
     }
 
     private func beginMutation(_ id: UUID) {
@@ -1076,25 +1063,11 @@ final class TaskStore: ObservableObject {
     }
 
     private func markCachedTaskPendingDelete(_ task: Task, shouldSave: Bool) {
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == task.id }
+        markTaskWorkItemPendingDelete(
+            task,
+            shouldSave: shouldSave,
+            operation: shouldSave ? "mark cached task pending delete" : ""
         )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            cached.syncStatusRaw = TaskSyncStatus.pendingDelete
-            cached.lastSyncedAt = nil
-            if shouldSave {
-                saveContextOrSetError(operation: "mark cached task pending delete")
-            }
-            return
-        }
-
-        let cached = CachedTask(from: task)
-        cached.syncStatusRaw = TaskSyncStatus.pendingDelete
-        cached.lastSyncedAt = nil
-        modelContext.insert(cached)
-        if shouldSave {
-            saveContextOrSetError(operation: "cache pending delete tombstone")
-        }
     }
 
     private func removeCachedTask(id: UUID) {
@@ -1102,88 +1075,14 @@ final class TaskStore: ObservableObject {
     }
 
     private func removeCachedTask(id: UUID, shouldSave: Bool) {
-        let descriptor = FetchDescriptor<CachedTask>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            modelContext.delete(cached)
-            if shouldSave {
-                saveContextOrSetError(operation: "remove cached task")
-            }
-        }
-    }
-
-    private func upsertCachedBacklogItem(
-        _ item: BacklogItem,
-        syncStatusRaw: String,
-        lastSyncedAt: Date?,
-        shouldSave: Bool
-    ) {
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.id == item.id }
-        )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            cached.update(from: item)
-            cached.syncStatusRaw = syncStatusRaw
-            cached.lastSyncedAt = lastSyncedAt
-        } else {
-            let cached = CachedBacklogItem(from: item)
-            cached.syncStatusRaw = syncStatusRaw
-            cached.lastSyncedAt = lastSyncedAt
-            modelContext.insert(cached)
-        }
-
-        if shouldSave {
-            saveContextOrSetError(operation: "persist backlog item from task move")
-        }
-    }
-
-    private func cachedBacklogItemSnapshot(for id: UUID) -> CachedBacklogItemSnapshot? {
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.id == id }
-        )
-        guard let cached = try? modelContext.fetch(descriptor).first else { return nil }
-        return CachedBacklogItemSnapshot(
-            item: cached.toBacklogItem(),
-            syncStatusRaw: cached.syncStatusRaw,
-            lastSyncedAt: cached.lastSyncedAt
+        removeTaskWorkItem(
+            id: id,
+            shouldSave: shouldSave,
+            operation: "remove cached task"
         )
     }
 
-    private func restoreCachedBacklogItem(_ snapshot: CachedBacklogItemSnapshot, shouldSave: Bool) {
-        upsertCachedBacklogItem(
-            snapshot.item,
-            syncStatusRaw: snapshot.syncStatusRaw,
-            lastSyncedAt: snapshot.lastSyncedAt,
-            shouldSave: shouldSave
-        )
-    }
-
-    private func removeCachedBacklogItem(id: UUID, shouldSave: Bool) {
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            modelContext.delete(cached)
-        }
-
-        if shouldSave {
-            saveContextOrSetError(operation: "remove backlog item from task move rollback")
-        }
-    }
-
-    private func markCachedBacklogItemAwaitingCloudEcho(id: UUID) {
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.id == id }
-        )
-        if let cached = try? modelContext.fetch(descriptor).first {
-            cached.syncStatusRaw = "awaitingCloudEcho"
-            cached.lastSyncedAt = Date()
-            saveContextOrSetError(operation: "mark backlog item awaiting cloud echo")
-        }
-    }
-
-    func pendingSyncSnapshot(from cachedTasks: [CachedTask]) -> PendingSyncSnapshot {
+    func pendingSyncSnapshot(from cachedTasks: [CachedWorkItem]) -> PendingSyncSnapshot {
         var pendingUploadByID: [UUID: Task] = [:]
         var pendingDeleteIDs = Set<UUID>()
         var pendingDeleteLogicalItemIDs = Set<UUID>()
@@ -1191,7 +1090,9 @@ final class TaskStore: ObservableObject {
         for cached in cachedTasks {
             switch cached.syncStatusRaw {
             case TaskSyncStatus.pendingUpload, TaskSyncStatus.awaitingCloudEcho:
-                pendingUploadByID[cached.id] = cached.toTask()
+                if let task = cached.toWorkItem().asTask() {
+                    pendingUploadByID[cached.id] = task
+                }
             case TaskSyncStatus.pendingDelete:
                 pendingDeleteIDs.insert(cached.id)
                 pendingDeleteLogicalItemIDs.insert(resolvedLogicalItemID(for: cached))
@@ -1263,17 +1164,6 @@ final class TaskStore: ObservableObject {
         needsLocalRehydrate || !hasHydratedVisibleSnapshot || tasks.isEmpty
     }
 
-    private func syncDemotedTaskDestinationInBackground(_ item: BacklogItem) {
-        _ = _Concurrency.Task { [self] in
-            do {
-                _ = try await cloudKit.saveBacklogItem(item, scope: cloudScope)
-                markCachedBacklogItemAwaitingCloudEcho(id: item.id)
-            } catch {
-                self.error = error
-            }
-        }
-    }
-
     @discardableResult
     func createTaskFromBacklogItem(
         title: String,
@@ -1307,64 +1197,16 @@ final class TaskStore: ObservableObject {
             .max() ?? -1
     }
 
-    private func resolvedLogicalItemID(for cached: CachedTask) -> UUID {
-        cached.logicalItemID ?? cached.id
+    private func resolvedLogicalItemID(for cached: CachedWorkItem) -> UUID {
+        WorkItemCacheStoreSupport.resolvedLogicalItemID(for: cached)
     }
 
-    private func deduplicatedVisibleTasks(from cachedTasks: [CachedTask]) -> [Task] {
-        let tombstonedLogicalItemIDs = Set(
-            cachedTasks.compactMap { cachedTask in
-                cachedTask.syncStatusRaw == TaskSyncStatus.pendingDelete
-                    ? resolvedLogicalItemID(for: cachedTask) : nil
-            }
-        )
-
-        return canonicalCachedTasksByLogicalItemID(cachedTasks)
-            .filter { !tombstonedLogicalItemIDs.contains($0.key) }
-            .values
-            .filter { $0.syncStatusRaw != TaskSyncStatus.pendingDelete }
-            .map { $0.toTask() }
-            .sorted { lhs, rhs in
-                if lhs.updatedAt != rhs.updatedAt {
-                    return lhs.updatedAt > rhs.updatedAt
-                }
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt > rhs.createdAt
-                }
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
+    private func deduplicatedVisibleTasks(from cachedTasks: [CachedWorkItem]) -> [Task] {
+        WorkItemCacheStoreSupport.visibleTasks(from: cachedTasks)
     }
 
-    private func canonicalCachedTasksByLogicalItemID(_ cachedTasks: [CachedTask]) -> [UUID: CachedTask] {
-        var deduplicated: [UUID: CachedTask] = [:]
-
-        for cached in cachedTasks {
-            let logicalItemID = resolvedLogicalItemID(for: cached)
-            if let existing = deduplicated[logicalItemID] {
-                if shouldPreferCachedTask(cached, over: existing) {
-                    deduplicated[logicalItemID] = cached
-                }
-            } else {
-                deduplicated[logicalItemID] = cached
-            }
-        }
-
-        return deduplicated
-    }
-
-    private func shouldPreferCachedTask(_ candidate: CachedTask, over current: CachedTask) -> Bool {
-        let candidatePriority = taskSyncPriority(candidate.syncStatusRaw)
-        let currentPriority = taskSyncPriority(current.syncStatusRaw)
-        if candidatePriority != currentPriority {
-            return candidatePriority > currentPriority
-        }
-        if candidate.updatedAt != current.updatedAt {
-            return candidate.updatedAt > current.updatedAt
-        }
-        if candidate.createdAt != current.createdAt {
-            return candidate.createdAt > current.createdAt
-        }
-        return candidate.id.uuidString < current.id.uuidString
+    private func canonicalCachedTasksByLogicalItemID(_ cachedTasks: [CachedWorkItem]) -> [UUID: CachedWorkItem] {
+        WorkItemCacheStoreSupport.canonicalCachedWorkItemsByLogicalItemID(cachedTasks)
     }
 
     private func taskSyncPriority(_ syncStatusRaw: String) -> Int {
@@ -1412,15 +1254,16 @@ final class TaskStore: ObservableObject {
 
     private func existingDestinationBacklogItem(for logicalItemID: UUID) -> BacklogItem? {
         guard let householdId else { return nil }
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
-            predicate: #Predicate { $0.householdId == householdId }
+        let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: modelContext
         )
-        let cachedItems = (try? modelContext.fetch(descriptor)) ?? []
 
-        return cachedItems
+        return cachedWorkItems
             .filter {
-                ($0.logicalItemID ?? $0.id) == logicalItemID &&
-                    $0.syncStatusRaw != TaskSyncStatus.pendingDelete
+                $0.logicalItemID == logicalItemID &&
+                    $0.syncStatusRaw != TaskSyncStatus.pendingDelete &&
+                    $0.toWorkItem().status == .idea
             }
             .max { lhs, rhs in
                 if lhs.updatedAt != rhs.updatedAt {
@@ -1428,7 +1271,8 @@ final class TaskStore: ObservableObject {
                 }
                 return lhs.id.uuidString > rhs.id.uuidString
             }?
-            .toBacklogItem()
+            .toWorkItem()
+            .asBacklogItem()
     }
 
     private func demotedBacklogDestination(
