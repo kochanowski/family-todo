@@ -394,7 +394,7 @@ struct RootView: View {
 
         householdStore.setSyncMode(userSession.syncMode)
 
-        if userSession.syncMode == .local {
+        if userSession.syncMode == SyncMode.local {
             if let cachedHousehold = householdStore.restoreCachedHousehold(
                 userId: "local-guest",
                 preferredHouseholdId: userSession.currentHouseholdID
