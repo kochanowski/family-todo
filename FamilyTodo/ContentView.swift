@@ -26,25 +26,25 @@ struct MainAppView: View {
                 TabBarControllerAccessor { controller in
                     if tabBarController !== controller {
                         tabBarController = controller
-                        applyTabBarAppearance()
                     }
+                    reconcileTabBarAppearance(using: controller)
                 }
             )
             .background(AppBackgroundView())
             .onAppear {
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: themeStore.tabTintColor) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: themeStore.retroFontScale) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: activeTab) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
                 refreshTabBarAppearanceForHouseholdChromeChange()
@@ -138,22 +138,22 @@ struct MainAppView: View {
         }
     }
 
-    private func applyTabBarAppearance() {
-        TabBarTypographyManager.apply(
+    private func reconcileTabBarAppearance(using controller: UITabBarController? = nil) {
+        TabBarTypographyManager.reconcile(
             themeStore: themeStore,
-            tabBarController: tabBarController,
+            tabBarController: controller ?? tabBarController,
             selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
         )
     }
 
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
-        applyTabBarAppearance()
+        reconcileTabBarAppearance()
         DispatchQueue.main.async {
-            applyTabBarAppearance()
+            reconcileTabBarAppearance()
         }
         // A defensive reapply keeps the selected tab tinted even if UIKit settles later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            applyTabBarAppearance()
+            reconcileTabBarAppearance()
         }
     }
 

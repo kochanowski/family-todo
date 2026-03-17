@@ -165,6 +165,81 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
     }
 
+    func testReconcileRepairsCorruptedInactiveTintOnSameTabBarController() {
+        let store = ThemeStore()
+        store.unifiedTheme = .light
+
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 1
+        )
+
+        controller.tabBar.unselectedItemTintColor = .gray
+        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor = .gray
+        var corruptedTitleAttributes =
+            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes
+        corruptedTitleAttributes[.foregroundColor] = UIColor.gray
+        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes =
+            corruptedTitleAttributes
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 1
+        )
+
+        assertColor(controller.tabBar.unselectedItemTintColor ?? .clear, matches: .black)
+        XCTAssertEqual(controller.selectedIndex, 1)
+        assertColor(
+            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor ?? .clear,
+            matches: .black
+        )
+    }
+
+    func testReconcileIsStableAcrossRepeatedCalls() {
+        let store = ThemeStore()
+        store.unifiedTheme = .dark
+
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 2
+        )
+        let firstNormalColor = controller.tabBar.unselectedItemTintColor
+        let firstSelectedColor = controller.tabBar.tintColor
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 2
+        )
+
+        assertColor(firstNormalColor ?? .clear, matches: controller.tabBar.unselectedItemTintColor ?? .clear)
+        assertColor(firstSelectedColor ?? .clear, matches: controller.tabBar.tintColor ?? .clear)
+        XCTAssertEqual(controller.selectedIndex, 2)
+    }
+
+    private func makeTabBarController() -> UITabBarController {
+        let controller = UITabBarController()
+        let viewControllers = AppTab.allCases.map { tab -> UIViewController in
+            let viewController = UIViewController()
+            viewController.tabBarItem = UITabBarItem(
+                title: tab.title,
+                image: UIImage(systemName: tab.icon),
+                selectedImage: UIImage(systemName: tab.activeIcon)
+            )
+            return viewController
+        }
+        controller.setViewControllers(viewControllers, animated: false)
+        controller.loadViewIfNeeded()
+        return controller
+    }
+
     private func assertColor(
         _ actual: UIColor,
         matches expected: UIColor,
