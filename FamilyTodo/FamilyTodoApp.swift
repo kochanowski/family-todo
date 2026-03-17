@@ -395,7 +395,7 @@ struct RootView: View {
         householdStore.setSyncMode(userSession.syncMode)
 
         if userSession.syncMode == SyncMode.localOnly {
-            if let cachedHousehold = householdStore.restoreCachedHousehold(
+            if let cachedHousehold = householdStore.resolveStartupHouseholdLocally(
                 userId: "local-guest",
                 preferredHouseholdId: userSession.currentHouseholdID
             ) {
@@ -422,10 +422,13 @@ struct RootView: View {
             return
         }
 
-        await householdStore.loadCurrentHouseholdAndMembership(
+        if let cachedHousehold = householdStore.resolveStartupHouseholdLocally(
             userId: userId,
             preferredHouseholdId: userSession.currentHouseholdID
-        )
+        ) {
+            completeRecoveredHouseholdRoute(with: cachedHousehold, resolutionKey: resolutionKey)
+            return
+        }
 
         _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: false)
 

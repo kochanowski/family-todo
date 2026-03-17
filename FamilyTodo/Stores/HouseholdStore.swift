@@ -143,6 +143,27 @@ class HouseholdStore: ObservableObject {
         )
     }
 
+    /// Launch-safe local-first resolver for startup routing.
+    /// It never touches CloudKit and only inspects in-memory/current cached household state.
+    @discardableResult
+    func resolveStartupHouseholdLocally(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Household? {
+        if let household = currentHousehold {
+            guard !isRecoverySuppressed(for: household.id) else {
+                clearCurrentHousehold()
+                return nil
+            }
+            return household
+        }
+
+        return restoreCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+    }
+
     @discardableResult
     func restoreCachedHousehold(
         userId: String,
@@ -1138,6 +1159,40 @@ class HouseholdStore: ObservableObject {
         _ = _Concurrency.Task { [cloudKit] in
             await cloudKit.setHouseholdScope(.participantShared)
         }
+    }
+
+    func resolveMembershipDisplayNameLocally(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> String? {
+        var householdIds: [UUID] = []
+
+        if let currentHouseholdId = currentHousehold?.id {
+            householdIds.append(currentHouseholdId)
+        }
+
+        if let preferredHouseholdId,
+           !householdIds.contains(preferredHouseholdId)
+        {
+            householdIds.append(preferredHouseholdId)
+        }
+
+        for cachedHousehold in fetchRecoverableCachedHouseholds(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        ) where !householdIds.contains(cachedHousehold.id) {
+            householdIds.append(cachedHousehold.id)
+        }
+
+        for householdId in householdIds {
+            if let member = fetchCachedMembers(householdId: householdId).first(where: {
+                $0.userId == userId && $0.isActive
+            }) {
+                return member.displayName
+            }
+        }
+
+        return nil
     }
 
     func isRecoverySuppressed(for householdId: UUID) -> Bool {

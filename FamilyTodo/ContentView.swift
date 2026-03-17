@@ -98,43 +98,57 @@ struct MainAppView: View {
             if userSession.currentHouseholdID != household.id {
                 userSession.setCurrentHousehold(household.id)
             }
+            refreshCurrentHouseholdInBackgroundIfNeeded(
+                userId: userSession.userId,
+                preferredHouseholdId: household.id
+            )
             return
         }
 
-        guard let userId = userSession.userId else { return }
+        let startupUserId = userSession.userId ?? (userSession.isGuest ? "local-guest" : nil)
+        guard let startupUserId else { return }
 
         householdStore.setSyncMode(userSession.syncMode)
 
-        if let restoredHousehold = householdStore.restoreCachedHousehold(
-            userId: userId,
+        if let restoredHousehold = householdStore.resolveStartupHouseholdLocally(
+            userId: startupUserId,
             preferredHouseholdId: userSession.currentHouseholdID
         ) {
             if userSession.currentHouseholdID != restoredHousehold.id {
                 userSession.setCurrentHousehold(restoredHousehold.id)
             }
-            _ = _Concurrency.Task {
-                await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                )
-                await MainActor.run {
-                    handleSuppressedHouseholdRecoveryIfNeeded()
-                }
-            }
+            refreshCurrentHouseholdInBackgroundIfNeeded(
+                userId: userSession.userId,
+                preferredHouseholdId: restoredHousehold.id
+            )
             return
         }
 
-        await householdStore.loadCurrentHouseholdAndMembership(
-            userId: userId,
-            preferredHouseholdId: userSession.currentHouseholdID
-        )
         if handleSuppressedHouseholdRecoveryIfNeeded() {
             return
         }
-        if let household = householdStore.currentHousehold,
-           userSession.currentHouseholdID != household.id
-        {
-            userSession.setCurrentHousehold(household.id)
+
+        guard userSession.syncMode == .cloud else { return }
+        if onboardingState.currentState == .mainApp {
+            householdStore.resetSetupResolution()
+            onboardingState.openHouseholdSetup()
+        }
+    }
+
+    private func refreshCurrentHouseholdInBackgroundIfNeeded(
+        userId: String?,
+        preferredHouseholdId: UUID?
+    ) {
+        guard userSession.syncMode == .cloud, let userId else { return }
+
+        _ = _Concurrency.Task {
+            await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                userId: userId,
+                preferredHouseholdId: preferredHouseholdId
+            )
+            await MainActor.run {
+                handleSuppressedHouseholdRecoveryIfNeeded()
+            }
         }
     }
 

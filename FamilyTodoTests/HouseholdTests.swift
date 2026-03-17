@@ -420,6 +420,95 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedMember>()).isEmpty)
     }
 
+    func testResolveStartupHouseholdLocallyRestoresCachedHousehold() throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(.cloud)
+
+        let household = Household(
+            name: "Startup Home",
+            ownerId: "owner-user"
+        )
+        let owner = Member(
+            householdId: household.id,
+            userId: "owner-user",
+            displayName: "Owner",
+            role: .owner
+        )
+
+        container.mainContext.insert(CachedHousehold(from: household))
+        container.mainContext.insert(CachedMember(from: owner))
+        try container.mainContext.save()
+
+        let restored = localStore.resolveStartupHouseholdLocally(
+            userId: owner.userId,
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertEqual(restored?.id, household.id)
+        XCTAssertEqual(localStore.currentHousehold?.id, household.id)
+    }
+
+    func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(.cloud)
+
+        let restored = localStore.resolveStartupHouseholdLocally(
+            userId: "owner-user",
+            preferredHouseholdId: nil
+        )
+
+        XCTAssertNil(restored)
+        XCTAssertNil(localStore.currentHousehold)
+    }
+
+    func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
+        let schema = Schema([
+            CachedHousehold.self,
+            CachedMember.self,
+        ])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [config])
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(.cloud)
+
+        let household = Household(
+            name: "Display Name Home",
+            ownerId: "owner-user"
+        )
+        let owner = Member(
+            householdId: household.id,
+            userId: "owner-user",
+            displayName: "Wojtek",
+            role: .owner
+        )
+
+        container.mainContext.insert(CachedHousehold(from: household))
+        container.mainContext.insert(CachedMember(from: owner))
+        try container.mainContext.save()
+
+        let restoredName = localStore.resolveMembershipDisplayNameLocally(
+            userId: owner.userId,
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertEqual(restoredName, "Wojtek")
+    }
+
     func testValidateRecoveredMembershipOrAbandonSuppressesZombieHousehold() async throws {
         let suiteName = "HouseholdStoreTests.\(#function)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

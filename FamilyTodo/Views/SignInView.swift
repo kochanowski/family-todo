@@ -257,24 +257,13 @@ struct SignInView: View {
         if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
 
-            if let restoredHousehold = householdStore.restoreCachedHousehold(
+            if let restoredHousehold = householdStore.resolveStartupHouseholdLocally(
                 userId: userId,
                 preferredHouseholdId: userSession.currentHouseholdID
             ) {
                 if userSession.currentHouseholdID != restoredHousehold.id {
                     userSession.setCurrentHousehold(restoredHousehold.id)
                 }
-                _ = _Concurrency.Task {
-                    await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-                        userId: userId,
-                        preferredHouseholdId: userSession.currentHouseholdID
-                    )
-                }
-            } else {
-                await householdStore.loadCurrentHouseholdAndMembership(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                )
             }
 
             if let household = householdStore.currentHousehold,
@@ -299,7 +288,10 @@ struct SignInView: View {
                    userId: userId,
                    preferredHouseholdId: userSession.currentHouseholdID
                ),
-               let restoredDisplayName = await householdStore.resolveMembershipDisplayName(userId: userId)
+               let restoredDisplayName = householdStore.resolveMembershipDisplayNameLocally(
+                   userId: userId,
+                   preferredHouseholdId: userSession.currentHouseholdID
+               )
             {
                 userSession.applyProfileUpdate(displayName: restoredDisplayName)
                 onboardingState.completeAuth(
