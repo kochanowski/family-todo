@@ -106,6 +106,10 @@ class HouseholdStore: ObservableObject {
         syncMode = mode
     }
 
+    var isModelContextReady: Bool {
+        modelContext != nil
+    }
+
     @discardableResult
     private func saveContextOrSetError(
         _ context: ModelContext? = nil,

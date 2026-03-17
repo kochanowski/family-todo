@@ -80,7 +80,7 @@ final class OnboardingState: ObservableObject {
         case LaunchState.auth.rawValue:
             currentState = .auth
         case LaunchState.householdSetup.rawValue:
-            currentState = .householdSetup
+            currentState = syncMethod == .local ? .householdSetup : .auth
         case LaunchState.mainApp.rawValue:
             currentState = .mainApp
         case "syncChoice":
@@ -88,6 +88,17 @@ final class OnboardingState: ObservableObject {
         default:
             currentState = .auth
         }
+    }
+
+    private func persistLaunchState(_ state: LaunchState) {
+        // Household setup is a runtime destination for cloud users.
+        // On cold launch we always re-run recovery before deciding they truly need setup.
+        if state == .householdSetup, syncMethod != .local {
+            lastLaunchStateRaw = LaunchState.auth.rawValue
+            return
+        }
+
+        lastLaunchStateRaw = state.rawValue
     }
 
     // MARK: - Transitions
@@ -110,7 +121,7 @@ final class OnboardingState: ObservableObject {
         } else {
             currentState = hasHousehold ? .mainApp : .householdSetup
         }
-        lastLaunchStateRaw = currentState.rawValue
+        persistLaunchState(currentState)
     }
 
     func completeHouseholdSetup(withHousehold: Bool) {
@@ -134,7 +145,7 @@ final class OnboardingState: ObservableObject {
     func openHouseholdSetup() {
         hasSeenOnboarding = true
         currentState = .householdSetup
-        lastLaunchStateRaw = LaunchState.householdSetup.rawValue
+        persistLaunchState(.householdSetup)
     }
 
     func openAuth() {

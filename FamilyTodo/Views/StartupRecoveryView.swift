@@ -28,7 +28,7 @@ struct StartupRecoveryView: View {
             .buttonStyle(.bordered)
 
             Button("Request local reset") {
-                SwiftDataContainerFactory.requestStoreReset()
+                SwiftDataContainerFactory.requestStoreReset(reason: .startupRecoveryManual)
                 resetRequested = true
             }
             .buttonStyle(.borderedProminent)

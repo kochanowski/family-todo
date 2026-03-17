@@ -229,6 +229,7 @@ struct SignInView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             userSession.hasConfirmedDisplayName ? "named" : "unnamed",
+            householdStore.isModelContextReady ? "contextReady" : "contextMissing",
         ].joined(separator: "|")
     }
 
@@ -248,44 +249,38 @@ struct SignInView: View {
         }
 
         guard userSession.isAuthenticated else { return }
+        guard householdStore.isModelContextReady else { return }
 
         isResolvingAuthRoute = true
         defer { isResolvingAuthRoute = false }
 
         if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
-            let hasTrustedLocalHouseholdContext = userSession.currentHouseholdID != nil ||
-                householdStore.hasTrustedLocalHouseholdContext(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                )
 
-            if hasTrustedLocalHouseholdContext {
-                if let restoredHousehold = householdStore.restoreCachedHousehold(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                ) {
-                    if userSession.currentHouseholdID != restoredHousehold.id {
-                        userSession.setCurrentHousehold(restoredHousehold.id)
-                    }
-                    _ = _Concurrency.Task {
-                        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-                            userId: userId,
-                            preferredHouseholdId: userSession.currentHouseholdID
-                        )
-                    }
-                } else {
-                    await householdStore.loadCurrentHouseholdAndMembership(
+            if let restoredHousehold = householdStore.restoreCachedHousehold(
+                userId: userId,
+                preferredHouseholdId: userSession.currentHouseholdID
+            ) {
+                if userSession.currentHouseholdID != restoredHousehold.id {
+                    userSession.setCurrentHousehold(restoredHousehold.id)
+                }
+                _ = _Concurrency.Task {
+                    await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
                         userId: userId,
                         preferredHouseholdId: userSession.currentHouseholdID
                     )
                 }
+            } else {
+                await householdStore.loadCurrentHouseholdAndMembership(
+                    userId: userId,
+                    preferredHouseholdId: userSession.currentHouseholdID
+                )
+            }
 
-                if let household = householdStore.currentHousehold,
-                   userSession.currentHouseholdID != household.id
-                {
-                    userSession.setCurrentHousehold(household.id)
-                }
+            if let household = householdStore.currentHousehold,
+               userSession.currentHouseholdID != household.id
+            {
+                userSession.setCurrentHousehold(household.id)
             }
         }
 

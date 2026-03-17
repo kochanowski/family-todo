@@ -340,7 +340,8 @@ struct SettingsView: View {
                 onboardingState: onboardingState,
                 subscriptionManager: subscriptionManager,
                 shareAcceptanceCoordinator: shareAcceptanceCoordinator,
-                celebrationManager: celebrationManager
+                celebrationManager: celebrationManager,
+                resetReason: .debugCloudHouseholdDelete
             )
             isDeletingCloudHousehold = false
         }
