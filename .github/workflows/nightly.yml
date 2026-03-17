@@ -1,9 +1,6 @@
 name: iOS Nightly Regression
 
 on:
-  push:
-    branches:
-      - feature/multi-user-sync-fixes # Temporary: remove after merging to main
   schedule:
     - cron: '0 0 * * *' # Midnight UTC
   workflow_dispatch:
