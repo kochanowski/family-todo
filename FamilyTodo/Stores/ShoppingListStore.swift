@@ -537,7 +537,7 @@ final class ShoppingListStore: ObservableObject {
     func moveToBuyItems(from source: IndexSet, to destination: Int, persist: Bool = true) {
         var orderedItems = toBuyItems
         orderedItems.move(fromOffsets: source, toOffset: destination)
-        applyToBuyOrder(orderedItems)
+        _ = applyToBuyOrder(orderedItems)
 
         guard persist else { return }
         _ = _Concurrency.Task {
