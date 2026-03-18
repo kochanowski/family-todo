@@ -9,6 +9,7 @@ final class ShoppingBundleStore: ObservableObject {
         static let pendingUpload = "pendingUpload"
         static let pendingDelete = "pendingDelete"
         static let awaitingCloudEcho = "awaitingCloudEcho"
+        static let awaitingDeleteEcho = "awaitingDeleteEcho"
     }
 
     struct PendingSyncSnapshot {
@@ -180,7 +181,10 @@ final class ShoppingBundleStore: ObservableObject {
         let cachedBundles = (try? context.fetch(descriptor)) ?? []
         if updateVisibleState {
             bundles = cachedBundles
-                .filter { $0.syncStatusRaw != BundleSyncStatus.pendingDelete }
+                .filter {
+                    $0.syncStatusRaw != BundleSyncStatus.pendingDelete &&
+                        $0.syncStatusRaw != BundleSyncStatus.awaitingDeleteEcho
+                }
                 .map { $0.toShoppingBundle() }
             hasHydratedVisibleSnapshot = true
             hasHydratedLocalSnapshot = true
@@ -200,7 +204,8 @@ final class ShoppingBundleStore: ObservableObject {
         for bundle in bundles {
             if let existing = cachedByID[bundle.id] {
                 if existing.syncStatusRaw == BundleSyncStatus.pendingUpload ||
-                    existing.syncStatusRaw == BundleSyncStatus.pendingDelete
+                    existing.syncStatusRaw == BundleSyncStatus.pendingDelete ||
+                    existing.syncStatusRaw == BundleSyncStatus.awaitingDeleteEcho
                 {
                     continue
                 }
@@ -213,6 +218,13 @@ final class ShoppingBundleStore: ObservableObject {
             } else {
                 context.insert(CachedShoppingBundle(from: bundle))
             }
+        }
+
+        for cached in cachedBundles where
+            cached.syncStatusRaw == BundleSyncStatus.awaitingDeleteEcho &&
+            !cloudBundleIDs.contains(cached.id)
+        {
+            context.delete(cached)
         }
 
         saveContextOrSetError(context, operation: "sync shopping bundle cache from cloud")
@@ -277,7 +289,8 @@ final class ShoppingBundleStore: ObservableObject {
                     householdId: cached.householdId,
                     scope: cloudScope
                 )
-                context.delete(cached)
+                cached.syncStatusRaw = BundleSyncStatus.awaitingDeleteEcho
+                cached.lastSyncedAt = Date()
                 didMutateCache = true
             } catch {
                 self.error = error
@@ -392,7 +405,7 @@ final class ShoppingBundleStore: ObservableObject {
             switch cached.syncStatusRaw {
             case BundleSyncStatus.pendingUpload, BundleSyncStatus.awaitingCloudEcho:
                 pendingUploadByID[cached.id] = cached.toShoppingBundle()
-            case BundleSyncStatus.pendingDelete:
+            case BundleSyncStatus.pendingDelete, BundleSyncStatus.awaitingDeleteEcho:
                 pendingDeleteIDs.insert(cached.id)
             default:
                 continue

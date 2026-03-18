@@ -73,7 +73,7 @@ struct MainAppView: View {
             .tag(AppTab.tasks)
 
             NavigationStack {
-                BacklogView()
+                BacklogView(selectedTab: $activeTab)
             }
             .tabItem {
                 Label(AppTab.backlog.title, systemImage: AppTab.backlog.icon)

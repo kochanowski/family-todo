@@ -139,6 +139,13 @@ final class TaskStore: ObservableObject {
         case wipLimitReached(current: Int, limit: Int)
     }
 
+    enum MoveToIdeasResult: Equatable {
+        case success(categoryId: UUID)
+        case missingDestinationCategory
+        case localSaveFailed
+        case alreadyProcessing
+    }
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
@@ -779,8 +786,14 @@ final class TaskStore: ObservableObject {
     }
 
     @discardableResult
-    func moveTaskToIdeas(_ task: Task, destinationCategoryId: UUID) -> Bool {
-        guard !pendingTaskMutations.contains(task.id) else { return false }
+    func moveTaskToIdeas(_ task: Task, destinationCategoryId: UUID?) -> MoveToIdeasResult {
+        guard let destinationCategoryId else {
+            return .missingDestinationCategory
+        }
+
+        guard !pendingTaskMutations.contains(task.id) else {
+            return .alreadyProcessing
+        }
 
         beginMutation(task.id)
 
@@ -823,7 +836,7 @@ final class TaskStore: ObservableObject {
             )
             _ = saveContextOrSetError(operation: "rollback move task to ideas")
             endMutation(task.id)
-            return false
+            return .localSaveFailed
         }
 
         endMutation(task.id)
@@ -839,7 +852,7 @@ final class TaskStore: ObservableObject {
             replayPendingMutationsInBackground()
         }
 
-        return true
+        return .success(categoryId: destinationCategoryId)
     }
 
     func archiveTask(_ task: Task) async {

@@ -82,6 +82,15 @@ struct BundlesManagementView: View {
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
+                .contextMenu {
+                    if shoppingStore != nil {
+                        Button {
+                            addBundleToShopping(bundle)
+                        } label: {
+                            Label("Add to Shopping List", systemImage: "cart.badge.plus")
+                        }
+                    }
+                }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         _ = _Concurrency.Task {
@@ -99,25 +108,26 @@ struct BundlesManagementView: View {
     }
 
     private var bundlesEmptyState: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
-
-            ThemedEmptyStateView(
-                title: "No Bundles Yet",
-                systemImage: ShoppingBundle.featureIcon,
-                description: "Create reusable shopping sets for faster planning here"
-            )
-
+        ThemedEmptyStateView(
+            title: "No Bundles Yet",
+            systemImage: ShoppingBundle.featureIcon,
+            description: "Create reusable shopping sets for faster planning here"
+        ) {
             Button {
                 presentedEditor = .create
             } label: {
                 Text("Create your first bundle")
                     .font(themeStore.font(for: .buttonLabel))
-                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 24)
+        }
+        .padding(.bottom, 24)
+    }
+
+    private func addBundleToShopping(_ bundle: ShoppingBundle) {
+        guard let shoppingStore else { return }
+        _ = _Concurrency.Task {
+            _ = await shoppingStore.createItems(fromTitles: bundle.normalizedItems)
         }
     }
 }

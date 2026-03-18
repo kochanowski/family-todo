@@ -177,6 +177,27 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertFalse(merged.contains(where: { $0.id == deleteID }))
     }
 
+    func testPendingSyncSnapshotTreatsAwaitingDeleteEchoAsHiddenDelete() throws {
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Dinner",
+            items: ["Pasta"]
+        )
+        let cached = CachedShoppingBundle(from: bundle)
+        cached.syncStatusRaw = "awaitingDeleteEcho"
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let descriptor = FetchDescriptor<CachedShoppingBundle>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedBundles = try modelContainer.mainContext.fetch(descriptor)
+        let snapshot = store.pendingSyncSnapshot(from: cachedBundles)
+
+        XCTAssertTrue(snapshot.pendingUploadByID.isEmpty)
+        XCTAssertEqual(snapshot.pendingDeleteIDs, Set([bundle.id]))
+    }
+
     func testInitHydratesBundlesFromCacheBeforeLoad() throws {
         let bundle = ShoppingBundle(
             householdId: householdId,

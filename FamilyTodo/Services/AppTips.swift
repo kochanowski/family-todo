@@ -325,6 +325,10 @@ enum AppTipStorageKey {
                 return nil
             }
 
+            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
+                return .bundleQuickAdd
+            }
+
             if !hasActiveItems, !hasRecentItems, !hasCompletedFirstAdd {
                 return .firstAdd
             }
@@ -335,10 +339,6 @@ enum AppTipStorageKey {
 
             if hasActiveItems || hasRecentItems, !hasBundles, !hasCompletedBundlesLocation {
                 return .bundlesLocation
-            }
-
-            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
-                return .bundleQuickAdd
             }
 
             return nil
@@ -756,6 +756,10 @@ enum AppTipStorageKey {
                 return nil
             }
 
+            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
+                return .bundleQuickAdd
+            }
+
             if !hasActiveItems, !hasRecentItems, !hasCompletedFirstAdd {
                 return .firstAdd
             }
@@ -766,10 +770,6 @@ enum AppTipStorageKey {
 
             if hasActiveItems || hasRecentItems, !hasBundles, !hasCompletedBundlesLocation {
                 return .bundlesLocation
-            }
-
-            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
-                return .bundleQuickAdd
             }
 
             return nil

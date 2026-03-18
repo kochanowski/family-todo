@@ -20,6 +20,7 @@ class MemberStore: ObservableObject {
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
     private var shouldReloadAfterCurrentLoad = false
     private var hasHydratedVisibleSnapshot = false
+    private var needsLocalRehydrate = false
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
@@ -38,8 +39,9 @@ class MemberStore: ObservableObject {
         if didChangeHousehold {
             hasHydratedVisibleSnapshot = false
             hasHydratedLocalSnapshot = false
+            needsLocalRehydrate = false
         }
-        hydrateVisibleSnapshotFromCacheIfNeeded(force: didChangeHousehold || !hasHydratedVisibleSnapshot)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: didChangeHousehold || shouldForceVisibleHydration())
     }
 
     func setSyncMode(_ mode: SyncMode) {
@@ -79,13 +81,13 @@ class MemberStore: ObservableObject {
     // MARK: - Data Loading
 
     func loadMembersForDisplay() async {
-        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || members.isEmpty)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: shouldForceVisibleHydration())
         guard syncMode == .cloud else { return }
         scheduleBackgroundRefresh()
     }
 
     func loadMembers() async {
-        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || members.isEmpty)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: shouldForceVisibleHydration())
         guard syncMode == .cloud else { return }
         let loadTask = ensureBackgroundRefreshTask()
         await loadTask.value
@@ -129,7 +131,7 @@ class MemberStore: ObservableObject {
             isRefreshingInBackground = false
         }
 
-        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || members.isEmpty)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: shouldForceVisibleHydration())
 
         guard syncMode == .cloud else { return }
 
@@ -148,18 +150,28 @@ class MemberStore: ObservableObject {
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
-        guard force || !hasHydratedVisibleSnapshot || members.isEmpty else { return }
+        guard force || shouldForceVisibleHydration() else { return }
 
         guard let householdId else {
             members = []
             hasHydratedVisibleSnapshot = true
             hasHydratedLocalSnapshot = true
+            needsLocalRehydrate = false
             return
         }
 
         members = fetchCachedMembers(householdId: householdId)
         hasHydratedVisibleSnapshot = true
         hasHydratedLocalSnapshot = true
+        needsLocalRehydrate = false
+    }
+
+    func markLocalSnapshotStale() {
+        needsLocalRehydrate = true
+    }
+
+    func rehydrateVisibleSnapshotFromCache() {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     func activeMember(for userId: String?) -> Member? {
@@ -266,7 +278,7 @@ class MemberStore: ObservableObject {
             throw MemberStoreError.profileLocalSaveFailed
         }
 
-        NotificationCenter.default.post(name: .memberProfileDidChange, object: nil)
+        NotificationCenter.default.post(name: .memberProfileDidChange, object: "local")
 
         guard syncMode == .cloud else { return }
 
@@ -495,6 +507,10 @@ class MemberStore: ObservableObject {
     private func isCurrentUserMember(_ member: Member, currentUserId: String?) -> Bool {
         guard let currentUserId else { return false }
         return member.userId == currentUserId
+    }
+
+    private func shouldForceVisibleHydration() -> Bool {
+        needsLocalRehydrate || !hasHydratedVisibleSnapshot || members.isEmpty
     }
 
     private var activeOwnersCount: Int {

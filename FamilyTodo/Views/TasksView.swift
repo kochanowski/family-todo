@@ -235,11 +235,9 @@ private struct TasksContent: View {
             normalizeAssigneeFilterSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
-            guard selectedTab == .tasks else { return }
-            _ = _Concurrency.Task {
-                await refreshData()
-                markTasksTutorialAsSeenIfNeeded()
-            }
+            memberStore.markLocalSnapshotStale()
+            memberStore.rehydrateVisibleSnapshotFromCache()
+            normalizeAssigneeFilterSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { notification in
             store.markLocalSnapshotStale()
@@ -1093,33 +1091,20 @@ private struct TasksContent: View {
             hiddenMovedToIdeasIds.insert(task.id)
         }
 
-        _ = _Concurrency.Task {
-            guard let destinationCategoryId = backlogStore.resolveDestinationCategoryIdForTaskMove(task) else {
-                await MainActor.run {
-                    processingMovedToIdeasIds.remove(task.id)
-                    hiddenMovedToIdeasIds.remove(task.id)
-                    showBanner(.moveToIdeasFailed)
-                }
-                HapticManager.warning()
-                return
-            }
-
-            let didMove = store.moveTaskToIdeas(task, destinationCategoryId: destinationCategoryId)
-            if !didMove {
-                await MainActor.run {
-                    processingMovedToIdeasIds.remove(task.id)
-                    hiddenMovedToIdeasIds.remove(task.id)
-                    showBanner(.moveToIdeasFailed)
-                }
-                HapticManager.warning()
-                return
-            }
-
-            await MainActor.run {
-                processingMovedToIdeasIds.remove(task.id)
-                hiddenMovedToIdeasIds.remove(task.id)
-            }
+        let result = store.moveTaskToIdeas(
+            task,
+            destinationCategoryId: backlogStore.resolveDestinationCategoryIdForTaskMove(task)
+        )
+        guard case .success = result else {
+            processingMovedToIdeasIds.remove(task.id)
+            hiddenMovedToIdeasIds.remove(task.id)
+            showBanner(.moveToIdeasFailed)
+            HapticManager.warning()
+            return
         }
+
+        processingMovedToIdeasIds.remove(task.id)
+        hiddenMovedToIdeasIds.remove(task.id)
     }
 
     private func moveActiveTasks(from source: IndexSet, to destination: Int) {

@@ -352,9 +352,9 @@ final class TaskStoreTests: XCTestCase {
         store.setSyncMode(.localOnly)
         await store.loadTasks()
 
-        let didMove = store.moveTaskToIdeas(task, destinationCategoryId: category.id)
+        let moveResult = store.moveTaskToIdeas(task, destinationCategoryId: category.id)
 
-        XCTAssertTrue(didMove)
+        XCTAssertEqual(moveResult, .success(categoryId: category.id))
         XCTAssertTrue(store.tasks.isEmpty)
 
         let backlogDescriptor = FetchDescriptor<CachedBacklogItem>(
@@ -408,9 +408,9 @@ final class TaskStoreTests: XCTestCase {
         store.setSyncMode(.localOnly)
         await store.loadTasks()
 
-        let didMove = store.moveTaskToIdeas(task, destinationCategoryId: category.id)
+        let moveResult = store.moveTaskToIdeas(task, destinationCategoryId: category.id)
 
-        XCTAssertTrue(didMove)
+        XCTAssertEqual(moveResult, .success(categoryId: category.id))
         XCTAssertTrue(store.tasks.isEmpty)
 
         let backlogDescriptor = FetchDescriptor<CachedBacklogItem>(

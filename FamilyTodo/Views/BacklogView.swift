@@ -7,11 +7,20 @@ import SwiftUI
 struct BacklogView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
+    @Binding private var selectedTab: AppTab
+
+    init(selectedTab: Binding<AppTab> = .constant(.backlog)) {
+        _selectedTab = selectedTab
+    }
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
-                BacklogContent(householdId: householdId, modelContext: modelContext)
+                BacklogContent(
+                    householdId: householdId,
+                    modelContext: modelContext,
+                    selectedTab: $selectedTab
+                )
             } else {
                 GuidedEmptyStateView()
             }
@@ -44,6 +53,7 @@ private struct BacklogContent: View {
 
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
+    @Binding private var selectedTab: AppTab
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
@@ -81,13 +91,14 @@ private struct BacklogContent: View {
     @AppStorage(AppTips.runtimeGenerationDefaultsKey)
     private var appTipRuntimeGeneration = 0
 
-    init(householdId: UUID, modelContext: ModelContext) {
+    init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         _store = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
         _memberStore = StateObject(
             wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
         )
+        _selectedTab = selectedTab
     }
 
     var body: some View {
@@ -202,6 +213,13 @@ private struct BacklogContent: View {
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
+        .onChange(of: selectedTab) { _, newTab in
+            guard newTab == .backlog else { return }
+            _ = _Concurrency.Task {
+                await loadBacklogData()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+        }
         .onChange(of: userSession.userId) { _, _ in
             updateStoreCloudContext()
         }
@@ -234,6 +252,16 @@ private struct BacklogContent: View {
                 _ = _Concurrency.Task {
                     await loadBacklogData()
                     markIdeasTutorialAsSeenIfNeeded()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
+            memberStore.markLocalSnapshotStale()
+            if selectedNotificationIsLocal(notification) {
+                memberStore.rehydrateVisibleSnapshotFromCache()
+            } else if selectedTab == .backlog {
+                _ = _Concurrency.Task {
+                    await memberStore.loadMembersForDisplay()
                 }
             }
         }
