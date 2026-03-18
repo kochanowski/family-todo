@@ -21,6 +21,7 @@ class MemberStore: ObservableObject {
     private var shouldReloadAfterCurrentLoad = false
     private var hasHydratedVisibleSnapshot = false
     private var needsLocalRehydrate = false
+    private static var pendingProfileOverrides: [UUID: Member] = [:]
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
@@ -141,8 +142,9 @@ class MemberStore: ObservableObject {
                 householdId: householdId,
                 scope: cloudScope
             )
-            updateCache(with: fetchedMembers, for: householdId)
-            members = fetchedMembers
+            let mergedMembers = mergeCloudMembersWithPendingProfileOverrides(fetchedMembers)
+            updateCache(with: mergedMembers, for: householdId)
+            members = mergedMembers
         } catch {
             print("Error loading members: \(error)")
             self.error = error
@@ -207,6 +209,8 @@ class MemberStore: ObservableObject {
 
         // Update Cache
         updateCachedMember(member)
+        registerPendingProfileOverride(member)
+        NotificationCenter.default.post(name: .memberProfileDidChange, object: "local")
 
         if syncMode == .cloud {
             do {
@@ -220,6 +224,7 @@ class MemberStore: ObservableObject {
                 // Revert
                 member.displayName = oldName
                 members[index] = member
+                clearPendingProfileOverride(for: member.id)
                 updateCachedMember(member)
                 throw error
             }
@@ -271,6 +276,7 @@ class MemberStore: ObservableObject {
             member.displayName = oldName
             member.colorHex = oldColorHex
             members[index] = member
+            clearPendingProfileOverride(for: member.id)
             _ = upsertCachedMember(
                 member,
                 operation: "rollback current user profile update"
@@ -278,6 +284,7 @@ class MemberStore: ObservableObject {
             throw MemberStoreError.profileLocalSaveFailed
         }
 
+        registerPendingProfileOverride(member)
         NotificationCenter.default.post(name: .memberProfileDidChange, object: "local")
 
         guard syncMode == .cloud else { return }
@@ -431,6 +438,31 @@ class MemberStore: ObservableObject {
         }
 
         // TODO: Handle deletions (members in cache but not in fetch)
+    }
+
+    private func mergeCloudMembersWithPendingProfileOverrides(_ fetchedMembers: [Member]) -> [Member] {
+        fetchedMembers.map { member in
+            guard let override = Self.pendingProfileOverrides[member.id] else {
+                return member
+            }
+
+            if member.displayName == override.displayName,
+               member.colorHex == override.colorHex
+            {
+                Self.pendingProfileOverrides.removeValue(forKey: member.id)
+                return member
+            }
+
+            return override
+        }
+    }
+
+    private func registerPendingProfileOverride(_ member: Member) {
+        Self.pendingProfileOverrides[member.id] = member
+    }
+
+    private func clearPendingProfileOverride(for memberId: UUID) {
+        Self.pendingProfileOverrides.removeValue(forKey: memberId)
     }
 
     private func updateCachedMember(_ member: Member) {

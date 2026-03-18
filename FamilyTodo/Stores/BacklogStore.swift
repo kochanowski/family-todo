@@ -345,23 +345,45 @@ final class BacklogStore: ObservableObject {
         )
         let cachedWorkItems = (try? context.fetch(descriptor)) ?? []
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedWorkItems.map { ($0.id, $0) })
+        let pendingSnapshot = WorkItemCacheStoreSupport.pendingSnapshot(from: cachedWorkItems)
+        let deduplicatedByLogicalID = WorkItemCacheStoreSupport.canonicalCachedWorkItemsByLogicalItemID(cachedWorkItems)
 
         for item in cloudItems {
+            if pendingSnapshot.pendingDeleteLogicalItemIDs.contains(item.logicalItemID) {
+                continue
+            }
+
             if let cached = cachedByID[item.id] {
-                let local = cached.toWorkItem()
-                if cached.syncStatusRaw == BacklogSyncStatus.pendingDelete {
-                    continue
-                }
-                if cached.syncStatusRaw == BacklogSyncStatus.pendingUpload ||
-                    cached.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho,
-                    !cloudWorkItemMatchesLocalMutationEcho(item, localItem: local)
-                {
+                if WorkItemCacheStoreSupport.shouldIgnoreCloudSnapshot(
+                    item,
+                    for: cached,
+                    pendingSnapshot: pendingSnapshot,
+                    mutationEchoMatches: cloudWorkItemMatchesLocalMutationEcho
+                ) {
                     continue
                 }
                 cached.update(from: item)
                 cached.syncStatusRaw = BacklogSyncStatus.synced
                 cached.lastSyncedAt = Date()
-            } else {
+                continue
+            }
+
+            if let cached = deduplicatedByLogicalID[item.logicalItemID] {
+                if WorkItemCacheStoreSupport.shouldIgnoreCloudSnapshot(
+                    item,
+                    for: cached,
+                    pendingSnapshot: pendingSnapshot,
+                    mutationEchoMatches: cloudWorkItemMatchesLocalMutationEcho
+                ) {
+                    continue
+                }
+                cached.update(from: item)
+                cached.syncStatusRaw = BacklogSyncStatus.synced
+                cached.lastSyncedAt = Date()
+                continue
+            }
+
+            if cachedByID[item.id] == nil {
                 let cached = CachedWorkItem(from: item)
                 cached.syncStatusRaw = BacklogSyncStatus.synced
                 cached.lastSyncedAt = Date()
@@ -1027,12 +1049,6 @@ final class BacklogStore: ObservableObject {
             return .assigneeRequired
         }
 
-        guard !pendingMutationIDs.contains(item.id) else {
-            return .failed("Please try promoting this idea again.")
-        }
-
-        beginMutation(item.id)
-
         let existingTask = existingDestinationTask(for: item.logicalItemID)
         let promotedItem: WorkItem
         if let existingTask, existingTask.id != item.id {
@@ -1093,11 +1109,9 @@ final class BacklogStore: ObservableObject {
                 operation: "rollback promoted idea work item"
             )
             _ = saveContextOrSetError(modelContext, operation: "rollback idea promotion")
-            endMutation(item.id)
             return .failed("Couldn't save the task locally.")
         }
 
-        endMutation(item.id)
         postLocalBacklogRefresh(includeTaskBoard: true)
 
         if isCloudSyncEnabled {

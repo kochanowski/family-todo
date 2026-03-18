@@ -200,7 +200,7 @@ final class MemberStoreProfileTests: XCTestCase {
         try modelContainer.mainContext.save()
 
         store = MemberStore(householdId: householdId, modelContext: modelContainer.mainContext)
-        store.setSyncMode(.localOnly)
+        store.setSyncMode(SyncMode.localOnly)
         await store.loadMembers()
     }
 
@@ -261,7 +261,7 @@ final class HouseholdStoreTests: XCTestCase {
 
     func testCreateHouseholdLocalOnlyStartsEmpty() async throws {
         let container = modelContainer
-        store.setSyncMode(.localOnly)
+        store.setSyncMode(SyncMode.localOnly)
 
         try await store.createHousehold(
             name: "Local Home",
@@ -304,7 +304,7 @@ final class HouseholdStoreTests: XCTestCase {
 
     func testCreateHouseholdRejectsMissingDisplayName() async throws {
         let container = modelContainer
-        store.setSyncMode(.localOnly)
+        store.setSyncMode(SyncMode.localOnly)
 
         do {
             _ = try await store.createHousehold(
@@ -332,7 +332,7 @@ final class HouseholdStoreTests: XCTestCase {
         try container.mainContext.save()
 
         let localStore = HouseholdStore(modelContext: container.mainContext)
-        localStore.setSyncMode(.localOnly)
+        localStore.setSyncMode(SyncMode.localOnly)
         localStore.currentHousehold = household
 
         try await localStore.updateCurrentHousehold(
@@ -353,7 +353,7 @@ final class HouseholdStoreTests: XCTestCase {
     func testRestoreCachedHouseholdIgnoresCloudCacheWithoutCurrentUserMembership() throws {
         let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
-        localStore.setSyncMode(.cloud)
+        localStore.setSyncMode(SyncMode.cloud)
 
         let household = Household(
             name: "Zombie House",
@@ -384,7 +384,7 @@ final class HouseholdStoreTests: XCTestCase {
     func testResolveStartupHouseholdLocallyRestoresCachedHousehold() throws {
         let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
-        localStore.setSyncMode(.cloud)
+        localStore.setSyncMode(SyncMode.cloud)
 
         let household = Household(
             name: "Startup Home",
@@ -410,10 +410,10 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertEqual(localStore.currentHousehold?.id, household.id)
     }
 
-    func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() throws {
+    func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() {
         let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
-        localStore.setSyncMode(.cloud)
+        localStore.setSyncMode(SyncMode.cloud)
 
         let restored = localStore.resolveStartupHouseholdLocally(
             userId: "owner-user",
@@ -427,7 +427,7 @@ final class HouseholdStoreTests: XCTestCase {
     func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
         let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
-        localStore.setSyncMode(.cloud)
+        localStore.setSyncMode(SyncMode.cloud)
 
         let household = Household(
             name: "Display Name Home",
@@ -467,7 +467,7 @@ final class HouseholdStoreTests: XCTestCase {
             userDefaults: defaults,
             recoverySuppressionDuration: 300
         )
-        localStore.setSyncMode(.cloud)
+        localStore.setSyncMode(SyncMode.cloud)
 
         let household = Household(
             name: "Zombie House",
@@ -505,7 +505,7 @@ final class HouseholdStoreTests: XCTestCase {
             userDefaults: defaults,
             recoverySuppressionDuration: 300
         )
-        localStore.setSyncMode(.localOnly)
+        localStore.setSyncMode(SyncMode.localOnly)
 
         let household = try await localStore.createHousehold(
             name: "Leave Me",
@@ -547,7 +547,7 @@ final class HouseholdStoreTests: XCTestCase {
             userDefaults: defaults,
             recoverySuppressionDuration: 300
         )
-        localStore.setSyncMode(.localOnly)
+        localStore.setSyncMode(SyncMode.localOnly)
 
         let household = try await localStore.createHousehold(
             name: "Pending Exit",

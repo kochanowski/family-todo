@@ -200,8 +200,13 @@ final class ShoppingBundleStore: ObservableObject {
         )
         let cachedBundles = (try? context.fetch(descriptor)) ?? []
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedBundles.map { ($0.id, $0) })
+        let pendingDeleteSnapshot = pendingSyncSnapshot(from: cachedBundles)
+        let pendingDeleteIDs = pendingDeleteSnapshot.pendingDeleteIDs
 
         for bundle in bundles {
+            if pendingDeleteIDs.contains(bundle.id) {
+                continue
+            }
             if let existing = cachedByID[bundle.id] {
                 if existing.syncStatusRaw == BundleSyncStatus.pendingUpload ||
                     existing.syncStatusRaw == BundleSyncStatus.pendingDelete ||
@@ -215,6 +220,7 @@ final class ShoppingBundleStore: ObservableObject {
                     continue
                 }
                 existing.update(from: bundle)
+                existing.lastSyncedAt = Date()
             } else {
                 context.insert(CachedShoppingBundle(from: bundle))
             }
@@ -222,7 +228,8 @@ final class ShoppingBundleStore: ObservableObject {
 
         for cached in cachedBundles where
             cached.syncStatusRaw == BundleSyncStatus.awaitingDeleteEcho &&
-            !cloudBundleIDs.contains(cached.id)
+            !cloudBundleIDs.contains(cached.id) &&
+            !pendingDeleteIDs.contains(cached.id)
         {
             context.delete(cached)
         }

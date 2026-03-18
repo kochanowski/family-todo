@@ -33,6 +33,54 @@ enum WorkItemCacheStoreSupport {
         return (try? context.fetch(FetchDescriptor<CachedWorkItem>())) ?? []
     }
 
+    static func isPendingCloudMutation(status: String) -> Bool {
+        status == pendingUpload || status == awaitingCloudEcho
+    }
+
+    static func isTombstoned(
+        cachedStatus: String,
+        id: UUID,
+        logicalItemID: UUID,
+        pendingDeleteIDs: Set<UUID>,
+        pendingDeleteLogicalItemIDs: Set<UUID>
+    ) -> Bool {
+        cachedStatus == pendingDelete ||
+            pendingDeleteIDs.contains(id) ||
+            pendingDeleteLogicalItemIDs.contains(logicalItemID)
+    }
+
+    static func shouldIgnoreCloudSnapshot(
+        _ cloudItem: WorkItem,
+        for localCachedItem: CachedWorkItem,
+        pendingSnapshot: PendingSnapshot,
+        mutationEchoMatches: (WorkItem, WorkItem) -> Bool
+    ) -> Bool {
+        let localLogicalItemID = resolvedLogicalItemID(for: localCachedItem)
+
+        if isTombstoned(
+            cachedStatus: localCachedItem.syncStatusRaw,
+            id: localCachedItem.id,
+            logicalItemID: localLogicalItemID,
+            pendingDeleteIDs: pendingSnapshot.pendingDeleteIDs,
+            pendingDeleteLogicalItemIDs: pendingSnapshot.pendingDeleteLogicalItemIDs
+        ) {
+            return true
+        }
+
+        let localItem = localCachedItem.toWorkItem()
+        if isPendingCloudMutation(status: localCachedItem.syncStatusRaw),
+           let localMutation = pendingSnapshot.pendingUploadByID[localCachedItem.id]
+        {
+            if !mutationEchoMatches(cloudItem, localMutation) {
+                return true
+            }
+            return cloudItem.updatedAt < localMutation.updatedAt
+        }
+
+        return cloudItem.updatedAt < localItem.updatedAt ||
+            cloudItem.logicalItemID != localLogicalItemID
+    }
+
     static func upsert(
         _ item: WorkItem,
         syncStatusRaw: String,

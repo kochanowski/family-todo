@@ -28,10 +28,12 @@ final class WorkItemTransitionTests: XCTestCase {
         )
 
         try TestCacheFixtures.insert(
-            [
-                CachedBacklogCategory(from: category),
-                TestCacheFixtures.cachedWorkItem(from: WorkItem(idea: idea)),
-            ],
+            CachedBacklogCategory(from: category),
+            into: modelContainer.mainContext,
+            save: true
+        )
+        try TestCacheFixtures.insert(
+            TestCacheFixtures.cachedWorkItem(from: WorkItem(idea: idea)),
             into: modelContainer.mainContext,
             save: true
         )
@@ -99,10 +101,12 @@ final class WorkItemTransitionTests: XCTestCase {
         )
 
         try TestCacheFixtures.insert(
-            [
-                CachedBacklogCategory(from: category),
-                TestCacheFixtures.cachedWorkItem(from: WorkItem(task: task)),
-            ],
+            CachedBacklogCategory(from: category),
+            into: modelContainer.mainContext,
+            save: true
+        )
+        try TestCacheFixtures.insert(
+            TestCacheFixtures.cachedWorkItem(from: WorkItem(task: task)),
             into: modelContainer.mainContext,
             save: true
         )
@@ -240,8 +244,8 @@ final class WorkItemTransitionTests: XCTestCase {
         await bundleStore.loadBundlesForDisplay()
         XCTAssertTrue(bundleStore.bundles.isEmpty)
 
-        var snapshot = bundleStore.pendingSyncSnapshot(
-            from: try modelContainer.mainContext.fetch(FetchDescriptor<CachedShoppingBundle>())
+        var snapshot = try bundleStore.pendingSyncSnapshot(
+            from: modelContainer.mainContext.fetch(FetchDescriptor<CachedShoppingBundle>())
         )
         XCTAssertTrue(bundleStore.mergeCloudSnapshot([bundle], with: snapshot).isEmpty)
 
@@ -253,8 +257,8 @@ final class WorkItemTransitionTests: XCTestCase {
         await bundleStore.loadBundlesForDisplay()
         XCTAssertTrue(bundleStore.bundles.isEmpty)
 
-        snapshot = bundleStore.pendingSyncSnapshot(
-            from: try modelContainer.mainContext.fetch(FetchDescriptor<CachedShoppingBundle>())
+        snapshot = try bundleStore.pendingSyncSnapshot(
+            from: modelContainer.mainContext.fetch(FetchDescriptor<CachedShoppingBundle>())
         )
         XCTAssertTrue(bundleStore.mergeCloudSnapshot([bundle], with: snapshot).isEmpty)
     }
@@ -262,7 +266,7 @@ final class WorkItemTransitionTests: XCTestCase {
     private func makeTaskStore() -> TaskStore {
         let taskStore = TaskStore(modelContext: modelContainer.mainContext)
         taskStore.setHousehold(householdId)
-        taskStore.setSyncMode(.localOnly)
+        taskStore.setSyncMode(SyncMode.localOnly)
         return taskStore
     }
 
@@ -271,7 +275,7 @@ final class WorkItemTransitionTests: XCTestCase {
             householdId: householdId,
             modelContext: modelContainer.mainContext
         )
-        backlogStore.setSyncMode(.localOnly)
+        backlogStore.setSyncMode(SyncMode.localOnly)
         return backlogStore
     }
 
@@ -280,7 +284,7 @@ final class WorkItemTransitionTests: XCTestCase {
             householdId: householdId,
             modelContext: modelContainer.mainContext
         )
-        bundleStore.setSyncMode(.localOnly)
+        bundleStore.setSyncMode(SyncMode.localOnly)
         return bundleStore
     }
 

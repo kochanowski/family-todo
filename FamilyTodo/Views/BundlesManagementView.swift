@@ -181,7 +181,9 @@ private struct ShoppingBundleRow: View {
 
             Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(bundle.name), \(itemCountLabel(for: bundle.itemCount))")
     }

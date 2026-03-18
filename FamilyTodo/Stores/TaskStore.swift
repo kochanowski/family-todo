@@ -470,23 +470,49 @@ final class TaskStore: ObservableObject {
         )
         let cachedWorkItems = (try? modelContext.fetch(descriptor)) ?? []
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedWorkItems.map { ($0.id, $0) })
+        let pendingSnapshot = WorkItemCacheStoreSupport.pendingSnapshot(from: cachedWorkItems)
+        let deduplicatedByLogicalID = WorkItemCacheStoreSupport.canonicalCachedWorkItemsByLogicalItemID(cachedWorkItems)
 
         for item in cloudItems {
+            if pendingSnapshot.pendingDeleteLogicalItemIDs.contains(item.logicalItemID) {
+                continue
+            }
+
             if let cached = cachedByID[item.id] {
-                let local = cached.toWorkItem()
-                if cached.syncStatusRaw == TaskSyncStatus.pendingDelete {
-                    continue
-                }
-                if cached.syncStatusRaw == TaskSyncStatus.pendingUpload ||
-                    cached.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho,
-                    !cloudWorkItemMatchesLocalMutationEcho(item, localItem: local)
-                {
+                if WorkItemCacheStoreSupport.shouldIgnoreCloudSnapshot(
+                    item,
+                    for: cached,
+                    pendingSnapshot: pendingSnapshot,
+                    mutationEchoMatches: cloudTaskMatchesLocalMutationEcho
+                ) {
                     continue
                 }
                 cached.update(from: item)
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
-            } else {
+                continue
+            }
+
+            if let cached = deduplicatedByLogicalID[item.logicalItemID] {
+                if WorkItemCacheStoreSupport.shouldIgnoreCloudSnapshot(
+                    item,
+                    for: cached,
+                    pendingSnapshot: pendingSnapshot,
+                    mutationEchoMatches: cloudTaskMatchesLocalMutationEcho
+                ) {
+                    continue
+                }
+                cached.update(from: item)
+                cached.syncStatusRaw = TaskSyncStatus.synced
+                cached.lastSyncedAt = Date()
+                continue
+            }
+
+            if pendingSnapshot.pendingDeleteLogicalItemIDs.contains(item.logicalItemID) {
+                continue
+            }
+
+            if cachedByID[item.id] == nil {
                 let cached = CachedWorkItem(from: item)
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
@@ -791,12 +817,6 @@ final class TaskStore: ObservableObject {
             return .missingDestinationCategory
         }
 
-        guard !pendingTaskMutations.contains(task.id) else {
-            return .alreadyProcessing
-        }
-
-        beginMutation(task.id)
-
         var demotedItem = WorkItem(task: task)
         demotedItem.status = .idea
         demotedItem.categoryId = destinationCategoryId
@@ -835,11 +855,9 @@ final class TaskStore: ObservableObject {
                 operation: "rollback demoted task work item"
             )
             _ = saveContextOrSetError(operation: "rollback move task to ideas")
-            endMutation(task.id)
             return .localSaveFailed
         }
 
-        endMutation(task.id)
         NotificationCenter.default.post(name: .backlogDataDidChange, object: "local")
         NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
 
