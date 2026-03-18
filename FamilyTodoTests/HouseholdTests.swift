@@ -210,6 +210,13 @@ final class MemberStoreProfileTests: XCTestCase {
         try await super.tearDown()
     }
 
+    private func requireContainer(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> ModelContainer {
+        try XCTUnwrap(modelContainer, "Expected in-memory model container", file: file, line: line)
+    }
+
     func testUpdateCurrentUserProfilePersistsDisplayNameAndColorToCache() async throws {
         try await store.updateCurrentUserProfile(
             displayName: "Wojciech",
@@ -260,10 +267,10 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testCreateHouseholdLocalOnlyStartsEmpty() async throws {
-        let container = modelContainer
+        let container = try requireContainer()
         store.setSyncMode(SyncMode.localOnly)
 
-        try await store.createHousehold(
+        _ = try await store.createHousehold(
             name: "Local Home",
             userId: "guest-user",
             displayName: "Guest"
@@ -303,7 +310,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testCreateHouseholdRejectsMissingDisplayName() async throws {
-        let container = modelContainer
+        let container = try requireContainer()
         store.setSyncMode(SyncMode.localOnly)
 
         do {
@@ -322,7 +329,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testUpdateCurrentHouseholdPersistsNameAndIconLocally() async throws {
-        let container = modelContainer
+        let container = try requireContainer()
         let household = Household(
             name: "Original Home",
             iconSymbol: "house.fill",
@@ -351,7 +358,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testRestoreCachedHouseholdIgnoresCloudCacheWithoutCurrentUserMembership() throws {
-        let container = modelContainer
+        let container = try requireContainer()
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(SyncMode.cloud)
 
@@ -382,7 +389,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testResolveStartupHouseholdLocallyRestoresCachedHousehold() throws {
-        let container = modelContainer
+        let container = try requireContainer()
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(SyncMode.cloud)
 
@@ -410,14 +417,14 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertEqual(localStore.currentHousehold?.id, household.id)
     }
 
-    func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() {
-        let container = modelContainer
+    func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() throws {
+        let container = try requireContainer()
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(SyncMode.cloud)
 
         let restored = localStore.resolveStartupHouseholdLocally(
             userId: "owner-user",
-            preferredHouseholdId: nil
+            preferredHouseholdId: nil as UUID?
         )
 
         XCTAssertNil(restored)
@@ -425,7 +432,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
-        let container = modelContainer
+        let container = try requireContainer()
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(SyncMode.cloud)
 
@@ -460,7 +467,7 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let container = modelContainer
+        let container = try requireContainer()
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
@@ -481,7 +488,7 @@ final class HouseholdStoreTests: XCTestCase {
             household: household,
             userId: "missing-user",
             retryDelaysNanoseconds: [0],
-            fetchActiveMember: { _, _ in nil }
+            fetchActiveMember: { _, _ in nil as Member? }
         )
 
         XCTAssertFalse(isValid)
@@ -498,7 +505,7 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let container = modelContainer
+        let container = try requireContainer()
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
@@ -540,7 +547,7 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let container = modelContainer
+        let container = try requireContainer()
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
