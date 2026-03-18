@@ -143,10 +143,7 @@ extension WorkItem {
             lastPokedAt: task.lastPokedAt,
             completedAt: task.completedAt,
             completedById: task.completedById,
-            taskType: switch task.taskType {
-            case .oneOff: .oneOff
-            case .recurring: .recurring
-            },
+            taskType: ItemType(taskType: task.taskType),
             recurringChoreId: task.recurringChoreId,
             notes: task.notes,
             order: task.order,
@@ -165,11 +162,7 @@ extension WorkItem {
             logicalItemID: task.logicalItemID,
             householdId: task.householdId,
             title: task.title,
-            status: switch task.status {
-            case .backlog: .backlog
-            case .next: .next
-            case .done: .done
-            },
+            status: Status(taskStatus: task.status),
             assigneeId: task.assigneeId,
             assigneeIds: task.assigneeIds,
             categoryId: task.backlogCategoryId,
@@ -178,10 +171,7 @@ extension WorkItem {
             lastPokedAt: task.lastPokedAt,
             completedAt: task.completedAt,
             completedById: task.completedById,
-            taskType: switch task.taskType {
-            case .oneOff: .oneOff
-            case .recurring: .recurring
-            },
+            taskType: ItemType(taskType: task.taskType),
             recurringChoreId: task.recurringChoreId,
             notes: task.notes,
             order: task.order,
@@ -242,10 +232,7 @@ extension WorkItem {
             lastPokedAt: lastPokedAt,
             completedAt: completedAt,
             completedById: completedById,
-            taskType: switch taskType {
-            case .oneOff: .oneOff
-            case .recurring: .recurring
-            },
+            taskType: Task.TaskType(workItemType: taskType),
             recurringChoreId: recurringChoreId,
             notes: notes,
             order: order,
@@ -297,6 +284,28 @@ extension WorkItem.Status {
             self = .next
         case .done:
             self = .done
+        }
+    }
+}
+
+extension WorkItem.ItemType {
+    init(taskType: Task.TaskType) {
+        switch taskType {
+        case .oneOff:
+            self = .oneOff
+        case .recurring:
+            self = .recurring
+        }
+    }
+}
+
+extension Task.TaskType {
+    init(workItemType: WorkItem.ItemType) {
+        switch workItemType {
+        case .oneOff:
+            self = .oneOff
+        case .recurring:
+            self = .recurring
         }
     }
 }
