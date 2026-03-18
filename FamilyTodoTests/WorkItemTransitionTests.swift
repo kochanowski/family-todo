@@ -263,6 +263,59 @@ final class WorkItemTransitionTests: XCTestCase {
         XCTAssertTrue(bundleStore.mergeCloudSnapshot([bundle], with: snapshot).isEmpty)
     }
 
+    func testPromoteThenDemoteSameLogicalItemReappearsInIdeas() async throws {
+        let category = TestCacheFixtures.category(householdId: householdId, title: "Ideas")
+        let idea = TestCacheFixtures.idea(
+            categoryId: category.id,
+            householdId: householdId,
+            title: "Promote then demote me",
+            assigneeId: assigneeId
+        )
+
+        try TestCacheFixtures.insert(
+            CachedBacklogCategory(from: category),
+            into: modelContainer.mainContext,
+            save: true
+        )
+        try TestCacheFixtures.insert(
+            TestCacheFixtures.cachedWorkItem(from: WorkItem(idea: idea)),
+            into: modelContainer.mainContext,
+            save: true
+        )
+
+        let backlogStore = makeBacklogStore()
+        let taskStore = makeTaskStore()
+        await backlogStore.loadDataForDisplay()
+        await taskStore.loadTasksForDisplay()
+
+        switch backlogStore.promoteItemToTask(idea, assigneeId: assigneeId) {
+        case .success:
+            break
+        default:
+            XCTFail("Expected local promotion to succeed")
+            return
+        }
+
+        taskStore.rehydrateVisibleSnapshotFromCache()
+
+        XCTAssertFalse(backlogStore.items(for: category.id).contains(where: { $0.logicalItemID == idea.logicalItemID }))
+        XCTAssertEqual(taskStore.tasks.filter { $0.logicalItemID == idea.logicalItemID }.count, 1)
+
+        guard let promotedTask = taskStore.tasks.first(where: { $0.logicalItemID == idea.logicalItemID }) else {
+            XCTFail("Expected promoted task to be visible in taskStore")
+            return
+        }
+
+        let demoteResult = taskStore.moveTaskToIdeas(promotedTask, destinationCategoryId: category.id)
+        XCTAssertEqual(demoteResult, .success(categoryId: category.id))
+
+        backlogStore.rehydrateVisibleSnapshotFromCache()
+
+        let reappearedIdeas = backlogStore.items(for: category.id).filter { $0.logicalItemID == idea.logicalItemID }
+        XCTAssertEqual(reappearedIdeas.count, 1)
+        XCTAssertTrue(taskStore.tasks.filter { $0.logicalItemID == idea.logicalItemID }.isEmpty)
+    }
+
     private func makeTaskStore() -> TaskStore {
         let taskStore = TaskStore(modelContext: modelContainer.mainContext)
         taskStore.setHousehold(householdId)

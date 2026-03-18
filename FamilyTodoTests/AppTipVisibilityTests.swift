@@ -194,4 +194,71 @@ final class AppTipVisibilityTests: XCTestCase {
             )
         )
     }
+
+    func testBundleQuickAddTipAppearsWhenQuickAddBundlesAvailableRegardlessOfBundlesLocationCompletion() {
+        let tip = AppTipVisibility.shoppingTip(
+            hasActiveItems: true,
+            hasRecentItems: false,
+            hasBundles: true,
+            hasQuickAddBundles: true,
+            isRapidEntryActive: false,
+            isKeyboardVisible: false,
+            hasActiveToast: false,
+            hasPresentedSheet: false,
+            hasCompletedFirstAdd: false, // NOT completed
+            hasCompletedRecentPurchases: false,
+            hasCompletedBundlesLocation: false, // NOT completed either
+            hasCompletedBundleQuickAdd: false
+        )
+        XCTAssertEqual(tip, .bundleQuickAdd)
+    }
+
+    func testBundleQuickAddTipSuppressedWhenBlockersActive() {
+        // Active toast suppresses
+        XCTAssertNil(AppTipVisibility.shoppingTip(
+            hasActiveItems: true, hasRecentItems: false, hasBundles: true,
+            hasQuickAddBundles: true, isRapidEntryActive: false,
+            isKeyboardVisible: false, hasActiveToast: true, // BLOCKER
+            hasPresentedSheet: false, hasCompletedFirstAdd: true,
+            hasCompletedRecentPurchases: true, hasCompletedBundlesLocation: true,
+            hasCompletedBundleQuickAdd: false
+        ))
+
+        // Presented sheet suppresses
+        XCTAssertNil(AppTipVisibility.shoppingTip(
+            hasActiveItems: true, hasRecentItems: false, hasBundles: true,
+            hasQuickAddBundles: true, isRapidEntryActive: false,
+            isKeyboardVisible: false, hasActiveToast: false,
+            hasPresentedSheet: true, // BLOCKER
+            hasCompletedFirstAdd: true, hasCompletedRecentPurchases: true,
+            hasCompletedBundlesLocation: true, hasCompletedBundleQuickAdd: false
+        ))
+
+        // Rapid entry suppresses
+        XCTAssertNil(AppTipVisibility.shoppingTip(
+            hasActiveItems: true, hasRecentItems: false, hasBundles: true,
+            hasQuickAddBundles: true, isRapidEntryActive: true, // BLOCKER
+            isKeyboardVisible: false, hasActiveToast: false,
+            hasPresentedSheet: false, hasCompletedFirstAdd: true,
+            hasCompletedRecentPurchases: true, hasCompletedBundlesLocation: true,
+            hasCompletedBundleQuickAdd: false
+        ))
+    }
+
+    func testPromoteTipEligibleImmediatelyAfterAssignmentWithNoSuppression() {
+        let tip = AppTipVisibility.ideasTip(
+            hasCategories: true,
+            hasVisibleIdeas: true,
+            hasVisibleUnassignedIdea: false,
+            hasVisibleAssignedIdea: true, // idea just got an assignee
+            hasActiveBanner: false,
+            hasPresentedSheet: false,
+            hasPendingDeletionToast: false,
+            hasCompletedCreateCategory: true,
+            hasCompletedAddIdea: true,
+            hasCompletedAssignOwner: true, // assignment step done
+            hasCompletedPromote: false // not yet promoted
+        )
+        XCTAssertEqual(tip, .promote)
+    }
 }
