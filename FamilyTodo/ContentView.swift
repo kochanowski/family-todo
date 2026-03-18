@@ -19,6 +19,7 @@ struct MainAppView: View {
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
     @State private var tabBarController: UITabBarController?
+    @State private var tasksTabBounceToken = 0
 
     var body: some View {
         legacyTabView
@@ -49,6 +50,9 @@ struct MainAppView: View {
             .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
                 refreshTabBarAppearanceForHouseholdChromeChange()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .tasksTabPromotionCueRequested)) { _ in
+                tasksTabBounceToken += 1
+            }
             .task {
                 await bootstrapHouseholdIfNeeded()
             }
@@ -69,6 +73,7 @@ struct MainAppView: View {
             }
             .tabItem {
                 Label(AppTab.tasks.title, systemImage: AppTab.tasks.icon)
+                    .symbolEffect(.bounce, value: tasksTabBounceToken)
             }
             .tag(AppTab.tasks)
 

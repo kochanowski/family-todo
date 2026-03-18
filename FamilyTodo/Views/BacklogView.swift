@@ -247,6 +247,11 @@ private struct BacklogContent: View {
             store.markLocalSnapshotStale()
             if selectedNotificationIsLocal(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
+                // Un-suppress items that have returned to Ideas via demotion.
+                // subtract(_:) removes IDs that ARE in the store — keeping promoted-item
+                // suppressions intact for IDs no longer present locally.
+                let activeItemIds = Set(store.items.map(\.id))
+                hiddenPendingPromotionIds.subtract(activeItemIds)
                 markIdeasTutorialAsSeenIfNeeded()
             } else {
                 _ = _Concurrency.Task {
@@ -383,7 +388,6 @@ private struct BacklogContent: View {
                             notes: item.notes,
                             assigneeId: selectedAssignee
                         )
-                        suppressPromotionTip(for: 1.25)
                         guard !hadAssignee else { return }
                         if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
                            updatedItem.assigneeId != nil
@@ -658,7 +662,7 @@ private struct BacklogContent: View {
         case .success:
             // Keep the item hidden for the rest of the session so a delayed
             // cloud echo cannot briefly show the promoted idea again.
-            break
+            NotificationCenter.default.post(name: .tasksTabPromotionCueRequested, object: nil)
         case .assigneeRequired, .wipLimitReached, .failed:
             withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
                 hiddenPendingPromotionIds.remove(item.id)

@@ -100,6 +100,10 @@ private struct ShoppingListContent: View {
                     markShoppingTutorialAsSeenIfNeeded()
                 }
             }
+            .onChange(of: quickAddBundles.isEmpty) { _, isEmpty in
+                guard !isEmpty else { return }
+                appTipRuntimeGeneration += 1
+            }
             .newItemsBanner(manager: subscriptionManager)
             .onChange(of: isKeyboardVisible) { _, visible in
                 guard !visible else { return }

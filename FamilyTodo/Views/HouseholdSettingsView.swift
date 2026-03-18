@@ -126,7 +126,11 @@ struct ProfileView: View {
             )
             await memberStore.loadMembers()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
+            memberStore.markLocalSnapshotStale()
+            if (notification.object as? String) == "local" {
+                memberStore.rehydrateVisibleSnapshotFromCache()
+            }
             _ = _Concurrency.Task {
                 memberStore.setCloudContext(
                     currentUserId: userSession.userId,
