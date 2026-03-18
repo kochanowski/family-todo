@@ -706,21 +706,31 @@ extension AuthenticationService {
         }
 
         switch rawValue {
-        case let boolValue as Bool:
-            return CloudKitFlagParseResult(
-                enabled: boolValue,
-                rawValue: String(boolValue),
-                rawType: "Bool",
-                reason: boolValue ? .enabled : .disabledByFlag
-            )
-
         case let numberValue as NSNumber:
+            if CFGetTypeID(numberValue) == CFBooleanGetTypeID() {
+                let enabled = numberValue.boolValue
+                return CloudKitFlagParseResult(
+                    enabled: enabled,
+                    rawValue: String(enabled),
+                    rawType: "Bool",
+                    reason: enabled ? .enabled : .disabledByFlag
+                )
+            }
+
             let enabled = numberValue.boolValue
             return CloudKitFlagParseResult(
                 enabled: enabled,
                 rawValue: numberValue.stringValue,
                 rawType: "NSNumber",
                 reason: enabled ? .enabled : .disabledByFlag
+            )
+
+        case let boolValue as Bool:
+            return CloudKitFlagParseResult(
+                enabled: boolValue,
+                rawValue: String(boolValue),
+                rawType: "Bool",
+                reason: boolValue ? .enabled : .disabledByFlag
             )
 
         case let stringValue as String:

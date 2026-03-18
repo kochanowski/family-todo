@@ -226,7 +226,8 @@ final class CelebrationManager: ObservableObject {
         fallback: (emoji: String, message: String)
     ) -> (emoji: String, message: String) {
         guard !messages.isEmpty else { return fallback }
-        let index = randomInt(0 ... (messages.count - 1))
+        let validRange = 0 ... (messages.count - 1)
+        let index = min(max(randomInt(validRange), validRange.lowerBound), validRange.upperBound)
         return messages[index]
     }
 }
