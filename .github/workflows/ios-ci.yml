@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes, feature/next-features, feature/multi-user-sync-fixes]
+    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes, feature/next-features]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
