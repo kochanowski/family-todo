@@ -11,9 +11,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let schema = Schema([CachedShoppingBundle.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        modelContainer = try ModelContainer(for: schema, configurations: [config])
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .bundles)
 
         store = ShoppingBundleStore(
             householdId: householdId,

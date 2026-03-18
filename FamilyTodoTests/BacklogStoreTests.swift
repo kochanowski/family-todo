@@ -11,14 +11,7 @@ final class BacklogStoreTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let schema = Schema([
-            CachedWorkItem.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedTask.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        modelContainer = try ModelContainer(for: schema, configurations: [config])
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .workItems)
 
         store = BacklogStore(householdId: householdId, modelContext: modelContainer.mainContext)
         store.setSyncMode(.localOnly)

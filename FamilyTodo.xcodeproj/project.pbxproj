@@ -97,6 +97,10 @@
 		SHOPB1000000000000000004 /* BundlesManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA1000000000000000004 /* BundlesManagementView.swift */; };
 		SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */; };
 		TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */; };
+		TSTBUILD000000000000001 /* TestModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000001 /* TestModelContainerFactory.swift */; };
+		TSTBUILD000000000000002 /* TestCacheFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000002 /* TestCacheFixtures.swift */; };
+		TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */; };
+		TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000004 /* BacklogStoreTests.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
 		TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABTYPO0000000000000002 /* TabBarTypographyManager.swift */; };
 			CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
@@ -219,6 +223,10 @@
 		SHOPA1000000000000000004 /* BundlesManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundlesManagementView.swift; sourceTree = "<group>"; };
 		SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingBundleStoreTests.swift; sourceTree = "<group>"; };
 		TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTipVisibilityTests.swift; sourceTree = "<group>"; };
+		TSTFILE0000000000000001 /* TestModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestModelContainerFactory.swift; sourceTree = "<group>"; };
+		TSTFILE0000000000000002 /* TestCacheFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCacheFixtures.swift; sourceTree = "<group>"; };
+		TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkItemTransitionTests.swift; sourceTree = "<group>"; };
+		TSTFILE0000000000000004 /* BacklogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStoreTests.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
 		TABTYPO0000000000000002 /* TabBarTypographyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarTypographyManager.swift; sourceTree = "<group>"; };
 			CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
@@ -347,9 +355,12 @@
 		A1B2C3D4E5F60718293A4B83 /* FamilyTodoTests */ = {
 			isa = PBXGroup;
 			children = (
+				TSTGROUP000000000000001 /* TestSupport */,
 				A1B2C3D4E5F60718293A4B74 /* FamilyTodoTests.swift */,
 				7EC3E5BB230C4430890CE54E /* TaskTests.swift */,
 				29641B06528147179F25068D /* TaskStoreTests.swift */,
+				TSTFILE0000000000000004 /* BacklogStoreTests.swift */,
+				TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */,
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
@@ -360,6 +371,15 @@
 					F0A200000000000000000003 /* SwiftDataContainerFactoryTests.swift */,
 				);
 			path = FamilyTodoTests;
+			sourceTree = "<group>";
+		};
+		TSTGROUP000000000000001 /* TestSupport */ = {
+			isa = PBXGroup;
+			children = (
+				TSTFILE0000000000000001 /* TestModelContainerFactory.swift */,
+				TSTFILE0000000000000002 /* TestCacheFixtures.swift */,
+			);
+			path = TestSupport;
 			sourceTree = "<group>";
 		};
 		A1B2C3D4E5F60718293A4B5C /* Project object */ = {
@@ -690,9 +710,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				TSTBUILD000000000000001 /* TestModelContainerFactory.swift in Sources */,
+				TSTBUILD000000000000002 /* TestCacheFixtures.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7F /* FamilyTodoTests.swift in Sources */,
 				9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */,
 				138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */,
+				TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */,
+				TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */,
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
