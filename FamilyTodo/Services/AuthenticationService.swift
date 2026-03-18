@@ -583,8 +583,14 @@ struct CloudKitFlagParseResult {
             hpCloudKitEnabledRawValue = parseResult.rawValue
             hpCloudKitEnabledRawType = parseResult.rawType
             cloudKitAvailabilityReason = parseResult.reason
-            cloudKitContainerInitialized = false
-            cloudKitEnabledFallbackApplied = false
+            if parseResult.reason == .missingKey {
+                cloudKitEnabledByFlag = true
+                cloudKitContainerInitialized = true
+                cloudKitEnabledFallbackApplied = true
+            } else {
+                cloudKitContainerInitialized = false
+                cloudKitEnabledFallbackApplied = false
+            }
             recordDiagnostic(stage: .cloudKitContainerInit)
             refreshLatestDiagnostics(mappedErrorCategory: nil, error: nil)
         }

@@ -404,6 +404,8 @@ final class BacklogStore: ObservableObject {
             cloudItem.status == localItem.status &&
             cloudItem.categoryId == localItem.categoryId &&
             cloudItem.assigneeId == localItem.assigneeId &&
+            cloudItem.title == localItem.title &&
+            cloudItem.notes == localItem.notes &&
             cloudItem.updatedAt >= localItem.updatedAt
     }
 
