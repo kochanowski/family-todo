@@ -8,9 +8,21 @@ final class InviteCodeFlowTests: XCTestCase {
 
         for _ in 0 ..< 100 {
             let code = CloudKitManager.generateInviteCode()
-            XCTAssertEqual(code.count, 6)
+            XCTAssertEqual(code.count, 8)
             XCTAssertTrue(code.unicodeScalars.allSatisfy { allowed.contains($0) })
         }
+    }
+
+    func testGenerateInviteCodeHonorsCustomLengthWithinBounds() {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+
+        let shorter = CloudKitManager.generateInviteCode(length: 6)
+        XCTAssertEqual(shorter.count, 8)
+        XCTAssertTrue(shorter.unicodeScalars.allSatisfy { allowed.contains($0) })
+
+        let exact = CloudKitManager.generateInviteCode(length: 8)
+        XCTAssertEqual(exact.count, 8)
+        XCTAssertTrue(exact.unicodeScalars.allSatisfy { allowed.contains($0) })
     }
 
     func testInviteTokenActiveStateForExpiryAndRevocation() {

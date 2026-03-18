@@ -187,9 +187,7 @@ final class MemberStoreProfileTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let schema = Schema([CachedMember.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        modelContainer = try ModelContainer(for: schema, configurations: [config])
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .members)
 
         let initialMember = Member(
             householdId: householdId,
@@ -234,14 +232,18 @@ final class MemberStoreProfileTests: XCTestCase {
 @MainActor
 final class HouseholdStoreTests: XCTestCase {
     private var store: HouseholdStore!
+    private var modelContainer: ModelContainer!
 
     override func setUp() async throws {
         try await super.setUp()
-        store = HouseholdStore()
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .household)
+        store = HouseholdStore(modelContext: modelContainer.mainContext)
+        store.setModelContext(modelContainer.mainContext)
     }
 
     override func tearDown() async throws {
         store = nil
+        modelContainer = nil
         try await super.tearDown()
     }
 
@@ -258,20 +260,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testCreateHouseholdLocalOnlyStartsEmpty() async throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
-        store.setModelContext(container.mainContext)
+        let container = modelContainer
         store.setSyncMode(.localOnly)
 
         try await store.createHousehold(
@@ -314,20 +303,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testCreateHouseholdRejectsMissingDisplayName() async throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
-        store.setModelContext(container.mainContext)
+        let container = modelContainer
         store.setSyncMode(.localOnly)
 
         do {
@@ -346,10 +322,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testUpdateCurrentHouseholdPersistsNameAndIconLocally() async throws {
-        let schema = Schema([CachedHousehold.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
+        let container = modelContainer
         let household = Household(
             name: "Original Home",
             iconSymbol: "house.fill",
@@ -378,19 +351,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testRestoreCachedHouseholdIgnoresCloudCacheWithoutCurrentUserMembership() throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
+        let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(.cloud)
 
@@ -421,13 +382,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testResolveStartupHouseholdLocallyRestoresCachedHousehold() throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
+        let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(.cloud)
 
@@ -456,13 +411,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
+        let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(.cloud)
 
@@ -476,13 +425,7 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
-
+        let container = modelContainer
         let localStore = HouseholdStore(modelContext: container.mainContext)
         localStore.setSyncMode(.cloud)
 
@@ -517,18 +460,7 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
+        let container = modelContainer
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
@@ -566,18 +498,7 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
+        let container = modelContainer
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
@@ -619,18 +540,7 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
+        let container = modelContainer
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
