@@ -270,15 +270,15 @@ class MemberStore: ObservableObject {
 
         guard syncMode == .cloud else { return }
 
-        let memberId = member.id
-        let householdId = member.householdId
+        let remoteMemberId = member.id
+        let remoteHouseholdId = member.householdId
         let scope = cloudScope
         _ = _Concurrency.Task(priority: .utility) { [weak self] in
             guard let self else { return }
             do {
                 _ = try await cloudKit.updateMemberProfile(
-                    memberId: memberId,
-                    householdId: householdId,
+                    memberId: remoteMemberId,
+                    householdId: remoteHouseholdId,
                     newDisplayName: trimmedName,
                     newColorHex: normalizedColorHex,
                     scope: scope
