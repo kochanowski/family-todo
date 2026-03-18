@@ -8,7 +8,6 @@ struct InviteQRCodeView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var inviteURL: URL?
     @State private var inviteCode: String?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -28,7 +27,7 @@ struct InviteQRCodeView: View {
                         systemImage: "exclamationmark.triangle",
                         description: errorMessage
                     )
-                } else if let inviteURL, let qrImage = qrImage(from: inviteURL.absoluteString) {
+                } else if let inviteCode, let qrImage = qrImage(from: inviteCode) {
                     VStack(spacing: 20) {
                         Image(uiImage: qrImage)
                             .interpolation(.none)
@@ -41,48 +40,28 @@ struct InviteQRCodeView: View {
                                     .fill(Color(.secondarySystemBackground))
                             )
 
-                        Text("Scan this QR code to join household")
+                        Text("Scan this QR code to join with the 8-character invite code")
                             .font(themeStore.font(for: .inlineTitle))
                             .foregroundStyle(themeStore.contentPrimaryColor)
 
-                        if let inviteCode {
-                            VStack(spacing: 8) {
-                                Text("Invite code")
-                                    .font(themeStore.font(for: .bodySmall))
-                                    .foregroundStyle(themeStore.contentSecondaryColor)
-                                Text(inviteCode)
-                                    .font(.system(size: 30, weight: .bold, design: .monospaced))
-                                    .textSelection(.enabled)
-                            }
+                        VStack(spacing: 8) {
+                            Text("Invite code")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                            Text(inviteCode)
+                                .font(.system(size: 30, weight: .bold, design: .monospaced))
+                                .textSelection(.enabled)
                         }
 
-                        Text(inviteURL.absoluteString)
-                            .font(themeStore.font(for: .bodySmall))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-                            .multilineTextAlignment(.center)
-                            .textSelection(.enabled)
-                            .padding(.horizontal)
-
                         VStack(spacing: 10) {
-                            if let inviteCode {
-                                Button {
-                                    UIPasteboard.general.string = inviteCode
-                                } label: {
-                                    Label("Copy invite code", systemImage: "number")
-                                        .font(themeStore.font(for: .buttonLabel))
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderedProminent)
-                            }
-
                             Button {
-                                UIPasteboard.general.string = inviteURL.absoluteString
+                                UIPasteboard.general.string = inviteCode
                             } label: {
-                                Label("Copy invite link", systemImage: "doc.on.doc")
+                                Label("Copy invite code", systemImage: "number")
                                     .font(themeStore.font(for: .buttonLabel))
                                     .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.borderedProminent)
                         }
                         .padding(.horizontal)
                     }
@@ -105,17 +84,16 @@ struct InviteQRCodeView: View {
             }
         }
         .task {
-            await loadInviteURL()
+            await loadInviteCode()
         }
     }
 
-    private func loadInviteURL() async {
+    private func loadInviteCode() async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            inviteURL = try await householdStore.fetchInviteURL()
-            inviteCode = try? await householdStore.fetchOrCreateInviteCode()
+            inviteCode = try await householdStore.fetchOrCreateInviteCode()
             errorMessage = nil
         } catch {
             errorMessage = "Could not prepare invite. Check CloudKit diagnostics in Profile."

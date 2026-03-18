@@ -76,6 +76,25 @@ final class AppTipVisibilityTests: XCTestCase {
         XCTAssertEqual(quickAddTip, .bundleQuickAdd)
     }
 
+    func testShoppingTipPrefersQuickAddWhenBundlesExist() {
+        let tip = AppTipVisibility.shoppingTip(
+            hasActiveItems: false,
+            hasRecentItems: false,
+            hasBundles: true,
+            hasQuickAddBundles: true,
+            isRapidEntryActive: false,
+            isKeyboardVisible: false,
+            hasActiveToast: false,
+            hasPresentedSheet: false,
+            hasCompletedFirstAdd: false,
+            hasCompletedRecentPurchases: false,
+            hasCompletedBundlesLocation: false,
+            hasCompletedBundleQuickAdd: false
+        )
+
+        XCTAssertEqual(tip, .bundleQuickAdd)
+    }
+
     func testIdeasTipPriorityIsSequential() {
         XCTAssertEqual(
             AppTipVisibility.ideasTip(

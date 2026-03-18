@@ -46,6 +46,27 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(state.currentState, .householdSetup)
     }
 
+    func testCloudHouseholdSetupDoesNotPersistAsColdLaunchDestination() {
+        let state = OnboardingState()
+        state.completeOnboarding()
+        state.completeAuth(syncMethod: .iCloud, isGuest: false, hasHousehold: false)
+
+        let relaunchedState = OnboardingState()
+
+        XCTAssertEqual(relaunchedState.currentState, .auth)
+    }
+
+    func testLocalHouseholdSetupStillPersistsForColdLaunch() {
+        let state = OnboardingState()
+        state.completeOnboarding()
+        state.syncMethod = .local
+        state.openHouseholdSetup()
+
+        let relaunchedState = OnboardingState()
+
+        XCTAssertEqual(relaunchedState.currentState, .householdSetup)
+    }
+
     func testCompleteAuthCloudWithHouseholdRoutesToMainApp() {
         let state = OnboardingState()
         state.completeOnboarding()

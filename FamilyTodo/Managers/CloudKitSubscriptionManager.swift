@@ -22,6 +22,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     /// Use CloudKitManager for consistent container access
     private let cloudKit = CloudKitManager.shared
     private var subscriptionIds: [String] = []
+    private var configuredUserId: String?
     private var configuredHouseholdId: UUID?
     private var aggregationTimer: Timer?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
@@ -36,8 +37,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Setup
 
-    func configure(userId _: String, householdId: UUID) {
-        guard configuredHouseholdId != householdId else { return }
+    func configure(userId: String, householdId: UUID) {
+        guard configuredUserId != userId || configuredHouseholdId != householdId else { return }
+        configuredUserId = userId
         configuredHouseholdId = householdId
 
         _Concurrency.Task {
@@ -53,13 +55,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
         await cloudKit.ensureReady()
 
         let container = await cloudKit.getContainer()
-        let database = container.sharedCloudDatabase
-        let subscriptionId = "shared-database-changes"
+        let sharedDatabase = container.sharedCloudDatabase
+        let privateDatabase = container.privateCloudDatabase
 
-        // Create Database Subscription for Shared Database
         await createDatabaseSubscription(
-            subscriptionId: subscriptionId,
-            database: database
+            subscriptionId: "shared-database-changes",
+            database: sharedDatabase
+        )
+        await createDatabaseSubscription(
+            subscriptionId: "private-database-changes",
+            database: privateDatabase
         )
     }
 
@@ -155,21 +160,37 @@ final class CloudKitSubscriptionManager: ObservableObject {
         return false
     }
 
-    private func triggerRefresh(for recordType: String?) {
+    private func triggerRefreshForAllDomains(source: String) {
+        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+        NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+        NotificationCenter.default.post(name: .householdDataDidChange, object: source)
+    }
+
+    private func triggerRefresh(for recordType: String?, source: String) {
         switch recordType {
         case "ShoppingItem", "ShoppingBundle":
-            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
-        case "Task", "BacklogItem", "BacklogCategory":
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
+        case "WorkItem":
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+        case "Task":
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+        case "BacklogItem":
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+        case "BacklogCategory":
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+        case "Household", "Member":
+            NotificationCenter.default.post(name: .householdDataDidChange, object: source)
         default:
-            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: nil)
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: nil)
+            return
         }
     }
 
     private func handleDatabaseNotification(_: CKDatabaseNotification) {
-        triggerRefresh(for: nil)
         guard !isLikelySelfNoise(recordName: nil) else { return }
+        triggerRefreshForAllDomains(source: "remote")
 
         pendingShoppingChanges.append("Shared Update")
         scheduleAggregatedNotification()
@@ -177,15 +198,24 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     private func handleQueryNotification(_ notification: CKQueryNotification) {
-        let recordType = notification.recordFields?["recordType"] as? String ?? "Unknown"
+        let recordType = (notification.recordFields?["recordType"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let recordName = notification.recordID?.recordName
-        triggerRefresh(for: recordType)
         guard !isLikelySelfNoise(recordName: recordName) else { return }
+        triggerRefresh(for: recordType, source: "remote")
+
+        guard let recordType, !recordType.isEmpty, recordType != "Unknown" else {
+            return
+        }
+
+        if recordType == "Household" || recordType == "Member" {
+            return
+        }
 
         // Add to pending notifications for aggregation
         if recordType == "ShoppingItem" || recordType == "ShoppingBundle" {
             pendingShoppingChanges.append(recordType)
-        } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" {
+        } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" || recordType == "WorkItem" {
             pendingTaskChanges.append(recordType)
         } else {
             pendingTaskChanges.append(recordType)
@@ -262,14 +292,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func removeSubscriptions() async {
         let container = await cloudKit.getContainer()
-        let database = container.sharedCloudDatabase
+        let databases = [
+            container.sharedCloudDatabase,
+            container.privateCloudDatabase,
+        ]
 
         for subscriptionId in subscriptionIds {
-            do {
-                try await database.deleteSubscription(withID: subscriptionId)
-                print("🗑️ Removed subscription: \(subscriptionId)")
-            } catch {
-                print("❌ Failed to remove subscription: \(error)")
+            for database in databases {
+                do {
+                    try await database.deleteSubscription(withID: subscriptionId)
+                    print("🗑️ Removed subscription: \(subscriptionId)")
+                } catch {
+                    print("❌ Failed to remove subscription: \(error)")
+                }
             }
         }
         subscriptionIds.removeAll()

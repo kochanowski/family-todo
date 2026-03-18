@@ -140,8 +140,45 @@ final class UserSession: ObservableObject {
         return user?.displayName ?? user?.givenName
     }
 
+    var confirmedMembershipDisplayName: String? {
+        if isGuest {
+            return try? DisplayNameValidator.validate(guestDisplayName ?? "Guest")
+        }
+
+        guard hasConfirmedDisplayName,
+              let preferredDisplayName,
+              let validated = try? DisplayNameValidator.validate(preferredDisplayName)
+        else {
+            return nil
+        }
+
+        return validated
+    }
+
+    var suggestedDisplayNameForPrompt: String {
+        if let preferredDisplayName,
+           let validated = try? DisplayNameValidator.validate(preferredDisplayName)
+        {
+            return validated
+        }
+
+        if let authDisplayName = user?.displayName,
+           let validated = try? DisplayNameValidator.validate(authDisplayName)
+        {
+            return validated
+        }
+
+        if let givenName = user?.givenName,
+           let validated = try? DisplayNameValidator.validate(givenName)
+        {
+            return validated
+        }
+
+        return ""
+    }
+
     var needsDisplayNamePrompt: Bool {
-        isAuthenticated && !hasConfirmedDisplayName
+        isAuthenticated && confirmedMembershipDisplayName == nil
     }
 
     // MARK: - Dependencies
@@ -381,8 +418,10 @@ final class UserSession: ObservableObject {
 
     private func restorePreferredDisplayName(for userId: String) {
         let values = userDefaults.dictionary(forKey: StorageKeys.preferredDisplayNameByUserId) as? [String: String] ?? [:]
-        if let name = values[userId], !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            preferredDisplayName = name
+        if let name = values[userId],
+           let validated = try? DisplayNameValidator.validate(name)
+        {
+            preferredDisplayName = validated
             hasConfirmedDisplayName = true
         } else {
             preferredDisplayName = nil

@@ -90,7 +90,7 @@ private struct TasksContent: View {
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
-    @State private var hasInitialMetadataLoaded = false
+    @State private var processingMovedToIdeasIds: Set<UUID> = []
     @State private var hasStartedInitialLoad = false
     @State private var editMode: EditMode = .inactive
     @State private var showRecommendedLimitInfo = false
@@ -99,10 +99,13 @@ private struct TasksContent: View {
     @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
     @AppStorage(AppTipProgressKey.tasksSwipeActionsCompleted)
     private var hasCompletedTaskSwipeActionsTip = false
+    @AppStorage(AppTips.runtimeGenerationDefaultsKey)
+    private var appTipRuntimeGeneration = 0
     @Binding private var selectedTab: AppTab
     @Namespace private var tasksFilterGlassNamespace
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
@@ -125,6 +128,7 @@ private struct TasksContent: View {
         let shouldShowActiveEmptyState = activeFilter == .active && filteredActiveTasks.isEmpty
         let shouldShowCompletedEmptyState =
             activeFilter == .completed && filteredCompletedTasks.isEmpty
+        let hasRenderableSnapshot = store.hasHydratedLocalSnapshot
 
         VStack(spacing: 0) {
             header
@@ -151,7 +155,7 @@ private struct TasksContent: View {
                 }
             }
 
-            if hasInitialMetadataLoaded {
+            if hasRenderableSnapshot {
                 if shouldShowActiveEmptyState {
                     activeTasksEmptyState
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -190,7 +194,6 @@ private struct TasksContent: View {
         .task {
             guard !hasStartedInitialLoad else { return }
             hasStartedInitialLoad = true
-            hasInitialMetadataLoaded = true
             await refreshData()
             markTasksTutorialAsSeenIfNeeded()
         }
@@ -200,6 +203,18 @@ private struct TasksContent: View {
                 await refreshData()
                 markTasksTutorialAsSeenIfNeeded()
             }
+        }
+        .onChange(of: userSession.syncMode) { _, _ in
+            _ = _Concurrency.Task {
+                await refreshData()
+                markTasksTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: userSession.userId) { _, _ in
+            updateStoreCloudContext()
+        }
+        .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
+            updateStoreCloudContext()
         }
         .onChange(of: store.nextTasks.isEmpty) { _, isEmpty in
             if !isEmpty {
@@ -220,17 +235,22 @@ private struct TasksContent: View {
             normalizeAssigneeFilterSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
-            guard selectedTab == .tasks else { return }
-            _ = _Concurrency.Task {
-                await refreshData()
-                markTasksTutorialAsSeenIfNeeded()
-            }
+            memberStore.markLocalSnapshotStale()
+            memberStore.rehydrateVisibleSnapshotFromCache()
+            normalizeAssigneeFilterSelection()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
-            guard selectedTab == .tasks else { return }
-            _ = _Concurrency.Task {
-                await refreshData()
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { notification in
+            store.markLocalSnapshotStale()
+            if isLocalStoreNotification(notification) {
+                store.rehydrateVisibleSnapshotFromCache()
                 markTasksTutorialAsSeenIfNeeded()
+            } else if selectedTab == .tasks {
+                _ = _Concurrency.Task {
+                    await refreshData()
+                    markTasksTutorialAsSeenIfNeeded()
+                }
+            } else {
+                store.replayPendingMutationsIfNeeded()
             }
         }
         .sheet(item: $pendingCleanupAction) { action in
@@ -335,6 +355,7 @@ private struct TasksContent: View {
                     assignee: assignee(for: task),
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
+                    appTipRuntimeGeneration: appTipRuntimeGeneration,
                     wipZone: wipZone(for: index),
                     showsSwipeActionsTip: shouldShowTaskSwipeActionsTip &&
                         task.id == taskSwipeActionsTipTaskID,
@@ -406,6 +427,7 @@ private struct TasksContent: View {
                 assignee: assignee(for: task),
                 categoryName: categoryName(for: task),
                 categoryColor: categoryColor(for: task),
+                appTipRuntimeGeneration: appTipRuntimeGeneration,
                 wipZone: .normal,
                 showsSwipeActionsTip: false,
                 onToggle: { toggleTask(task) },
@@ -750,7 +772,7 @@ private struct TasksContent: View {
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 _ = _Concurrency.Task {
-                    let validation = await store.moveTask(task, to: newStatus)
+                    let validation = await store.toggleTaskCompletion(task)
                     taskBeingCompleted = nil
                     handleNextTransitionValidation(validation)
 
@@ -785,7 +807,7 @@ private struct TasksContent: View {
             }
         } else {
             _ = _Concurrency.Task {
-                let validation = await store.moveTask(task, to: newStatus)
+                let validation = await store.toggleTaskCompletion(task)
                 handleNextTransitionValidation(validation)
                 if validation == .ok {
                     HapticManager.lightTap()
@@ -1013,16 +1035,24 @@ private struct TasksContent: View {
     }
 
     private func refreshData() async {
+        updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         memberStore.setSyncMode(userSession.syncMode)
         backlogStore.setSyncMode(userSession.syncMode)
 
-        async let loadTasks = store.loadTasks()
-        async let loadMembers = memberStore.loadMembers()
-        async let loadBacklog = backlogStore.loadData()
+        async let loadTasks = store.loadTasksForDisplay()
+        async let loadMembers = memberStore.loadMembersForDisplay()
+        async let loadBacklog = backlogStore.loadDataForDisplay()
 
         _ = await (loadTasks, loadMembers, loadBacklog)
         normalizeAssigneeFilterSelection()
+    }
+
+    private func updateStoreCloudContext() {
+        let ownerId = householdStore.currentHousehold?.ownerId
+        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        backlogStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
     }
 
     private func markTasksTutorialAsSeenIfNeeded() {
@@ -1055,53 +1085,26 @@ private struct TasksContent: View {
     }
 
     private func demoteTaskToBacklog(_ task: Task) {
+        guard processingMovedToIdeasIds.insert(task.id).inserted else { return }
         AppTips.donateTaskSwipeActionUsed()
         withAnimation(.easeInOut(duration: 0.18)) {
             hiddenMovedToIdeasIds.insert(task.id)
         }
 
-        _ = _Concurrency.Task {
-            if userSession.syncMode == .localOnly {
-                do {
-                    _ = try await backlogStore.createFromTask(task)
-                    await store.deleteTask(task)
-                } catch {
-                    await MainActor.run {
-                        showBanner(.moveToIdeasFailed)
-                    }
-                    HapticManager.warning()
-                }
-
-                await MainActor.run {
-                    hiddenMovedToIdeasIds.remove(task.id)
-                }
-                return
-            }
-
-            await MainActor.run {
-                store.removeTaskLocally(task)
-            }
-
-            do {
-                let createdBacklogItem = try await backlogStore.createFromTask(task)
-                do {
-                    try await store.deleteTaskRemote(id: task.id, householdId: task.householdId)
-                } catch {
-                    _ = await backlogStore.deleteItem(createdBacklogItem)
-                    throw error
-                }
-            } catch {
-                await MainActor.run {
-                    store.restoreTaskLocally(task)
-                    showBanner(.moveToIdeasFailed)
-                }
-                HapticManager.warning()
-            }
-
-            await MainActor.run {
-                hiddenMovedToIdeasIds.remove(task.id)
-            }
+        let result = store.moveTaskToIdeas(
+            task,
+            destinationCategoryId: backlogStore.resolveDestinationCategoryIdForTaskMove(task)
+        )
+        guard case .success = result else {
+            processingMovedToIdeasIds.remove(task.id)
+            hiddenMovedToIdeasIds.remove(task.id)
+            showBanner(.moveToIdeasFailed)
+            HapticManager.warning()
+            return
         }
+
+        processingMovedToIdeasIds.remove(task.id)
+        hiddenMovedToIdeasIds.remove(task.id)
     }
 
     private func moveActiveTasks(from source: IndexSet, to destination: Int) {
@@ -1113,6 +1116,10 @@ private struct TasksContent: View {
                 visibleTaskIDs: visibleIds
             )
         }
+    }
+
+    private func isLocalStoreNotification(_ notification: Notification) -> Bool {
+        (notification.object as? String) == "local"
     }
 
     private func queueDeleteTask(_ task: Task) {
@@ -1254,6 +1261,7 @@ struct TaskRow: View {
     let assignee: Member?
     let categoryName: String?
     let categoryColor: Color?
+    let appTipRuntimeGeneration: Int
     let wipZone: WipZone
     let showsSwipeActionsTip: Bool
     let onToggle: () -> Void
@@ -1323,7 +1331,8 @@ struct TaskRow: View {
             .contextualPopoverTip(
                 showsSwipeActionsTip,
                 TaskSwipeActionsTip(),
-                arrowEdge: .top
+                arrowEdge: .top,
+                generation: appTipRuntimeGeneration
             )
         }
         .padding(.vertical, 2)

@@ -9,6 +9,7 @@ final class ShoppingBundleStore: ObservableObject {
         static let pendingUpload = "pendingUpload"
         static let pendingDelete = "pendingDelete"
         static let awaitingCloudEcho = "awaitingCloudEcho"
+        static let awaitingDeleteEcho = "awaitingDeleteEcho"
     }
 
     struct PendingSyncSnapshot {
@@ -17,27 +18,47 @@ final class ShoppingBundleStore: ObservableObject {
     }
 
     @Published private(set) var bundles: [ShoppingBundle] = []
+    @Published private(set) var hasHydratedLocalSnapshot = false
     @Published private(set) var isLoading = false
+    @Published private(set) var isRefreshingInBackground = false
     @Published private(set) var error: Error?
 
     private lazy var cloudKit = CloudKitManager.shared
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
+    private var currentUserId: String?
+    private var householdOwnerId: String?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
+    private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var shouldReloadAfterCurrentLoad = false
+    private var hasHydratedVisibleSnapshot = false
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
+    }
+
+    func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
+        self.currentUserId = currentUserId
+        self.householdOwnerId = householdOwnerId
     }
 
     private var isCloudSyncEnabled: Bool {
         syncMode == .cloud
     }
 
+    private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
+        guard let currentUserId, let householdOwnerId else {
+            return .participantShared
+        }
+        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
+    }
+
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     @discardableResult
@@ -60,55 +81,115 @@ final class ShoppingBundleStore: ObservableObject {
 
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     var quickAddBundles: [ShoppingBundle] {
         bundles.filter { !$0.normalizedItems.isEmpty }
     }
 
+    func loadBundlesForDisplay() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || bundles.isEmpty)
+        guard isCloudSyncEnabled else { return }
+        scheduleBackgroundRefresh()
+    }
+
     func loadBundles() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || bundles.isEmpty)
+        guard isCloudSyncEnabled else { return }
+        let loadTask = ensureBackgroundRefreshTask()
+        await loadTask.value
+    }
+
+    private func scheduleBackgroundRefresh() {
+        _ = ensureBackgroundRefreshTask()
+    }
+
+    private func ensureBackgroundRefreshTask() -> _Concurrency.Task<Void, Never> {
+        if let activeLoadTask {
+            shouldReloadAfterCurrentLoad = true
+            return activeLoadTask
+        }
+
+        let loadTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            repeat {
+                shouldReloadAfterCurrentLoad = false
+                await performLoadBundlesPass()
+            } while shouldReloadAfterCurrentLoad
+
+            activeLoadTask = nil
+        }
+
+        activeLoadTask = loadTask
+        return loadTask
+    }
+
+    private func performLoadBundlesPass() async {
         guard let householdId else { return }
 
         isLoading = true
+        isRefreshingInBackground = true
         error = nil
+        defer {
+            isLoading = false
+            isRefreshingInBackground = false
+        }
 
-        let cachedBundles = loadFromCache()
-        let pendingSnapshot = pendingSyncSnapshot(from: cachedBundles)
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: !hasHydratedVisibleSnapshot || bundles.isEmpty)
 
         if !isCloudSyncEnabled {
-            isLoading = false
             return
         }
 
         do {
             await cloudKit.ensureReady()
-            let fetchedBundles = try await cloudKit.fetchShoppingBundles(householdId: householdId)
-            bundles = mergeCloudSnapshot(fetchedBundles, with: pendingSnapshot)
+            let fetchedBundles = try await cloudKit.fetchShoppingBundles(
+                householdId: householdId,
+                scope: cloudScope
+            )
+            let latestCachedBundles = fetchCachedBundles(updateVisibleState: false)
+            let latestPendingSnapshot = pendingSyncSnapshot(from: latestCachedBundles)
+            bundles = mergeCloudSnapshot(fetchedBundles, with: latestPendingSnapshot)
             syncToCache(fetchedBundles, cloudBundleIDs: Set(fetchedBundles.map(\.id)))
             replayPendingMutationsInBackground()
         } catch {
             self.error = error
         }
-
-        isLoading = false
     }
 
-    private func loadFromCache() -> [CachedShoppingBundle] {
-        guard let context = modelContext, let householdId else { return [] }
+    private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
+        _ = fetchCachedBundles(updateVisibleState: force || !hasHydratedVisibleSnapshot || bundles.isEmpty)
+    }
+
+    private func fetchCachedBundles(updateVisibleState: Bool) -> [CachedShoppingBundle] {
+        guard let context = modelContext, let householdId else {
+            if updateVisibleState {
+                bundles = []
+                hasHydratedVisibleSnapshot = true
+                hasHydratedLocalSnapshot = true
+            }
+            return []
+        }
 
         let descriptor = FetchDescriptor<CachedShoppingBundle>(
             predicate: #Predicate { $0.householdId == householdId },
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)]
         )
 
-        if let cachedBundles = try? context.fetch(descriptor) {
+        let cachedBundles = (try? context.fetch(descriptor)) ?? []
+        if updateVisibleState {
             bundles = cachedBundles
-                .filter { $0.syncStatusRaw != BundleSyncStatus.pendingDelete }
+                .filter {
+                    $0.syncStatusRaw != BundleSyncStatus.pendingDelete &&
+                        $0.syncStatusRaw != BundleSyncStatus.awaitingDeleteEcho
+                }
                 .map { $0.toShoppingBundle() }
-            return cachedBundles
+            hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
         }
-
-        return []
+        return cachedBundles
     }
 
     private func syncToCache(_ bundles: [ShoppingBundle], cloudBundleIDs: Set<UUID>) {
@@ -119,11 +200,17 @@ final class ShoppingBundleStore: ObservableObject {
         )
         let cachedBundles = (try? context.fetch(descriptor)) ?? []
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedBundles.map { ($0.id, $0) })
+        let pendingDeleteSnapshot = pendingSyncSnapshot(from: cachedBundles)
+        let pendingDeleteIDs = pendingDeleteSnapshot.pendingDeleteIDs
 
         for bundle in bundles {
+            if pendingDeleteIDs.contains(bundle.id) {
+                continue
+            }
             if let existing = cachedByID[bundle.id] {
                 if existing.syncStatusRaw == BundleSyncStatus.pendingUpload ||
-                    existing.syncStatusRaw == BundleSyncStatus.pendingDelete
+                    existing.syncStatusRaw == BundleSyncStatus.pendingDelete ||
+                    existing.syncStatusRaw == BundleSyncStatus.awaitingDeleteEcho
                 {
                     continue
                 }
@@ -133,9 +220,18 @@ final class ShoppingBundleStore: ObservableObject {
                     continue
                 }
                 existing.update(from: bundle)
+                existing.lastSyncedAt = Date()
             } else {
                 context.insert(CachedShoppingBundle(from: bundle))
             }
+        }
+
+        for cached in cachedBundles where
+            cached.syncStatusRaw == BundleSyncStatus.awaitingDeleteEcho &&
+            !cloudBundleIDs.contains(cached.id) &&
+            !pendingDeleteIDs.contains(cached.id)
+        {
+            context.delete(cached)
         }
 
         saveContextOrSetError(context, operation: "sync shopping bundle cache from cloud")
@@ -181,7 +277,10 @@ final class ShoppingBundleStore: ObservableObject {
 
         for cached in pendingUploads {
             do {
-                _ = try await cloudKit.saveShoppingBundle(cached.toShoppingBundle())
+                _ = try await cloudKit.saveShoppingBundle(
+                    cached.toShoppingBundle(),
+                    scope: cloudScope
+                )
                 cached.syncStatusRaw = BundleSyncStatus.awaitingCloudEcho
                 cached.lastSyncedAt = Date()
                 didMutateCache = true
@@ -194,9 +293,11 @@ final class ShoppingBundleStore: ObservableObject {
             do {
                 try await cloudKit.deleteShoppingBundle(
                     id: cached.id,
-                    householdId: cached.householdId
+                    householdId: cached.householdId,
+                    scope: cloudScope
                 )
-                context.delete(cached)
+                cached.syncStatusRaw = BundleSyncStatus.awaitingDeleteEcho
+                cached.lastSyncedAt = Date()
                 didMutateCache = true
             } catch {
                 self.error = error
@@ -210,7 +311,7 @@ final class ShoppingBundleStore: ObservableObject {
 
     func createBundle(
         name: String,
-        icon: String = ShoppingBundle.defaultIcon,
+        icon: String = ShoppingBundle.creationDefaultIcon,
         items: [String]
     ) async {
         guard let householdId else { return }
@@ -311,7 +412,7 @@ final class ShoppingBundleStore: ObservableObject {
             switch cached.syncStatusRaw {
             case BundleSyncStatus.pendingUpload, BundleSyncStatus.awaitingCloudEcho:
                 pendingUploadByID[cached.id] = cached.toShoppingBundle()
-            case BundleSyncStatus.pendingDelete:
+            case BundleSyncStatus.pendingDelete, BundleSyncStatus.awaitingDeleteEcho:
                 pendingDeleteIDs.insert(cached.id)
             default:
                 continue

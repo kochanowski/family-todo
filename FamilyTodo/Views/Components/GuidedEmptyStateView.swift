@@ -9,12 +9,9 @@ struct GuidedEmptyStateView: View {
 
     @State private var showCreateFlow = false
     @State private var showJoinSheet = false
-    @State private var joinInput = ""
     @State private var joinInviteCode = ""
     @State private var isJoining = false
     @State private var joinErrorMessage: String?
-    @State private var pendingCustomJoinInviteCode: String?
-    @State private var showCustomJoinConfirmation = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -65,7 +62,7 @@ struct GuidedEmptyStateView: View {
                                 .fill(Color.blue)
                         )
                 }
-                .disabled(showJoinSheet)
+                .disabled(showJoinSheet || confirmedMembershipDisplayName == nil)
 
                 // Secondary - Join
                 Button {
@@ -76,7 +73,7 @@ struct GuidedEmptyStateView: View {
                         .font(themeStore.font(for: .buttonLabel))
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
-                .disabled(showCreateFlow || !canJoinViaInvite)
+                .disabled(showCreateFlow || !canJoinViaInvite || confirmedMembershipDisplayName == nil)
             }
             .padding(.horizontal, 40)
 
@@ -98,21 +95,13 @@ struct GuidedEmptyStateView: View {
         .sheet(isPresented: $showJoinSheet) {
             HouseholdJoinSheet(
                 inviteCodeToken: $joinInviteCode,
-                inviteLink: $joinInput,
+                isJoining: isJoining,
                 onJoin: joinHousehold,
                 onPasteFromClipboard: {
-                    joinInput = UIPasteboard.general.string ?? ""
+                    joinInviteCode = UIPasteboard.general.string ?? ""
                 }
             )
             .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showCustomJoinConfirmation) {
-            AppConfirmationSheet(
-                title: "Join this household?",
-                message: "This invite uses a custom deep link. Confirm before joining.",
-                primaryTitle: "Join",
-                onPrimary: confirmCustomJoin
-            )
         }
         .alert("Action failed", isPresented: Binding(
             get: { joinErrorMessage != nil },
@@ -126,7 +115,6 @@ struct GuidedEmptyStateView: View {
             guard newValue != nil else { return }
             showCreateFlow = false
             showJoinSheet = false
-            pendingCustomJoinInviteCode = nil
         }
     }
 
@@ -143,8 +131,11 @@ struct GuidedEmptyStateView: View {
             joinErrorMessage = "Could not determine your account identity."
             return
         }
-        let rawInviteInput = preferredJoinInput()
-        guard !rawInviteInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let displayName = confirmedMembershipDisplayName else {
+            joinErrorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
+        guard let inviteCode = preferredJoinCode() else { return }
         guard !isJoining else { return }
 
         isJoining = true
@@ -152,15 +143,11 @@ struct GuidedEmptyStateView: View {
 
         _Concurrency.Task {
             do {
-                let normalizedInvite = try InviteInputNormalizer.normalizeInput(rawInviteInput)
-                if normalizedInvite.requiresConfirmation {
-                    pendingCustomJoinInviteCode = normalizedInvite.inviteCode
-                    showCustomJoinConfirmation = true
-                    isJoining = false
-                    return
-                }
-
-                try await performJoinHousehold(inviteCode: normalizedInvite.inviteCode, userId: userId)
+                try await performJoinHousehold(
+                    inviteCode: inviteCode,
+                    userId: userId,
+                    displayName: displayName
+                )
             } catch {
                 joinErrorMessage = error.localizedDescription
             }
@@ -169,62 +156,41 @@ struct GuidedEmptyStateView: View {
         }
     }
 
-    private func confirmCustomJoin() {
-        guard canJoinViaInvite else {
-            joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
-            return
-        }
-        guard let userId = userSession.userId else {
-            joinErrorMessage = "Could not determine your account identity."
-            return
-        }
-        guard let inviteCode = pendingCustomJoinInviteCode else { return }
-
-        pendingCustomJoinInviteCode = nil
-        isJoining = true
-
-        _Concurrency.Task {
-            do {
-                try await performJoinHousehold(inviteCode: inviteCode, userId: userId)
-            } catch {
-                joinErrorMessage = error.localizedDescription
-            }
-            isJoining = false
-        }
-    }
-
-    private func performJoinHousehold(inviteCode: String, userId: String) async throws {
+    private func performJoinHousehold(
+        inviteCode: String,
+        userId: String,
+        displayName: String
+    ) async throws {
         householdStore.setSyncMode(userSession.syncMode)
         try await householdStore.joinHousehold(
-            withInviteInput: inviteCode,
+            inviteCode: inviteCode,
             userId: userId,
-            displayName: fallbackDisplayNameForMembership()
+            displayName: displayName
         )
+        await MainActor.run {
+            userSession.applyProfileUpdate(displayName: displayName)
+        }
 
         if let household = householdStore.currentHousehold {
             userSession.setCurrentHousehold(household.id)
         }
 
-        joinInput = ""
         joinInviteCode = ""
         showJoinSheet = false
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
-    private func preferredJoinInput() -> String {
-        if let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode) {
-            return normalizedCode
+    private func preferredJoinCode() -> String? {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode),
+              normalizedCode.count == 8
+        else {
+            return nil
         }
-        return joinInput
+        return normalizedCode
     }
 
-    private func fallbackDisplayNameForMembership() -> String {
-        if let displayName = userSession.displayName,
-           let validated = try? DisplayNameValidator.validate(displayName)
-        {
-            return validated
-        }
-        return userSession.isGuest ? "Guest" : "Member"
+    private var confirmedMembershipDisplayName: String? {
+        userSession.confirmedMembershipDisplayName
     }
 }
 

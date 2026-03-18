@@ -112,6 +112,134 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(foreground, matches: .black)
     }
 
+    func testInactiveTabBarColorUsesBlackForLightTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .light
+
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
+
+        assertColor(inactiveColor, matches: .black)
+    }
+
+    func testInactiveTabBarColorUsesWhiteForDarkTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .dark
+
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .dark)
+        )
+
+        assertColor(inactiveColor, matches: .white)
+    }
+
+    func testInactiveTabBarColorUsesTraitCollectionForAutoTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .auto
+
+        let lightInactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
+        let darkInactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .dark)
+        )
+
+        assertColor(lightInactiveColor, matches: .black)
+        assertColor(darkInactiveColor, matches: .white)
+    }
+
+    func testInactiveTabBarColorUsesPaperInkColorForPaperTheme() {
+        let store = ThemeStore()
+        store.unifiedTheme = .paper
+
+        let inactiveColor = TabBarTypographyManager.inactiveItemColor(
+            themeStore: store,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
+
+        assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
+    }
+
+    func testReconcileRepairsCorruptedInactiveTintOnSameTabBarController() {
+        let store = ThemeStore()
+        store.unifiedTheme = .light
+
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 1
+        )
+
+        controller.tabBar.unselectedItemTintColor = .gray
+        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor = .gray
+        var corruptedTitleAttributes =
+            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes
+        corruptedTitleAttributes[.foregroundColor] = UIColor.gray
+        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes =
+            corruptedTitleAttributes
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 1
+        )
+
+        assertColor(controller.tabBar.unselectedItemTintColor ?? .clear, matches: .black)
+        XCTAssertEqual(controller.selectedIndex, 1)
+        assertColor(
+            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor ?? .clear,
+            matches: .black
+        )
+    }
+
+    func testReconcileIsStableAcrossRepeatedCalls() {
+        let store = ThemeStore()
+        store.unifiedTheme = .dark
+
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 2
+        )
+        let firstNormalColor = controller.tabBar.unselectedItemTintColor
+        let firstSelectedColor = controller.tabBar.tintColor
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 2
+        )
+
+        assertColor(firstNormalColor ?? .clear, matches: controller.tabBar.unselectedItemTintColor ?? .clear)
+        assertColor(firstSelectedColor ?? .clear, matches: controller.tabBar.tintColor ?? .clear)
+        XCTAssertEqual(controller.selectedIndex, 2)
+    }
+
+    private func makeTabBarController() -> UITabBarController {
+        let controller = UITabBarController()
+        let viewControllers = AppTab.allCases.map { tab -> UIViewController in
+            let viewController = UIViewController()
+            viewController.tabBarItem = UITabBarItem(
+                title: tab.title,
+                image: UIImage(systemName: tab.icon),
+                selectedImage: UIImage(systemName: tab.activeIcon)
+            )
+            return viewController
+        }
+        controller.setViewControllers(viewControllers, animated: false)
+        controller.loadViewIfNeeded()
+        return controller
+    }
+
     private func assertColor(
         _ actual: UIColor,
         matches expected: UIColor,
@@ -254,11 +382,52 @@ final class UserSessionTests: XCTestCase {
         try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertTrue(session.needsDisplayNamePrompt)
+        XCTAssertNil(session.confirmedMembershipDisplayName)
 
         session.confirmDisplayName("Tester")
 
         XCTAssertFalse(session.needsDisplayNamePrompt)
         XCTAssertEqual(session.displayName, "Tester")
+        XCTAssertEqual(session.confirmedMembershipDisplayName, "Tester")
+    }
+
+    func testSuggestedDisplayNameForPromptUsesAvailableAuthNameWithoutAutoConfirming() async {
+        let authService = TestAuthenticationService()
+        let session = UserSession(authService: authService, userDefaults: makeUserDefaults())
+
+        let user = AuthenticationService.AuthenticatedUser(
+            id: "cloudkit-user-3",
+            appleUserID: "apple-user-3",
+            email: nil,
+            displayName: "Taylor",
+            givenName: "Taylor",
+            familyName: "Swift"
+        )
+        authService.currentUser = user
+        authService.authenticationState = .authenticated(userID: user.id)
+        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertTrue(session.needsDisplayNamePrompt)
+        XCTAssertEqual(session.suggestedDisplayNameForPrompt, "Taylor")
+        XCTAssertNil(session.confirmedMembershipDisplayName)
+    }
+
+    func testLocalAppResetClearsPersistedDisplayNameAndHouseholdSelection() {
+        let defaults = makeUserDefaults()
+        defaults.set("household-id", forKey: "currentHouseholdID")
+        defaults.set(true, forKey: "signedInSessionEnabled")
+        defaults.set("cloud-user", forKey: "lastSignedInUserId")
+        defaults.set(
+            ["cloud-user": "Wojtek"],
+            forKey: "preferredDisplayNameByUserId"
+        )
+
+        LocalAppReset.clearUserDefaults(defaults)
+
+        XCTAssertNil(defaults.object(forKey: "currentHouseholdID"))
+        XCTAssertNil(defaults.object(forKey: "signedInSessionEnabled"))
+        XCTAssertNil(defaults.object(forKey: "lastSignedInUserId"))
+        XCTAssertNil(defaults.object(forKey: "preferredDisplayNameByUserId"))
     }
 }
 
@@ -606,6 +775,24 @@ final class CelebrationManagerTests: XCTestCase {
 
         XCTAssertEqual(decision.tier, .fallback)
         XCTAssertEqual(decision.celebration.style, .normal)
+        XCTAssertNil(defaults.object(forKey: "celebrations.lastSurpriseAt"))
+    }
+
+    func testResetForDevelopmentClearsActiveCelebrationConfettiAndCadence() {
+        let defaults = makeUserDefaults()
+        defaults.set(Date(timeIntervalSince1970: 1_736_950_000), forKey: "celebrations.lastSurpriseAt")
+        let manager = CelebrationManager(userDefaults: defaults)
+
+        manager.triggerConfetti()
+        manager.celebrateAllTasksComplete()
+
+        XCTAssertNotNil(manager.activeCelebration)
+        XCTAssertGreaterThan(manager.confettiTrigger, 0)
+
+        manager.resetForDevelopment()
+
+        XCTAssertNil(manager.activeCelebration)
+        XCTAssertEqual(manager.confettiTrigger, 0)
         XCTAssertNil(defaults.object(forKey: "celebrations.lastSurpriseAt"))
     }
 }

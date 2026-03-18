@@ -147,6 +147,13 @@ final class CelebrationManager: ObservableObject {
         confettiTrigger += 1
     }
 
+    /// Clears transient celebration UI and cadence state for fresh-start testing.
+    func resetForDevelopment() {
+        activeCelebration = nil
+        confettiTrigger = 0
+        userDefaults.removeObject(forKey: DefaultsKey.lastSurpriseAt)
+    }
+
     /// Notify partner about completion (local notification).
     func notifyPartner(completedBy memberName: String, action: String) {
         #if !targetEnvironment(simulator) && !CI
@@ -219,7 +226,8 @@ final class CelebrationManager: ObservableObject {
         fallback: (emoji: String, message: String)
     ) -> (emoji: String, message: String) {
         guard !messages.isEmpty else { return fallback }
-        let index = randomInt(0 ... (messages.count - 1))
+        let validRange = 0 ... (messages.count - 1)
+        let index = min(max(randomInt(validRange), validRange.lowerBound), validRange.upperBound)
         return messages[index]
     }
 }

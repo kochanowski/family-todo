@@ -33,7 +33,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
     }
 
     func testBootstrapSuccessReturnsReadyNormalMode() {
-        let schema = Schema([CachedTask.self])
+        let schema = TestModelContainerFactory.schema(for: .appCache)
         let result = SwiftDataContainerFactory.bootstrap(
             schema: schema,
             dependencies: dependencies()
@@ -47,7 +47,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
     }
 
     func testBootstrapUsesCloudKitNoneForPersistentAndInMemoryPaths() {
-        let schema = Schema([CachedTask.self])
+        let schema = TestModelContainerFactory.schema(for: .appCache)
         var attempts = 0
         var capturedModes: [String] = []
 
@@ -57,7 +57,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
                 containerBuilder: { schema, configuration in
                     attempts += 1
                     capturedModes.append(String(describing: configuration.cloudKitDatabase).lowercased())
-                    if attempts <= 2 {
+                    if attempts == 1 {
                         throw NSError(domain: "SwiftDataContainerFactoryTests", code: 901)
                     }
                     return try Self.makeInMemoryContainer(schema: schema)
@@ -65,14 +65,37 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(attempts, 3)
-        XCTAssertEqual(capturedModes.count, 3)
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(capturedModes.count, 2)
         XCTAssertTrue(capturedModes.allSatisfy { $0.contains("none") })
     }
 
-    func testBootstrapAfterCleanupReturnsStoreResetReadyMode() {
-        let schema = Schema([CachedTask.self])
+    func testBootstrapAfterExplicitResetReturnsStoreResetReadyMode() {
+        let schema = TestModelContainerFactory.schema(for: .appCache)
+        let staleArtifactURL = tempDirectoryURL.appendingPathComponent("default.store-wal")
+        FileManager.default.createFile(atPath: staleArtifactURL.path, contents: Data())
+        SwiftDataContainerFactory.requestStoreReset(reason: .hardResetApp, defaults)
+
+        let result = SwiftDataContainerFactory.bootstrap(
+            schema: schema,
+            dependencies: dependencies()
+        )
+
+        XCTAssertEqual(result.recoveryMode, .storeReset)
+        XCTAssertEqual(result.bootstrapState, .ready)
+        XCTAssertNil(result.diagnosticMessage)
+        XCTAssertNil(result.diagnostics)
+        XCTAssertNotNil(result.container)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleArtifactURL.path))
+        XCTAssertNil(defaults.data(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey))
+    }
+
+    func testBootstrapPersistentFailureReturnsRecoveryRequiredWithoutDeletingArtifacts() {
+        let schema = TestModelContainerFactory.schema(for: .appCache)
+        let staleArtifactURL = tempDirectoryURL.appendingPathComponent("default.store-wal")
+        FileManager.default.createFile(atPath: staleArtifactURL.path, contents: Data())
         var attempts = 0
+
         let result = SwiftDataContainerFactory.bootstrap(
             schema: schema,
             dependencies: dependencies(
@@ -87,55 +110,26 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         )
 
         XCTAssertEqual(attempts, 2)
-        XCTAssertEqual(result.recoveryMode, .storeReset)
-        XCTAssertEqual(result.bootstrapState, .ready)
+        XCTAssertEqual(result.recoveryMode, .recoveryRequired)
+        XCTAssertEqual(result.bootstrapState, .recoveryRequired)
         XCTAssertNotNil(result.diagnosticMessage)
         XCTAssertNotNil(result.diagnostics)
-        XCTAssertNotNil(result.container)
+        XCTAssertNil(result.container)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: staleArtifactURL.path))
 
         let event = defaults.dictionary(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
-        XCTAssertEqual(event?["mode"] as? String, StoreRecoveryMode.storeReset.rawValue)
-    }
-
-    func testBootstrapDoubleFailureReturnsInMemoryFallbackReadyMode() {
-        let schema = Schema([CachedTask.self])
-        var attempts = 0
-        let result = SwiftDataContainerFactory.bootstrap(
-            schema: schema,
-            dependencies: dependencies(
-                containerBuilder: { schema, _ in
-                    attempts += 1
-                    if attempts <= 2 {
-                        throw NSError(domain: "SwiftDataContainerFactoryTests", code: 1002)
-                    }
-                    return try Self.makeInMemoryContainer(schema: schema)
-                }
-            )
-        )
-
-        XCTAssertGreaterThanOrEqual(attempts, 3)
-        XCTAssertEqual(result.recoveryMode, .inMemoryFallback)
-        XCTAssertEqual(result.bootstrapState, .ready)
-        XCTAssertNotNil(result.diagnosticMessage)
-        XCTAssertNotNil(result.diagnostics)
-        XCTAssertNotNil(result.container)
-
-        let event = defaults.dictionary(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
-        XCTAssertEqual(event?["mode"] as? String, StoreRecoveryMode.inMemoryFallback.rawValue)
+        XCTAssertEqual(event?["mode"] as? String, StoreRecoveryMode.recoveryRequired.rawValue)
     }
 
     func testBootstrapTripleFailureReturnsSchemaFailureEmergencyMode() {
-        let schema = Schema([CachedTask.self])
+        let schema = TestModelContainerFactory.schema(for: .appCache)
         var attempts = 0
         let result = SwiftDataContainerFactory.bootstrap(
             schema: schema,
             dependencies: dependencies(
-                containerBuilder: { schema, _ in
+                containerBuilder: { _, _ in
                     attempts += 1
-                    if attempts <= 3 {
-                        throw NSError(domain: "SwiftDataContainerFactoryTests", code: 1003)
-                    }
-                    return try Self.makeInMemoryContainer(schema: schema)
+                    throw NSError(domain: "SwiftDataContainerFactoryTests", code: 1003)
                 }
             )
         )
@@ -145,7 +139,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         XCTAssertEqual(result.bootstrapState, .emergency)
         XCTAssertNotNil(result.diagnosticMessage)
         XCTAssertNotNil(result.diagnostics)
-        XCTAssertNotNil(result.container)
+        XCTAssertNil(result.container)
         XCTAssertEqual(result.diagnostics?.cloudKitDatabaseMode, "none")
 
         let event = defaults.dictionary(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
@@ -153,7 +147,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
     }
 
     func testBootstrapSchemaFailureRecordsStagewiseDetailedErrors() {
-        let schema = Schema([CachedTask.self])
+        let schema = TestModelContainerFactory.schema(for: .appCache)
         let result = SwiftDataContainerFactory.bootstrap(
             schema: schema,
             dependencies: dependencies(
@@ -175,14 +169,13 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         XCTAssertEqual(diagnostics.cloudKitDatabaseMode, "none")
         XCTAssertEqual(diagnostics.errorChain, diagnostics.errorDetails.map(\.summary))
         XCTAssertTrue(diagnostics.errorDetails.contains(where: { $0.stage == .initialPersistent }))
-        XCTAssertTrue(diagnostics.errorDetails.contains(where: { $0.stage == .persistentAfterCleanup }))
         XCTAssertTrue(diagnostics.errorDetails.contains(where: { $0.stage == .fullInMemory }))
         XCTAssertTrue(diagnostics.errorDetails.contains(where: { $0.stage == .emergencyInMemory }))
         XCTAssertTrue(diagnostics.errorDetails.allSatisfy { !$0.reflected.isEmpty })
     }
 
     func testProbeModelsIndividuallyStillWorksWithCloudKitNone() {
-        let schema = Schema([CachedTask.self])
+        let schema = TestModelContainerFactory.schema(for: .appCache)
         var attempts = 0
         var probeModeSamples: [String] = []
 
@@ -191,7 +184,7 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
             dependencies: dependencies(
                 containerBuilder: { _, configuration in
                     attempts += 1
-                    if attempts > 3 {
+                    if attempts > 2 {
                         probeModeSamples.append(String(describing: configuration.cloudKitDatabase).lowercased())
                     }
                     throw NSError(domain: "SwiftDataContainerFactoryTests", code: 2002)
@@ -202,16 +195,16 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
         XCTAssertEqual(result.recoveryMode, .schemaFailure)
         XCTAssertEqual(result.bootstrapState, .emergency)
         XCTAssertNil(result.container)
-        XCTAssertGreaterThanOrEqual(probeModeSamples.count, 8)
+        XCTAssertGreaterThanOrEqual(probeModeSamples.count, 10)
         XCTAssertTrue(probeModeSamples.allSatisfy { $0.contains("none") })
 
         let probeErrors = result.diagnostics?.errorDetails.filter { $0.stage == .modelProbe } ?? []
-        XCTAssertEqual(probeErrors.count, 8)
+        XCTAssertEqual(probeErrors.count, 10)
         XCTAssertTrue(probeErrors.allSatisfy { $0.modelName != nil })
     }
 
     func testEmergencyPathReturnsWithoutCrashWhenAllContainerBuildsFail() {
-        let schema = Schema([CachedTask.self])
+        let schema = TestModelContainerFactory.schema(for: .appCache)
 
         let result = SwiftDataContainerFactory.bootstrap(
             schema: schema,
@@ -281,11 +274,12 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
     }
 
     func testRequestStoreResetSetsFlag() {
-        XCTAssertFalse(defaults.bool(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey))
+        XCTAssertNil(defaults.data(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey))
 
-        SwiftDataContainerFactory.requestStoreReset(defaults)
+        SwiftDataContainerFactory.requestStoreReset(reason: .debugCloudHouseholdDelete, defaults)
 
-        XCTAssertTrue(defaults.bool(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey))
+        let request = decodePendingResetRequest()
+        XCTAssertEqual(request?.reason, .debugCloudHouseholdDelete)
     }
 
     private func dependencies(
@@ -303,7 +297,19 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
     }
 
     private static func makeInMemoryContainer(schema: Schema) throws -> ModelContainer {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let configuration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
+        )
         return try ModelContainer(for: schema, configurations: [configuration])
+    }
+
+    private func decodePendingResetRequest() -> PendingStoreResetRequest? {
+        guard let data = defaults.data(forKey: SwiftDataContainerFactory.pendingStoreResetUserDefaultsKey) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(PendingStoreResetRequest.self, from: data)
     }
 }

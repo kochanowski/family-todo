@@ -36,6 +36,7 @@ struct BacklogCategory: Identifiable, Codable {
 
 struct BacklogItem: Identifiable, Codable {
     let id: UUID
+    let logicalItemID: UUID
     let categoryId: UUID
     let householdId: UUID
     var title: String
@@ -44,8 +45,21 @@ struct BacklogItem: Identifiable, Codable {
     let createdAt: Date
     var updatedAt: Date
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case logicalItemID
+        case categoryId
+        case householdId
+        case title
+        case assigneeId
+        case notes
+        case createdAt
+        case updatedAt
+    }
+
     init(
         id: UUID = UUID(),
+        logicalItemID: UUID? = nil,
         categoryId: UUID,
         householdId: UUID,
         title: String,
@@ -55,6 +69,7 @@ struct BacklogItem: Identifiable, Codable {
         updatedAt: Date = Date()
     ) {
         self.id = id
+        self.logicalItemID = logicalItemID ?? id
         self.categoryId = categoryId
         self.householdId = householdId
         self.title = title
@@ -62,6 +77,21 @@ struct BacklogItem: Identifiable, Codable {
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedID = try container.decode(UUID.self, forKey: .id)
+
+        id = decodedID
+        logicalItemID = try container.decodeIfPresent(UUID.self, forKey: .logicalItemID) ?? decodedID
+        categoryId = try container.decode(UUID.self, forKey: .categoryId)
+        householdId = try container.decode(UUID.self, forKey: .householdId)
+        title = try container.decode(String.self, forKey: .title)
+        assigneeId = try container.decodeIfPresent(UUID.self, forKey: .assigneeId)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 }
 

@@ -25,6 +25,11 @@ class HouseholdStore: ObservableObject {
         let userId: String?
     }
 
+    private struct PendingHouseholdMetadataSync {
+        let household: Household
+        let userId: String
+    }
+
     enum LeaveResolution: Equatable {
         case deleteHousehold
         case requireTransfer
@@ -76,6 +81,8 @@ class HouseholdStore: ObservableObject {
     private let recoverySuppressionDuration: TimeInterval
     private var isRefreshingCloudHousehold = false
     private var isReplayingPendingExitOperations = false
+    private var pendingHouseholdMetadataSync: PendingHouseholdMetadataSync?
+    private var isReplayingPendingHouseholdMetadataSync = false
 
     // Cache for sharing controller
     private var activeShare: CKShare?
@@ -97,6 +104,10 @@ class HouseholdStore: ObservableObject {
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
+    }
+
+    var isModelContextReady: Bool {
+        modelContext != nil
     }
 
     @discardableResult
@@ -132,6 +143,27 @@ class HouseholdStore: ObservableObject {
         )
     }
 
+    /// Launch-safe local-first resolver for startup routing.
+    /// It never touches CloudKit and only inspects in-memory/current cached household state.
+    @discardableResult
+    func resolveStartupHouseholdLocally(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Household? {
+        if let household = currentHousehold {
+            guard !isRecoverySuppressed(for: household.id) else {
+                clearCurrentHousehold()
+                return nil
+            }
+            return household
+        }
+
+        return restoreCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+    }
+
     @discardableResult
     func restoreCachedHousehold(
         userId: String,
@@ -145,6 +177,17 @@ class HouseholdStore: ObservableObject {
         }
 
         let restoredHousehold = cached.toHousehold()
+        guard isValidCachedMembershipForRecoveredHousehold(
+            householdId: restoredHousehold.id,
+            userId: userId
+        ) else {
+            print(
+                "DEBUG: Ignoring cached household \(restoredHousehold.id) because the current user has no cached membership."
+            )
+            removeHouseholdFromCache(id: restoredHousehold.id)
+            currentHousehold = nil
+            return nil
+        }
         currentHousehold = restoredHousehold
         return restoredHousehold
     }
@@ -175,8 +218,13 @@ class HouseholdStore: ObservableObject {
                 do {
                     await setCloudScope(for: current, userId: userId)
                     let fresh = try await cloudKit.fetchHousehold(id: current.id)
-                    await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
-                    resolvedCloudHousehold = fresh
+                    if try await validateRecoveredMembershipOrAbandon(
+                        household: fresh,
+                        userId: userId
+                    ) {
+                        await cloudKit.migrateMemberColorsIfNeeded(householdId: fresh.id)
+                        resolvedCloudHousehold = fresh
+                    }
                 } catch {
                     print("DEBUG: Cached household refresh failed, retrying membership lookup: \(error)")
                 }
@@ -193,6 +241,11 @@ class HouseholdStore: ObservableObject {
             if let resolvedCloudHousehold {
                 print("DEBUG: Found recoverable household in cloud: \(resolvedCloudHousehold.id)")
                 await setCloudScope(for: resolvedCloudHousehold, userId: userId)
+                if resolvedCloudHousehold.ownerId == userId {
+                    try? await cloudKit.repairSharedHouseholdGraphIfNeeded(
+                        householdId: resolvedCloudHousehold.id
+                    )
+                }
                 await cloudKit.migrateMemberColorsIfNeeded(householdId: resolvedCloudHousehold.id)
                 updateCache(with: resolvedCloudHousehold)
                 currentHousehold = resolvedCloudHousehold
@@ -219,21 +272,35 @@ class HouseholdStore: ObservableObject {
             "Invalid sync mode for household creation"
         )
 
-        try await ensureUserCanStartSingleHousehold(userId: userId)
+        try ensureUserCanStartSingleHouseholdLocally(userId: userId)
+        if syncMode == .cloud, !shouldSkipRemoteSingleHouseholdDiscoveryForCreate {
+            try await ensureUserCanStartSingleHouseholdRemotely(userId: userId)
+        }
 
         isLoading = true
         defer { isLoading = false }
 
-        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
+        let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
         let trimmedHouseholdName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedHouseholdName.isEmpty else {
             throw HouseholdError.invalidInviteCode
+        }
+        if syncMode == .localOnly, modelContext == nil {
+            throw HouseholdError.cacheNotAvailable
         }
 
         let newHousehold = Household(
             name: trimmedHouseholdName,
             iconSymbol: iconSymbol,
             ownerId: userId
+        )
+
+        let ownerMember = Member(
+            householdId: newHousehold.id,
+            userId: userId,
+            displayName: validatedDisplayName,
+            role: .owner,
+            colorHex: MemberColorToken.randomHex()
         )
 
         // 1. Save to CloudKit (if cloud sync is enabled and available)
@@ -244,26 +311,17 @@ class HouseholdStore: ObservableObject {
             _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: newHousehold.id)
 
             _ = try await cloudKit.saveHousehold(newHousehold)
-
-            // Create initial member (owner)
-            let owner = Member(
-                householdId: newHousehold.id,
-                userId: userId,
-                displayName: validatedDisplayName,
-                role: .owner,
-                colorHex: MemberColorToken.randomHex()
-            )
-            _ = try await cloudKit.saveMember(owner)
-            await cloudKit.migrateMemberColorsIfNeeded(householdId: newHousehold.id)
+            _ = try await cloudKit.saveMember(ownerMember)
+            updateCache(with: ownerMember)
+            updateCache(with: newHousehold)
+            currentHousehold = newHousehold
+            runCreateHouseholdPostflight(household: newHousehold, userId: userId)
+            return newHousehold
         }
 
-        // 2. Cache the local owner membership in local-only mode
+        // 2. Cache the local owner membership for immediate UI availability.
         if syncMode == .localOnly {
-            try cacheLocalOwnerMembership(
-                householdId: newHousehold.id,
-                userId: userId,
-                displayName: validatedDisplayName
-            )
+            updateCache(with: ownerMember)
         }
 
         // 3. Update Cache
@@ -285,6 +343,7 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.ownerPrivate)
         _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: household.id)
         try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
+        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
         let container = await cloudKit.getContainer()
 
         let share = try await cloudKit.createShare(for: household)
@@ -301,6 +360,7 @@ class HouseholdStore: ObservableObject {
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.ownerPrivate)
         try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
+        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
 
         if let existingURL = share?.url {
             return existingURL
@@ -340,6 +400,9 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
+
         if let activeInviteCode {
             do {
                 let token = try await cloudKit.fetchInviteToken(code: activeInviteCode)
@@ -377,7 +440,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
-        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
+        let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
         let normalizedInvite = try InviteInputNormalizer.normalizeInput(input)
@@ -402,6 +465,7 @@ class HouseholdStore: ObservableObject {
         // Update local cache
         updateCache(with: household)
         currentHousehold = household
+        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     func joinHousehold(metadata: CKShare.Metadata, userId: String, displayName: String) async throws {
@@ -414,7 +478,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
-        let validatedDisplayName = normalizedMembershipDisplayName(from: displayName)
+        let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.participantShared)
@@ -432,6 +496,7 @@ class HouseholdStore: ObservableObject {
 
         updateCache(with: household)
         currentHousehold = household
+        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     // MARK: - Household Management
@@ -451,7 +516,7 @@ class HouseholdStore: ObservableObject {
         userId: String,
         iconSymbol: String? = nil
     ) async throws {
-        guard var household = currentHousehold else {
+        guard let household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
         guard household.ownerId == userId else {
@@ -468,27 +533,62 @@ class HouseholdStore: ObservableObject {
             return
         }
 
-        household.name = trimmedName
-        household.iconSymbol = resolvedIconSymbol
-        household.updatedAt = Date()
-        updateCache(with: household)
-        currentHousehold = household
+        error = nil
 
-        if syncMode == .cloud {
-            do {
-                await setCloudScope(for: household, userId: userId)
-                let members = try await cloudKit.fetchMembers(householdId: household.id)
-                guard members.contains(where: { $0.userId == userId && $0.isActive }) else {
-                    throw HouseholdError.notAuthorized
+        let previousHousehold = household
+        var updatedHousehold = household
+        updatedHousehold.name = trimmedName
+        updatedHousehold.iconSymbol = resolvedIconSymbol
+        updatedHousehold.updatedAt = Date()
+
+        currentHousehold = updatedHousehold
+        guard updateCache(with: updatedHousehold) else {
+            currentHousehold = previousHousehold
+            _ = updateCache(with: previousHousehold)
+            throw error ?? HouseholdError.cacheNotAvailable
+        }
+
+        guard syncMode == .cloud else {
+            return
+        }
+
+        queueHouseholdMetadataSync(updatedHousehold, userId: userId)
+    }
+
+    private func queueHouseholdMetadataSync(_ household: Household, userId: String) {
+        guard syncMode == .cloud else { return }
+        pendingHouseholdMetadataSync = PendingHouseholdMetadataSync(
+            household: household,
+            userId: userId
+        )
+        replayPendingHouseholdMetadataSyncInBackground()
+    }
+
+    private func replayPendingHouseholdMetadataSyncInBackground() {
+        guard syncMode == .cloud else {
+            pendingHouseholdMetadataSync = nil
+            return
+        }
+        guard !isReplayingPendingHouseholdMetadataSync else { return }
+
+        isReplayingPendingHouseholdMetadataSync = true
+        _ = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { isReplayingPendingHouseholdMetadataSync = false }
+
+            while let pendingSync = pendingHouseholdMetadataSync {
+                pendingHouseholdMetadataSync = nil
+
+                do {
+                    await setCloudScope(for: pendingSync.household, userId: pendingSync.userId)
+                    _ = try await cloudKit.updateHouseholdMetadata(
+                        householdId: pendingSync.household.id,
+                        newName: pendingSync.household.name,
+                        newIconSymbol: pendingSync.household.iconSymbol
+                    )
+                } catch {
+                    self.error = error
                 }
-                _ = try await cloudKit.updateHouseholdMetadata(
-                    householdId: household.id,
-                    newName: household.name,
-                    newIconSymbol: resolvedIconSymbol
-                )
-            } catch {
-                self.error = error
-                throw error
             }
         }
     }
@@ -588,6 +688,29 @@ class HouseholdStore: ObservableObject {
 
         if pendingOperation != nil {
             replayPendingExitOperationsInBackground()
+        }
+    }
+
+    /// Removes the current household from CloudKit as part of a hard reset.
+    /// Owner → deletes the entire household. Participant → deactivates membership and leaves.
+    /// Errors are swallowed; local reset proceeds regardless of network state.
+    func hardResetCloudHousehold(userId: String) async {
+        guard syncMode == .cloud, let household = currentHousehold else { return }
+
+        do {
+            await cloudKit.ensureReady()
+            try await cloudKit.checkAvailability()
+
+            if household.ownerId == userId {
+                try await deleteRemoteOwnedHousehold(householdId: household.id)
+            } else {
+                try await leaveSharedHouseholdRemotely(
+                    householdId: household.id,
+                    userId: userId
+                )
+            }
+        } catch {
+            print("[HouseholdStore] Hard reset cloud cleanup non-fatal: \(error)")
         }
     }
 
@@ -860,11 +983,142 @@ class HouseholdStore: ObservableObject {
         _ = try await cloudKit.saveMember(member)
     }
 
-    private func normalizedMembershipDisplayName(from rawDisplayName: String) -> String {
-        if let validated = try? DisplayNameValidator.validate(rawDisplayName) {
-            return validated
+    private func requiredMembershipDisplayName(from rawDisplayName: String) throws -> String {
+        guard let validated = try? DisplayNameValidator.validate(rawDisplayName) else {
+            throw HouseholdError.displayNameRequired
         }
-        return syncMode == .localOnly ? "Guest" : "Member"
+        return validated
+    }
+
+    private func runCreateHouseholdPostflight(household: Household, userId: String) {
+        _ = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
+
+            do {
+                try await validateOwnerMembershipBootstrap(
+                    household: household,
+                    userId: userId
+                )
+            } catch {
+                self.error = error
+                print("DEBUG: Owner membership postflight validation failed: \(error)")
+            }
+        }
+    }
+
+    private func validateOwnerMembershipBootstrap(
+        household: Household,
+        userId: String
+    ) async throws {
+        let retryBackoffNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000]
+        var lastError: Error?
+
+        for (attempt, delay) in retryBackoffNanoseconds.enumerated() {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
+            memberStore.setSyncMode(syncMode)
+            memberStore.setCloudContext(currentUserId: userId, householdOwnerId: household.ownerId)
+            await memberStore.loadMembers()
+
+            if let error = memberStore.error {
+                lastError = error
+            } else if let ownerMember = memberStore.members.first(where: {
+                $0.userId == userId && $0.role == .owner && $0.isActive
+            }) {
+                updateCache(with: ownerMember)
+                return
+            } else {
+                lastError = HouseholdError.memberNotFound
+            }
+
+            let isLastAttempt = attempt == retryBackoffNanoseconds.count - 1
+            if isLastAttempt {
+                throw lastError ?? HouseholdError.memberNotFound
+            }
+        }
+    }
+
+    private func prewarmJoinedHouseholdGraph(household: Household, userId: String) async throws {
+        guard syncMode == .cloud, let modelContext else { return }
+
+        let retryBackoffNanoseconds: [UInt64] = [0, 400_000_000, 1_000_000_000, 2_000_000_000]
+        var lastError: Error?
+
+        for (attempt, delay) in retryBackoffNanoseconds.enumerated() {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            do {
+                try await prewarmJoinedHouseholdGraphOnce(household: household, userId: userId, modelContext: modelContext)
+                return
+            } catch {
+                lastError = error
+                let isLastAttempt = attempt == retryBackoffNanoseconds.count - 1
+                if isLastAttempt {
+                    throw error
+                }
+            }
+        }
+
+        throw lastError ?? HouseholdError.householdNotFound
+    }
+
+    private func prewarmJoinedHouseholdGraphOnce(
+        household: Household,
+        userId: String,
+        modelContext: ModelContext
+    ) async throws {
+        let ownerId = household.ownerId
+
+        let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
+        memberStore.setSyncMode(syncMode)
+        memberStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await memberStore.loadMembers()
+        if let error = memberStore.error {
+            throw error
+        }
+        guard memberStore.members.contains(where: { $0.userId == userId && $0.isActive }) else {
+            throw HouseholdError.memberNotFound
+        }
+
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(household.id)
+        taskStore.setSyncMode(syncMode)
+        taskStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await taskStore.loadTasks()
+        if let error = taskStore.error {
+            throw error
+        }
+
+        let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
+        shoppingStore.setSyncMode(syncMode)
+        shoppingStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await shoppingStore.loadItems()
+        if let error = shoppingStore.error {
+            throw error
+        }
+
+        let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
+        bundleStore.setSyncMode(syncMode)
+        bundleStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await bundleStore.loadBundles()
+        if let error = bundleStore.error {
+            throw error
+        }
+
+        let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
+        backlogStore.setSyncMode(syncMode)
+        backlogStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
+        await backlogStore.loadData()
+        if let error = backlogStore.error {
+            throw error
+        }
     }
 
     func resolveLeaveBehavior(for member: Member, activeMembers: [Member]) -> LeaveResolution {
@@ -907,6 +1161,40 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    func resolveMembershipDisplayNameLocally(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> String? {
+        var householdIds: [UUID] = []
+
+        if let currentHouseholdId = currentHousehold?.id {
+            householdIds.append(currentHouseholdId)
+        }
+
+        if let preferredHouseholdId,
+           !householdIds.contains(preferredHouseholdId)
+        {
+            householdIds.append(preferredHouseholdId)
+        }
+
+        for cachedHousehold in fetchRecoverableCachedHouseholds(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        ) where !householdIds.contains(cachedHousehold.id) {
+            householdIds.append(cachedHousehold.id)
+        }
+
+        for householdId in householdIds {
+            if let member = fetchCachedMembers(householdId: householdId).first(where: {
+                $0.userId == userId && $0.isActive
+            }) {
+                return member.displayName
+            }
+        }
+
+        return nil
+    }
+
     func isRecoverySuppressed(for householdId: UUID) -> Bool {
         let suppressions = loadSuppressedRecoveries(cleaningExpired: true)
         return suppressions[householdId.uuidString] != nil || hasPendingExitOperation(for: householdId)
@@ -940,6 +1228,14 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         ).count)
+    }
+
+    func hasTrustedLocalHouseholdContext(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Bool {
+        currentHousehold != nil ||
+            fetchCachedHousehold(userId: userId, preferredHouseholdId: preferredHouseholdId) != nil
     }
 
     // MARK: - SwiftData Helpers
@@ -983,6 +1279,16 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    private func isValidCachedMembershipForRecoveredHousehold(
+        householdId: UUID,
+        userId: String
+    ) -> Bool {
+        guard syncMode == .cloud else { return true }
+        return fetchCachedMembers(householdId: householdId).contains {
+            $0.userId == userId && $0.isActive
+        }
+    }
+
     private func resolvedActiveMembersForExit(
         householdId: UUID,
         activeMembersSnapshot: [Member]?
@@ -1013,7 +1319,11 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    private func ensureUserCanStartSingleHousehold(userId: String) async throws {
+    private var shouldSkipRemoteSingleHouseholdDiscoveryForCreate: Bool {
+        setupResolutionState.resolvedHouseholdCount == 0
+    }
+
+    private func ensureUserCanStartSingleHouseholdLocally(userId: String) throws {
         if let household = currentHousehold,
            !isRecoverySuppressed(for: household.id)
         {
@@ -1024,9 +1334,9 @@ class HouseholdStore: ObservableObject {
             currentHousehold = cachedHousehold.toHousehold()
             throw HouseholdError.alreadyInHousehold
         }
+    }
 
-        guard syncMode == .cloud else { return }
-
+    private func ensureUserCanStartSingleHouseholdRemotely(userId: String) async throws {
         await replayPendingExitOperationsIfNeeded()
         await cloudKit.ensureReady()
         try await cloudKit.checkAvailability()
@@ -1038,16 +1348,46 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    private func ensureUserCanStartSingleHousehold(userId: String) async throws {
+        try ensureUserCanStartSingleHouseholdLocally(userId: userId)
+
+        guard syncMode == .cloud else { return }
+        try await ensureUserCanStartSingleHouseholdRemotely(userId: userId)
+    }
+
     private func resolveRecoverableCloudHousehold(
         userId: String,
         preferredHouseholdId: UUID? = nil
     ) async throws -> Household? {
         if let preferredHouseholdId, !isRecoverySuppressed(for: preferredHouseholdId) {
-            do {
-                return try await cloudKit.fetchHousehold(id: preferredHouseholdId)
-            } catch {
-                print("DEBUG: Preferred household lookup failed, falling back to membership lookup: \(error)")
+            await cloudKit.setHouseholdScope(.participantShared)
+            if let participantPreferredHousehold = try await recoverableHousehold(
+                from: cloudKit.fetchMemberByUserId(
+                    userId,
+                    householdId: preferredHouseholdId,
+                    scope: .participantShared
+                ),
+                source: .participantShared
+            ) {
+                return participantPreferredHousehold
             }
+
+            await cloudKit.setHouseholdScope(.ownerPrivate)
+            if let ownerPreferredHousehold = try await recoverableHousehold(
+                from: cloudKit.fetchMemberByUserId(
+                    userId,
+                    householdId: preferredHouseholdId,
+                    scope: .ownerPrivate
+                ),
+                source: .ownerPrivate
+            ) {
+                return ownerPreferredHousehold
+            }
+
+            print(
+                "DEBUG: Preferred household \(preferredHouseholdId) has no active membership for user \(userId); abandoning recovery."
+            )
+            await invalidateRecoveredHousehold(preferredHouseholdId)
         }
 
         await cloudKit.setHouseholdScope(.participantShared)
@@ -1067,6 +1407,42 @@ class HouseholdStore: ObservableObject {
         }
 
         return nil
+    }
+
+    func validateRecoveredMembershipOrAbandon(
+        household: Household,
+        userId: String,
+        retryDelaysNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000],
+        fetchActiveMember: ((Household, String) async throws -> Member?)? = nil
+    ) async throws -> Bool {
+        guard syncMode == .cloud else { return true }
+
+        let fetchActiveMember = fetchActiveMember ?? { [cloudKit] household, userId in
+            let scope: CloudKitManager.HouseholdDatabaseScope = household.ownerId == userId
+                ? .ownerPrivate
+                : .participantShared
+            return try await cloudKit.fetchMemberByUserId(
+                userId,
+                householdId: household.id,
+                scope: scope
+            )
+        }
+
+        for delay in retryDelaysNanoseconds {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            if let member = try await fetchActiveMember(household, userId), member.isActive {
+                return true
+            }
+        }
+
+        print(
+            "DEBUG: Abandoning recovered household \(household.id) because no active membership exists for user \(userId)."
+        )
+        await invalidateRecoveredHousehold(household.id)
+        return false
     }
 
     func recoverableHousehold(
@@ -1103,6 +1479,15 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    private func invalidateRecoveredHousehold(_ householdId: UUID) async {
+        suppressRecovery(for: householdId)
+        removeHouseholdFromCache(id: householdId)
+        if currentHousehold?.id == householdId {
+            clearCurrentHousehold()
+        }
+        await cloudKit.clearAllCachedZones(for: householdId)
+    }
+
     private func cleanupStaleRecoverableMembership(
         _ member: Member,
         source: RecoverableMembershipSource
@@ -1130,8 +1515,9 @@ class HouseholdStore: ObservableObject {
         count > 0 ? 1 : 0
     }
 
-    private func updateCache(with household: Household) {
-        guard let context = modelContext else { return }
+    @discardableResult
+    private func updateCache(with household: Household) -> Bool {
+        guard let context = modelContext else { return true }
 
         let descriptor = FetchDescriptor<CachedHousehold>(
             predicate: #Predicate { $0.id == household.id }
@@ -1144,10 +1530,11 @@ class HouseholdStore: ObservableObject {
             } else {
                 context.insert(CachedHousehold(from: household))
             }
-            saveContextOrSetError(context, operation: "upsert cached household")
+            return saveContextOrSetError(context, operation: "upsert cached household")
         } catch {
             print("Cache update error: \(error)")
             self.error = error
+            return false
         }
     }
 
@@ -1248,31 +1635,25 @@ class HouseholdStore: ObservableObject {
 
     // MARK: - Local Household Bootstrap
 
-    private func cacheLocalOwnerMembership(
-        householdId: UUID,
-        userId: String,
-        displayName: String
-    ) throws {
-        guard let context = modelContext else {
-            throw HouseholdError.cacheNotAvailable
-        }
+    private func updateCache(with member: Member) {
+        guard let context = modelContext else { return }
 
+        let memberId = member.id
         let descriptor = FetchDescriptor<CachedMember>(
-            predicate: #Predicate { $0.householdId == householdId && $0.userId == userId }
+            predicate: #Predicate { $0.id == memberId }
         )
 
-        if try context.fetch(descriptor).isEmpty == false {
-            return
+        do {
+            if let cached = try context.fetch(descriptor).first {
+                cached.update(from: member)
+            } else {
+                context.insert(CachedMember(from: member))
+            }
+            saveContextOrSetError(context, operation: "upsert cached household member")
+        } catch {
+            print("Cache update error: \(error)")
+            self.error = error
         }
-
-        let ownerMember = Member(
-            householdId: householdId,
-            userId: userId,
-            displayName: displayName,
-            role: .owner,
-            colorHex: MemberColorToken.randomHex()
-        )
-        context.insert(CachedMember(from: ownerMember))
     }
 }
 

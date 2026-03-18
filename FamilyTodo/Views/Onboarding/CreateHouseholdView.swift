@@ -15,12 +15,9 @@ struct CreateHouseholdView: View {
     @State private var isCreating = false
     @State private var isJoining = false
     @State private var showJoinSheet = false
-    @State private var joinInput = ""
     @State private var joinInviteCode = ""
     @State private var joinErrorMessage: String?
     @State private var selectedIconSymbol = "house.fill"
-    @State private var pendingCustomJoinInviteCode: String?
-    @State private var showCustomJoinConfirmation = false
     @FocusState private var isTextFieldFocused: Bool
 
     init(allowsJoin: Bool = true, showsCloseButton: Bool = false) {
@@ -128,7 +125,9 @@ struct CreateHouseholdView: View {
                     }
                     .disabled(
                         householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                            isCreating || !userSession.hasActiveSession
+                            isCreating ||
+                            !userSession.hasActiveSession ||
+                            confirmedMembershipDisplayName == nil
                     )
                     .padding(.horizontal, 40)
 
@@ -144,7 +143,7 @@ struct CreateHouseholdView: View {
                                 .bold()
                         }
                         .font(themeStore.font(for: .buttonLabel))
-                        .disabled(!canJoinViaInvite || isCreating)
+                        .disabled(!canJoinViaInvite || isCreating || confirmedMembershipDisplayName == nil)
                     }
 
                     if !userSession.hasActiveSession {
@@ -178,21 +177,13 @@ struct CreateHouseholdView: View {
             .sheet(isPresented: $showJoinSheet) {
                 HouseholdJoinSheet(
                     inviteCodeToken: $joinInviteCode,
-                    inviteLink: $joinInput,
+                    isJoining: isJoining,
                     onJoin: joinHousehold,
                     onPasteFromClipboard: {
-                        joinInput = UIPasteboard.general.string ?? ""
+                        joinInviteCode = UIPasteboard.general.string ?? ""
                     }
                 )
                 .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showCustomJoinConfirmation) {
-                AppConfirmationSheet(
-                    title: "Join this household?",
-                    message: "This invite uses a custom deep link. Confirm before joining.",
-                    primaryTitle: "Join",
-                    onPrimary: confirmCustomJoin
-                )
             }
             .alert("Action failed", isPresented: Binding(
                 get: { joinErrorMessage != nil },
@@ -220,6 +211,10 @@ struct CreateHouseholdView: View {
     private func createHousehold() {
         householdName = householdName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !householdName.isEmpty else { return }
+        guard let displayName = confirmedMembershipDisplayName else {
+            joinErrorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
         guard userSession.hasActiveSession, let userId = userSession.userId else {
             joinErrorMessage = "Sign in or continue as guest before creating household."
             return
@@ -235,9 +230,12 @@ struct CreateHouseholdView: View {
                 let newHousehold = try await householdStore.createHousehold(
                     name: householdName,
                     userId: userId,
-                    displayName: fallbackDisplayNameForMembership(),
+                    displayName: displayName,
                     iconSymbol: selectedIconSymbol
                 )
+                await MainActor.run {
+                    userSession.applyProfileUpdate(displayName: displayName)
+                }
                 userSession.setCurrentHousehold(newHousehold.id)
                 onboardingState.completeHouseholdSetup(withHousehold: true)
                 if showsCloseButton {
@@ -261,9 +259,13 @@ struct CreateHouseholdView: View {
             joinErrorMessage = "Could not determine your account identity."
             return
         }
+        guard let displayName = confirmedMembershipDisplayName else {
+            joinErrorMessage = HouseholdError.displayNameRequired.localizedDescription
+            return
+        }
 
-        let rawInviteInput = preferredJoinInput()
-        guard !rawInviteInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let inviteCode = preferredJoinCode()
+        guard let inviteCode else { return }
         guard !isJoining else { return }
 
         isJoining = true
@@ -271,48 +273,10 @@ struct CreateHouseholdView: View {
 
         _Concurrency.Task {
             do {
-                let normalizedInvite = try InviteInputNormalizer.normalizeInput(rawInviteInput)
-                let displayName = fallbackDisplayNameForMembership()
-                if normalizedInvite.requiresConfirmation {
-                    pendingCustomJoinInviteCode = normalizedInvite.inviteCode
-                    showCustomJoinConfirmation = true
-                    isJoining = false
-                    return
-                }
-
-                try await performJoinHousehold(
-                    inviteCode: normalizedInvite.inviteCode,
-                    userId: userId,
-                    displayName: displayName
-                )
-            } catch {
-                joinErrorMessage = error.localizedDescription
-            }
-
-            isJoining = false
-        }
-    }
-
-    private func confirmCustomJoin() {
-        guard allowsJoin else { return }
-        guard let inviteCode = pendingCustomJoinInviteCode else { return }
-        guard canJoinViaInvite else {
-            joinErrorMessage = "Joining via invite requires Apple/iCloud sign in."
-            return
-        }
-        guard let userId = userSession.userId else {
-            joinErrorMessage = "Could not determine your account identity."
-            return
-        }
-
-        pendingCustomJoinInviteCode = nil
-        isJoining = true
-        _Concurrency.Task {
-            do {
                 try await performJoinHousehold(
                     inviteCode: inviteCode,
                     userId: userId,
-                    displayName: fallbackDisplayNameForMembership()
+                    displayName: displayName
                 )
             } catch {
                 joinErrorMessage = error.localizedDescription
@@ -325,34 +289,33 @@ struct CreateHouseholdView: View {
     private func performJoinHousehold(inviteCode: String, userId: String, displayName: String) async throws {
         householdStore.setSyncMode(userSession.syncMode)
         try await householdStore.joinHousehold(
-            withInviteInput: inviteCode,
+            inviteCode: inviteCode,
             userId: userId,
             displayName: displayName
         )
+        await MainActor.run {
+            userSession.applyProfileUpdate(displayName: displayName)
+        }
         if let household = householdStore.currentHousehold {
             userSession.setCurrentHousehold(household.id)
         }
 
-        joinInput = ""
         joinInviteCode = ""
         showJoinSheet = false
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
-    private func preferredJoinInput() -> String {
-        if let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode) {
-            return normalizedCode
+    private func preferredJoinCode() -> String? {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode),
+              normalizedCode.count == 8
+        else {
+            return nil
         }
-        return joinInput
+        return normalizedCode
     }
 
-    private func fallbackDisplayNameForMembership() -> String {
-        if let displayName = userSession.displayName,
-           let validated = try? DisplayNameValidator.validate(displayName)
-        {
-            return validated
-        }
-        return userSession.isGuest ? "Guest" : "Member"
+    private var confirmedMembershipDisplayName: String? {
+        userSession.confirmedMembershipDisplayName
     }
 
     private func defaultHouseholdName() -> String {
@@ -380,7 +343,7 @@ struct CreateHouseholdView: View {
 
 struct HouseholdJoinSheet: View {
     @Binding var inviteCodeToken: String
-    @Binding var inviteLink: String
+    let isJoining: Bool
     let onJoin: () -> Void
     let onPasteFromClipboard: () -> Void
     @EnvironmentObject private var themeStore: ThemeStore
@@ -390,121 +353,107 @@ struct HouseholdJoinSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-                    .frame(height: 20)
+            ScrollView {
+                VStack(spacing: 24) {
+                    Text("Enter Invite Code")
+                        .font(themeStore.font(for: .screenHeader))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                        .multilineTextAlignment(.center)
 
-                Text("Enter Invite Code")
-                    .font(themeStore.font(for: .screenHeader))
-                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    TextField("A7B9XQ2M", text: $inviteCodeToken, axis: .vertical)
+                        .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                        .multilineTextAlignment(.center)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled(true)
+                        .disabled(isJoining)
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.secondary.opacity(0.1))
+                        )
+                        .onChange(of: inviteCodeToken) { _, newValue in
+                            inviteCodeToken = normalizedInviteCodeInput(newValue)
+                        }
 
-                TextField("A7B9XQ2M", text: $inviteCodeToken)
-                    .font(.system(size: 24, weight: .semibold, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled(true)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.secondary.opacity(0.1))
-                    )
-                    .padding(.horizontal, 32)
-                    .onChange(of: inviteCodeToken) { _, newValue in
-                        inviteCodeToken = normalizedInviteCodeInput(newValue)
-                    }
+                    Text("Use the 8-character invite code (A-Z, 0-9). QR codes fill this field automatically.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .multilineTextAlignment(.center)
 
-                Text("Use the 8-character invite code (A-Z, 0-9)")
-                    .font(themeStore.font(for: .bodySmall))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
-
-                Button {
-                    onJoin()
-                } label: {
-                    Text("Join with code")
-                        .font(themeStore.font(for: .buttonLabel))
+                    Button {
+                        onJoin()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isJoining {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                            Text(isJoining ? "Joining..." : "Join with code")
+                                .font(themeStore.font(for: .buttonLabel))
+                        }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             Capsule()
-                                .fill(canJoinWithCode ? Color.blue : Color.secondary)
+                                .fill(canJoinWithCode && !isJoining ? themeStore.accentTabColor : Color.secondary)
                         )
-                }
-                .disabled(!canJoinWithCode)
-                .padding(.horizontal, 40)
-
-                Divider()
-                    .padding(.horizontal, 40)
-
-                Text("Or join with invite link")
-                    .font(themeStore.font(for: .bodyStrong))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
-
-                TextField("https://www.icloud.com/share/...", text: $inviteLink)
-                    .font(themeStore.font(for: .listRowTitle))
-                    .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.secondary.opacity(0.1))
-                    )
-                    .padding(.horizontal, 32)
-
-                Button {
-                    onJoin()
-                } label: {
-                    Text("Join with link")
-                        .font(themeStore.font(for: .buttonLabel))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            Capsule()
-                                .fill(canJoinWithLink ? Color.blue : Color.secondary)
-                        )
-                }
-                .disabled(!canJoinWithLink)
-                .padding(.horizontal, 40)
-
-                HStack(spacing: 12) {
-                    Button {
-                        onPasteFromClipboard()
-                    } label: {
-                        Label("Paste", systemImage: "doc.on.clipboard")
-                            .font(themeStore.font(for: .buttonLabel))
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .disabled(!canJoinWithCode || isJoining)
 
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Label("Scan QR", systemImage: "qrcode.viewfinder")
-                            .font(themeStore.font(for: .buttonLabel))
-                            .frame(maxWidth: .infinity)
+                    if isJoining {
+                        ProgressView("Joining household...")
+                            .font(themeStore.font(for: .bodySmall))
+                            .tint(themeStore.accentTabColor)
                     }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.horizontal, 40)
 
-                Spacer()
+                    HStack(spacing: 12) {
+                        Button {
+                            onPasteFromClipboard()
+                        } label: {
+                            Label("Paste", systemImage: "doc.on.clipboard")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isJoining)
+
+                        Button {
+                            showScanner = true
+                        } label: {
+                            Label("Scan QR", systemImage: "qrcode.viewfinder")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isJoining)
+                    }
+                }
+                .padding(24)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isJoining)
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Join Household")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
             .sheet(isPresented: $showScanner) {
                 NavigationStack {
                     QRCodeScannerView(
                         onCodeScanned: { scanned in
-                            inviteLink = scanned
+                            inviteCodeToken = normalizedInviteCodeInput(scanned)
                             showScanner = false
+                            if canJoinWithCode, !isJoining {
+                                onJoin()
+                            }
                         },
                         onFailure: { message in
                             scannerErrorMessage = message
@@ -532,11 +481,10 @@ struct HouseholdJoinSheet: View {
     }
 
     private var canJoinWithCode: Bool {
-        InviteInputNormalizer.normalizeInviteCodeToken(inviteCodeToken) != nil
-    }
-
-    private var canJoinWithLink: Bool {
-        !inviteLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteCodeToken) else {
+            return false
+        }
+        return normalizedCode.count == 8
     }
 
     private func normalizedInviteCodeInput(_ raw: String) -> String {

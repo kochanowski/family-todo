@@ -7,7 +7,7 @@ struct FamilyTodoApp: App {
     @UIApplicationDelegateAdaptor(AppDelegateBridge.self) private var appDelegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var themeStore: ThemeStore
-    @StateObject private var householdStore = HouseholdStore()
+    @StateObject private var householdStore: HouseholdStore
     @StateObject private var onboardingState = OnboardingState()
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
@@ -21,6 +21,7 @@ struct FamilyTodoApp: App {
     private let sharedModelContainer: ModelContainer?
 
     private static let appSchema = Schema([
+        CachedWorkItem.self,
         CachedTask.self,
         CachedMember.self,
         CachedShoppingItem.self,
@@ -53,6 +54,9 @@ struct FamilyTodoApp: App {
         #endif
 
         sharedModelContainer = bootstrapResult.container
+        _householdStore = StateObject(
+            wrappedValue: HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
+        )
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
         _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
         _startupDiagnostics = State(initialValue: bootstrapResult.diagnostics)
@@ -96,7 +100,10 @@ struct FamilyTodoApp: App {
         WindowGroup {
             AppChromeContainer(themeStore: themeStore) {
                 Group {
-                    if startupBootstrapState == .emergency || sharedModelContainer == nil {
+                    if startupBootstrapState == .recoveryRequired ||
+                        startupBootstrapState == .emergency ||
+                        sharedModelContainer == nil
+                    {
                         StartupRecoveryView(
                             message: startupRecoveryMessage
                                 ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
@@ -114,28 +121,33 @@ struct FamilyTodoApp: App {
                             .environmentObject(cloudKitDiagnostics)
                             .modelContainer(sharedModelContainer)
                             .overlay {
-                                let toastBackground = themeStore.surfaceElevatedColor
-                                let toastAppearance = ToastView.Appearance(
-                                    backgroundColor: toastBackground,
-                                    messageColor: themeStore.inkColor,
-                                    strokeColor: themeStore.borderLightColor.opacity(0.55),
-                                    shadowColor: themeStore.inkColor.opacity(0.18),
-                                    actionColor: themeStore.accentTabColor,
-                                    messageFont: themeStore.font(for: .celebrationMessage),
-                                    actionFont: themeStore.font(for: .buttonLabel)
-                                )
+                                if onboardingState.currentState == .mainApp {
+                                    let toastBackground = themeStore.surfaceElevatedColor
+                                    let toastAppearance = ToastView.Appearance(
+                                        backgroundColor: toastBackground,
+                                        messageColor: themeStore.inkColor,
+                                        strokeColor: themeStore.borderLightColor.opacity(0.55),
+                                        shadowColor: themeStore.inkColor.opacity(0.18),
+                                        actionColor: themeStore.accentTabColor,
+                                        messageFont: themeStore.font(for: .celebrationMessage),
+                                        actionFont: themeStore.font(for: .buttonLabel)
+                                    )
 
-                                CelebrationOverlay(
-                                    manager: celebrationManager,
-                                    messageFont: themeStore.font(for: .celebrationMessage),
-                                    accentPalette: themeStore.confettiAccentPalette,
-                                    toastAppearance: toastAppearance
-                                )
-                                .environmentObject(themeStore)
+                                    CelebrationOverlay(
+                                        manager: celebrationManager,
+                                        messageFont: themeStore.font(for: .celebrationMessage),
+                                        accentPalette: themeStore.confettiAccentPalette,
+                                        toastAppearance: toastAppearance
+                                    )
+                                    .environmentObject(themeStore)
+                                }
                             }
                             .task {
                                 appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
                                 appDelegate.flushPendingInviteIfNeeded()
+                                WorkItemCacheMigrator.migrateIfNeeded(
+                                    context: sharedModelContainer.mainContext
+                                )
                                 householdStore.setModelContext(sharedModelContainer.mainContext)
                                 householdStore.setSyncMode(userSession.syncMode)
 
@@ -207,6 +219,7 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     var body: some View {
         Group {
@@ -221,7 +234,10 @@ struct RootView: View {
 
             case .householdSetup:
                 if userSession.hasActiveSession {
-                    if shouldShowHouseholdSetupLoader {
+                    if userSession.needsDisplayNamePrompt {
+                        SignInView()
+                            .transition(.opacity)
+                    } else if shouldShowHouseholdSetupLoader {
                         HouseholdSetupLoadingView()
                             .transition(.opacity)
                     } else {
@@ -262,6 +278,11 @@ struct RootView: View {
             guard userSession.hasActiveSession else { return }
             householdStore.prepareForSetupResolution(key: newKey)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
+            _ = _Concurrency.Task {
+                await handleHouseholdDataDidChange()
+            }
+        }
         .task(id: pendingProcessingKey) {
             await shareAcceptanceCoordinator.processPendingIfPossible(
                 userSession: userSession,
@@ -270,11 +291,15 @@ struct RootView: View {
             )
         }
         .task(id: tipContextKey) {
+            guard onboardingState.currentState == .mainApp else { return }
             AppTips.syncContextIfNeeded(
                 sessionMode: userSession.sessionMode,
                 userId: userSession.userId,
                 householdId: userSession.currentHouseholdID
             )
+        }
+        .task(id: subscriptionConfigurationKey) {
+            configureSubscriptionsIfNeeded()
         }
         .task(id: householdRecoveryKey) {
             await recoverHouseholdRouteIfNeeded()
@@ -316,12 +341,26 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.id.uuidString ?? "none",
+            householdStore.isModelContextReady ? "contextReady" : "contextMissing",
+            shareAcceptanceCoordinator.pendingInviteCode ?? "noPendingInvite",
+            shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "noPendingMetadata",
+            shareAcceptanceCoordinator.isProcessing ? "processingShare" : "idleShare",
         ].joined(separator: "|")
     }
 
     private var tipContextKey: String {
         [
+            onboardingState.currentState.rawValue,
             userSession.sessionMode.rawValue,
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none",
+        ].joined(separator: "|")
+    }
+
+    private var subscriptionConfigurationKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
@@ -336,53 +375,66 @@ struct RootView: View {
         ].joined(separator: "|")
     }
 
+    private var hasPendingShareAcceptance: Bool {
+        shareAcceptanceCoordinator.pendingInviteCode != nil ||
+            shareAcceptanceCoordinator.pendingMetadata != nil ||
+            shareAcceptanceCoordinator.isProcessing
+    }
+
     private func recoverHouseholdRouteIfNeeded() async {
         guard onboardingState.currentState == .householdSetup else { return }
         guard userSession.hasActiveSession else { return }
+        guard householdStore.isModelContextReady else { return }
 
         let resolutionKey = householdSetupResolutionKey
         householdStore.prepareForSetupResolution(key: resolutionKey)
 
-        if let householdId = userSession.currentHouseholdID,
-           householdStore.isRecoverySuppressed(for: householdId)
-        {
-            userSession.clearCurrentHousehold()
-        }
-
-        if let household = householdStore.currentHousehold,
-           householdStore.isRecoverySuppressed(for: household.id)
-        {
-            householdStore.clearCurrentHousehold()
-        }
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: false)
 
         if let household = householdStore.currentHousehold {
             completeRecoveredHouseholdRoute(with: household, resolutionKey: resolutionKey)
             return
         }
 
-        guard let userId = userSession.userId else { return }
         householdStore.setSyncMode(userSession.syncMode)
 
-        if let cachedHousehold = householdStore.restoreCachedHousehold(
-            userId: userId,
-            preferredHouseholdId: userSession.currentHouseholdID
-        ),
-            !householdStore.isRecoverySuppressed(for: cachedHousehold.id)
-        {
-            completeRecoveredHouseholdRoute(with: cachedHousehold, resolutionKey: resolutionKey)
-            _ = _Concurrency.Task {
-                await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-                    userId: userId,
+        if userSession.syncMode == SyncMode.localOnly {
+            if let cachedHousehold = householdStore.resolveStartupHouseholdLocally(
+                userId: "local-guest",
+                preferredHouseholdId: userSession.currentHouseholdID
+            ) {
+                completeRecoveredHouseholdRoute(with: cachedHousehold, resolutionKey: resolutionKey)
+                return
+            }
+
+            householdStore.completeSetupResolution(
+                key: resolutionKey,
+                householdCount: householdStore.cachedRecoverableHouseholdCount(
+                    userId: "local-guest",
                     preferredHouseholdId: userSession.currentHouseholdID
                 )
-            }
+            )
             return
         }
 
-        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+        guard let userId = userSession.userId else {
+            householdStore.completeSetupResolution(key: resolutionKey, householdCount: 0)
+            return
+        }
+
+        guard !hasPendingShareAcceptance else {
+            return
+        }
+
+        if let cachedHousehold = householdStore.resolveStartupHouseholdLocally(
             userId: userId,
             preferredHouseholdId: userSession.currentHouseholdID
-        )
+        ) {
+            completeRecoveredHouseholdRoute(with: cachedHousehold, resolutionKey: resolutionKey)
+            return
+        }
+
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: false)
 
         if let household = householdStore.currentHousehold,
            !householdStore.isRecoverySuppressed(for: household.id)
@@ -408,6 +460,32 @@ struct RootView: View {
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
+    private func handleHouseholdDataDidChange() async {
+        guard onboardingState.currentState == .mainApp else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId else { return }
+        guard userSession.currentHouseholdID != nil else { return }
+
+        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+            userId: userId,
+            preferredHouseholdId: userSession.currentHouseholdID
+        )
+
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: true)
+    }
+
+    private func configureSubscriptionsIfNeeded() {
+        guard onboardingState.currentState == .mainApp else { return }
+        guard userSession.syncMode == .cloud else { return }
+        guard let userId = userSession.userId,
+              let householdId = userSession.currentHouseholdID
+        else {
+            return
+        }
+
+        subscriptionManager.configure(userId: userId, householdId: householdId)
+    }
+
     private var shouldShowCreateHouseholdView: Bool {
         guard onboardingState.currentState == .householdSetup else { return false }
         guard userSession.hasActiveSession else { return false }
@@ -421,9 +499,48 @@ struct RootView: View {
     }
 
     private var shouldShowHouseholdSetupLoader: Bool {
-        onboardingState.currentState == .householdSetup &&
-            userSession.hasActiveSession &&
-            !shouldShowCreateHouseholdView
+        guard onboardingState.currentState == .householdSetup else { return false }
+        guard userSession.hasActiveSession else { return false }
+        guard !shouldShowCreateHouseholdView else { return false }
+
+        if !householdStore.isModelContextReady || hasPendingShareAcceptance {
+            return true
+        }
+
+        switch householdStore.setupResolutionState {
+        case let .loading(key):
+            return key == householdSetupResolutionKey
+        case .idle:
+            return true
+        case .resolved:
+            return false
+        }
+    }
+
+    @discardableResult
+    private func clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: Bool) -> Bool {
+        var didClear = false
+
+        if let householdId = userSession.currentHouseholdID,
+           householdStore.isRecoverySuppressed(for: householdId)
+        {
+            userSession.clearCurrentHousehold()
+            didClear = true
+        }
+
+        if let household = householdStore.currentHousehold,
+           householdStore.isRecoverySuppressed(for: household.id)
+        {
+            householdStore.clearCurrentHousehold()
+            didClear = true
+        }
+
+        if didClear, routeToSetup {
+            householdStore.resetSetupResolution()
+            onboardingState.openHouseholdSetup()
+        }
+
+        return didClear
     }
 }
 
@@ -438,6 +555,70 @@ private struct HouseholdSetupLoadingView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+@MainActor
+enum LocalAppReset {
+    static func clearAllData(context: ModelContext) {
+        do {
+            try context.delete(model: CachedShoppingItem.self)
+            try context.delete(model: CachedShoppingBundle.self)
+            try context.delete(model: CachedWorkItem.self)
+            try context.delete(model: CachedTask.self)
+            try context.delete(model: CachedBacklogItem.self)
+            try context.delete(model: CachedBacklogCategory.self)
+            try context.delete(model: CachedMember.self)
+            try context.delete(model: CachedHousehold.self)
+            try context.delete(model: CachedArea.self)
+            try context.delete(model: CachedRecurringChore.self)
+            try context.save()
+        } catch {
+            print("Failed to clear data: \(error)")
+        }
+    }
+
+    static func clearUserDefaults(_ userDefaults: UserDefaults = .standard) {
+        let keys = Array(userDefaults.dictionaryRepresentation().keys)
+        keys.forEach { userDefaults.removeObject(forKey: $0) }
+        if let domain = Bundle.main.bundleIdentifier {
+            userDefaults.removePersistentDomain(forName: domain)
+        }
+        userDefaults.synchronize()
+    }
+
+    static func performHardReset(
+        modelContext: ModelContext,
+        userSession: UserSession,
+        householdStore: HouseholdStore,
+        onboardingState: OnboardingState,
+        subscriptionManager: CloudKitSubscriptionManager,
+        shareAcceptanceCoordinator: ShareAcceptanceCoordinator,
+        celebrationManager: CelebrationManager,
+        resetReason: StoreResetReason = .hardResetApp,
+        userDefaults: UserDefaults = .standard
+    ) async {
+        // Local-only fresh-start reset. Remote CloudKit cleanup is exposed as a separate
+        // destructive debug action so startup/onboarding is never blocked by network work.
+        await subscriptionManager.removeSubscriptions()
+        await CloudKitManager.shared.resetAvailabilityCache()
+        NotificationService.shared.cancelDailyDigest()
+        NotificationService.shared.removeAllDeliveredNotifications()
+        NotificationService.shared.removeAllTaskReminders()
+
+        clearAllData(context: modelContext)
+        clearUserDefaults(userDefaults)
+        SwiftDataContainerFactory.requestStoreReset(reason: resetReason, userDefaults)
+        shareAcceptanceCoordinator.resetForDevelopment()
+        celebrationManager.resetForDevelopment()
+        AppTips.resetForHardReset(userDefaults: userDefaults)
+
+        householdStore.clearCurrentHousehold()
+        householdStore.resetSetupResolution()
+        userSession.clearCurrentHousehold()
+
+        userSession.signOut()
+        onboardingState.resetOnboarding()
     }
 }
 
@@ -458,8 +639,8 @@ struct UITestHelper {
 
         // Reset Data
         if args.contains("-resetData") {
-            clearAllData(context: modelContext)
-            clearUserDefaults()
+            LocalAppReset.clearAllData(context: modelContext)
+            LocalAppReset.clearUserDefaults()
         }
 
         applyThemeOverride(arguments: args)
@@ -534,28 +715,6 @@ struct UITestHelper {
         default:
             print("Unknown seeding scenario: \(scenario)")
         }
-    }
-
-    private static func clearAllData(context: ModelContext) {
-        do {
-            try context.delete(model: CachedShoppingItem.self)
-            try context.delete(model: CachedShoppingBundle.self)
-            try context.delete(model: CachedTask.self)
-            try context.delete(model: CachedBacklogItem.self)
-            try context.delete(model: CachedBacklogCategory.self)
-            try context.delete(model: CachedMember.self)
-            try context.delete(model: CachedHousehold.self)
-            try context.delete(model: CachedArea.self)
-            try context.delete(model: CachedRecurringChore.self)
-        } catch {
-            print("Failed to clear data: \(error)")
-        }
-    }
-
-    private static func clearUserDefaults() {
-        let domain = Bundle.main.bundleIdentifier!
-        UserDefaults.standard.removePersistentDomain(forName: domain)
-        UserDefaults.standard.synchronize()
     }
 
     private static func applyThemeOverride(arguments: [String]) {
@@ -668,6 +827,7 @@ struct UITestHelper {
             Task(householdId: householdId, title: "Call mom", status: .next, taskType: .oneOff),
             Task(householdId: householdId, title: "Walk dog", status: .done, taskType: .oneOff),
         ]
+        tasks.map(WorkItem.init(task:)).forEach { context.insert(CachedWorkItem(from: $0)) }
         tasks.forEach { context.insert(CachedTask(from: $0)) }
     }
 
@@ -685,6 +845,7 @@ struct UITestHelper {
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Olive Oil"),
             BacklogItem(categoryId: category.id, householdId: householdId, title: "Spices"),
         ]
+        items.map(WorkItem.init(idea:)).forEach { context.insert(CachedWorkItem(from: $0)) }
         items.forEach { context.insert(CachedBacklogItem(from: $0)) }
     }
 
@@ -707,6 +868,7 @@ struct UITestHelper {
             title: "Paint guest room",
             assigneeId: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")
         )
+        context.insert(CachedWorkItem(from: WorkItem(idea: assignedIdea)))
         context.insert(CachedBacklogItem(from: assignedIdea))
     }
 
@@ -740,6 +902,7 @@ struct UITestHelper {
             householdId: householdId,
             title: "Replace hallway lamp"
         )
+        context.insert(CachedWorkItem(from: WorkItem(idea: idea)))
         context.insert(CachedBacklogItem(from: idea))
     }
 
@@ -756,6 +919,7 @@ struct UITestHelper {
         for i in 1 ... 50 {
             let status: Task.TaskStatus = (i % 3 == 0) ? .done : .next
             let task = Task(householdId: householdId, title: "Task \(i)", status: status, taskType: .oneOff)
+            context.insert(CachedWorkItem(from: WorkItem(task: task)))
             context.insert(CachedTask(from: task))
         }
     }

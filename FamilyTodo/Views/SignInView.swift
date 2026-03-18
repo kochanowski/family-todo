@@ -55,9 +55,13 @@ struct SignInView: View {
                     defaultAuthActions
 
                 case .authenticated:
-                    Text("Signed in")
-                        .font(themeStore.font(for: .buttonLabel))
-                        .foregroundStyle(.green)
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                        Text("Loading your household...")
+                            .font(themeStore.font(for: .bodyStrong))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                    }
                 }
             }
             .padding(.bottom, 60)
@@ -225,11 +229,14 @@ struct SignInView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             userSession.hasConfirmedDisplayName ? "named" : "unnamed",
+            householdStore.isModelContextReady ? "contextReady" : "contextMissing",
         ].joined(separator: "|")
     }
 
     private func handleAuthRoutingIfNeeded() async {
-        guard onboardingState.currentState == .auth else { return }
+        guard onboardingState.currentState == .auth || onboardingState.currentState == .householdSetup else {
+            return
+        }
         guard !isResolvingAuthRoute else { return }
 
         if userSession.isGuest {
@@ -242,6 +249,7 @@ struct SignInView: View {
         }
 
         guard userSession.isAuthenticated else { return }
+        guard householdStore.isModelContextReady else { return }
 
         isResolvingAuthRoute = true
         defer { isResolvingAuthRoute = false }
@@ -249,24 +257,13 @@ struct SignInView: View {
         if let userId = userSession.userId {
             householdStore.setSyncMode(.cloud)
 
-            if let restoredHousehold = householdStore.restoreCachedHousehold(
+            if let restoredHousehold = householdStore.resolveStartupHouseholdLocally(
                 userId: userId,
                 preferredHouseholdId: userSession.currentHouseholdID
             ) {
                 if userSession.currentHouseholdID != restoredHousehold.id {
                     userSession.setCurrentHousehold(restoredHousehold.id)
                 }
-                _ = _Concurrency.Task {
-                    await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-                        userId: userId,
-                        preferredHouseholdId: userSession.currentHouseholdID
-                    )
-                }
-            } else {
-                await householdStore.loadCurrentHouseholdAndMembership(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                )
             }
 
             if let household = householdStore.currentHousehold,
@@ -276,10 +273,25 @@ struct SignInView: View {
             }
         }
 
+        if let householdId = userSession.currentHouseholdID,
+           householdStore.isRecoverySuppressed(for: householdId)
+        {
+            householdStore.clearCurrentHousehold()
+            userSession.clearCurrentHousehold()
+        }
+
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
         if userSession.needsDisplayNamePrompt {
             if let userId = userSession.userId,
-               let restoredDisplayName = await householdStore.resolveMembershipDisplayName(userId: userId)
+               userSession.currentHouseholdID != nil ||
+               householdStore.hasTrustedLocalHouseholdContext(
+                   userId: userId,
+                   preferredHouseholdId: userSession.currentHouseholdID
+               ),
+               let restoredDisplayName = householdStore.resolveMembershipDisplayNameLocally(
+                   userId: userId,
+                   preferredHouseholdId: userSession.currentHouseholdID
+               )
             {
                 userSession.applyProfileUpdate(displayName: restoredDisplayName)
                 onboardingState.completeAuth(
@@ -291,7 +303,7 @@ struct SignInView: View {
             }
 
             pendingPostAuthHasHousehold = hasHousehold
-            pendingDisplayName = userSession.displayName ?? ""
+            pendingDisplayName = userSession.suggestedDisplayNameForPrompt
             showDisplayNamePrompt = true
             return
         }

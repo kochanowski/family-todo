@@ -7,51 +7,18 @@ struct BundlesManagementView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var presentedEditor: PresentedBundleEditor?
+    @State private var hasStartedInitialLoad = false
 
     var body: some View {
-        List {
-            ForEach(store.bundles) { bundle in
-                Button {
-                    presentedEditor = .edit(bundle)
-                } label: {
-                    ShoppingBundleRow(bundle: bundle)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .listRowInsets(
-                    EdgeInsets(
-                        top: 0,
-                        leading: 16,
-                        bottom: 0,
-                        trailing: 16
-                    )
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        _ = _Concurrency.Task {
-                            await store.deleteBundle(bundle)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
+        Group {
+            if !store.hasHydratedLocalSnapshot, store.bundles.isEmpty {
+                ProgressView("Loading bundles...")
+            } else if store.bundles.isEmpty {
+                bundlesEmptyState
+            } else {
+                bundlesList
             }
         }
-        .overlay {
-            if store.bundles.isEmpty {
-                ThemedEmptyStateView(
-                    title: "No Bundles Yet",
-                    systemImage: ShoppingBundle.defaultIcon,
-                    description: "Create reusable shopping bundles for quick add from the main Shopping button."
-                )
-                .offset(y: -24)
-            }
-        }
-        .environment(\.defaultMinListRowHeight, 10)
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .background(themeStore.canvasColor.ignoresSafeArea())
         .navigationTitle("Shopping Bundles")
         .navigationBarTitleDisplayMode(.inline)
@@ -71,17 +38,19 @@ struct BundlesManagementView: View {
             }
         }
         .task {
+            guard !hasStartedInitialLoad else { return }
+            hasStartedInitialLoad = true
             store.setSyncMode(userSession.syncMode)
-            await store.loadBundles()
+            await store.loadBundlesForDisplay()
         }
         .refreshable {
             store.setSyncMode(userSession.syncMode)
-            await store.loadBundles()
+            await store.loadBundlesForDisplay()
         }
         .onChange(of: userSession.syncMode) { _, mode in
             store.setSyncMode(mode)
             _ = _Concurrency.Task {
-                await store.loadBundles()
+                await store.loadBundlesForDisplay()
             }
         }
         .sheet(item: $presentedEditor) { destination in
@@ -90,6 +59,75 @@ struct BundlesManagementView: View {
                 shoppingStore: shoppingStore,
                 bundle: destination.bundle
             )
+        }
+    }
+
+    private var bundlesList: some View {
+        List {
+            ForEach(store.bundles) { bundle in
+                Button {
+                    presentedEditor = .edit(bundle)
+                } label: {
+                    ShoppingBundleRow(bundle: bundle)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 0,
+                        leading: 16,
+                        bottom: 0,
+                        trailing: 16
+                    )
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .contextMenu {
+                    if shoppingStore != nil {
+                        Button {
+                            addBundleToShopping(bundle)
+                        } label: {
+                            Label("Add to Shopping List", systemImage: "cart.badge.plus")
+                        }
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        _ = _Concurrency.Task {
+                            await store.deleteBundle(bundle)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .environment(\.defaultMinListRowHeight, 10)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var bundlesEmptyState: some View {
+        ThemedEmptyStateView(
+            title: "No Bundles Yet",
+            systemImage: ShoppingBundle.featureIcon,
+            description: "Create reusable shopping sets for faster planning here"
+        ) {
+            Button {
+                presentedEditor = .create
+            } label: {
+                Text("Create your first bundle")
+                    .font(themeStore.font(for: .buttonLabel))
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.bottom, 24)
+    }
+
+    private func addBundleToShopping(_ bundle: ShoppingBundle) {
+        guard let shoppingStore else { return }
+        _ = _Concurrency.Task {
+            _ = await shoppingStore.createItems(fromTitles: bundle.normalizedItems)
         }
     }
 }
@@ -143,7 +181,9 @@ private struct ShoppingBundleRow: View {
 
             Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(bundle.name), \(itemCountLabel(for: bundle.itemCount))")
     }
@@ -176,7 +216,7 @@ private struct ShoppingBundleEditorSheet: View {
         self.shoppingStore = shoppingStore
         self.bundle = bundle
         _name = State(initialValue: bundle?.name ?? "")
-        _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.defaultIcon)
+        _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.creationDefaultIcon)
 
         let initialItems = bundle?.normalizedItems ?? []
         _itemDrafts = State(initialValue: initialItems.map { BundleItemDraft(title: $0) })
@@ -630,7 +670,7 @@ private struct ShoppingBundleItemRow: View {
             TextField("Item", text: $title)
                 .font(themeStore.font(for: .listRowTitle))
                 .textFieldStyle(.plain)
-                .textInputAutocapitalization(.words)
+                .textInputAutocapitalization(.sentences)
                 .autocorrectionDisabled()
                 .submitLabel(.next)
                 .focused(focusedField, equals: focusID)
@@ -666,7 +706,7 @@ private struct ShoppingBundleComposerRow: View {
             )
             .font(themeStore.font(for: .listRowTitle))
             .textFieldStyle(.plain)
-            .textInputAutocapitalization(.words)
+            .textInputAutocapitalization(.sentences)
             .autocorrectionDisabled()
             .submitLabel(.done)
             .focused(focusedField, equals: .composer)

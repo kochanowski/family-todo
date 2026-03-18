@@ -1,6 +1,7 @@
 import CloudKit
 import SwiftData
 import SwiftUI
+import UIKit
 
 // swiftlint:disable file_length
 @MainActor
@@ -34,8 +35,7 @@ struct ProfileView: View {
     @StateObject private var uiState = HouseholdSettingsUIState()
 
     @State private var showEditProfile = false
-    @State private var showEditHousehold = false
-    @State private var didSaveHouseholdMetadata = false
+    @State private var householdBeingEdited: Household?
     @State private var isPreparingShareInvite = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
@@ -61,19 +61,10 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(
-            isPresented: $showEditHousehold,
-            onDismiss: handleHouseholdEditDismiss
-        ) {
-            if let household = householdStore.currentHousehold {
-                NavigationStack {
-                    EditHouseholdView(
-                        household: household,
-                        onSaveSuccess: {
-                            didSaveHouseholdMetadata = true
-                        }
-                    )
-                }
+        .sheet(item: $householdBeingEdited, onDismiss: handleHouseholdEditDismiss) { household in
+            NavigationStack {
+                EditHouseholdView(household: household)
+                    .id(household.id)
             }
         }
         .sheet(item: $uiState.route) { route in
@@ -129,10 +120,18 @@ struct ProfileView: View {
             memberStore.setModelContext(modelContext)
             memberStore.setSyncMode(userSession.syncMode)
             memberStore.setHousehold(householdStore.currentHousehold?.id)
+            memberStore.setCloudContext(
+                currentUserId: userSession.userId,
+                householdOwnerId: householdStore.currentHousehold?.ownerId
+            )
             await memberStore.loadMembers()
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { _ in
             _ = _Concurrency.Task {
+                memberStore.setCloudContext(
+                    currentUserId: userSession.userId,
+                    householdOwnerId: householdStore.currentHousehold?.ownerId
+                )
                 await memberStore.loadMembers()
             }
         }
@@ -151,38 +150,58 @@ struct ProfileView: View {
     }
 
     private var householdSection: some View {
-        Section("Household") {
+        Section {
             if let household = householdStore.currentHousehold {
-                Button {
-                    showEditHousehold = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: household.iconSymbol)
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(themeStore.accentTabColor)
-                            .frame(width: 28, height: 28)
-                        Text(household.name)
-                            .font(themeStore.font(for: .listRowTitle))
-                            .foregroundStyle(themeStore.contentPrimaryColor)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                if currentUserIsOwner {
+                    Button {
+                        householdBeingEdited = household
+                    } label: {
+                        householdRow(household: household, showsChevron: true)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        householdRow(household: household, showsChevron: false)
+
+                        Text("Only the household owner can edit the household name and icon.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             } else {
                 Text("No Household Selected")
                     .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(themeStore.contentSecondaryColor)
             }
+        } header: {
+            sectionHeader("Household")
         }
     }
 
+    private func householdRow(household: Household, showsChevron: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: household.iconSymbol)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+                .frame(width: 28, height: 28)
+            Text(household.name)
+                .font(themeStore.font(for: .listRowTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+            Spacer()
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
     private var membersSection: some View {
-        Section("Members") {
+        Section {
             if activeMembers.isEmpty {
                 Text("No members yet.")
                     .font(themeStore.font(for: .bodySmall))
@@ -226,13 +245,15 @@ struct ProfileView: View {
                     }
                 }
             }
+        } header: {
+            sectionHeader("Members")
         }
     }
 
     @ViewBuilder
     private var inviteSection: some View {
         if householdStore.currentHousehold != nil {
-            Section("Invite") {
+            Section {
                 Button {
                     _ = _Concurrency.Task { await prepareShareInvite() }
                 } label: {
@@ -263,12 +284,14 @@ struct ProfileView: View {
                         .font(themeStore.font(for: .bodySmall))
                         .foregroundStyle(themeStore.contentSecondaryColor)
                 }
+            } header: {
+                sectionHeader("Invite")
             }
         }
     }
 
     private var actionsSection: some View {
-        Section("Actions") {
+        Section {
             Button("Leave Household", role: .destructive) {
                 showLeaveConfirmation = true
             }
@@ -279,6 +302,8 @@ struct ProfileView: View {
                     showDeleteConfirmation = true
                 }
             }
+        } header: {
+            sectionHeader("Actions")
         }
     }
 
@@ -302,10 +327,25 @@ struct ProfileView: View {
         guard householdStore.currentHousehold != nil, userSession.userId != nil else {
             return false
         }
-        if userSession.syncMode == .cloud {
-            return !memberStore.isLoading && currentMember != nil
+        if userSession.syncMode == .localOnly {
+            return false
         }
-        return true
+        guard let currentMember else {
+            return false
+        }
+
+        let leaveResolution = householdStore.resolveLeaveBehavior(
+            for: currentMember,
+            activeMembers: activeMembers
+        )
+        return leaveResolution == .deactivateMembership
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(themeStore.font(for: .sectionHeader))
+            .foregroundStyle(themeStore.contentSecondaryColor)
+            .textCase(nil)
     }
 
     private func memberRowContent(
@@ -342,6 +382,10 @@ struct ProfileView: View {
                     newRole: newRole,
                     currentUserId: userId
                 )
+                memberStore.setCloudContext(
+                    currentUserId: userSession.userId,
+                    householdOwnerId: householdStore.currentHousehold?.ownerId
+                )
                 await memberStore.loadMembers()
             } catch {
                 actionErrorMessage = error.localizedDescription
@@ -355,6 +399,10 @@ struct ProfileView: View {
             do {
                 try await memberStore.deleteMember(id: member.id, currentUserId: userId)
                 memberToDelete = nil
+                memberStore.setCloudContext(
+                    currentUserId: userSession.userId,
+                    householdOwnerId: householdStore.currentHousehold?.ownerId
+                )
                 await memberStore.loadMembers()
             } catch {
                 actionErrorMessage = error.localizedDescription
@@ -416,8 +464,6 @@ struct ProfileView: View {
     }
 
     private func handleHouseholdEditDismiss() {
-        guard didSaveHouseholdMetadata else { return }
-        didSaveHouseholdMetadata = false
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: .tabBarAppearanceRefreshRequested,
@@ -435,8 +481,12 @@ private struct InviteMemberView: View {
     let share: CKShare
     let container: CKContainer
 
-    @State private var showSystemShareSheet = false
+    @State private var inviteCode: String?
+    @State private var inviteCodeShareText = ""
+    @State private var showCodeShareSheet = false
     @State private var showQRCode = false
+    @State private var isLoadingInviteCode = true
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -457,30 +507,55 @@ private struct InviteMemberView: View {
                             .foregroundStyle(themeStore.contentPrimaryColor)
                             .multilineTextAlignment(.center)
 
-                        Text("Share an invite link or show a QR code so someone can join this household.")
+                        Text("Share the 8-character invite code or show the QR code so someone can join this household.")
                             .font(themeStore.font(for: .bodyStrong))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
                     }
 
-                    VStack(spacing: 12) {
-                        Button {
-                            showSystemShareSheet = true
-                        } label: {
-                            Label("Share Invite", systemImage: "square.and.arrow.up")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .frame(maxWidth: .infinity)
+                    if isLoadingInviteCode {
+                        ProgressView("Preparing invite code...")
+                            .font(themeStore.font(for: .bodyStrong))
+                    } else if let errorMessage {
+                        Text(errorMessage)
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    } else {
+                        if let inviteCode {
+                            VStack(spacing: 8) {
+                                Text("Invite code")
+                                    .font(themeStore.font(for: .bodySmall))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
+                                Text(inviteCode)
+                                    .font(.system(size: 30, weight: .bold, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(themeStore.contentPrimaryColor)
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
 
-                        Button {
-                            showQRCode = true
-                        } label: {
-                            Label("Show Invite QR", systemImage: "qrcode")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .frame(maxWidth: .infinity)
+                        VStack(spacing: 12) {
+                            Button {
+                                inviteCodeShareText = shareText(for: inviteCode)
+                                showCodeShareSheet = true
+                            } label: {
+                                Label("Share Invite Code", systemImage: "square.and.arrow.up")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(inviteCode == nil)
+
+                            Button {
+                                showQRCode = true
+                            } label: {
+                                Label("Show Invite QR", systemImage: "qrcode")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(inviteCode == nil)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
                 .padding(24)
@@ -500,27 +575,61 @@ private struct InviteMemberView: View {
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
-            .sheet(isPresented: $showSystemShareSheet) {
-                ShareInviteView(share: share, container: container)
+            .sheet(isPresented: $showCodeShareSheet) {
+                ActivityView(activityItems: [inviteCodeShareText])
             }
             .sheet(isPresented: $showQRCode) {
                 InviteQRCodeView()
                     .environmentObject(householdStore)
             }
+            .task {
+                await loadInviteCode()
+            }
         }
     }
+
+    private func loadInviteCode() async {
+        isLoadingInviteCode = true
+        defer { isLoadingInviteCode = false }
+
+        do {
+            inviteCode = try await householdStore.fetchOrCreateInviteCode()
+            errorMessage = nil
+        } catch {
+            errorMessage = "Could not prepare the invite code right now."
+        }
+    }
+
+    private func shareText(for inviteCode: String?) -> String {
+        guard let inviteCode else {
+            return "Join my household in HousePulse."
+        }
+        return "Join my household in HousePulse with code: \(inviteCode)"
+    }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context _: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
 }
 
 private struct EditProfileView: View {
     @StateObject private var memberStore: MemberStore
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var displayName = ""
     @State private var selectedColorHex = MemberColorToken.fallbackHex
     @State private var hasLoaded = false
+    @State private var isSaving = false
     @State private var errorMessage: String?
 
     private let modelContext: ModelContext
@@ -591,7 +700,9 @@ private struct EditProfileView: View {
                     Text("Save")
                         .font(themeStore.font(for: .buttonLabel))
                 }
-                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving
+                )
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -607,7 +718,12 @@ private struct EditProfileView: View {
             hasLoaded = true
             memberStore.setModelContext(modelContext)
             memberStore.setSyncMode(userSession.syncMode)
-            await memberStore.loadMembers()
+            memberStore.setCloudContext(
+                currentUserId: userSession.userId,
+                householdOwnerId: householdStore.currentHousehold?.ownerId
+            )
+            hydrateInitialValues()
+            await memberStore.loadMembersForDisplay()
             hydrateInitialValues()
         }
     }
@@ -620,7 +736,7 @@ private struct EditProfileView: View {
             return
         }
 
-        displayName = userSession.displayName ?? ""
+        displayName = userSession.confirmedMembershipDisplayName ?? userSession.displayName ?? ""
         selectedColorHex = MemberColorToken.fallbackHex
     }
 
@@ -638,7 +754,7 @@ private struct EditProfileView: View {
             return
         }
 
-        dismiss()
+        isSaving = true
         _ = _Concurrency.Task {
             do {
                 try await memberStore.updateCurrentUserProfile(
@@ -646,15 +762,31 @@ private struct EditProfileView: View {
                     colorHex: selectedColorHex,
                     currentUserId: currentUserId
                 )
-                userSession.applyProfileUpdate(displayName: trimmedName)
+                await MainActor.run {
+                    userSession.applyProfileUpdate(displayName: trimmedName)
+                    isSaving = false
+                    dismiss()
+                }
             } catch {
-                memberStore.error = error
+                await MainActor.run {
+                    isSaving = false
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
 }
 
 private struct EditHouseholdView: View {
+    private struct HouseholdMetadataDraft: Equatable {
+        var name: String
+        var iconSymbol: String
+
+        var trimmedName: String {
+            name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
@@ -662,10 +794,9 @@ private struct EditHouseholdView: View {
     @Environment(\.dismiss) private var dismiss
 
     let household: Household
-    let onSaveSuccess: () -> Void
 
-    @State private var name: String
-    @State private var selectedIconSymbol: String
+    private let initialDraft: HouseholdMetadataDraft
+    @State private var draft: HouseholdMetadataDraft
     @State private var errorMessage: String?
     @State private var isSaving = false
 
@@ -688,19 +819,21 @@ private struct EditHouseholdView: View {
     ]
 
     init(
-        household: Household,
-        onSaveSuccess: @escaping () -> Void
+        household: Household
     ) {
         self.household = household
-        self.onSaveSuccess = onSaveSuccess
-        _name = State(initialValue: household.name)
-        _selectedIconSymbol = State(initialValue: household.iconSymbol)
+        let initialDraft = HouseholdMetadataDraft(
+            name: household.name,
+            iconSymbol: household.iconSymbol
+        )
+        self.initialDraft = initialDraft
+        _draft = State(initialValue: initialDraft)
     }
 
     var body: some View {
         Form {
             Section {
-                TextField("Household name", text: $name)
+                TextField("Household name", text: $draft.name)
                     .font(themeStore.font(for: .bodyStrong))
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
@@ -717,12 +850,12 @@ private struct EditHouseholdView: View {
                 ) {
                     ForEach(iconOptions, id: \.self) { icon in
                         Button {
-                            selectedIconSymbol = icon
+                            draft.iconSymbol = icon
                         } label: {
                             ZStack {
                                 Circle()
                                     .fill(
-                                        selectedIconSymbol == icon
+                                        draft.iconSymbol == icon
                                             ? themeStore.accentTabColor.opacity(0.18)
                                             : Color.secondary.opacity(0.12)
                                     )
@@ -730,7 +863,7 @@ private struct EditHouseholdView: View {
                                 Image(systemName: icon)
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(
-                                        selectedIconSymbol == icon
+                                        draft.iconSymbol == icon
                                             ? themeStore.foregroundOnAccent(
                                                 for: themeStore.accentTabColor,
                                                 colorScheme: colorScheme
@@ -739,7 +872,7 @@ private struct EditHouseholdView: View {
                                     )
                             }
                             .overlay {
-                                if selectedIconSymbol == icon {
+                                if draft.iconSymbol == icon {
                                     Circle()
                                         .stroke(themeStore.accentTabColor, lineWidth: 2)
                                         .frame(width: 40, height: 40)
@@ -760,7 +893,7 @@ private struct EditHouseholdView: View {
         .navigationTitle("Edit Household")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .cancellationAction) {
                 Button {
                     dismiss()
                 } label: {
@@ -768,17 +901,14 @@ private struct EditHouseholdView: View {
                         .font(themeStore.font(for: .buttonLabel))
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button {
                     saveHousehold()
                 } label: {
                     Text("Save")
                         .font(themeStore.font(for: .buttonLabel))
                 }
-                .disabled(
-                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                        isSaving
-                )
+                .disabled(!canSave)
             }
             ToolbarItem(placement: .principal) {
                 Text("Edit Household")
@@ -796,8 +926,19 @@ private struct EditHouseholdView: View {
         }
     }
 
+    private var trimmedName: String {
+        draft.trimmedName
+    }
+
+    private var hasChanges: Bool {
+        trimmedName != initialDraft.trimmedName || draft.iconSymbol != initialDraft.iconSymbol
+    }
+
+    private var canSave: Bool {
+        !trimmedName.isEmpty && hasChanges && !isSaving
+    }
+
     private func saveHousehold() {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         guard !isSaving else { return }
         guard let userId = userSession.userId else {
@@ -811,9 +952,8 @@ private struct EditHouseholdView: View {
                 try await householdStore.updateCurrentHousehold(
                     name: trimmedName,
                     userId: userId,
-                    iconSymbol: selectedIconSymbol
+                    iconSymbol: draft.iconSymbol
                 )
-                onSaveSuccess()
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

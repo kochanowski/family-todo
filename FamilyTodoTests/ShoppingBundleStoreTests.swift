@@ -11,9 +11,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let schema = Schema([CachedShoppingBundle.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        modelContainer = try ModelContainer(for: schema, configurations: [config])
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .bundles)
 
         store = ShoppingBundleStore(
             householdId: householdId,
@@ -61,6 +59,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
     func testCuratedIconsExposeGroupedPickerChoicesAndKeepValidLegacySymbols() {
         let expectedCuratedIcons = [
             "fork.knife",
+            "fork.knife.circle.fill",
             "takeoutbag.and.cup.and.straw.fill",
             "carrot.fill",
             "house.fill",
@@ -75,7 +74,20 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertEqual(ShoppingBundle.foodIcons.count, 12)
         XCTAssertEqual(ShoppingBundle.genericIcons.count, 12)
         XCTAssertEqual(ShoppingBundle.resolvedIconName("cube.box.fill"), "cube.box.fill")
-        XCTAssertEqual(ShoppingBundle.resolvedIconName("not-a-real-symbol"), ShoppingBundle.defaultIcon)
+        XCTAssertEqual(ShoppingBundle.resolvedIconName("not-a-real-symbol"), ShoppingBundle.fallbackIcon)
+    }
+
+    func testBundleIconRolesKeepFeatureAndCreationDefaultsSeparate() {
+        XCTAssertEqual(ShoppingBundle.featureIcon, "shippingbox.fill")
+        XCTAssertEqual(ShoppingBundle.fallbackIcon, "shippingbox.fill")
+        XCTAssertEqual(ShoppingBundle.creationDefaultIcon, "fork.knife")
+
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Dinner"
+        )
+
+        XCTAssertEqual(bundle.icon, "fork.knife")
     }
 
     func testCreateUpdateDeleteBundleLocalOnlyPersistsCache() async throws {
@@ -161,5 +173,47 @@ final class ShoppingBundleStoreTests: XCTestCase {
         XCTAssertTrue(merged.contains(where: { $0.id == pendingID && $0.name == "Local breakfast" }))
         XCTAssertTrue(merged.contains(where: { $0.id == cloudOnlyID }))
         XCTAssertFalse(merged.contains(where: { $0.id == deleteID }))
+    }
+
+    func testPendingSyncSnapshotTreatsAwaitingDeleteEchoAsHiddenDelete() throws {
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Dinner",
+            items: ["Pasta"]
+        )
+        let cached = CachedShoppingBundle(from: bundle)
+        cached.syncStatusRaw = "awaitingDeleteEcho"
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let descriptor = FetchDescriptor<CachedShoppingBundle>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        let cachedBundles = try modelContainer.mainContext.fetch(descriptor)
+        let snapshot = store.pendingSyncSnapshot(from: cachedBundles)
+
+        XCTAssertTrue(snapshot.pendingUploadByID.isEmpty)
+        XCTAssertEqual(snapshot.pendingDeleteIDs, Set([bundle.id]))
+    }
+
+    func testInitHydratesBundlesFromCacheBeforeLoad() throws {
+        let bundle = ShoppingBundle(
+            householdId: householdId,
+            name: "Weekend breakfast",
+            icon: "shippingbox.fill",
+            items: ["Eggs", "Bread"]
+        )
+        modelContainer.mainContext.insert(CachedShoppingBundle(from: bundle))
+        try modelContainer.mainContext.save()
+
+        let hydratedStore = ShoppingBundleStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+
+        XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
+        XCTAssertEqual(hydratedStore.bundles.count, 1)
+        XCTAssertEqual(hydratedStore.bundles.first?.name, "Weekend breakfast")
+        XCTAssertEqual(hydratedStore.bundles.first?.items, ["Eggs", "Bread"])
     }
 }

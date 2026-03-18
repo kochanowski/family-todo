@@ -18,8 +18,23 @@ extension CloudKitManager {
         CKRecord.Reference(recordID: recordID(for: id), action: .none)
     }
 
+    func reference(for id: UUID, in zoneID: CKRecordZone.ID) -> CKRecord.Reference {
+        CKRecord.Reference(recordID: recordID(for: id, in: zoneID), action: .none)
+    }
+
+    func reference(for id: UUID, zoneID: CKRecordZone.ID?) -> CKRecord.Reference {
+        if let zoneID {
+            return reference(for: id, in: zoneID)
+        }
+        return reference(for: id)
+    }
+
     func references(from ids: [UUID]) -> [CKRecord.Reference] {
         ids.map { reference(for: $0) }
+    }
+
+    func references(from ids: [UUID], zoneID: CKRecordZone.ID?) -> [CKRecord.Reference] {
+        ids.map { reference(for: $0, zoneID: zoneID) }
     }
 
     func uuid(from reference: CKRecord.Reference?) -> UUID? {
@@ -155,6 +170,7 @@ extension CloudKitManager {
     func taskRecord(from task: Task) -> CKRecord {
         let record = CKRecord(recordType: "Task", recordID: recordID(for: task.id))
         record["id"] = task.id.uuidString as CKRecordValue
+        record["logicalItemId"] = task.logicalItemID.uuidString as CKRecordValue
         record["householdId"] = reference(for: task.householdId)
         record["title"] = task.title as CKRecordValue
         record["status"] = task.status.rawValue as CKRecordValue
@@ -214,6 +230,7 @@ extension CloudKitManager {
 
         return Task(
             id: id,
+            logicalItemID: UUID(uuidString: record["logicalItemId"] as? String ?? "") ?? id,
             householdId: householdId,
             title: title,
             status: status,
@@ -226,6 +243,90 @@ extension CloudKitManager {
             completedAt: record["completedAt"] as? Date,
             completedById: record["completedById"] as? String,
             taskType: taskType,
+            recurringChoreId: uuid(from: record["recurringChoreId"] as? CKRecord.Reference),
+            notes: record["notes"] as? String,
+            order: Int(record["order"] as? Int64 ?? 0),
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    // MARK: - WorkItem Mapping
+
+    func workItemRecord(from item: WorkItem) -> CKRecord {
+        let record = CKRecord(recordType: "WorkItem", recordID: recordID(for: item.id))
+        record["id"] = item.id.uuidString as CKRecordValue
+        record["logicalItemId"] = item.logicalItemID.uuidString as CKRecordValue
+        record["householdId"] = reference(for: item.householdId)
+        record["title"] = item.title as CKRecordValue
+        record["status"] = item.status.rawValue as CKRecordValue
+        if let assigneeId = item.assigneeId {
+            record["assigneeId"] = reference(for: assigneeId)
+        }
+        if !item.assigneeIds.isEmpty {
+            record["assigneeIds"] = references(from: item.assigneeIds) as CKRecordValue
+        }
+        if let categoryId = item.categoryId {
+            record["categoryId"] = reference(for: categoryId)
+        }
+        if let areaId = item.areaId {
+            record["areaId"] = reference(for: areaId)
+        }
+        if let dueDate = item.dueDate {
+            record["dueDate"] = dueDate as CKRecordValue
+        }
+        if let lastPokedAt = item.lastPokedAt {
+            record["lastPokedAt"] = lastPokedAt as CKRecordValue
+        }
+        if let completedAt = item.completedAt {
+            record["completedAt"] = completedAt as CKRecordValue
+        }
+        if let completedById = item.completedById {
+            record["completedById"] = completedById as CKRecordValue
+        }
+        record["taskType"] = item.taskType.rawValue as CKRecordValue
+        if let recurringChoreId = item.recurringChoreId {
+            record["recurringChoreId"] = reference(for: recurringChoreId)
+        }
+        if let notes = item.notes {
+            record["notes"] = notes as CKRecordValue
+        }
+        record["order"] = Int64(item.order) as CKRecordValue
+        record["createdAt"] = item.createdAt as CKRecordValue
+        record["updatedAt"] = item.updatedAt as CKRecordValue
+        return record
+    }
+
+    func workItem(from record: CKRecord) throws -> WorkItem {
+        guard
+            let idString = record["id"] as? String,
+            let id = UUID(uuidString: idString),
+            let householdReference = record["householdId"] as? CKRecord.Reference,
+            let householdId = UUID(uuidString: householdReference.recordID.recordName),
+            let title = record["title"] as? String,
+            let statusRaw = record["status"] as? String,
+            let status = WorkItem.Status(rawValue: statusRaw),
+            let createdAt = record["createdAt"] as? Date,
+            let updatedAt = record["updatedAt"] as? Date
+        else {
+            throw CloudKitManagerError.invalidRecord
+        }
+
+        return WorkItem(
+            id: id,
+            logicalItemID: UUID(uuidString: record["logicalItemId"] as? String ?? "") ?? id,
+            householdId: householdId,
+            title: title,
+            status: status,
+            assigneeId: uuid(from: record["assigneeId"] as? CKRecord.Reference),
+            assigneeIds: uuidArray(from: record["assigneeIds"] as? [CKRecord.Reference]),
+            categoryId: uuid(from: record["categoryId"] as? CKRecord.Reference),
+            areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
+            dueDate: record["dueDate"] as? Date,
+            lastPokedAt: record["lastPokedAt"] as? Date,
+            completedAt: record["completedAt"] as? Date,
+            completedById: record["completedById"] as? String,
+            taskType: WorkItem.ItemType(rawValue: record["taskType"] as? String ?? "") ?? .oneOff,
             recurringChoreId: uuid(from: record["recurringChoreId"] as? CKRecord.Reference),
             notes: record["notes"] as? String,
             order: Int(record["order"] as? Int64 ?? 0),
@@ -484,6 +585,7 @@ extension CloudKitManager {
     func backlogItemRecord(from item: BacklogItem) -> CKRecord {
         let record = CKRecord(recordType: "BacklogItem", recordID: recordID(for: item.id))
         record["id"] = item.id.uuidString as CKRecordValue
+        record["logicalItemId"] = item.logicalItemID.uuidString as CKRecordValue
         record["categoryId"] = reference(for: item.categoryId)
         record["householdId"] = reference(for: item.householdId)
         record["title"] = item.title as CKRecordValue
@@ -515,6 +617,7 @@ extension CloudKitManager {
 
         return BacklogItem(
             id: id,
+            logicalItemID: UUID(uuidString: record["logicalItemId"] as? String ?? "") ?? id,
             categoryId: categoryId,
             householdId: householdId,
             title: title,

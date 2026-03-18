@@ -40,16 +40,28 @@ jobs:
           # Find first available iOS simulator
           SIMULATOR_ID=$(xcrun simctl list devices available --json | \
             jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
 
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
+            -only-testing:FamilyTodoTests \
             -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             INFOPLIST_KEY_HPCloudKitEnabled="$HP_CLOUDKIT_ENABLED" \
-            | xcpretty
+            OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
+            2>&1 | tee xcodebuild-test.log | xcpretty || { \
+              status=$?; \
+              echo "::group::xcodebuild-test.log (tail)"; \
+              tail -n 200 xcodebuild-test.log || true; \
+              echo "::endgroup::"; \
+              exit $status; \
+            }
 
       - name: Upload Test Results
         if: failure()

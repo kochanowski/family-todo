@@ -7,11 +7,20 @@ import SwiftUI
 struct BacklogView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
+    @Binding private var selectedTab: AppTab
+
+    init(selectedTab: Binding<AppTab> = .constant(.backlog)) {
+        _selectedTab = selectedTab
+    }
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
-                BacklogContent(householdId: householdId, modelContext: modelContext)
+                BacklogContent(
+                    householdId: householdId,
+                    modelContext: modelContext,
+                    selectedTab: $selectedTab
+                )
             } else {
                 GuidedEmptyStateView()
             }
@@ -44,7 +53,9 @@ private struct BacklogContent: View {
 
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
+    @Binding private var selectedTab: AppTab
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var isAddingCategory = false
@@ -65,7 +76,8 @@ private struct BacklogContent: View {
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
-    @State private var processingPromotionItemIds: Set<UUID> = []
+    @State private var suppressPromotionTipUntil = Date.distantPast
+    @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
     @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
@@ -76,14 +88,17 @@ private struct BacklogContent: View {
     private var hasCompletedIdeasAssignOwnerTip = false
     @AppStorage(AppTipProgressKey.ideasPromoteCompleted)
     private var hasCompletedIdeasPromoteTip = false
+    @AppStorage(AppTips.runtimeGenerationDefaultsKey)
+    private var appTipRuntimeGeneration = 0
 
-    init(householdId: UUID, modelContext: ModelContext) {
+    init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         _store = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
         _memberStore = StateObject(
             wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
         )
+        _selectedTab = selectedTab
     }
 
     var body: some View {
@@ -105,9 +120,15 @@ private struct BacklogContent: View {
             }
 
             if store.categories.isEmpty {
-                emptyState
-                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                    .padding(.bottom, listBottomInset)
+                if store.hasHydratedLocalSnapshot {
+                    emptyState
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else {
+                    backlogLoadingState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 40)
+                }
             } else {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
@@ -117,10 +138,11 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
+                                    appTipRuntimeGeneration: appTipRuntimeGeneration,
                                     addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
                                     ideaAssignTipItemID: ideaAssignTipAnchorItemID,
                                     ideaPromotionTipItemID: ideaPromotionTipItemID,
-                                    isPromotingItem: { processingPromotionItemIds.contains($0) },
+                                    isPromotingItem: { hiddenPendingPromotionIds.contains($0) || pendingPromotionItemID == $0 },
                                     assigneeFor: { assigneeId in
                                         assignee(for: assigneeId)
                                     },
@@ -171,10 +193,7 @@ private struct BacklogContent: View {
                     .scrollDismissesKeyboard(.never)
                 }
                 .refreshable {
-                    store.setSyncMode(userSession.syncMode)
-                    memberStore.setSyncMode(userSession.syncMode)
-                    await store.loadData()
-                    await memberStore.loadMembers()
+                    await loadBacklogData()
                     markIdeasTutorialAsSeenIfNeeded()
                 }
             }
@@ -183,21 +202,67 @@ private struct BacklogContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
-            store.setSyncMode(userSession.syncMode)
-            memberStore.setSyncMode(userSession.syncMode)
-            await store.loadData()
-            await memberStore.loadMembers()
+            guard !hasStartedInitialLoad else { return }
+            hasStartedInitialLoad = true
+            await loadBacklogData()
             markIdeasTutorialAsSeenIfNeeded()
+        }
+        .onChange(of: userSession.syncMode) { _, _ in
+            _ = _Concurrency.Task {
+                await loadBacklogData()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            guard newTab == .backlog else { return }
+            _ = _Concurrency.Task {
+                await loadBacklogData()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+        }
+        .onChange(of: userSession.userId) { _, _ in
+            updateStoreCloudContext()
+        }
+        .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
+            updateStoreCloudContext()
         }
         .onChange(of: store.categories.isEmpty) { _, isEmpty in
             if !isEmpty {
                 markIdeasTutorialAsSeenIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
-            _ = _Concurrency.Task {
-                await store.loadData()
+        .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { notification in
+            store.markLocalSnapshotStale()
+            if selectedNotificationIsLocal(notification) {
+                store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else {
+                _ = _Concurrency.Task {
+                    await loadBacklogData()
+                    markIdeasTutorialAsSeenIfNeeded()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { notification in
+            store.markLocalSnapshotStale()
+            if selectedNotificationIsLocal(notification) {
+                store.rehydrateVisibleSnapshotFromCache()
+                markIdeasTutorialAsSeenIfNeeded()
+            } else {
+                _ = _Concurrency.Task {
+                    await loadBacklogData()
+                    markIdeasTutorialAsSeenIfNeeded()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
+            memberStore.markLocalSnapshotStale()
+            if selectedNotificationIsLocal(notification) {
+                memberStore.rehydrateVisibleSnapshotFromCache()
+            } else if selectedTab == .backlog {
+                _ = _Concurrency.Task {
+                    await memberStore.loadMembersForDisplay()
+                }
             }
         }
         .sheet(isPresented: $isAddingCategory) {
@@ -312,21 +377,18 @@ private struct BacklogContent: View {
                         let pendingItemID = item.id
                         pendingAssignmentItemID = nil
                         selectedAssigneeIdForAssignment = nil
-                        _ = _Concurrency.Task {
-                            await store.updateItem(
-                                item,
-                                title: item.title,
-                                notes: item.notes,
-                                assigneeId: selectedAssignee
-                            )
-                            await MainActor.run {
-                                guard !hadAssignee else { return }
-                                if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
-                                   updatedItem.assigneeId != nil
-                                {
-                                    AppTips.donateIdeasOwnerAssigned()
-                                }
-                            }
+                        store.updateItem(
+                            item,
+                            title: item.title,
+                            notes: item.notes,
+                            assigneeId: selectedAssignee
+                        )
+                        suppressPromotionTip(for: 1.25)
+                        guard !hadAssignee else { return }
+                        if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
+                           updatedItem.assigneeId != nil
+                        {
+                            AppTips.donateIdeasOwnerAssigned()
                         }
                     }
                 )
@@ -355,14 +417,12 @@ private struct BacklogContent: View {
                     item: item,
                     members: activeMembers,
                     onSave: { title, notes, assigneeId in
-                        _ = _Concurrency.Task {
-                            await store.updateItem(
-                                item,
-                                title: title,
-                                notes: notes,
-                                assigneeId: assigneeId
-                            )
-                        }
+                        store.updateItem(
+                            item,
+                            title: title,
+                            notes: notes,
+                            assigneeId: assigneeId
+                        )
                     },
                     onDelete: {
                         performImmediateDeleteItem(withID: item.id)
@@ -426,6 +486,24 @@ private struct BacklogContent: View {
         .animation(ToastView.AnimationTokens.curve, value: pendingDeletionItem?.id)
     }
 
+    private func loadBacklogData() async {
+        updateStoreCloudContext()
+        store.setSyncMode(userSession.syncMode)
+        memberStore.setSyncMode(userSession.syncMode)
+        await store.loadDataForDisplay()
+        await memberStore.loadMembersForDisplay()
+    }
+
+    private var backlogLoadingState: some View {
+        ProgressView("Loading ideas...")
+    }
+
+    private func updateStoreCloudContext() {
+        let ownerId = householdStore.currentHousehold?.ownerId
+        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+    }
+
     private var activeMembers: [Member] {
         memberStore.members
             .filter(\.isActive)
@@ -467,7 +545,12 @@ private struct BacklogContent: View {
     }
 
     private var header: some View {
-        AppScreenHeader(title: "Ideas", trailing: {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("Ideas")
+                .font(themeStore.font(for: .screenHeader))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             Button {
                 newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
@@ -482,9 +565,11 @@ private struct BacklogContent: View {
             .contextualPopoverTip(
                 activeIdeasTip == .createCategory,
                 IdeasCreateCategoryTip(),
-                arrowEdge: .top
+                arrowEdge: .top,
+                generation: appTipRuntimeGeneration
             )
-        })
+        }
+        .frame(minHeight: 44, alignment: .center)
     }
 
     private var emptyState: some View {
@@ -531,13 +616,14 @@ private struct BacklogContent: View {
 
     private func promoteItem(withID itemID: UUID) {
         guard let item = latestItem(withID: itemID) else { return }
-        guard processingPromotionItemIds.insert(item.id).inserted else { return }
+        guard !hiddenPendingPromotionIds.contains(item.id), pendingPromotionItemID != item.id else {
+            return
+        }
 
         if activeMembers.isEmpty {
             if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
                 completePromotion(of: item.id, assigneeId: assigneeId)
             } else {
-                processingPromotionItemIds.remove(item.id)
                 showBanner(.assigneeRequired)
             }
             return
@@ -559,39 +645,29 @@ private struct BacklogContent: View {
 
     private func completePromotion(of itemID: UUID, assigneeId: UUID) {
         guard let item = latestItem(withID: itemID) else {
-            processingPromotionItemIds.remove(itemID)
             hiddenPendingPromotionIds.remove(itemID)
             return
         }
 
-        if !processingPromotionItemIds.contains(item.id) {
-            processingPromotionItemIds.insert(item.id)
-        }
         withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
             hiddenPendingPromotionIds.insert(item.id)
         }
 
-        _ = _Concurrency.Task {
-            let result = await store.promoteItemToTask(item, assigneeId: assigneeId)
-            await MainActor.run {
-                processingPromotionItemIds.remove(item.id)
-                switch result {
-                case .success:
-                    hiddenPendingPromotionIds.remove(item.id)
-                case .assigneeRequired, .wipLimitReached, .failed:
-                    withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
-                        hiddenPendingPromotionIds.remove(item.id)
-                    }
-                }
-                handlePromotionResult(result)
+        let result = store.promoteItemToTask(item, assigneeId: assigneeId)
+        switch result {
+        case .success:
+            // Keep the item hidden for the rest of the session so a delayed
+            // cloud echo cannot briefly show the promoted idea again.
+            break
+        case .assigneeRequired, .wipLimitReached, .failed:
+            withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+                hiddenPendingPromotionIds.remove(item.id)
             }
         }
+        handlePromotionResult(result)
     }
 
     private func cancelPendingPromotion() {
-        if let itemID = pendingPromotionItemID {
-            processingPromotionItemIds.remove(itemID)
-        }
         pendingPromotionItemID = nil
         selectedAssigneeIdForPromotion = nil
     }
@@ -628,6 +704,10 @@ private struct BacklogContent: View {
         }
     }
 
+    private func selectedNotificationIsLocal(_ notification: Notification) -> Bool {
+        (notification.object as? String) == "local"
+    }
+
     private func activateComposer(for categoryId: UUID, scrollProxy: ScrollViewProxy) {
         activeComposerCategoryId = categoryId
         composerText = ""
@@ -654,6 +734,7 @@ private struct BacklogContent: View {
             let previousCount = visibleItems(for: categoryId).count
             await store.addItem(to: categoryId, title: trimmedText)
             await MainActor.run {
+                suppressPromotionTip(for: 1.25)
                 if visibleItems(for: categoryId).count > previousCount {
                     AppTips.donateIdeasFirstIdeaAdded()
                 }
@@ -671,6 +752,13 @@ private struct BacklogContent: View {
         focusedComposerCategoryId = nil
         activeComposerCategoryId = nil
         composerText = ""
+    }
+
+    private func suppressPromotionTip(for duration: TimeInterval) {
+        suppressPromotionTipUntil = max(
+            suppressPromotionTipUntil,
+            Date().addingTimeInterval(duration)
+        )
     }
 
     private func scheduleComposerFocus(for categoryId: UUID) {
@@ -736,6 +824,8 @@ private struct BacklogContent: View {
     }
 
     private var promoteTipItemID: UUID? {
+        guard Date() >= suppressPromotionTipUntil else { return nil }
+
         for category in store.categories {
             if let promotableItem = visibleItems(for: category.id).first(where: { $0.assigneeId != nil }) {
                 return promotableItem.id
@@ -922,6 +1012,7 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let appTipRuntimeGeneration: Int
     let addIdeaTipCategoryID: UUID?
     let ideaAssignTipItemID: UUID?
     let ideaPromotionTipItemID: UUID?
@@ -1000,6 +1091,7 @@ struct CategoryCard: View {
                     BacklogItemRow(
                         item: item,
                         assignee: assigneeFor(item.assigneeId),
+                        appTipRuntimeGeneration: appTipRuntimeGeneration,
                         canPromote: canPromote,
                         isPromotionDisabled: isPromoting,
                         showsAssignOwnerTip: item.id == ideaAssignTipItemID,
@@ -1086,7 +1178,8 @@ struct CategoryCard: View {
                 .contextualPopoverTip(
                     addIdeaTipCategoryID == category.id,
                     IdeasAddIdeaTip(),
-                    arrowEdge: .top
+                    arrowEdge: .top,
+                    generation: appTipRuntimeGeneration
                 )
             }
         }
@@ -1180,6 +1273,7 @@ struct BacklogItemRow: View {
 
     let item: BacklogItem
     let assignee: Member?
+    let appTipRuntimeGeneration: Int
     let canPromote: Bool
     let isPromotionDisabled: Bool
     let showsAssignOwnerTip: Bool
@@ -1218,11 +1312,6 @@ struct BacklogItemRow: View {
                     .disabled(isPromotionDisabled)
                     .opacity(isPromotionDisabled ? 0.45 : 1)
                     .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
-                    .contextualPopoverTip(
-                        showsIdeaPromotionTip,
-                        IdeaPromotionTip(),
-                        arrowEdge: .trailing
-                    )
                     .transition(.opacity.combined(with: .scale))
                 }
 
@@ -1235,6 +1324,12 @@ struct BacklogItemRow: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogDeleteButton_\(item.title)")
             }
+            .contextualPopoverTip(
+                showsIdeaPromotionTip,
+                IdeaPromotionTip(),
+                arrowEdge: .trailing,
+                generation: appTipRuntimeGeneration
+            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -1274,7 +1369,8 @@ struct BacklogItemRow: View {
         .contextualPopoverTip(
             showsAssignOwnerTip,
             IdeasAssignOwnerTip(),
-            arrowEdge: .trailing
+            arrowEdge: .trailing,
+            generation: appTipRuntimeGeneration
         )
     }
 }

@@ -4,13 +4,26 @@ import SwiftData
 enum StoreRecoveryMode: String, Codable {
     case normal
     case storeReset
+    case recoveryRequired
     case inMemoryFallback
     case schemaFailure
 }
 
 enum StartupBootstrapState: String, Codable {
     case ready
+    case recoveryRequired
     case emergency
+}
+
+enum StoreResetReason: String, Codable {
+    case hardResetApp
+    case debugCloudHouseholdDelete
+    case startupRecoveryManual
+}
+
+struct PendingStoreResetRequest: Codable, Equatable {
+    let reason: StoreResetReason
+    let requestedAtISO8601: String
 }
 
 enum BootstrapStage: String, Codable {
@@ -58,6 +71,7 @@ enum SwiftDataContainerFactory {
         let schemaModelNames: [String]
         let timestamp: String
         let cloudKitDatabaseMode: String
+        let consumedResetRequest: PendingStoreResetRequest?
     }
 
     static let recoveryUserDefaultsKey = "lastStoreRecoveryEvent"
@@ -67,8 +81,8 @@ enum SwiftDataContainerFactory {
     private static let legacyStorePrefix = "default.store"
     private static let runtimeStoreFileName = "HousePulse.store"
     private static let swiftDataCloudKitDatabaseMode = "none"
-    private static let recoveryMessage =
-        "Wykryto problem lokalnej bazy. Cache został odtworzony. Dane w chmurze zsynchronizują się automatycznie."
+    private static let recoveryRequiredMessage =
+        "We couldn't safely open the local cache. Your local data was preserved. Use Startup Recovery only if you want to reset local data."
     private static let emergencyMessage =
         "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym."
     private static let removableStoreSuffixes = [
@@ -86,6 +100,7 @@ enum SwiftDataContainerFactory {
     }
 
     private static let runtimeModelProbes: [ModelSchemaProbe] = [
+        .init(name: "CachedWorkItem", makeSchema: { Schema([CachedWorkItem.self]) }),
         .init(name: "CachedTask", makeSchema: { Schema([CachedTask.self]) }),
         .init(name: "CachedMember", makeSchema: { Schema([CachedMember.self]) }),
         .init(name: "CachedShoppingItem", makeSchema: { Schema([CachedShoppingItem.self]) }),
@@ -130,8 +145,22 @@ enum SwiftDataContainerFactory {
         return bootstrapForRuntime(schema: schema, dependencies: dependencies)
     }
 
-    static func requestStoreReset(_ userDefaults: UserDefaults = .standard) {
-        userDefaults.set(true, forKey: pendingStoreResetUserDefaultsKey)
+    static func requestStoreReset(
+        reason: StoreResetReason = .hardResetApp,
+        _ userDefaults: UserDefaults = .standard,
+        now: Date = Date()
+    ) {
+        let request = PendingStoreResetRequest(
+            reason: reason,
+            requestedAtISO8601: ISO8601DateFormatter().string(from: now)
+        )
+
+        guard let data = try? JSONEncoder().encode(request) else {
+            userDefaults.removeObject(forKey: pendingStoreResetUserDefaultsKey)
+            return
+        }
+
+        userDefaults.set(data, forKey: pendingStoreResetUserDefaultsKey)
     }
 
     private static func bootstrapForCI(
@@ -159,49 +188,40 @@ enum SwiftDataContainerFactory {
     ) -> ModelContainerBootstrapResult {
         let context = prepareRuntimeContext(dependencies: dependencies)
         var errorDetails: [BootstrapErrorDetail] = []
+        let persistentStage: BootstrapStage = context.consumedResetRequest == nil
+            ? .initialPersistent
+            : .persistentAfterCleanup
+        let persistentFailureLogPrefix = context.consumedResetRequest == nil
+            ? "initial persistent bootstrap failed"
+            : "persistent bootstrap after explicit reset failed"
 
         if let container = attemptPersistentContainer(
             schema: schema,
             storeURL: context.storeURL,
             dependencies: dependencies,
-            stage: .initialPersistent,
-            failureLogPrefix: "initial persistent bootstrap failed",
-            errorDetails: &errorDetails,
-            cleanupURLOnFailure: context.appSupportURL
-        ) {
-            return readyResult(container: container, mode: .normal, message: nil, diagnostics: nil)
-        }
-
-        if let container = attemptPersistentContainer(
-            schema: schema,
-            storeURL: context.storeURL,
-            dependencies: dependencies,
-            stage: .persistentAfterCleanup,
-            failureLogPrefix: "persistent bootstrap after cleanup failed",
+            stage: persistentStage,
+            failureLogPrefix: persistentFailureLogPrefix,
             errorDetails: &errorDetails
         ) {
-            return recoveredResult(
+            return readyResult(
                 container: container,
-                mode: .storeReset,
-                context: context,
-                errorDetails: errorDetails,
-                dependencies: dependencies
+                mode: context.consumedResetRequest == nil ? .normal : .storeReset,
+                message: nil,
+                diagnostics: nil
             )
         }
 
-        if let container = attemptInMemoryContainer(
+        if attemptInMemoryContainer(
             schema: schema,
             dependencies: dependencies,
             stage: .fullInMemory,
             failureLogPrefix: "in-memory full schema bootstrap failed",
             errorDetails: &errorDetails
-        ) {
-            return recoveredResult(
-                container: container,
-                mode: .inMemoryFallback,
+        ) != nil {
+            return recoveryRequiredResult(
                 context: context,
-                errorDetails: errorDetails,
-                dependencies: dependencies
+                dependencies: dependencies,
+                errorDetails: errorDetails
             )
         }
 
@@ -226,10 +246,10 @@ enum SwiftDataContainerFactory {
             withIntermediateDirectories: true
         )
 
-        if dependencies.userDefaults.bool(forKey: pendingStoreResetUserDefaultsKey) {
-            log("pending reset flag detected, clearing local store artifacts before bootstrap")
+        let pendingResetRequest = consumePendingResetRequest(from: dependencies.userDefaults)
+        if let pendingResetRequest {
+            log("pending reset request detected (\(pendingResetRequest.reason.rawValue)), clearing local store artifacts before bootstrap")
             _ = cleanupStoreArtifacts(in: appSupportURL, using: dependencies.fileManager)
-            dependencies.userDefaults.removeObject(forKey: pendingStoreResetUserDefaultsKey)
         }
 
         dependencies.userDefaults.removeObject(forKey: bootstrapDiagnosticsUserDefaultsKey)
@@ -240,7 +260,8 @@ enum SwiftDataContainerFactory {
             storeURL: appSupportURL.appendingPathComponent(runtimeStoreFileName),
             schemaModelNames: runtimeModelProbes.map(\.name),
             timestamp: ISO8601DateFormatter().string(from: dependencies.now()),
-            cloudKitDatabaseMode: swiftDataCloudKitDatabaseMode
+            cloudKitDatabaseMode: swiftDataCloudKitDatabaseMode,
+            consumedResetRequest: pendingResetRequest
         )
     }
 
@@ -250,8 +271,7 @@ enum SwiftDataContainerFactory {
         dependencies: Dependencies,
         stage: BootstrapStage,
         failureLogPrefix: String,
-        errorDetails: inout [BootstrapErrorDetail],
-        cleanupURLOnFailure: URL? = nil
+        errorDetails: inout [BootstrapErrorDetail]
     ) -> ModelContainer? {
         let configuration = persistentConfiguration(schema: schema, storeURL: storeURL)
         do {
@@ -263,13 +283,6 @@ enum SwiftDataContainerFactory {
             log("stage=\(detail.stage.rawValue) reflected=\(detail.reflected)")
             if !detail.underlyingChain.isEmpty {
                 log("stage=\(detail.stage.rawValue) underlying=\(detail.underlyingChain.joined(separator: " || "))")
-            }
-            if let cleanupURLOnFailure {
-                let removedArtifacts = cleanupStoreArtifacts(
-                    in: cleanupURLOnFailure,
-                    using: dependencies.fileManager
-                )
-                log("cleanup removed \(removedArtifacts.count) artifacts")
             }
             return nil
         }
@@ -297,24 +310,23 @@ enum SwiftDataContainerFactory {
         }
     }
 
-    private static func recoveredResult(
-        container: ModelContainer,
-        mode: StoreRecoveryMode,
+    private static func recoveryRequiredResult(
         context: RuntimeBootstrapContext,
-        errorDetails: [BootstrapErrorDetail],
-        dependencies: Dependencies
+        dependencies: Dependencies,
+        errorDetails: [BootstrapErrorDetail]
     ) -> ModelContainerBootstrapResult {
         let diagnostics = makeDiagnostics(
-            mode: mode,
+            mode: .recoveryRequired,
             context: context,
             failingModelNames: [],
             errorDetails: errorDetails
         )
-        persistRecoveryEvent(mode: mode, diagnostics: diagnostics, dependencies: dependencies)
-        return readyResult(
-            container: container,
-            mode: mode,
-            message: recoveryMessage,
+        persistRecoveryEvent(mode: .recoveryRequired, diagnostics: diagnostics, dependencies: dependencies)
+        return ModelContainerBootstrapResult(
+            container: nil,
+            recoveryMode: .recoveryRequired,
+            diagnosticMessage: recoveryRequiredMessage,
+            bootstrapState: .recoveryRequired,
             diagnostics: diagnostics
         )
     }
@@ -463,6 +475,20 @@ enum SwiftDataContainerFactory {
         name.hasPrefix(legacyStorePrefix)
             || removableStoreSuffixes.contains(where: { name.hasSuffix($0) })
             || (isDirectory && name.hasSuffix("_SUPPORT"))
+    }
+
+    private static func consumePendingResetRequest(
+        from userDefaults: UserDefaults
+    ) -> PendingStoreResetRequest? {
+        defer {
+            userDefaults.removeObject(forKey: pendingStoreResetUserDefaultsKey)
+        }
+
+        guard let data = userDefaults.data(forKey: pendingStoreResetUserDefaultsKey) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(PendingStoreResetRequest.self, from: data)
     }
 
     private static func persistentConfiguration(schema: Schema, storeURL: URL) -> ModelConfiguration {

@@ -55,9 +55,7 @@ final class ShareAcceptanceCoordinator: ObservableObject {
         guard userSession.hasActiveSession,
               userSession.syncMode == .cloud,
               let userId = userSession.userId,
-              !userSession.needsDisplayNamePrompt,
-              let displayName = userSession.displayName,
-              !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              let displayName = userSession.confirmedMembershipDisplayName
         else {
             return
         }
@@ -112,6 +110,15 @@ final class ShareAcceptanceCoordinator: ObservableObject {
         userDefaults.removeObject(forKey: StorageKeys.pendingInviteCode)
         userDefaults.removeObject(forKey: StorageKeys.pendingInviteSource)
         userDefaults.removeObject(forKey: StorageKeys.pendingInviteTimestamp)
+    }
+
+    func resetForDevelopment() {
+        pendingMetadata = nil
+        pendingInviteCode = nil
+        pendingSource = nil
+        pendingTimestampISO8601 = nil
+        lastErrorMessage = nil
+        clearPendingPersistent()
     }
 
     private func processMetadata(

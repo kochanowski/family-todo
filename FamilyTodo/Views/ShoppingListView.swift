@@ -27,6 +27,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
@@ -61,6 +62,8 @@ private struct ShoppingListContent: View {
     private var hasCompletedShoppingBundlesLocationTip = false
     @AppStorage(AppTipProgressKey.shoppingBundleQuickAddCompleted)
     private var hasCompletedShoppingBundleQuickAddTip = false
+    @AppStorage(AppTips.runtimeGenerationDefaultsKey)
+    private var appTipRuntimeGeneration = 0
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(
@@ -79,11 +82,18 @@ private struct ShoppingListContent: View {
                 await loadShoppingData()
             }
             .onChange(of: userSession.syncMode) { _, mode in
+                updateStoreCloudContext()
                 store.setSyncMode(mode)
                 bundleStore.setSyncMode(mode)
                 _ = _Concurrency.Task {
                     await loadShoppingData()
                 }
+            }
+            .onChange(of: userSession.userId) { _, _ in
+                updateStoreCloudContext()
+            }
+            .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
+                updateStoreCloudContext()
             }
             .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
                 if !isEmpty {
@@ -168,7 +178,14 @@ private struct ShoppingListContent: View {
                 : AppChromeMetrics.compactCTAHeight + 28
         let floatingButtonInset: CGFloat = 16
         let rapidEntryTapHeight = max(0, proxy.size.height - listBottomInset)
-        let shouldShowEmptyState = store.toBuyItems.isEmpty && !isRapidEntryActive
+        let shouldShowLoadingState =
+            !store.hasHydratedLocalSnapshot &&
+            store.toBuyItems.isEmpty &&
+            !isRapidEntryActive
+        let shouldShowEmptyState =
+            store.hasHydratedLocalSnapshot &&
+            store.toBuyItems.isEmpty &&
+            !isRapidEntryActive
 
         return ZStack(alignment: .bottomTrailing) {
             rapidEntryDismissOverlay(maxHeight: rapidEntryTapHeight)
@@ -179,7 +196,12 @@ private struct ShoppingListContent: View {
                     .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
                     .padding(.bottom, AppChromeMetrics.screenHeaderBottomPadding)
 
-                if shouldShowEmptyState {
+                if shouldShowLoadingState {
+                    shoppingLoadingState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                        .padding(.bottom, listBottomInset)
+                } else if shouldShowEmptyState {
                     shoppingEmptyState
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
@@ -345,6 +367,12 @@ private struct ShoppingListContent: View {
         .offset(y: -40)
     }
 
+    private var shoppingLoadingState: some View {
+        ProgressView("Loading shopping...")
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 40)
+    }
+
     // MARK: - Header
 
     private var header: some View {
@@ -372,7 +400,7 @@ private struct ShoppingListContent: View {
                 NavigationLink {
                     BundlesManagementView(store: bundleStore, shoppingStore: store)
                 } label: {
-                    Image(systemName: ShoppingBundle.defaultIcon)
+                    Image(systemName: ShoppingBundle.featureIcon)
                         .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(themeStore.accentTabColor)
                         .frame(width: 44, height: 44)
@@ -386,7 +414,8 @@ private struct ShoppingListContent: View {
                 .contextualPopoverTip(
                     activeShoppingTip == .bundlesLocation,
                     ShoppingBundlesLocationTip(),
-                    arrowEdge: .top
+                    arrowEdge: .top,
+                    generation: appTipRuntimeGeneration
                 )
 
                 // Recently purchased
@@ -406,7 +435,8 @@ private struct ShoppingListContent: View {
                 .contextualPopoverTip(
                     activeShoppingTip == .recentPurchases,
                     ShoppingRecentlyPurchasedTip(),
-                    arrowEdge: .top
+                    arrowEdge: .top,
+                    generation: appTipRuntimeGeneration
                 )
                 .sheet(isPresented: $showRestock) {
                     RestockSheet(
@@ -470,12 +500,14 @@ private struct ShoppingListContent: View {
         .contextualPopoverTip(
             activeShoppingTip == .firstAdd,
             ShoppingFirstAddTip(),
-            arrowEdge: .bottom
+            arrowEdge: .bottom,
+            generation: appTipRuntimeGeneration
         )
         .contextualPopoverTip(
             activeShoppingTip == .bundleQuickAdd,
             ShoppingBundleQuickAddTip(),
-            arrowEdge: .bottom
+            arrowEdge: .bottom,
+            generation: appTipRuntimeGeneration
         )
     }
 
@@ -721,11 +753,18 @@ private struct ShoppingListContent: View {
     }
 
     private func loadShoppingData() async {
+        updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         bundleStore.setSyncMode(userSession.syncMode)
-        await store.loadItems()
-        await bundleStore.loadBundles()
+        await store.loadItemsForDisplay()
+        await bundleStore.loadBundlesForDisplay()
         markShoppingTutorialAsSeenIfNeeded()
+    }
+
+    private func updateStoreCloudContext() {
+        let ownerId = householdStore.currentHousehold?.ownerId
+        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        bundleStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
     }
 
     private func scheduleShoppingCompletionCelebration() {
@@ -1328,6 +1367,8 @@ private struct ShoppingQuickAddBundleSheet: View {
                         Spacer()
                     }
                     .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

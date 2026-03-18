@@ -187,22 +187,20 @@ final class MemberStoreProfileTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let schema = Schema([CachedMember.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        modelContainer = try ModelContainer(for: schema, configurations: [config])
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .members)
 
         let initialMember = Member(
             householdId: householdId,
             userId: userId,
             displayName: "Wojtek",
             role: .owner,
-            colorHex: MemberColorToken.pastelPink.hex
+            colorHex: MemberColorToken.systemPink.hex
         )
         modelContainer.mainContext.insert(CachedMember(from: initialMember))
         try modelContainer.mainContext.save()
 
         store = MemberStore(householdId: householdId, modelContext: modelContainer.mainContext)
-        store.setSyncMode(.localOnly)
+        store.setSyncMode(SyncMode.localOnly)
         await store.loadMembers()
     }
 
@@ -215,17 +213,17 @@ final class MemberStoreProfileTests: XCTestCase {
     func testUpdateCurrentUserProfilePersistsDisplayNameAndColorToCache() async throws {
         try await store.updateCurrentUserProfile(
             displayName: "Wojciech",
-            colorHex: MemberColorToken.pastelBlue.hex,
+            colorHex: MemberColorToken.systemBlue.hex,
             currentUserId: userId
         )
 
         XCTAssertEqual(store.members.first?.displayName, "Wojciech")
-        XCTAssertEqual(store.members.first?.colorHex, MemberColorToken.pastelBlue.hex)
+        XCTAssertEqual(store.members.first?.colorHex, MemberColorToken.systemBlue.hex)
 
         let descriptor = FetchDescriptor<CachedMember>()
         let cachedMembers = try modelContainer.mainContext.fetch(descriptor)
         XCTAssertEqual(cachedMembers.first?.displayName, "Wojciech")
-        XCTAssertEqual(cachedMembers.first?.colorHex, MemberColorToken.pastelBlue.hex)
+        XCTAssertEqual(cachedMembers.first?.colorHex, MemberColorToken.systemBlue.hex)
     }
 }
 
@@ -234,15 +232,26 @@ final class MemberStoreProfileTests: XCTestCase {
 @MainActor
 final class HouseholdStoreTests: XCTestCase {
     private var store: HouseholdStore!
+    private var modelContainer: ModelContainer!
 
     override func setUp() async throws {
         try await super.setUp()
-        store = HouseholdStore()
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .household)
+        store = HouseholdStore(modelContext: modelContainer.mainContext)
+        store.setModelContext(modelContainer.mainContext)
     }
 
     override func tearDown() async throws {
         store = nil
+        modelContainer = nil
         try await super.tearDown()
+    }
+
+    private func requireContainer(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> ModelContainer {
+        try XCTUnwrap(modelContainer, "Expected in-memory model container", file: file, line: line)
     }
 
     // MARK: - Computed Properties
@@ -258,23 +267,10 @@ final class HouseholdStoreTests: XCTestCase {
     }
 
     func testCreateHouseholdLocalOnlyStartsEmpty() async throws {
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
+        let container = try requireContainer()
+        store.setSyncMode(SyncMode.localOnly)
 
-        store.setModelContext(container.mainContext)
-        store.setSyncMode(.localOnly)
-
-        try await store.createHousehold(
+        _ = try await store.createHousehold(
             name: "Local Home",
             userId: "guest-user",
             displayName: "Guest"
@@ -313,6 +309,194 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertTrue(recurring.isEmpty)
     }
 
+    func testCreateHouseholdRejectsMissingDisplayName() async throws {
+        let container = try requireContainer()
+        store.setSyncMode(SyncMode.localOnly)
+
+        do {
+            _ = try await store.createHousehold(
+                name: "Local Home",
+                userId: "guest-user",
+                displayName: "   "
+            )
+            XCTFail("Expected createHousehold to reject an empty display name")
+        } catch let error as HouseholdError {
+            XCTAssertEqual(error, .displayNameRequired)
+        }
+
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).isEmpty)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedMember>()).isEmpty)
+    }
+
+    func testUpdateCurrentHouseholdPersistsNameAndIconLocally() async throws {
+        let container = try requireContainer()
+        let household = Household(
+            name: "Original Home",
+            iconSymbol: "house.fill",
+            ownerId: "household-owner"
+        )
+        container.mainContext.insert(CachedHousehold(from: household))
+        try container.mainContext.save()
+
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.localOnly)
+        localStore.currentHousehold = household
+
+        try await localStore.updateCurrentHousehold(
+            name: "Updated Home",
+            userId: household.ownerId,
+            iconSymbol: "star.fill"
+        )
+
+        XCTAssertEqual(localStore.currentHousehold?.name, "Updated Home")
+        XCTAssertEqual(localStore.currentHousehold?.iconSymbol, "star.fill")
+
+        let cachedHouseholds = try container.mainContext.fetch(FetchDescriptor<CachedHousehold>())
+        XCTAssertEqual(cachedHouseholds.count, 1)
+        XCTAssertEqual(cachedHouseholds.first?.name, "Updated Home")
+        XCTAssertEqual(cachedHouseholds.first?.iconSymbol, "star.fill")
+    }
+
+    func testRestoreCachedHouseholdIgnoresCloudCacheWithoutCurrentUserMembership() throws {
+        let container = try requireContainer()
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let household = Household(
+            name: "Zombie House",
+            ownerId: "owner-user"
+        )
+        container.mainContext.insert(CachedHousehold(from: household))
+
+        let someoneElse = Member(
+            householdId: household.id,
+            userId: "other-user",
+            displayName: "Other",
+            role: .member
+        )
+        container.mainContext.insert(CachedMember(from: someoneElse))
+        try container.mainContext.save()
+
+        let restored = localStore.restoreCachedHousehold(
+            userId: "missing-user",
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertNil(restored)
+        XCTAssertNil(localStore.currentHousehold)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).isEmpty)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedMember>()).isEmpty)
+    }
+
+    func testResolveStartupHouseholdLocallyRestoresCachedHousehold() throws {
+        let container = try requireContainer()
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let household = Household(
+            name: "Startup Home",
+            ownerId: "owner-user"
+        )
+        let owner = Member(
+            householdId: household.id,
+            userId: "owner-user",
+            displayName: "Owner",
+            role: .owner
+        )
+
+        container.mainContext.insert(CachedHousehold(from: household))
+        container.mainContext.insert(CachedMember(from: owner))
+        try container.mainContext.save()
+
+        let restored = localStore.resolveStartupHouseholdLocally(
+            userId: owner.userId,
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertEqual(restored?.id, household.id)
+        XCTAssertEqual(localStore.currentHousehold?.id, household.id)
+    }
+
+    func testResolveStartupHouseholdLocallyReturnsNilWhenCacheIsEmpty() throws {
+        let container = try requireContainer()
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let restored = localStore.resolveStartupHouseholdLocally(
+            userId: "owner-user",
+            preferredHouseholdId: nil as UUID?
+        )
+
+        XCTAssertNil(restored)
+        XCTAssertNil(localStore.currentHousehold)
+    }
+
+    func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
+        let container = try requireContainer()
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let household = Household(
+            name: "Display Name Home",
+            ownerId: "owner-user"
+        )
+        let owner = Member(
+            householdId: household.id,
+            userId: "owner-user",
+            displayName: "Wojtek",
+            role: .owner
+        )
+
+        container.mainContext.insert(CachedHousehold(from: household))
+        container.mainContext.insert(CachedMember(from: owner))
+        try container.mainContext.save()
+
+        let restoredName = localStore.resolveMembershipDisplayNameLocally(
+            userId: owner.userId,
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertEqual(restoredName, "Wojtek")
+    }
+
+    func testValidateRecoveredMembershipOrAbandonSuppressesZombieHousehold() async throws {
+        let suiteName = "HouseholdStoreTests.\(#function)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated user defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let container = try requireContainer()
+
+        let localStore = HouseholdStore(
+            modelContext: container.mainContext,
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300
+        )
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let household = Household(
+            name: "Zombie House",
+            ownerId: "owner-user"
+        )
+        container.mainContext.insert(CachedHousehold(from: household))
+        try container.mainContext.save()
+        localStore.currentHousehold = household
+
+        let isValid = try await localStore.validateRecoveredMembershipOrAbandon(
+            household: household,
+            userId: "missing-user",
+            retryDelaysNanoseconds: [0],
+            fetchActiveMember: { _, _ in nil as Member? }
+        )
+
+        XCTAssertFalse(isValid)
+        XCTAssertNil(localStore.currentHousehold)
+        XCTAssertTrue(localStore.isRecoverySuppressed(for: household.id))
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).isEmpty)
+    }
+
     func testLeaveCurrentHouseholdLocalOnlyRemovesRecurringCacheAndSuppressesRecovery() async throws {
         let suiteName = "HouseholdStoreTests.\(#function)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -321,25 +505,14 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
+        let container = try requireContainer()
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
             userDefaults: defaults,
             recoverySuppressionDuration: 300
         )
-        localStore.setSyncMode(.localOnly)
+        localStore.setSyncMode(SyncMode.localOnly)
 
         let household = try await localStore.createHousehold(
             name: "Leave Me",
@@ -374,25 +547,14 @@ final class HouseholdStoreTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let schema = Schema([
-            CachedHousehold.self,
-            CachedMember.self,
-            CachedTask.self,
-            CachedShoppingItem.self,
-            CachedShoppingBundle.self,
-            CachedBacklogCategory.self,
-            CachedBacklogItem.self,
-            CachedRecurringChore.self,
-        ])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [config])
+        let container = try requireContainer()
 
         let localStore = HouseholdStore(
             modelContext: container.mainContext,
             userDefaults: defaults,
             recoverySuppressionDuration: 300
         )
-        localStore.setSyncMode(.localOnly)
+        localStore.setSyncMode(SyncMode.localOnly)
 
         let household = try await localStore.createHousehold(
             name: "Pending Exit",
@@ -537,6 +699,16 @@ final class HouseholdStoreTests: XCTestCase {
 }
 
 final class CloudKitManagerScopeTests: XCTestCase {
+    private let ownerZoneID = CKRecordZone.ID(
+        zoneName: "HouseholdZone-owner",
+        ownerName: CKCurrentUserDefaultName
+    )
+    private let legacyZoneID = CKRecordZone.ID(
+        zoneName: "LegacyZone-owner",
+        ownerName: CKCurrentUserDefaultName
+    )
+    private let defaultZoneID = CKRecordZone.default().zoneID
+
     func testParticipantSharedRejectsDefaultZone() {
         XCTAssertFalse(
             CloudKitManager.isZoneCompatible(
@@ -546,13 +718,13 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
     }
 
-    func testParticipantSharedRejectsOwnerPrivateCustomZonePrefix() {
+    func testParticipantSharedAllowsOwnerStyleCustomZoneWhenItIsNotDefaultZone() {
         let zoneID = CKRecordZone.ID(
             zoneName: "HouseholdZone-\(UUID().uuidString)",
             ownerName: CKCurrentUserDefaultName
         )
 
-        XCTAssertFalse(
+        XCTAssertTrue(
             CloudKitManager.isZoneCompatible(
                 zoneID,
                 for: .participantShared
@@ -572,6 +744,165 @@ final class CloudKitManagerScopeTests: XCTestCase {
                 for: .participantShared
             )
         )
+    }
+
+    func testReferenceMatchPredicateUsesInOperatorForMultipleReferences() {
+        let scopedReference = CKRecord.Reference(
+            recordID: CKRecord.ID(
+                recordName: UUID().uuidString,
+                zoneID: ownerZoneID
+            ),
+            action: .none
+        )
+        let legacyReference = CKRecord.Reference(
+            recordID: CKRecord.ID(
+                recordName: UUID().uuidString,
+                zoneID: legacyZoneID
+            ),
+            action: .none
+        )
+
+        let predicate = CloudKitManager.referenceMatchPredicate(
+            field: "householdId",
+            references: [scopedReference, legacyReference]
+        )
+
+        XCTAssertTrue(predicate.predicateFormat.contains(" IN "))
+    }
+
+    func testReferenceMatchPredicateUsesEqualityForSingleReference() {
+        let scopedReference = CKRecord.Reference(
+            recordID: CKRecord.ID(
+                recordName: UUID().uuidString,
+                zoneID: ownerZoneID
+            ),
+            action: .none
+        )
+
+        let predicate = CloudKitManager.referenceMatchPredicate(
+            field: "householdId",
+            references: [scopedReference]
+        )
+
+        XCTAssertTrue(predicate.predicateFormat.contains(" == "))
+    }
+
+    func testMergeOwnerPrivateRecordsReturnsUnionAcrossMixedZonesAndSortsByUpdatedAt() {
+        let olderTask = makeTaskRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000A1") ?? UUID(),
+            zoneID: ownerZoneID,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newerLegacyTask = makeTaskRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000B2") ?? UUID(),
+            zoneID: legacyZoneID,
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [olderTask, newerLegacyTask],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        )
+
+        XCTAssertEqual(
+            result.authoritativeRecords.map(\.recordID.recordName),
+            [newerLegacyTask.recordID.recordName, olderTask.recordID.recordName]
+        )
+        XCTAssertEqual(
+            result.legacyDuplicateRecordIDs.map(\.recordName),
+            [newerLegacyTask.recordID.recordName]
+        )
+    }
+
+    func testMergeOwnerPrivateRecordsPrefersTargetZoneWhenFreshnessTies() {
+        let recordID = UUID(uuidString: "00000000-0000-0000-0000-0000000000C3") ?? UUID()
+        let sharedTimestamp = Date(timeIntervalSince1970: 300)
+        let targetRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: ownerZoneID,
+            updatedAt: sharedTimestamp
+        )
+        let legacyRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: defaultZoneID,
+            updatedAt: sharedTimestamp
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [legacyRecord, targetRecord],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        )
+
+        XCTAssertEqual(result.authoritativeRecords.map(\.recordID), [targetRecord.recordID])
+        XCTAssertEqual(result.legacyDuplicateRecordIDs, [legacyRecord.recordID])
+    }
+
+    func testMergeOwnerPrivateRecordsKeepsNewerLegacySourceButDoesNotDeleteTargetRecordID() {
+        let recordID = UUID(uuidString: "00000000-0000-0000-0000-0000000000D4") ?? UUID()
+        let targetRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: ownerZoneID,
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newerLegacyRecord = makeTaskRecord(
+            id: recordID,
+            zoneID: legacyZoneID,
+            updatedAt: Date(timeIntervalSince1970: 500)
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [targetRecord, newerLegacyRecord],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "updatedAt", ascending: false)]
+        )
+
+        XCTAssertEqual(result.authoritativeRecords.map(\.recordID), [newerLegacyRecord.recordID])
+        XCTAssertEqual(result.legacyDuplicateRecordIDs, [newerLegacyRecord.recordID])
+        XCTAssertFalse(result.legacyDuplicateRecordIDs.contains(targetRecord.recordID))
+    }
+
+    func testMergeOwnerPrivateRecordsSortsBySortOrderAscending() {
+        let first = makeShoppingRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000E5") ?? UUID(),
+            zoneID: legacyZoneID,
+            sortOrder: 1
+        )
+        let second = makeShoppingRecord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-0000000000F6") ?? UUID(),
+            zoneID: ownerZoneID,
+            sortOrder: 2
+        )
+
+        let result = CloudKitManager.mergeOwnerPrivateRecords(
+            [second, first],
+            targetZoneID: ownerZoneID,
+            sortDescriptors: [NSSortDescriptor(key: "sortOrder", ascending: true)]
+        )
+
+        XCTAssertEqual(
+            result.authoritativeRecords.map(\.recordID.recordName),
+            [first.recordID.recordName, second.recordID.recordName]
+        )
+    }
+
+    private func makeTaskRecord(id: UUID, zoneID: CKRecordZone.ID, updatedAt: Date) -> CKRecord {
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+        )
+        record["updatedAt"] = updatedAt
+        return record
+    }
+
+    private func makeShoppingRecord(id: UUID, zoneID: CKRecordZone.ID, sortOrder: Int) -> CKRecord {
+        let record = CKRecord(
+            recordType: "ShoppingItem",
+            recordID: CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
+        )
+        record["sortOrder"] = sortOrder as NSNumber
+        return record
     }
 }
 

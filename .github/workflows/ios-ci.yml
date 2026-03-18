@@ -5,9 +5,9 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, develop, rebuild/swiftui-clean-impl, feature/continue-mvp, appleid-login, features-and-testing, feature/cloudkit-fixes, feature/next-features]
+    branches: [main,]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
     inputs:
       cloud_sync_profile:
@@ -203,7 +203,7 @@ jobs:
     name: CloudKit Schema Gate
     needs: [build-and-test, swiftlint]
     # Run only on release/testing lanes that should promote schema toward Production.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/r4-features' || github.ref == 'refs/heads/appleid-login' || github.ref == 'refs/heads/features-and-testing'))
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main'))
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
       promote_to_production: true
@@ -229,25 +229,8 @@ jobs:
         (
           github.event_name == 'push' &&
           (
-            github.ref == 'refs/heads/main' ||
-            github.ref == 'refs/heads/r4-features' ||
-            github.ref == 'refs/heads/appleid-login' ||
-            github.ref == 'refs/heads/features-and-testing' ||
-            github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features'
+            github.ref == 'refs/heads/main'
           )
-        )
-      ) &&
-      needs.build-and-test.result == 'success' &&
-      needs.swiftlint.result == 'success' &&
-      (
-        needs.cloudkit-schema.result == 'success' ||
-        (
-          (
-            github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features'
-          ) &&
-          needs.cloudkit-schema.result == 'skipped'
         )
       )
 

@@ -6,29 +6,59 @@ import SwiftUI
 @MainActor
 class MemberStore: ObservableObject {
     @Published var members: [Member] = []
+    @Published private(set) var hasHydratedLocalSnapshot = false
     @Published var isLoading = false
+    @Published private(set) var isRefreshingInBackground = false
     @Published var error: Error?
 
     private var modelContext: ModelContext?
     private lazy var cloudKit = CloudKitManager.shared
     private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
+    private var currentUserId: String?
+    private var householdOwnerId: String?
+    private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var shouldReloadAfterCurrentLoad = false
+    private var hasHydratedVisibleSnapshot = false
+    private var needsLocalRehydrate = false
+    private static var pendingProfileOverrides: [UUID: Member] = [:]
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     func setModelContext(_ context: ModelContext) {
         modelContext = context
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     func setHousehold(_ id: UUID?) {
+        let didChangeHousehold = householdId != id
         householdId = id
+        if didChangeHousehold {
+            hasHydratedVisibleSnapshot = false
+            hasHydratedLocalSnapshot = false
+            needsLocalRehydrate = false
+        }
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: didChangeHousehold || shouldForceVisibleHydration())
     }
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
+    }
+
+    func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
+        self.currentUserId = currentUserId
+        self.householdOwnerId = householdOwnerId
+    }
+
+    private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
+        guard let currentUserId, let householdOwnerId else {
+            return .participantShared
+        }
+        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
     @discardableResult
@@ -51,32 +81,99 @@ class MemberStore: ObservableObject {
 
     // MARK: - Data Loading
 
-    func loadMembers() async {
-        guard let householdId else { return }
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+    func loadMembersForDisplay() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: shouldForceVisibleHydration())
+        guard syncMode == .cloud else { return }
+        scheduleBackgroundRefresh()
+    }
 
-        // 1. Load from cache
-        members = fetchCachedMembers(householdId: householdId)
+    func loadMembers() async {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: shouldForceVisibleHydration())
+        guard syncMode == .cloud else { return }
+        let loadTask = ensureBackgroundRefreshTask()
+        await loadTask.value
+    }
+
+    private func scheduleBackgroundRefresh() {
+        _ = ensureBackgroundRefreshTask()
+    }
+
+    private func ensureBackgroundRefreshTask() -> _Concurrency.Task<Void, Never> {
+        if let activeLoadTask {
+            shouldReloadAfterCurrentLoad = true
+            return activeLoadTask
+        }
+
+        let loadTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            repeat {
+                shouldReloadAfterCurrentLoad = false
+                await performLoadMembersPass()
+            } while shouldReloadAfterCurrentLoad
+
+            activeLoadTask = nil
+        }
+
+        activeLoadTask = loadTask
+        return loadTask
+    }
+
+    private func performLoadMembersPass() async {
+        guard let householdId else {
+            hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
+            return
+        }
+
+        isLoading = true
+        isRefreshingInBackground = true
+        defer {
+            isLoading = false
+            isRefreshingInBackground = false
+        }
+
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: shouldForceVisibleHydration())
 
         guard syncMode == .cloud else { return }
 
-        // 2. Load from CloudKit
         do {
-            // Ensure CloudKit is ready before accessing
             await cloudKit.ensureReady()
-            let fetchedMembers = try await cloudKit.fetchMembers(householdId: householdId)
-
-            // Update cache
-            updateCache(with: fetchedMembers, for: householdId)
-
-            // Update UI
-            members = fetchedMembers
+            let fetchedMembers = try await cloudKit.fetchMembers(
+                householdId: householdId,
+                scope: cloudScope
+            )
+            let mergedMembers = mergeCloudMembersWithPendingProfileOverrides(fetchedMembers)
+            updateCache(with: mergedMembers, for: householdId)
+            members = mergedMembers
         } catch {
             print("Error loading members: \(error)")
             self.error = error
         }
+    }
+
+    private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
+        guard force || shouldForceVisibleHydration() else { return }
+
+        guard let householdId else {
+            members = []
+            hasHydratedVisibleSnapshot = true
+            hasHydratedLocalSnapshot = true
+            needsLocalRehydrate = false
+            return
+        }
+
+        members = fetchCachedMembers(householdId: householdId)
+        hasHydratedVisibleSnapshot = true
+        hasHydratedLocalSnapshot = true
+        needsLocalRehydrate = false
+    }
+
+    func markLocalSnapshotStale() {
+        needsLocalRehydrate = true
+    }
+
+    func rehydrateVisibleSnapshotFromCache() {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
     }
 
     func activeMember(for userId: String?) -> Member? {
@@ -112,19 +209,22 @@ class MemberStore: ObservableObject {
 
         // Update Cache
         updateCachedMember(member)
+        registerPendingProfileOverride(member)
+        NotificationCenter.default.post(name: .memberProfileDidChange, object: "local")
 
         if syncMode == .cloud {
-            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
             do {
                 _ = try await cloudKit.updateMemberDisplayName(
                     memberId: member.id,
                     householdId: member.householdId,
-                    newDisplayName: trimmedName
+                    newDisplayName: trimmedName,
+                    scope: cloudScope
                 )
             } catch {
                 // Revert
                 member.displayName = oldName
                 members[index] = member
+                clearPendingProfileOverride(for: member.id)
                 updateCachedMember(member)
                 throw error
             }
@@ -169,27 +269,45 @@ class MemberStore: ObservableObject {
         member.displayName = trimmedName
         member.colorHex = normalizedColorHex
         members[index] = member
-        updateCachedMember(member)
-
-        if syncMode == .cloud {
-            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
-            do {
-                _ = try await cloudKit.updateMemberProfile(
-                    memberId: member.id,
-                    householdId: member.householdId,
-                    newDisplayName: trimmedName,
-                    newColorHex: normalizedColorHex
-                )
-            } catch {
-                member.displayName = oldName
-                member.colorHex = oldColorHex
-                members[index] = member
-                updateCachedMember(member)
-                throw error
-            }
+        guard upsertCachedMember(
+            member,
+            operation: "persist current user profile update"
+        ) else {
+            member.displayName = oldName
+            member.colorHex = oldColorHex
+            members[index] = member
+            clearPendingProfileOverride(for: member.id)
+            _ = upsertCachedMember(
+                member,
+                operation: "rollback current user profile update"
+            )
+            throw MemberStoreError.profileLocalSaveFailed
         }
 
-        NotificationCenter.default.post(name: .memberProfileDidChange, object: nil)
+        registerPendingProfileOverride(member)
+        NotificationCenter.default.post(name: .memberProfileDidChange, object: "local")
+
+        guard syncMode == .cloud else { return }
+
+        let remoteMemberId = member.id
+        let remoteHouseholdId = member.householdId
+        let scope = cloudScope
+        _ = _Concurrency.Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await cloudKit.updateMemberProfile(
+                    memberId: remoteMemberId,
+                    householdId: remoteHouseholdId,
+                    newDisplayName: trimmedName,
+                    newColorHex: normalizedColorHex,
+                    scope: scope
+                )
+            } catch {
+                await MainActor.run {
+                    self.error = error
+                }
+            }
+        }
     }
 
     func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {
@@ -222,12 +340,12 @@ class MemberStore: ObservableObject {
         updateCachedMember(updatedMember)
 
         if syncMode == .cloud {
-            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
             do {
                 _ = try await cloudKit.updateMemberRole(
                     memberId: updatedMember.id,
                     householdId: updatedMember.householdId,
-                    newRole: updatedMember.role
+                    newRole: updatedMember.role,
+                    scope: cloudScope
                 )
             } catch {
                 members[index] = member // revert
@@ -254,9 +372,12 @@ class MemberStore: ObservableObject {
         deleteCachedMember(id: id)
 
         if syncMode == .cloud {
-            await setCloudScopeForCurrentUser(currentUserId: currentUserId)
             do {
-                try await cloudKit.deleteMember(id: id, householdId: member.householdId)
+                try await cloudKit.deleteMember(
+                    id: id,
+                    householdId: member.householdId,
+                    scope: cloudScope
+                )
             } catch {
                 // Revert
                 members.insert(member, at: index)
@@ -319,8 +440,38 @@ class MemberStore: ObservableObject {
         // TODO: Handle deletions (members in cache but not in fetch)
     }
 
+    private func mergeCloudMembersWithPendingProfileOverrides(_ fetchedMembers: [Member]) -> [Member] {
+        fetchedMembers.map { member in
+            guard let override = Self.pendingProfileOverrides[member.id] else {
+                return member
+            }
+
+            if member.displayName == override.displayName,
+               member.colorHex == override.colorHex
+            {
+                Self.pendingProfileOverrides.removeValue(forKey: member.id)
+                return member
+            }
+
+            return override
+        }
+    }
+
+    private func registerPendingProfileOverride(_ member: Member) {
+        Self.pendingProfileOverrides[member.id] = member
+    }
+
+    private func clearPendingProfileOverride(for memberId: UUID) {
+        Self.pendingProfileOverrides.removeValue(forKey: memberId)
+    }
+
     private func updateCachedMember(_ member: Member) {
-        guard let context = modelContext else { return }
+        _ = upsertCachedMember(member, operation: "upsert cached member")
+    }
+
+    @discardableResult
+    private func upsertCachedMember(_ member: Member, operation: String) -> Bool {
+        guard let context = modelContext else { return false }
 
         let memberId = member.id
         let descriptor = FetchDescriptor<CachedMember>(
@@ -333,10 +484,11 @@ class MemberStore: ObservableObject {
             } else {
                 context.insert(CachedMember(from: member))
             }
-            saveContextOrSetError(context, operation: "upsert cached member")
+            return saveContextOrSetError(context, operation: operation)
         } catch {
             print("Cache save error: \(error)")
             self.error = error
+            return false
         }
     }
 
@@ -358,16 +510,6 @@ class MemberStore: ObservableObject {
     }
 
     // MARK: - Permissions
-
-    private func setCloudScopeForCurrentUser(currentUserId: String?) async {
-        guard syncMode == .cloud else { return }
-        guard let currentUserId else { return }
-        guard let currentUserMember = members.first(where: { $0.userId == currentUserId }) else { return }
-
-        let scope: CloudKitManager.HouseholdDatabaseScope =
-            currentUserMember.role == .owner ? .ownerPrivate : .participantShared
-        await cloudKit.setHouseholdScope(scope)
-    }
 
     private func assertOwnerPermissions(currentUserId: String?) throws {
         guard let userId = currentUserId,
@@ -399,6 +541,10 @@ class MemberStore: ObservableObject {
         return member.userId == currentUserId
     }
 
+    private func shouldForceVisibleHydration() -> Bool {
+        needsLocalRehydrate || !hasHydratedVisibleSnapshot || members.isEmpty
+    }
+
     private var activeOwnersCount: Int {
         members.filter { $0.isActive && $0.role == .owner }.count
     }
@@ -411,6 +557,7 @@ enum MemberStoreError: LocalizedError, Equatable {
     case lastOwnerRequired
     case invalidColorSelection
     case profileMemberNotFound
+    case profileLocalSaveFailed
 
     var errorDescription: String? {
         switch self {
@@ -426,6 +573,8 @@ enum MemberStoreError: LocalizedError, Equatable {
             "Choose one of the available profile colors."
         case .profileMemberNotFound:
             "Couldn't find your member profile in this household."
+        case .profileLocalSaveFailed:
+            "Couldn't save your profile locally right now."
         }
     }
 }

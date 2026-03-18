@@ -41,8 +41,10 @@ enum AppTipProgressKey {
     ]
 }
 
-private enum AppTipStorageKey {
+enum AppTipStorageKey {
     static let contextSignature = "appTips.contextSignature"
+    static let runtimeGeneration = "appTips.runtimeGeneration"
+    static let pendingHardResetBootstrap = "appTips.pendingHardResetBootstrap"
 }
 
 #if canImport(TipKit)
@@ -51,6 +53,10 @@ private enum AppTipStorageKey {
     enum AppTips {
         private static var hasConfigured = false
         private static let defaults = UserDefaults.standard
+
+        static var runtimeGenerationDefaultsKey: String {
+            AppTipStorageKey.runtimeGeneration
+        }
 
         static func configureIfNeeded(launchArguments: [String] = ProcessInfo.processInfo.arguments) {
             guard !hasConfigured else { return }
@@ -80,11 +86,13 @@ private enum AppTipStorageKey {
                 householdId: householdId
             )
             let previousSignature = defaults.string(forKey: AppTipStorageKey.contextSignature)
-            guard previousSignature != newSignature else { return }
+            let shouldForceBootstrap = defaults.bool(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            guard shouldForceBootstrap || previousSignature != newSignature else { return }
 
             guard #available(iOS 17, *) else {
                 clearOnboardingProgress()
                 defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+                defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
                 return
             }
 
@@ -95,7 +103,11 @@ private enum AppTipStorageKey {
             }
 
             clearOnboardingProgress()
+            bumpRuntimeGeneration()
             defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            hasConfigured = false
+            configureIfNeeded(launchArguments: launchArguments)
             configureTestingOverridesIfNeeded(launchArguments: launchArguments)
         }
 
@@ -115,6 +127,43 @@ private enum AppTipStorageKey {
 
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            bumpRuntimeGeneration()
+            hasConfigured = false
+        }
+
+        static func resetForHardReset(userDefaults: UserDefaults = .standard) {
+            if #available(iOS 17, *) {
+                do {
+                    try Tips.resetDatastore()
+                } catch {
+                    print("TipKit hard reset failed: \(error.localizedDescription)")
+                }
+            }
+
+            clearOnboardingProgress(userDefaults: userDefaults)
+            userDefaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            userDefaults.set(true, forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            bumpRuntimeGeneration(userDefaults: userDefaults)
+            hasConfigured = false
+            configureIfNeeded()
+        }
+
+        static func resetForDevelopment() {
+            if #available(iOS 17, *) {
+                do {
+                    try Tips.resetDatastore()
+                } catch {
+                    print("TipKit development reset failed: \(error.localizedDescription)")
+                }
+            }
+
+            clearOnboardingProgress()
+            defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            bumpRuntimeGeneration()
+            hasConfigured = false
+            configureIfNeeded()
         }
 
         static func donateShoppingFirstItemCreated() {
@@ -171,9 +220,9 @@ private enum AppTipStorageKey {
             AppTipEvents.taskSwipeActionUsed.sendDonation()
         }
 
-        static func clearOnboardingProgress() {
+        static func clearOnboardingProgress(userDefaults: UserDefaults = .standard) {
             for key in AppTipProgressKey.all {
-                defaults.removeObject(forKey: key)
+                userDefaults.removeObject(forKey: key)
             }
         }
 
@@ -191,6 +240,13 @@ private enum AppTipStorageKey {
 
         private static func markProgress(_ key: String) {
             defaults.set(true, forKey: key)
+        }
+
+        private static func bumpRuntimeGeneration(userDefaults: UserDefaults = .standard) {
+            userDefaults.set(
+                userDefaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1,
+                forKey: AppTipStorageKey.runtimeGeneration
+            )
         }
 
         @available(iOS 17, *)
@@ -269,6 +325,10 @@ private enum AppTipStorageKey {
                 return nil
             }
 
+            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
+                return .bundleQuickAdd
+            }
+
             if !hasActiveItems, !hasRecentItems, !hasCompletedFirstAdd {
                 return .firstAdd
             }
@@ -279,10 +339,6 @@ private enum AppTipStorageKey {
 
             if hasActiveItems || hasRecentItems, !hasBundles, !hasCompletedBundlesLocation {
                 return .bundlesLocation
-            }
-
-            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
-                return .bundleQuickAdd
             }
 
             return nil
@@ -357,7 +413,7 @@ private enum AppTipStorageKey {
         }
 
         var message: Text? {
-            Text("Tap Add item to create your first shopping entry.")
+            Text("Tap Add item to create your first shopping entry. Later, long-press it to quickly add a saved bundle.")
         }
 
         var image: Image? {
@@ -407,7 +463,7 @@ private enum AppTipStorageKey {
         }
 
         var image: Image? {
-            Image(systemName: ShoppingBundle.defaultIcon)
+            Image(systemName: ShoppingBundle.featureIcon)
         }
 
         var rules: [Rule] {
@@ -430,7 +486,7 @@ private enum AppTipStorageKey {
         }
 
         var image: Image? {
-            Image(systemName: ShoppingBundle.defaultIcon)
+            Image(systemName: ShoppingBundle.featureIcon)
         }
 
         var rules: [Rule] {
@@ -562,10 +618,12 @@ private enum AppTipStorageKey {
         func contextualPopoverTip(
             _ isEnabled: Bool,
             _ tip: some Tip,
-            arrowEdge: Edge = .top
+            arrowEdge: Edge = .top,
+            generation: Int = 0
         ) -> some View {
             if #available(iOS 17, *), isEnabled {
-                popoverTip(tip, arrowEdge: arrowEdge)
+                id("app-tip-\(generation)")
+                    .popoverTip(tip, arrowEdge: arrowEdge)
             } else {
                 self
             }
@@ -574,6 +632,10 @@ private enum AppTipStorageKey {
 #else
     enum AppTips {
         private static let defaults = UserDefaults.standard
+
+        static var runtimeGenerationDefaultsKey: String {
+            AppTipStorageKey.runtimeGeneration
+        }
 
         static func configureIfNeeded(launchArguments _: [String] = ProcessInfo.processInfo.arguments) {}
 
@@ -589,10 +651,13 @@ private enum AppTipStorageKey {
                 householdId?.uuidString ?? "none",
             ].joined(separator: "|")
             let previousSignature = defaults.string(forKey: AppTipStorageKey.contextSignature)
-            guard previousSignature != newSignature else { return }
+            let shouldForceBootstrap = defaults.bool(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            guard shouldForceBootstrap || previousSignature != newSignature else { return }
 
             clearOnboardingProgress()
+            bumpRuntimeGeneration()
             defaults.set(newSignature, forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
         }
 
         static func resetDatastoreForTestingIfNeeded(
@@ -600,6 +665,22 @@ private enum AppTipStorageKey {
         ) {
             clearOnboardingProgress()
             defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            bumpRuntimeGeneration()
+        }
+
+        static func resetForHardReset(userDefaults: UserDefaults = .standard) {
+            clearOnboardingProgress(userDefaults: userDefaults)
+            userDefaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            userDefaults.set(true, forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            bumpRuntimeGeneration(userDefaults: userDefaults)
+        }
+
+        static func resetForDevelopment() {
+            clearOnboardingProgress()
+            defaults.removeObject(forKey: AppTipStorageKey.contextSignature)
+            defaults.removeObject(forKey: AppTipStorageKey.pendingHardResetBootstrap)
+            bumpRuntimeGeneration()
         }
 
         static func donateShoppingFirstItemCreated() {
@@ -638,10 +719,17 @@ private enum AppTipStorageKey {
             defaults.set(true, forKey: AppTipProgressKey.tasksSwipeActionsCompleted)
         }
 
-        static func clearOnboardingProgress() {
+        static func clearOnboardingProgress(userDefaults: UserDefaults = .standard) {
             for key in AppTipProgressKey.all {
-                defaults.removeObject(forKey: key)
+                userDefaults.removeObject(forKey: key)
             }
+        }
+
+        private static func bumpRuntimeGeneration(userDefaults: UserDefaults = .standard) {
+            userDefaults.set(
+                userDefaults.integer(forKey: AppTipStorageKey.runtimeGeneration) + 1,
+                forKey: AppTipStorageKey.runtimeGeneration
+            )
         }
     }
 
@@ -668,6 +756,10 @@ private enum AppTipStorageKey {
                 return nil
             }
 
+            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
+                return .bundleQuickAdd
+            }
+
             if !hasActiveItems, !hasRecentItems, !hasCompletedFirstAdd {
                 return .firstAdd
             }
@@ -678,10 +770,6 @@ private enum AppTipStorageKey {
 
             if hasActiveItems || hasRecentItems, !hasBundles, !hasCompletedBundlesLocation {
                 return .bundlesLocation
-            }
-
-            if hasQuickAddBundles, !hasCompletedBundleQuickAdd {
-                return .bundleQuickAdd
             }
 
             return nil

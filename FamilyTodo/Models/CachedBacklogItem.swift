@@ -6,6 +6,7 @@ import SwiftData
 @Model
 final class CachedBacklogItem {
     @Attribute(.unique) var id: UUID
+    var logicalItemID: UUID?
     var categoryId: UUID
     var householdId: UUID
     var title: String
@@ -22,6 +23,7 @@ final class CachedBacklogItem {
 
     init(from item: BacklogItem) {
         id = item.id
+        logicalItemID = item.logicalItemID
         categoryId = item.categoryId
         householdId = item.householdId
         title = item.title
@@ -34,6 +36,7 @@ final class CachedBacklogItem {
     }
 
     func update(from item: BacklogItem) {
+        logicalItemID = item.logicalItemID
         categoryId = item.categoryId
         householdId = item.householdId
         title = item.title
@@ -48,6 +51,7 @@ final class CachedBacklogItem {
     func toBacklogItem() -> BacklogItem {
         BacklogItem(
             id: id,
+            logicalItemID: logicalItemID ?? id,
             categoryId: categoryId,
             householdId: householdId,
             title: title,

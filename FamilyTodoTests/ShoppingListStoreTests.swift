@@ -11,9 +11,7 @@ final class ShoppingListStoreTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let schema = Schema([CachedShoppingItem.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        modelContainer = try ModelContainer(for: schema, configurations: [config])
+        modelContainer = try TestModelContainerFactory.makeInMemoryContainer(profile: .shopping)
 
         store = ShoppingListStore(
             householdId: householdId,
@@ -141,6 +139,60 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertFalse(merged.contains(where: { $0.id == deleteID }))
     }
 
+    func testPendingSyncSnapshotTreatsAwaitingCloudEchoAsLocalPending() throws {
+        let pendingItem = ShoppingItem(
+            householdId: householdId,
+            title: "Milk",
+            isBought: false
+        )
+        let cached = CachedShoppingItem(from: pendingItem)
+        cached.syncStatusRaw = "awaitingCloudEcho"
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>()
+        let snapshot = try store.pendingSyncSnapshot(from: modelContainer.mainContext.fetch(descriptor))
+
+        XCTAssertEqual(snapshot.pendingUploadByID[pendingItem.id]?.title, "Milk")
+        XCTAssertTrue(snapshot.pendingDeleteIDs.isEmpty)
+    }
+
+    func testMergeCloudSnapshotDoesNotAcceptStaleCloudEchoWhileAwaitingCloudEcho() throws {
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_736_910_000)
+        let localItem = ShoppingItem(
+            householdId: householdId,
+            title: "Tomatoes",
+            quantityValue: "2",
+            isBought: false,
+            sortOrder: 1,
+            updatedAt: localUpdatedAt
+        )
+
+        let cached = CachedShoppingItem(from: localItem)
+        cached.syncStatusRaw = "awaitingCloudEcho"
+        cached.lastSyncedAt = Date()
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let staleCloudItem = ShoppingItem(
+            id: localItem.id,
+            householdId: householdId,
+            title: "Tomatoes",
+            quantityValue: nil,
+            isBought: false,
+            sortOrder: 0,
+            updatedAt: localUpdatedAt.addingTimeInterval(30)
+        )
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>()
+        let snapshot = try store.pendingSyncSnapshot(from: modelContainer.mainContext.fetch(descriptor))
+        let merged = store.mergeCloudSnapshot([staleCloudItem], with: snapshot)
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged.first?.quantityValue, "2")
+        XCTAssertEqual(merged.first?.sortOrder, 1)
+    }
+
     func testUpdateItem_UpsertsCacheWhenRowMissing() async throws {
         let item = ShoppingItem(
             householdId: householdId,
@@ -198,6 +250,27 @@ final class ShoppingListStoreTests: XCTestCase {
         let cachedItems = try modelContainer.mainContext.fetch(descriptor)
 
         XCTAssertEqual(cachedItems.map(\.title), ["Milk", "Eggs", "Bread"])
+    }
+
+    func testInitHydratesItemsFromCacheBeforeLoad() throws {
+        let cachedItem = ShoppingItem(
+            householdId: householdId,
+            title: "Pomidorki koktajlowe",
+            isBought: false,
+            sortOrder: 1
+        )
+        modelContainer.mainContext.insert(CachedShoppingItem(from: cachedItem))
+        try modelContainer.mainContext.save()
+
+        let hydratedStore = ShoppingListStore(
+            householdId: householdId,
+            modelContext: modelContainer.mainContext
+        )
+
+        XCTAssertTrue(hydratedStore.hasHydratedLocalSnapshot)
+        XCTAssertEqual(hydratedStore.items.count, 1)
+        XCTAssertEqual(hydratedStore.toBuyItems.count, 1)
+        XCTAssertEqual(hydratedStore.toBuyItems.first?.title, "Pomidorki koktajlowe")
     }
 
     private func createBoughtItem(title: String) async {

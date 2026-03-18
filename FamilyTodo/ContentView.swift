@@ -13,6 +13,7 @@ struct ContentView: View {
 struct MainAppView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var activeTab: AppTab = .shopping
@@ -26,34 +27,24 @@ struct MainAppView: View {
                     if tabBarController !== controller {
                         tabBarController = controller
                     }
-                    // UIKit can temporarily drop the live tab bar styling after modal save/dismiss flows.
-                    applyTabBarAppearance()
+                    reconcileTabBarAppearance(using: controller)
                 }
             )
             .background(AppBackgroundView())
             .onAppear {
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: themeStore.tabTintColor) { _, _ in
-                applyTabBarAppearance()
-            }
-            .onChange(of: householdStore.currentHousehold?.updatedAt) { _, _ in
-                applyTabBarAppearance()
-            }
-            .onChange(of: householdStore.currentHousehold?.name) { _, _ in
-                refreshTabBarAppearanceForHouseholdChromeChange()
-            }
-            .onChange(of: householdStore.currentHousehold?.iconSymbol) { _, _ in
-                refreshTabBarAppearanceForHouseholdChromeChange()
+                reconcileTabBarAppearance()
             }
             .onChange(of: themeStore.retroFontScale) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onChange(of: activeTab) { _, _ in
-                applyTabBarAppearance()
+                reconcileTabBarAppearance()
             }
             .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
                 refreshTabBarAppearanceForHouseholdChromeChange()
@@ -82,7 +73,7 @@ struct MainAppView: View {
             .tag(AppTab.tasks)
 
             NavigationStack {
-                BacklogView()
+                BacklogView(selectedTab: $activeTab)
             }
             .tabItem {
                 Label(AppTab.backlog.title, systemImage: AppTab.backlog.icon)
@@ -107,57 +98,92 @@ struct MainAppView: View {
             if userSession.currentHouseholdID != household.id {
                 userSession.setCurrentHousehold(household.id)
             }
+            refreshCurrentHouseholdInBackgroundIfNeeded(
+                userId: userSession.userId,
+                preferredHouseholdId: household.id
+            )
             return
         }
 
-        guard let userId = userSession.userId else { return }
+        let startupUserId = userSession.userId ?? (userSession.isGuest ? "local-guest" : nil)
+        guard let startupUserId else { return }
 
         householdStore.setSyncMode(userSession.syncMode)
 
-        if let restoredHousehold = householdStore.restoreCachedHousehold(
-            userId: userId,
+        if let restoredHousehold = householdStore.resolveStartupHouseholdLocally(
+            userId: startupUserId,
             preferredHouseholdId: userSession.currentHouseholdID
         ) {
             if userSession.currentHouseholdID != restoredHousehold.id {
                 userSession.setCurrentHousehold(restoredHousehold.id)
             }
-            _ = _Concurrency.Task {
-                await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-                    userId: userId,
-                    preferredHouseholdId: userSession.currentHouseholdID
-                )
-            }
+            refreshCurrentHouseholdInBackgroundIfNeeded(
+                userId: userSession.userId,
+                preferredHouseholdId: restoredHousehold.id
+            )
             return
         }
 
-        await householdStore.loadCurrentHouseholdAndMembership(
-            userId: userId,
-            preferredHouseholdId: userSession.currentHouseholdID
-        )
-        if let household = householdStore.currentHousehold,
-           userSession.currentHouseholdID != household.id
-        {
-            userSession.setCurrentHousehold(household.id)
+        if handleSuppressedHouseholdRecoveryIfNeeded() {
+            return
+        }
+
+        guard userSession.syncMode == .cloud else { return }
+        if onboardingState.currentState == .mainApp {
+            householdStore.resetSetupResolution()
+            onboardingState.openHouseholdSetup()
         }
     }
 
-    private func applyTabBarAppearance() {
-        TabBarTypographyManager.apply(
+    private func refreshCurrentHouseholdInBackgroundIfNeeded(
+        userId: String?,
+        preferredHouseholdId: UUID?
+    ) {
+        guard userSession.syncMode == .cloud, let userId else { return }
+
+        _ = _Concurrency.Task {
+            await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
+                userId: userId,
+                preferredHouseholdId: preferredHouseholdId
+            )
+            await MainActor.run {
+                handleSuppressedHouseholdRecoveryIfNeeded()
+            }
+        }
+    }
+
+    private func reconcileTabBarAppearance(using controller: UITabBarController? = nil) {
+        TabBarTypographyManager.reconcile(
             themeStore: themeStore,
-            tabBarController: tabBarController,
+            tabBarController: controller ?? tabBarController,
             selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
         )
     }
 
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
-        applyTabBarAppearance()
+        reconcileTabBarAppearance()
         DispatchQueue.main.async {
-            applyTabBarAppearance()
+            reconcileTabBarAppearance()
         }
         // A defensive reapply keeps the selected tab tinted even if UIKit settles later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            applyTabBarAppearance()
+            reconcileTabBarAppearance()
         }
+    }
+
+    @discardableResult
+    private func handleSuppressedHouseholdRecoveryIfNeeded() -> Bool {
+        guard let householdId = userSession.currentHouseholdID,
+              householdStore.isRecoverySuppressed(for: householdId)
+        else {
+            return false
+        }
+
+        householdStore.clearCurrentHousehold()
+        userSession.clearCurrentHousehold()
+        householdStore.resetSetupResolution()
+        onboardingState.openHouseholdSetup()
+        return true
     }
 }
 

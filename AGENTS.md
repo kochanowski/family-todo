@@ -1,408 +1,453 @@
 # AGENTS.md
 
-Last updated: 2026-03-11
+Last updated: 2026-03-14
 
-This file is the practical source of truth for Codex and other AI agents working in this repository. Follow it precisely — when it contradicts the code, code wins; when in doubt, prefer simplicity and follow existing patterns.
+This file is the practical source of truth for coding agents working in this repository. Follow it closely. If it conflicts with the current code, the code wins.
 
 ---
 
 ## 1) Product North Star
 
-Family To-Do is household task management in "home Agile lite" style:
-- Minimum friction, clear ownership, shared household
-- No gamification based on rankings or pressure
-- Target question: **"Does this make it easier for two people to live together and remember tasks, without feeling controlled?"** — if not, simplify or reject
+HousePulse is household task coordination in “home Agile lite” form:
+- shared-first,
+- low-friction,
+- clear ownership,
+- no pressure mechanics.
+
+Before implementing anything, ask:
+
+**“Does this make it easier for two people living together to remember, plan, and coordinate without feeling controlled?”**
+
+If not, simplify or reject it.
 
 ---
 
-## 2) Core Design Principles (DO NOT VIOLATE)
+## 2) Core Product Rules
 
-1. **Shared-first** — Sharing is core, not an add-on. Household exists from the start.
-2. **Simplicity over power** — Max 3-5 concepts users need. If a feature complicates onboarding/UX, simplify or remove it.
-3. **No micromanagement** — No ratings, points, penalties, or pressure.
-4. **Gentle nudges, not nagging** — Notifications are rare, predictable, and configurable.
-5. **One source of truth** — Every task has clear status, owner, and change history.
-6. **Theme support is mandatory** — Every new UI element must support the app's typography themes out of the box. New buttons, labels, section headers, sheet titles, toolbar titles, picker text, and other visible text controls must be wired to Retro/Paper theme fonts wherever SwiftUI allows native styling.
+1. **Shared-first** — household collaboration is core, not an add-on.
+2. **Simplicity over power** — keep the mental model small.
+3. **No micromanagement** — no points, ratings, penalties, or pressure loops.
+4. **Gentle nudges only** — reminders must be predictable, rare, and configurable.
+5. **One source of truth** — every visible item must have a clear owner/state/history.
+6. **Theme support is mandatory** — every new visible UI element must support theme typography out of the box wherever SwiftUI allows native styling.
+7. **English only for v1.0** — new copy, labels, comments, and docs should stay in English unless the user explicitly asks otherwise.
 
-**Celebrations (Duolingo-style, NOT gamification):**
-- Private micro-celebrations on task completion (toast messages, emoji)
-- Household milestone moments (non-comparative)
-- Max 1 surprise message per week via `CelebrationManager`
-- No leaderboards, no streaks creating pressure, no "You vs Partner"
-- Optional — can be disabled in Settings (`ThemeStore.celebrationsEnabled`)
+### Celebration policy
 
----
+Allowed:
+- private micro-celebrations on completion,
+- neutral household milestones,
+- optional settings-controlled delight.
 
-## 3) Domain Model
-
-| Entity | Key Fields | Notes |
-|--------|-----------|-------|
-| `Household` | name, ownerId, members[] | Single source of truth, supports guest/cloud modes |
-| `Member` | userId, displayName, role (owner/member), isActive | CloudKit identity via `recordName` |
-| `Task` | title, assigneeId, status (backlog/next/done), dueDate, areaId | WIP limit: max 3 per assignee in `.next` |
-| `ShoppingItem` | title, quantity, unit, isBought, restockCount | Restock = bought items become suggestions |
-| `BacklogCategory` | name | Long-term storage container |
-| `BacklogItem` | title, notes, categoryId | For planning, not active tasks |
-
-**Status flow**: backlog → next → done (no skipping, no going backwards arbitrarily)
-
-**WIP Limit**: CRITICAL — max 3 tasks per assignee in `.next`. Enforced in `TaskStore`, not UI.
+Not allowed:
+- leaderboards,
+- streak pressure,
+- points,
+- member-vs-member competition.
 
 ---
 
-## 4) Architecture
+## 3) Current Product State
 
-### 4.1 Navigation
+As of now, the repo already includes:
+- Shopping, Tasks, Backlog, More
+- Sign in with Apple
+- Guest mode and CloudKit mode
+- contextual TipKit onboarding
+- Retro Dark, Retro Light, Paper, and System theme support
+- local-first household exit flows
+- hard reset button in Settings for local state reset
 
-**Custom Floating Tab Bar** (`FloatingTabBar.swift`) — NOT native TabView:
-- **Shopping** 🛒 — Shopping list with restock/suggestions
-- **Tasks** ✓ — Active tasks (Next/Done + assignee filters)
-- **Backlog** 📦 — Long-term categories + items
-- **More** ⋯ — Settings, household, profile, member management
+Currently deferred:
+- `Live Shopping Mode / Last-Minute Alert` is postponed to **v2.0**
+- recurring rotation flows remain deferred
+- monetization is planned but not yet wired into schema/runtime
 
-Tab bar uses Liquid Glass on iOS 26+ (`GlassEffectContainer` + `.glassEffect()`) with material fallback on iOS 17-25. Hides on keyboard show.
+Current stability focus before MVP:
+- multi-user household sync,
+- join/bootstrap reliability,
+- CloudKit shared graph consistency,
+- on-device validation of real household collaboration.
 
-**CRITICAL**: `glassEffect()` must be the LAST modifier — no `.overlay` or `.shadow` after it.
+---
 
-### 4.2 Offline-First Data Flow
+## 4) Domain Model Truth
 
-All stores follow the same 3-phase pattern:
-1. **Load from SwiftData cache** (instant UI)
-2. **If `.cloud` mode** → fetch from CloudKit, merge
-3. **Writes**: optimistic UI update → SwiftData cache → CloudKit sync
+| Entity | Notes |
+|---|---|
+| `Household` | Core household metadata: `name`, `iconSymbol`, `ownerId`, timestamps |
+| `Member` | **Real source of truth for membership**; includes `userId`, `displayName`, `role`, `isActive` |
+| `Task` | Execution item with `status` in `backlog / next / done` |
+| `ShoppingItem` | Shared shopping entry with bought/restock behavior |
+| `ShoppingBundle` | Saved quick-add bundle for shopping |
+| `BacklogCategory` | Long-term planning container |
+| `BacklogItem` | Planning item that can be promoted into `Task` |
 
-SwiftData is source of truth. CloudKit is for sync only.
+Important:
+- `Household.members[]` in the model is **legacy/test-helper only**. Do not treat it as the authoritative membership source.
+- Membership truth lives in `Member` records and cached `CachedMember`.
+- `Task` items in `Tasks` must stay assigned.
+- `BacklogItem` in `Ideas` may be unassigned.
 
-### 4.3 Stores
+### Status and WIP rules
+
+- Canonical flow: `backlog -> next -> done`
+- No arbitrary backward skipping without explicit UX
+- WIP limit is **3 tasks per assignee in `.next`**
+- WIP enforcement belongs in `TaskStore`, not only in UI
+
+---
+
+## 5) Architecture
+
+### Navigation
+
+The app uses a **custom floating tab bar**, not a stock `TabView` shell:
+- Shopping
+- Tasks
+- Backlog
+- More
+
+For iOS 26+ it uses Liquid Glass. For older supported iOS versions it falls back to materials.
+
+**Rule:** `glassEffect()` must be the last modifier.
+
+### Offline-first data flow
+
+All stores follow the same broad pattern:
+1. Load SwiftData cache first for instant UI
+2. If cloud mode is active, fetch CloudKit and merge
+3. Mutations are local-first, then cached, then synced to CloudKit
+
+SwiftData is the local source of truth for UI responsiveness.
+CloudKit is sync/transport, not the first paint.
+
+### Core stores
 
 | Store | Responsibility |
-|-------|---------------|
-| `TaskStore` | Task CRUD, WIP limit enforcement, notifications |
-| `ShoppingListStore` | Shopping CRUD, restock, suggestions |
-| `BacklogStore` | Category + item CRUD |
-| `HouseholdStore` | Household CRUD, CKShare, local-first exit flows, recovery guards |
-| `MemberStore` | Member CRUD, role management |
-| `ThemeStore` | Appearance (Light/Dark/System), celebrations/suggestions toggles |
-
-### 4.4 Sync Modes
-
-- **Guest Mode (`.localOnly`)** — SwiftData only, no CloudKit. Production households start empty; sample/test seeding is allowed only behind explicit UI-test launch arguments.
-- **Cloud Mode (`.cloud`)** — Full CloudKit sync, requires Sign in with Apple.
-
-### 4.5 CloudKit Constraints
-
-- **`CKQuerySubscription` does NOT work in shared DB** (Apple QA1917) — use `CKDatabaseSubscription` instead.
-- CloudKit schema: `Household`, `Member`, `Task`, `ShoppingItem`, `BacklogCategory`, `BacklogItem`
-- Private DB: owner's data. Shared DB: household members' view.
-- CloudKit schema changes: see `docs/2026-01-11_cloudkit-schema.md` and `cloudkit/schema/`
+|---|---|
+| `TaskStore` | task CRUD, WIP limit, reminders |
+| `ShoppingListStore` | shopping CRUD, restock, recent items |
+| `ShoppingBundleStore` | saved bundles |
+| `BacklogStore` | categories, ideas, promotions |
+| `HouseholdStore` | household CRUD, create/join/leave/delete, recovery |
+| `MemberStore` | member CRUD and household member state |
+| `ThemeStore` | themes, typography, accent behavior |
 
 ---
 
-## 5) Development Environment
+## 6) CloudKit Rules
 
-| Item | Detail |
-|------|--------|
-| Platform | Linux (Manjaro) — development machine |
-| Build/Test | GitHub Actions (macOS runner) — `xcodebuild` is NOT available locally |
+The app is CloudKit-based. Do not introduce Firebase/Supabase assumptions unless explicitly requested.
+
+### Current CloudKit truths
+
+- Owner data lives in the owner’s **private database/custom zone**
+- Members consume shared data from the **shared database**
+- `Member` records are required for household access and UI membership state
+- Invite UI is **code-based** for users; QR encodes the invite code, not a visible share URL
+- `CKQuerySubscription` is not usable for shared DB behavior; use `CKDatabaseSubscription`
+
+### Scope rules
+
+When touching CloudKit household graph data:
+- never rely on stale mutable global scope assumptions,
+- use the store’s current cloud context,
+- keep references zone-aware,
+- preserve shared-graph repair logic for legacy/mixed-zone households.
+
+### Recovery rules
+
+If a household is restored but the current user has no active `Member`:
+- treat it as invalid recovery,
+- clear local current-household selection,
+- suppress stale recovery,
+- route the app back to household setup.
+
+Do not trap the user in a zombie household shell.
+
+---
+
+## 7) Onboarding, Auth, and Session Rules
+
+### Display-name gating
+
+For signed-in CloudKit users:
+- iCloud auth alone is **not enough**
+- create/join household requires a valid `confirmedMembershipDisplayName`
+
+Do not silently fall back to `"Member"` for cloud create/join.
+
+### TipKit contract
+
+- TipKit is contextual and sequential
+- show at most one onboarding tip per screen at a time
+- reset TipKit only on meaningful context changes:
+  - logout
+  - user switch
+  - household switch
+  - leave/delete household
+- do not reset TipKit on every cold start of the same session
+
+### Hard reset
+
+`Settings` now contains a visible `Hard Reset App` action.
+
+It is local-only and should:
+- clear SwiftData cache,
+- clear app `UserDefaults`,
+- clear onboarding/session state,
+- clear household selection,
+- clear saved display-name confirmation,
+- sign the user out locally,
+- route back to the first welcome screen.
+
+Do not turn this into a remote CloudKit delete flow unless explicitly requested.
+
+---
+
+## 8) UI / Theme Rules
+
+### Theme typography contract
+
+Every new visible UI element must be checked against `ThemeStore` typography before the task is considered done.
+
+Apply theme-aware fonts to:
+- buttons,
+- labels,
+- toolbar items,
+- section headers,
+- sheet titles,
+- picker text,
+- visible form copy,
+- CTA text,
+- empty states,
+- header chips/badges.
+
+If a native SwiftUI component refuses custom fonts:
+- keep system rendering,
+- do not build a custom replacement unless requested.
+
+### Required theme sanity checks
+
+New UI must be checked in:
+- `System`
+- `Retro Dark`
+- `Retro Light`
+- `Paper`
+
+Also verify at least one narrow layout.
+
+### Toolbar rule
+
+If the toolbar becomes crowded:
+- move secondary actions into body content
+- do not force awkward overflow menus unless the user explicitly wants that pattern
+
+---
+
+## 9) Store Mutation Rules
+
+### Optimistic writes
+
+Prefer local-first UI updates.
+
+### Tombstone behavior
+
+For delete/promotion flows:
+- do not rollback UI just because CloudKit delete fails immediately
+- keep tombstones/pending delete markers locally
+- let background replay finish the remote cleanup
+
+### Ghost-record prevention
+
+When syncing from CloudKit into cache:
+- pending local deletes must win over incoming server echoes
+- never re-show a locally deleted/promoted idea just because a delayed cloud echo arrived
+
+### Promotion rule
+
+Promoting `BacklogItem -> Task` must:
+1. create the task locally,
+2. remove the idea locally immediately,
+3. keep the backlog tombstone until cloud deletion completes.
+
+The same logical item must never remain visible in both `Ideas` and `Tasks`.
+
+---
+
+## 10) Development Environment
+
+| Item | Value |
+|---|---|
+| Local OS | Linux |
+| Local builds | No `xcodebuild` available |
+| CI builds | GitHub Actions on macOS |
+| iOS target | 17+ |
 | Physical testing | iPhone 15, iOS 26.2.1 |
-| Swift | 5.9+ |
-| iOS target | 17+ (26+ for Liquid Glass) |
-| CI | `.github/workflows/ios-ci.yml`, `.github/workflows/nightly.yml` |
 
-**There is no `xcodebuild` locally.** Do not run `xcodebuild` commands on the local machine. All builds and test runs happen via GitHub Actions on push.
+### Build policy
+
+- Do **not** run `xcodebuild` locally
+- Use `pre-commit` locally
+- Trust GitHub Actions for real Apple toolchain validation
+
+Current `iOS CI` is effectively:
+- SwiftLint
+- build-only validation
+- TestFlight deploy on selected branches
 
 ---
 
-## 6) Linting and Code Quality
+## 11) Linting and Quality
 
-### SwiftLint via Docker (ALLOWED)
-
-You are permitted to run SwiftLint using Docker for any Swift files:
+After every code change:
 
 ```bash
-docker run --rm -v "$PWD":"$PWD" -w "$PWD" ghcr.io/realm/swiftlint:latest lint
+pre-commit run --all-files
 ```
 
-Preferred fast command (especially for CI-style local checks):
+If SwiftFormat rewrites files, run it again until clean.
+
+SwiftLint via Docker is allowed:
 
 ```bash
 docker run --rm -v "$PWD":"$PWD" -w "$PWD" ghcr.io/realm/swiftlint:latest lint --quiet *
 ```
 
-To lint specific files or paths:
-```bash
-docker run --rm -v "$PWD":"$PWD" -w "$PWD" ghcr.io/realm/swiftlint:latest lint FamilyTodo/Views/TasksView.swift
-```
+---
 
-### Pre-commit Hooks
+## 12) Git / CI Workflow
 
-Always run before committing (after any code change):
-```bash
-pre-commit run --all-files
-```
+### Autonomous actions allowed
 
-Checks include: YAML syntax, merge conflicts, large files, trailing whitespace, SwiftLint, SwiftFormat.
+- `git add <specific files>`
+- `git commit`
+- `git push` when explicitly requested or when the standing repo rule says to always push after code changes
+- `gh run list`
+- `gh run view`
+- `pre-commit run --all-files`
+- SwiftLint via Docker
 
-If SwiftFormat modifies files, run `pre-commit run --all-files` a second time to verify the formatted files also pass.
+### Never do without explicit instruction
+
+- `git merge`
+- `git rebase`
+- force push
+- history rewrite
+- merging PRs
+
+### Current standing workflow rule
+
+For code changes in this repo:
+1. implement,
+2. run `pre-commit run --all-files`,
+3. commit,
+4. push,
+5. monitor GHA until green,
+6. report a structured handoff.
+
+### Docs-only exception
+
+If a change touches only documentation:
+- commit it,
+- **do not push**,
+- let the user decide when to push docs.
+
+### CI ownership after push
+
+If push happens:
+1. check Actions status,
+2. wait for completion,
+3. inspect logs on failure,
+4. fix root cause,
+5. push again,
+6. repeat until green.
+
+### Current TestFlight branches
+
+As of now, `ios-ci.yml` includes TestFlight/CI handling for:
+- `main`
+- `develop`
+- `rebuild/swiftui-clean-impl`
+- `feature/continue-mvp`
+- `appleid-login`
+- `features-and-testing`
+- `feature/cloudkit-fixes`
+- `feature/next-features`
+- `feature/multi-user-sync-fixes`
+
+If a new long-lived feature branch must deploy like the previous one, update the workflow accordingly.
 
 ---
 
-## 7) Git Workflow and Permissions
+## 13) Required Final Handoff
 
-### What agents ARE allowed to do autonomously:
-- `git add <specific-files>`
-- `git commit -m "..."`
-- `git push` (only when explicitly requested by the user, or when a standing instruction says to always push after commit)
-- `gh run list`, `gh run view` (check CI status)
-- Run `pre-commit run --all-files` and fix errors
-- Run SwiftLint via Docker (see Section 6)
+For every implementation task, end with:
 
-### What agents MUST NOT do without explicit user instruction:
-- `git merge`, `git rebase`
-- Force push, history rewrite
-- Close or merge pull requests
-
-### Post-push CI ownership (required when push happens)
-
-If the task includes push:
-1. Monitor GitHub Actions every ~60s until workflow completion.
-2. If any job fails, inspect failed logs immediately.
-3. Fix root cause in all repeated code patterns (not only one occurrence).
-4. Commit + push fix and continue monitoring until all required jobs are green.
-
-### Documentation-only changes
-
-If a change touches **only documentation files** (`.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `STATUS.md`, `docs/`, etc.) and no Swift source files:
-- Commit the change (`git add` + `git commit`)
-- **Do NOT push** — wait for user to push manually
-
-### Commit message format
-
-```
-<type>(<scope>): <short description>
-
-- Point 1
-- Point 2
-
-[Optional: related context]
-```
-
-Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`
-
-Example:
-```
-feat(tasks): add conversational filter chips for assignee filtering
-
-- Add TaskFilter enum (all/mine/member)
-- Add FilterChip component with Capsule shape
-- Wire filteredActiveTasks computed property
-```
-
----
-
-## 8) After Implementation — Required Handoff Summary
-
-**Every time you finish implementing a feature or fix**, you MUST print a brief summary in the following format before stopping:
-
-```
+```md
 ## What I changed (Task IDs)
-- [1-3 bullet points describing the changes made]
-- [Include exact task IDs when applicable, e.g. P1.1, P1.2]
+- ...
 
 ## Files changed
-- `FamilyTodo/Views/TasksView.swift` — [what changed]
-- `FamilyTodo/Stores/TaskStore.swift` — [what changed]
+- ...
 
 ## What to test on the device
-- [Step 1: specific action to take in the app]
-- [Step 2: what to verify / what should happen]
-- [Step 3: regression check — what existing flow to verify still works]
+- ...
 ```
 
-This applies to every code implementation, even small ones. Skip only for pure documentation changes.
+Also always include:
+- `What we changed`
+- `Regression checklist in app`
 
-Additionally, after each implementation handoff always include:
-- **"What we changed"** (concise, high-signal summary)
-- **"Regression checklist in app"** (specific taps/flows to validate)
+Skip this only for pure documentation changes.
 
 ---
 
-## 9) Implementation Patterns
-
-### Theme typography contract
-- Every newly added visible UI element must be checked against `ThemeStore` typography before the task is considered complete.
-- Apply theme fonts to all new buttons, labels, section headers, toolbar titles, sheet titles, and picker text wherever SwiftUI allows native styling.
-- If a native SwiftUI control does not honor custom fonts (for example some Alerts, ContextMenus, or parts of native DatePicker/Picker rendering), leave the system font in place rather than building a custom replacement unless explicitly requested.
-- Retro and Paper compatibility must be handled during the initial implementation, not as a later cleanup pass.
-- New UI must be sanity-checked in `System`, `Retro Dark`, `Retro Light`, and `Paper`, including at least one narrow-screen layout.
-
-### Onboarding / TipKit contract
-- TipKit is contextual and sequential. On a given screen, show at most one onboarding tip at a time.
-- Reset TipKit progress only on meaningful context changes (logout, user switch, household switch/leave/delete), not on every cold start of the same session.
-- Prefer first-run guidance that teaches the next useful action; do not ship tips that promise behavior not implemented yet.
-
-### Adding a new model (full chain)
-1. Define struct in `Models/` (Codable, Identifiable)
-2. Create `Cached*` SwiftData @Model with sync metadata
-3. Add conversion: `init(from:)`, `update(from:)`, `toModel()`
-4. Add to appSchema in `FamilyTodoApp.swift`
-5. Implement CloudKit mapping in `CloudKitManager+Mapping.swift`
-6. Create store in `Stores/` with `@Observable`
-7. Add unit tests in `FamilyTodoTests/`
-
-### Store write pattern (optimistic + rollback)
-```swift
-let snapshot = items
-items.append(newItem)          // optimistic UI
-saveToCache(newItem)
-do {
-    try await cloudKit.save(newItem)
-} catch {
-    items = snapshot           // rollback UI
-    deleteFromCache(newItem.id)
-    self.error = error
-}
-```
-
-### Store delete/promotion pattern (Tombstone + Retry)
-When deleting or promoting an item (e.g., Idea -> Task), DO NOT rollback the UI if the initial CloudKit delete fails.
-1. Mark local record as `pendingDelete = true` (or delete locally).
-2. Create the new item locally (if promoting).
-3. Try CloudKit sync in a background task.
-4. If CloudKit fails, keep the local tombstone and let `replayPendingMutations` handle the retry later.
-
-### syncToCache pattern (Ghost Record Prevention)
-When merging incoming CloudKit records with local SwiftData:
-- ALWAYS check if the local record exists and has `pendingDelete == true`.
-- If `pendingDelete == true`, IGNORE the incoming CloudKit record. Local tombstones must win against incoming server data until the pending delete is successfully pushed.
-
-### SwiftData query pattern (avoid N+1)
-```swift
-// GOOD — one query, in-memory merge
-let descriptor = FetchDescriptor<CachedTask>(
-    predicate: #Predicate { cloudIDs.contains($0.id) }
-)
-let existing = try modelContext.fetch(descriptor)
-let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
-
-// BAD — query per item
-for task in cloudTasks {
-    let found = try modelContext.fetch(FetchDescriptor<CachedTask>(
-        predicate: #Predicate { $0.id == task.id }
-    ))
-}
-```
-
----
-
-## 10) Key Files Reference
+## 14) Key File Map
 
 | File | Purpose |
-|------|---------|
-| `FamilyTodo/FamilyTodoApp.swift` | App entry, SwiftData schema, environment setup |
-| `FamilyTodo/ContentView.swift` | Auth gate → MainAppView |
-| `FamilyTodo/Views/TasksView.swift` | Tasks tab (1194 lines) |
-| `FamilyTodo/Views/ShoppingListView.swift` | Shopping tab (937 lines) |
-| `FamilyTodo/Views/BacklogView.swift` | Backlog tab (1036 lines) |
-| `FamilyTodo/Views/MoreView.swift` | More tab / settings hub |
-| `FamilyTodo/Views/ThemeStore.swift` | Theme presets + toggles |
-| `FamilyTodo/Views/Components/FloatingTabBar.swift` | Custom glass tab bar |
-| `FamilyTodo/Views/Components/ToastView.swift` | Toast notification component |
-| `FamilyTodo/Models/LegacyStubs.swift` | ⚠️ Area, RecurringChore + stub views/stores |
-| `FamilyTodo/Managers/CloudKitManager.swift` | Full CloudKit CRUD (66KB) |
-| `FamilyTodo/Managers/CloudKitManager+Mapping.swift` | CKRecord ↔ Model mapping (522 lines) |
-| `FamilyTodo/Managers/CloudKitSubscriptionManager.swift` | Push subscriptions |
-| `FamilyTodo/Services/CelebrationManager.swift` | Completion message logic |
-| `FamilyTodo/Services/UserSession.swift` | Session state, sync mode, householdID |
-| `CLAUDE.md` | Claude-specific agent guidance (more detailed) |
-| `FEATURES_claude.md` | Feature implementation plans (Parts 1-8) |
-| `CLOUDKIT_claude.md` | CloudKit architecture analysis + recommendations |
-| `docs/current/ROADMAP.md` | Active roadmap |
-| `docs/2026-01-11_cloudkit-schema.md` | CloudKit schema reference |
+|---|---|
+| `FamilyTodo/FamilyTodoApp.swift` | app entry, schema, root environment |
+| `FamilyTodo/ContentView.swift` | app shell, bootstrap routing |
+| `FamilyTodo/Views/ShoppingListView.swift` | Shopping tab |
+| `FamilyTodo/Views/TasksView.swift` | Tasks tab |
+| `FamilyTodo/Views/BacklogView.swift` | Ideas/Backlog tab |
+| `FamilyTodo/Views/MoreView.swift` | More hub |
+| `FamilyTodo/Views/SettingsView.swift` | Settings + hard reset |
+| `FamilyTodo/Stores/HouseholdStore.swift` | create/join/leave/delete/recovery |
+| `FamilyTodo/Stores/BacklogStore.swift` | ideas/categories/promotion |
+| `FamilyTodo/Stores/TaskStore.swift` | tasks + WIP |
+| `FamilyTodo/Managers/CloudKitManager.swift` | main CloudKit CRUD/recovery logic |
+| `FamilyTodo/Managers/CloudKitManager+Mapping.swift` | CKRecord mapping |
+| `FamilyTodo/Managers/CloudKitSubscriptionManager.swift` | remote-change subscriptions |
+| `FamilyTodo/Services/UserSession.swift` | session mode, display name, household selection |
+| `FamilyTodo/Services/AppTips.swift` | TipKit setup and progress |
+| `TODO.md` / `TODO_DETAILS.md` | current roadmap and implementation plans |
 
 ---
 
-## 11) Known Stubs and Technical Debt
+## 15) Known Deferred / Stub Areas
 
-Do not implement these without explicit instruction — they are intentionally deferred:
-
-| Stub | Location | Status |
-|------|----------|--------|
-| Task Detail/Edit | `LegacyStubs.TaskDetailView` | "Coming Soon" |
-| Recurring Chores | `RepetitiveTasksView`, `LegacyStubs` | Model exists, no store/UI |
-| Areas/Rooms | `AreaStore` | Empty stub, `areaId` field exists for compat |
-| Role Guardrails | `MemberStore` | No actual validation enforcement |
+Intentionally deferred unless explicitly requested:
+- recurring chores full productization
+- areas/rooms beyond compatibility fields
+- monetization schema/runtime wiring
+- Live Shopping Mode (moved to v2.0)
 
 ---
 
-## 12) CI/CD and Branch Policy
+## 16) TL;DR
 
-- `.github/workflows/ios-ci.yml` — build + SwiftLint + schema gate
-- `.github/workflows/nightly.yml` — extended tests
-- TestFlight deploys trigger on: `main`, `features-and-testing`, `workflow_dispatch`, tags `v*`
-- Schema gate must be green before TestFlight deploy
+1. Shared-first, low-friction household app
+2. `Member` records are the real membership source of truth
+3. Signed-in users need confirmed display name before create/join
+4. New UI must support theme fonts from day one
+5. Ideas can be unassigned; Tasks cannot
+6. Local-first UI, tombstones for delete/promotion
+7. TipKit is sequential and context-reset only
+8. No local `xcodebuild`
+9. After code changes: `pre-commit -> commit -> push -> monitor GHA`
+10. Docs-only: commit but do not push
 
-### CloudKit Schema Bootstrap (one-time, if needed)
-If `Cannot create new type cloudkit.share` error appears:
-1. CloudKit Console → Development → Private DB → Act As iCloud Account
-2. Create custom zone → create Household record → Share Record (creates `cloudkit.share`)
-3. Stop Acting As → Deploy Schema: Development → Production
-
-### Quick CI diagnostics
-```bash
-gh run list --limit 5
-gh run view <run-id> --json status,conclusion,jobs
-gh run view <run-id> --log-failed
-```
-
-### CloudKit InviteToken security roles (operational check)
-
-When InviteToken behavior changes or after schema/deploy operations, verify CloudKit Console security roles for `InviteToken`:
-- `_creator` → Read, Write
-- `_icloud` → Create, Read
-- `_world` → Read
-
-If Development schema loses these settings after deploy, re-apply them in CloudKit Console before closing the task.
-
----
-
-## 13) Session Learnings (2026-03-04)
-
-### Fast Boot contract (must preserve)
-App launch must prioritize instant local UI:
-1. Route to UI from local session/cache state immediately.
-2. Do not block launch transition on CloudKit initialization or auth status checks.
-3. Run CloudKit startup work in background tasks (auth refresh, replay pending mutations, initial cloud fetches).
-4. User should see SwiftData-backed content instantly; cloud sync may update afterward.
-
-### Optimistic UI & Tombstones (Ghost Record Prevention)
-- UI must update immediately on mutations (e.g., Idea -> Task conversion) without waiting for CloudKit.
-- If a CloudKit delete fails, we use the **"Keep task + tombstone"** policy. Do not rollback the UI. Keep the local `pendingDelete` flag and let background retries handle it.
-- `syncToCache` MUST respect local tombstones. If a local record is marked `pendingDelete`, ignore incoming CloudKit updates for that record to prevent "ghost records" from reappearing.
-
-### Silent Background Sync
-- Do not use blocking full-screen spinners on tab switches (e.g., `TasksView`, `IdeasView`) if local data exists.
-- Show local SwiftData immediately via `@Query`.
-- CloudKit fetches should happen silently in the background and update the UI reactively.
-
----
-
-## 14) Rules Summary (TL;DR)
-
-1. English only in code, comments, and this file
-2. Push only when explicitly requested or standing instruction allows it; then monitor GHA every ~60s until green
-3. For docs-only changes: commit but do NOT push
-4. Always run `pre-commit run --all-files` after code changes; fix until green
-5. SwiftLint via Docker is allowed (prefer `lint --quiet *`) — see Section 6
-6. No `xcodebuild` locally — Linux only; builds run on GitHub Actions
-7. After every implementation: print handoff + regression checklist + task IDs (Section 8)
-8. WIP limit is 3 tasks per assignee in `.next` — enforce in TaskStore
-9. `glassEffect()` is always the last modifier — no modifiers after it
-10. Every new UI element must ship with Retro/Paper theme font support wherever SwiftUI natively allows it
-11. New UI should be checked in `System`, `Retro Dark`, `Retro Light`, and `Paper`, plus a narrow layout
-12. TipKit must stay contextual/sequential: one tip per screen, reset only on real context change
-13. If this file contradicts the code, code wins; if uncertain, ask
-
----
-
-If this file contradicts current code, the code and latest agreements take precedence.
+If in doubt, follow the code, prefer the existing pattern, and keep the product simpler rather than more powerful.

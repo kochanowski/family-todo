@@ -2,7 +2,9 @@ import Foundation
 import UIKit
 
 struct ShoppingBundle: Identifiable, Codable, Hashable {
-    static let defaultIcon = "shippingbox.fill"
+    static let featureIcon = "shippingbox.fill"
+    static let fallbackIcon = "shippingbox.fill"
+    static let creationDefaultIcon = "fork.knife"
     static let foodIcons = [
         "fork.knife",
         "fork.knife.circle.fill",
@@ -103,7 +105,7 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
         id: UUID = UUID(),
         householdId: UUID,
         name: String,
-        icon: String = ShoppingBundle.defaultIcon,
+        icon: String = ShoppingBundle.creationDefaultIcon,
         items: [String] = [],
         sortOrder: Int = 0,
         createdAt: Date = Date(),
@@ -146,7 +148,7 @@ struct ShoppingBundle: Identifiable, Codable, Hashable {
     }
 
     static func resolvedIconName(_ icon: String) -> String {
-        UIImage(systemName: icon) != nil ? icon : defaultIcon
+        UIImage(systemName: icon) != nil ? icon : fallbackIcon
     }
 
     static func encodeItemsJSON(_ items: [String]) -> String {

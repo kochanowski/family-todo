@@ -67,11 +67,15 @@ struct ConfettiCannon: UIViewRepresentable {
     let accentColor: UIColor
 
     final class Coordinator {
-        var lastTrigger = 0
+        var lastTrigger: Int
+
+        init(lastTrigger: Int) {
+            self.lastTrigger = lastTrigger
+        }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(lastTrigger: trigger)
     }
 
     func makeUIView(context _: Context) -> ConfettiEmitterView {
