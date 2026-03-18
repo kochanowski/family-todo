@@ -233,6 +233,9 @@ struct CreateHouseholdView: View {
                     displayName: displayName,
                     iconSymbol: selectedIconSymbol
                 )
+                await MainActor.run {
+                    userSession.applyProfileUpdate(displayName: displayName)
+                }
                 userSession.setCurrentHousehold(newHousehold.id)
                 onboardingState.completeHouseholdSetup(withHousehold: true)
                 if showsCloseButton {
@@ -290,6 +293,9 @@ struct CreateHouseholdView: View {
             userId: userId,
             displayName: displayName
         )
+        await MainActor.run {
+            userSession.applyProfileUpdate(displayName: displayName)
+        }
         if let household = householdStore.currentHousehold {
             userSession.setCurrentHousehold(household.id)
         }

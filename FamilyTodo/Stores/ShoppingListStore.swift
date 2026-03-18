@@ -231,7 +231,12 @@ final class ShoppingListStore: ObservableObject {
 
         for item in items {
             if let existing = cachedByID[item.id] {
-                if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "pendingDelete" {
+                if existing.syncStatusRaw == "pendingDelete" {
+                    continue
+                }
+                if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "awaitingCloudEcho",
+                   !cloudShoppingItemMatchesLocalMutationEcho(item, localItem: existing.toShoppingItem())
+                {
                     continue
                 }
                 existing.update(from: item)
@@ -293,7 +298,7 @@ final class ShoppingListStore: ObservableObject {
                 }
 
                 for cached in pendingUploads {
-                    cached.syncStatusRaw = "synced"
+                    cached.syncStatusRaw = "awaitingCloudEcho"
                     cached.lastSyncedAt = syncedAt
                 }
                 didMutateCache = true
@@ -306,7 +311,7 @@ final class ShoppingListStore: ObservableObject {
                             cached.toShoppingItem(),
                             scope: cloudScope
                         )
-                        cached.syncStatusRaw = "synced"
+                        cached.syncStatusRaw = "awaitingCloudEcho"
                         cached.lastSyncedAt = syncedAt
                         didMutateCache = true
                     } catch {
@@ -475,9 +480,9 @@ final class ShoppingListStore: ObservableObject {
                     predicate: #Predicate { $0.id == item.id }
                 )
                 if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "synced"
+                    cached.syncStatusRaw = "awaitingCloudEcho"
                     cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "mark updated shopping item as synced")
+                    saveContextOrSetError(context, operation: "mark updated shopping item awaiting cloud echo")
                 }
             }
         } catch {
@@ -593,9 +598,9 @@ final class ShoppingListStore: ObservableObject {
             predicate: #Predicate { $0.id == itemId }
         )
         if let cached = try? context.fetch(descriptor).first {
-            cached.syncStatusRaw = "synced"
+            cached.syncStatusRaw = "awaitingCloudEcho"
             cached.lastSyncedAt = Date()
-            saveContextOrSetError(context, operation: "mark reordered shopping item as synced")
+            saveContextOrSetError(context, operation: "mark reordered shopping item awaiting cloud echo")
         }
     }
 
@@ -859,7 +864,7 @@ final class ShoppingListStore: ObservableObject {
 
         for cached in cachedItems {
             switch cached.syncStatusRaw {
-            case "pendingUpload":
+            case "pendingUpload", "awaitingCloudEcho":
                 pendingUploadByID[cached.id] = cached.toShoppingItem()
             case "pendingDelete":
                 pendingDeleteIDs.insert(cached.id)
@@ -883,10 +888,13 @@ final class ShoppingListStore: ObservableObject {
         )
 
         for (id, pendingItem) in pendingSnapshot.pendingUploadByID {
-            if let cloudItem = mergedByID[id], cloudItem.updatedAt > pendingItem.updatedAt {
-                continue
+            if let cloudItem = mergedByID[id],
+               cloudShoppingItemMatchesLocalMutationEcho(cloudItem, localItem: pendingItem)
+            {
+                mergedByID[id] = cloudItem
+            } else {
+                mergedByID[id] = pendingItem
             }
-            mergedByID[id] = pendingItem
         }
         for id in pendingSnapshot.pendingDeleteIDs {
             mergedByID.removeValue(forKey: id)
@@ -898,6 +906,22 @@ final class ShoppingListStore: ObservableObject {
             }
             return lhs.createdAt > rhs.createdAt
         }
+    }
+
+    private func cloudShoppingItemMatchesLocalMutationEcho(
+        _ cloudItem: ShoppingItem,
+        localItem: ShoppingItem
+    ) -> Bool {
+        guard cloudItem.id == localItem.id else { return false }
+        guard cloudItem.updatedAt >= localItem.updatedAt else { return false }
+
+        return cloudItem.title == localItem.title &&
+            cloudItem.quantityValue == localItem.quantityValue &&
+            cloudItem.quantityUnit == localItem.quantityUnit &&
+            cloudItem.isBought == localItem.isBought &&
+            cloudItem.boughtAt == localItem.boughtAt &&
+            cloudItem.restockCount == localItem.restockCount &&
+            cloudItem.sortOrder == localItem.sortOrder
     }
 
     private func upsertCachedItem(

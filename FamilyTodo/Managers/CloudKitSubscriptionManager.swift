@@ -174,7 +174,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
         case "WorkItem":
             NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
             NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
-        case "Task", "BacklogItem", "BacklogCategory":
+        case "Task":
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+        case "BacklogItem":
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+        case "BacklogCategory":
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
             NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
         case "Household", "Member":
             NotificationCenter.default.post(name: .householdDataDidChange, object: source)

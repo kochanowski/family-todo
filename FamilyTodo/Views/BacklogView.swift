@@ -66,7 +66,6 @@ private struct BacklogContent: View {
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
-    @State private var processingPromotionItemIds: Set<UUID> = []
     @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
@@ -131,7 +130,7 @@ private struct BacklogContent: View {
                                     addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
                                     ideaAssignTipItemID: ideaAssignTipAnchorItemID,
                                     ideaPromotionTipItemID: ideaPromotionTipItemID,
-                                    isPromotingItem: { processingPromotionItemIds.contains($0) },
+                                    isPromotingItem: { hiddenPendingPromotionIds.contains($0) || pendingPromotionItemID == $0 },
                                     assigneeFor: { assigneeId in
                                         assignee(for: assigneeId)
                                     },
@@ -349,21 +348,17 @@ private struct BacklogContent: View {
                         let pendingItemID = item.id
                         pendingAssignmentItemID = nil
                         selectedAssigneeIdForAssignment = nil
-                        _ = _Concurrency.Task {
-                            await store.updateItem(
-                                item,
-                                title: item.title,
-                                notes: item.notes,
-                                assigneeId: selectedAssignee
-                            )
-                            await MainActor.run {
-                                guard !hadAssignee else { return }
-                                if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
-                                   updatedItem.assigneeId != nil
-                                {
-                                    AppTips.donateIdeasOwnerAssigned()
-                                }
-                            }
+                        store.updateItem(
+                            item,
+                            title: item.title,
+                            notes: item.notes,
+                            assigneeId: selectedAssignee
+                        )
+                        guard !hadAssignee else { return }
+                        if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
+                           updatedItem.assigneeId != nil
+                        {
+                            AppTips.donateIdeasOwnerAssigned()
                         }
                     }
                 )
@@ -392,14 +387,12 @@ private struct BacklogContent: View {
                     item: item,
                     members: activeMembers,
                     onSave: { title, notes, assigneeId in
-                        _ = _Concurrency.Task {
-                            await store.updateItem(
-                                item,
-                                title: title,
-                                notes: notes,
-                                assigneeId: assigneeId
-                            )
-                        }
+                        store.updateItem(
+                            item,
+                            title: title,
+                            notes: notes,
+                            assigneeId: assigneeId
+                        )
                     },
                     onDelete: {
                         performImmediateDeleteItem(withID: item.id)
@@ -593,13 +586,14 @@ private struct BacklogContent: View {
 
     private func promoteItem(withID itemID: UUID) {
         guard let item = latestItem(withID: itemID) else { return }
-        guard processingPromotionItemIds.insert(item.id).inserted else { return }
+        guard !hiddenPendingPromotionIds.contains(item.id), pendingPromotionItemID != item.id else {
+            return
+        }
 
         if activeMembers.isEmpty {
             if let userId = userSession.userId, let assigneeId = UUID(uuidString: userId) {
                 completePromotion(of: item.id, assigneeId: assigneeId)
             } else {
-                processingPromotionItemIds.remove(item.id)
                 showBanner(.assigneeRequired)
             }
             return
@@ -621,41 +615,29 @@ private struct BacklogContent: View {
 
     private func completePromotion(of itemID: UUID, assigneeId: UUID) {
         guard let item = latestItem(withID: itemID) else {
-            processingPromotionItemIds.remove(itemID)
             hiddenPendingPromotionIds.remove(itemID)
             return
         }
 
-        if !processingPromotionItemIds.contains(item.id) {
-            processingPromotionItemIds.insert(item.id)
-        }
         withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
             hiddenPendingPromotionIds.insert(item.id)
         }
 
-        _ = _Concurrency.Task {
-            let result = await store.promoteItemToTask(item, assigneeId: assigneeId)
-            await MainActor.run {
-                processingPromotionItemIds.remove(item.id)
-                switch result {
-                case .success:
-                    // Keep the item hidden for the rest of the session so a delayed
-                    // cloud echo cannot briefly show the promoted idea again.
-                    break
-                case .assigneeRequired, .wipLimitReached, .failed:
-                    withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
-                        hiddenPendingPromotionIds.remove(item.id)
-                    }
-                }
-                handlePromotionResult(result)
+        let result = store.promoteItemToTask(item, assigneeId: assigneeId)
+        switch result {
+        case .success:
+            // Keep the item hidden for the rest of the session so a delayed
+            // cloud echo cannot briefly show the promoted idea again.
+            break
+        case .assigneeRequired, .wipLimitReached, .failed:
+            withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+                hiddenPendingPromotionIds.remove(item.id)
             }
         }
+        handlePromotionResult(result)
     }
 
     private func cancelPendingPromotion() {
-        if let itemID = pendingPromotionItemID {
-            processingPromotionItemIds.remove(itemID)
-        }
         pendingPromotionItemID = nil
         selectedAssigneeIdForPromotion = nil
     }

@@ -468,6 +468,13 @@ final class BacklogStore: ObservableObject {
         }
     }
 
+    private func postLocalBacklogRefresh(includeTaskBoard: Bool = false) {
+        NotificationCenter.default.post(name: .backlogDataDidChange, object: "local")
+        if includeTaskBoard {
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
+        }
+    }
+
     private func flushPendingSync() async {
         guard isCloudSyncEnabled, let context = modelContext, let householdId else { return }
 
@@ -571,36 +578,23 @@ final class BacklogStore: ObservableObject {
             categories.append(category)
         }
 
-        // Cache
+        let didPersistLocally: Bool
         if let context = modelContext {
             let cached = CachedBacklogCategory(from: category)
             cached.syncStatusRaw = isCloudSyncEnabled
                 ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
             cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
             context.insert(cached)
-            saveContextOrSetError(context, operation: "persist backlog cache")
+            didPersistLocally = saveContextOrSetError(context, operation: "persist backlog cache")
+        } else {
+            didPersistLocally = true
         }
 
-        if !isCloudSyncEnabled { return }
+        guard didPersistLocally else { return }
+        postLocalBacklogRefresh(includeTaskBoard: true)
 
-        do {
-            _ = try await cloudKit.saveBacklogCategory(category, scope: cloudScope)
-
-            // Mark synced
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedBacklogCategory>(
-                    predicate: #Predicate { $0.id == category.id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "persist backlog cache")
-                }
-            }
-        } catch {
-            self.error = error
-            // Revert UI if needed, or keep as pending
-        }
+        guard isCloudSyncEnabled else { return }
+        replayPendingMutationsInBackground()
     }
 
     @discardableResult
@@ -616,7 +610,7 @@ final class BacklogStore: ObservableObject {
             items.removeAll { $0.categoryId == category.id }
         }
 
-        // Cache
+        let didPersistLocally: Bool
         if let context = modelContext {
             // Delete category
             let catDescriptor = FetchDescriptor<CachedBacklogCategory>(
@@ -633,8 +627,13 @@ final class BacklogStore: ObservableObject {
             for cached in cachedWorkItems where cached.categoryId == category.id {
                 context.delete(cached)
             }
-            saveContextOrSetError(context, operation: "persist backlog cache")
+            didPersistLocally = saveContextOrSetError(context, operation: "persist backlog cache")
+        } else {
+            didPersistLocally = true
         }
+
+        guard didPersistLocally else { return .deleted }
+        postLocalBacklogRefresh(includeTaskBoard: true)
 
         if !isCloudSyncEnabled { return .deleted }
 
@@ -705,6 +704,7 @@ final class BacklogStore: ObservableObject {
             categories[index] = updatedCategory
         }
 
+        let didPersistLocally: Bool
         if let context = modelContext {
             let categoryId = category.id
             let descriptor = FetchDescriptor<CachedBacklogCategory>(
@@ -715,49 +715,24 @@ final class BacklogStore: ObservableObject {
                 cached.syncStatusRaw = isCloudSyncEnabled
                     ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced
                 cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
-                saveContextOrSetError(context, operation: "persist backlog cache")
+                didPersistLocally = saveContextOrSetError(context, operation: "persist backlog cache")
+            } else {
+                didPersistLocally = true
             }
+        } else {
+            didPersistLocally = true
         }
 
-        guard isCloudSyncEnabled else { return }
-        do {
-            _ = try await cloudKit.updateBacklogCategoryMetadata(
-                categoryId: updatedCategory.id,
-                householdId: updatedCategory.householdId,
-                newTitle: updatedCategory.title,
-                newColorHex: updatedCategory.colorHex,
-                scope: cloudScope
-            )
-
-            if let context = modelContext {
-                let categoryId = updatedCategory.id
-                let descriptor = FetchDescriptor<CachedBacklogCategory>(
-                    predicate: #Predicate { $0.id == categoryId }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = BacklogSyncStatus.awaitingCloudEcho
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "persist backlog cache")
-                }
-            }
-        } catch {
-            self.error = error
+        guard didPersistLocally else {
             withAnimation {
                 categories[index] = previousCategory
             }
-            if let context = modelContext {
-                let categoryId = previousCategory.id
-                let descriptor = FetchDescriptor<CachedBacklogCategory>(
-                    predicate: #Predicate { $0.id == categoryId }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.update(from: previousCategory)
-                    cached.syncStatusRaw = BacklogSyncStatus.synced
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "persist backlog cache")
-                }
-            }
+            return
         }
+        postLocalBacklogRefresh(includeTaskBoard: true)
+
+        guard isCloudSyncEnabled else { return }
+        replayPendingMutationsInBackground()
     }
 
     func reorderCategories(orderedIds: [UUID]) async {
@@ -775,6 +750,7 @@ final class BacklogStore: ObservableObject {
         }
         categories.sort { $0.sortOrder < $1.sortOrder }
 
+        let didPersistLocally: Bool
         if let context = modelContext {
             for category in categories {
                 let categoryId = category.id
@@ -788,26 +764,16 @@ final class BacklogStore: ObservableObject {
                     cached.lastSyncedAt = isCloudSyncEnabled ? nil : Date()
                 }
             }
-            saveContextOrSetError(context, operation: "persist backlog cache")
+            didPersistLocally = saveContextOrSetError(context, operation: "persist backlog cache")
+        } else {
+            didPersistLocally = true
         }
 
+        guard didPersistLocally else { return }
+        postLocalBacklogRefresh(includeTaskBoard: true)
+
         guard isCloudSyncEnabled else { return }
-        do {
-            try await cloudKit.saveBacklogCategoriesBatch(categories, scope: cloudScope)
-            for category in categories {
-                markCachedCategoryAwaitingCloudEcho(id: category.id)
-            }
-        } catch {
-            self.error = error
-            for category in categories {
-                do {
-                    _ = try await cloudKit.saveBacklogCategory(category, scope: cloudScope)
-                    markCachedCategoryAwaitingCloudEcho(id: category.id)
-                } catch {
-                    self.error = error
-                }
-            }
-        }
+        replayPendingMutationsInBackground()
     }
 
     // MARK: - Item Operations
@@ -977,16 +943,17 @@ final class BacklogStore: ObservableObject {
         }
     }
 
-    func updateItem(_ item: BacklogItem, title: String, notes: String?) async {
-        await updateItem(item, title: title, notes: notes, assigneeId: item.assigneeId)
+    func updateItem(_ item: BacklogItem, title: String, notes: String?) {
+        updateItem(item, title: title, notes: notes, assigneeId: item.assigneeId)
     }
 
-    func updateItem(_ item: BacklogItem, title: String, notes: String?, assigneeId: UUID?) async {
+    func updateItem(_ item: BacklogItem, title: String, notes: String?, assigneeId: UUID?) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard !pendingMutationIDs.contains(item.id) else { return }
+
         beginMutation(item.id)
-        defer { endMutation(item.id) }
 
         var updatedItem = items[index]
         updatedItem.title = trimmedTitle
@@ -1002,18 +969,36 @@ final class BacklogStore: ObservableObject {
             updatedItem,
             syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
             lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
-            shouldSave: true,
+            shouldSave: false,
             operation: "persist backlog cache"
         )
 
-        guard isCloudSyncEnabled else { return }
-        do {
-            _ = try await cloudKit.saveWorkItem(WorkItem(idea: updatedItem), scope: cloudScope)
-            markIdeaWorkItemAwaitingCloudEcho(id: updatedItem.id, operation: "persist backlog cache")
-        } catch {
-            self.error = error
-            // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
+        guard let context = modelContext else {
+            endMutation(item.id)
+            return
         }
+
+        guard saveContextOrSetError(context, operation: "persist backlog cache") else {
+            withAnimation {
+                items[index] = item
+            }
+            persistIdeaWorkItem(
+                item,
+                syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
+                lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
+                shouldSave: false,
+                operation: "rollback backlog cache"
+            )
+            _ = saveContextOrSetError(context, operation: "rollback backlog cache")
+            endMutation(item.id)
+            return
+        }
+
+        endMutation(item.id)
+        postLocalBacklogRefresh()
+
+        guard isCloudSyncEnabled else { return }
+        replayPendingMutationsInBackground()
     }
 
     @discardableResult
@@ -1021,7 +1006,7 @@ final class BacklogStore: ObservableObject {
         _ item: BacklogItem,
         assigneeId: UUID?,
         preferredStatus: Task.TaskStatus = .next
-    ) async -> PromotionResult {
+    ) -> PromotionResult {
         guard let modelContext else {
             return .failed("Missing local context.")
         }
@@ -1032,27 +1017,47 @@ final class BacklogStore: ObservableObject {
         }
 
         guard !pendingMutationIDs.contains(item.id) else {
-            return .failed("This idea is already being promoted.")
+            return .failed("Please try promoting this idea again.")
         }
 
         beginMutation(item.id)
-        defer { endMutation(item.id) }
 
-        var promotedItem = WorkItem(idea: item)
-        promotedItem.status = WorkItem.Status(taskStatus: preferredStatus)
-        promotedItem.assigneeId = resolvedAssigneeId
-        promotedItem.assigneeIds = resolvedAssigneeId.map { [$0] } ?? []
-        promotedItem.order = preferredStatus == .next ? nextTaskOrderBaselineFromCache() + 1 : 0
-        promotedItem.updatedAt = Date()
-        if preferredStatus == .done {
-            promotedItem.completedAt = Date()
+        let existingTask = existingDestinationTask(for: item.logicalItemID)
+        let promotedItem: WorkItem
+        if let existingTask, existingTask.id != item.id {
+            let promotedTask = promotedTaskDestination(
+                from: item,
+                assigneeId: resolvedAssigneeId,
+                preferredStatus: preferredStatus,
+                existing: existingTask
+            )
+            promotedItem = WorkItem(task: promotedTask)
         } else {
-            promotedItem.completedAt = nil
-            promotedItem.completedById = nil
+            var localPromotedItem = WorkItem(idea: item)
+            localPromotedItem.status = WorkItem.Status(taskStatus: preferredStatus)
+            localPromotedItem.assigneeId = resolvedAssigneeId
+            localPromotedItem.assigneeIds = resolvedAssigneeId.map { [$0] } ?? []
+            localPromotedItem.order = preferredStatus == .next ? nextTaskOrderBaselineFromCache() + 1 : 0
+            localPromotedItem.updatedAt = Date()
+            if preferredStatus == .done {
+                localPromotedItem.completedAt = Date()
+            } else {
+                localPromotedItem.completedAt = nil
+                localPromotedItem.completedById = nil
+            }
+            promotedItem = localPromotedItem
         }
 
         withAnimation {
             items.removeAll { $0.id == item.id }
+        }
+
+        if promotedItem.id != item.id {
+            removeIdeaWorkItem(
+                id: item.id,
+                shouldSave: false,
+                operation: "remove source idea after promotion"
+            )
         }
 
         WorkItemCacheStoreSupport.upsert(
@@ -1077,11 +1082,12 @@ final class BacklogStore: ObservableObject {
                 operation: "rollback promoted idea work item"
             )
             _ = saveContextOrSetError(modelContext, operation: "rollback idea promotion")
+            endMutation(item.id)
             return .failed("Couldn't save the task locally.")
         }
 
-        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
-        NotificationCenter.default.post(name: .backlogDataDidChange, object: "local")
+        endMutation(item.id)
+        postLocalBacklogRefresh(includeTaskBoard: true)
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()

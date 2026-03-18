@@ -167,6 +167,9 @@ struct GuidedEmptyStateView: View {
             userId: userId,
             displayName: displayName
         )
+        await MainActor.run {
+            userSession.applyProfileUpdate(displayName: displayName)
+        }
 
         if let household = householdStore.currentHousehold {
             userSession.setCurrentHousehold(household.id)

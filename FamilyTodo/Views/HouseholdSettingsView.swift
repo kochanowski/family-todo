@@ -629,6 +629,7 @@ private struct EditProfileView: View {
     @State private var displayName = ""
     @State private var selectedColorHex = MemberColorToken.fallbackHex
     @State private var hasLoaded = false
+    @State private var isSaving = false
     @State private var errorMessage: String?
 
     private let modelContext: ModelContext
@@ -699,7 +700,9 @@ private struct EditProfileView: View {
                     Text("Save")
                         .font(themeStore.font(for: .buttonLabel))
                 }
-                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving
+                )
             }
         }
         .alert("Save failed", isPresented: Binding(
@@ -732,7 +735,7 @@ private struct EditProfileView: View {
             return
         }
 
-        displayName = userSession.displayName ?? ""
+        displayName = userSession.confirmedMembershipDisplayName ?? userSession.displayName ?? ""
         selectedColorHex = MemberColorToken.fallbackHex
     }
 
@@ -750,7 +753,7 @@ private struct EditProfileView: View {
             return
         }
 
-        dismiss()
+        isSaving = true
         _ = _Concurrency.Task {
             do {
                 try await memberStore.updateCurrentUserProfile(
@@ -758,9 +761,16 @@ private struct EditProfileView: View {
                     colorHex: selectedColorHex,
                     currentUserId: currentUserId
                 )
-                userSession.applyProfileUpdate(displayName: trimmedName)
+                await MainActor.run {
+                    userSession.applyProfileUpdate(displayName: trimmedName)
+                    isSaving = false
+                    dismiss()
+                }
             } catch {
-                memberStore.error = error
+                await MainActor.run {
+                    isSaving = false
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }

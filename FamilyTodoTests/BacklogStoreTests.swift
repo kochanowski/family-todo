@@ -12,8 +12,9 @@ final class BacklogStoreTests: XCTestCase {
         try await super.setUp()
 
         let schema = Schema([
-            CachedBacklogItem.self,
+            CachedWorkItem.self,
             CachedBacklogCategory.self,
+            CachedBacklogItem.self,
             CachedTask.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -41,8 +42,8 @@ final class BacklogStoreTests: XCTestCase {
             notes: "Notes"
         )
 
-        let cached = CachedBacklogItem(from: item)
-        let restored = cached.toBacklogItem()
+        let cached = CachedWorkItem(from: WorkItem(idea: item))
+        let restored = cached.toWorkItem().toBacklogItem()
 
         XCTAssertEqual(restored.assigneeId, assigneeId)
         XCTAssertEqual(restored.logicalItemID, logicalItemID)
@@ -59,7 +60,7 @@ final class BacklogStoreTests: XCTestCase {
             return
         }
 
-        let result = await store.promoteItemToTask(backlogItem, assigneeId: nil)
+        let result = store.promoteItemToTask(backlogItem, assigneeId: nil)
 
         switch result {
         case .success:
@@ -71,13 +72,13 @@ final class BacklogStoreTests: XCTestCase {
 
         XCTAssertTrue(store.items(for: categoryId).isEmpty)
 
-        let taskDescriptor = FetchDescriptor<CachedTask>(
+        let taskDescriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.title == "Vacuum living room" }
         )
         let cachedTasks = try modelContainer.mainContext.fetch(taskDescriptor)
         XCTAssertEqual(cachedTasks.count, 1)
         XCTAssertEqual(cachedTasks.first?.assigneeId, assigneeId)
-        XCTAssertEqual(cachedTasks.first?.statusRaw, Task.TaskStatus.next.rawValue)
+        XCTAssertEqual(cachedTasks.first?.statusRaw, WorkItem.Status.next.rawValue)
 
         let hydratedTaskStore = TaskStore(modelContext: modelContainer.mainContext)
         hydratedTaskStore.setHousehold(householdId)
@@ -115,14 +116,14 @@ final class BacklogStoreTests: XCTestCase {
             taskType: .oneOff
         )
 
-        modelContainer.mainContext.insert(CachedBacklogItem(from: backlogItem))
-        modelContainer.mainContext.insert(CachedTask(from: existingTask))
+        modelContainer.mainContext.insert(CachedWorkItem(from: WorkItem(idea: backlogItem)))
+        modelContainer.mainContext.insert(CachedWorkItem(from: WorkItem(task: existingTask)))
         try modelContainer.mainContext.save()
 
         store.setSyncMode(.localOnly)
         await store.loadDataForDisplay()
 
-        let result = await store.promoteItemToTask(backlogItem, assigneeId: backlogItem.assigneeId)
+        let result = store.promoteItemToTask(backlogItem, assigneeId: backlogItem.assigneeId)
 
         switch result {
         case let .success(createdTaskId):
@@ -134,15 +135,15 @@ final class BacklogStoreTests: XCTestCase {
 
         XCTAssertTrue(store.items(for: category.id).isEmpty)
 
-        let taskDescriptor = FetchDescriptor<CachedTask>(
+        let taskDescriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.householdId == householdId }
         )
         let cachedTasks = try modelContainer.mainContext.fetch(taskDescriptor)
         XCTAssertEqual(
-            cachedTasks.filter { ($0.logicalItemID ?? $0.id) == logicalItemID }.count,
+            cachedTasks.filter { $0.logicalItemID == logicalItemID && $0.statusRaw != WorkItem.Status.idea.rawValue }.count,
             1
         )
-        XCTAssertEqual(cachedTasks.first?.id, existingTask.id)
+        XCTAssertTrue(cachedTasks.contains(where: { $0.id == existingTask.id }))
     }
 
     func testDeleteItemInCloudModeReplacesVisibleCacheRowWithPendingDeleteTombstone() async throws {
@@ -160,7 +161,7 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertTrue(didDelete)
         XCTAssertTrue(store.items(for: categoryId).isEmpty)
 
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
+        let descriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.id == item.id }
         )
         let cachedItems = try modelContainer.mainContext.fetch(descriptor)
@@ -178,7 +179,7 @@ final class BacklogStoreTests: XCTestCase {
             return
         }
 
-        let cachedDescriptor = FetchDescriptor<CachedBacklogItem>(
+        let cachedDescriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.id == createdItem.id }
         )
         if let cachedItem = try modelContainer.mainContext.fetch(cachedDescriptor).first {
@@ -186,7 +187,7 @@ final class BacklogStoreTests: XCTestCase {
             try modelContainer.mainContext.save()
         }
 
-        await store.updateItem(
+        store.updateItem(
             createdItem,
             title: createdItem.title,
             notes: createdItem.notes,
@@ -224,7 +225,7 @@ final class BacklogStoreTests: XCTestCase {
             createdAt: localCreatedAt,
             updatedAt: localUpdatedAt
         )
-        let tombstone = CachedBacklogItem(from: localItem)
+        let tombstone = CachedWorkItem(from: WorkItem(idea: localItem))
         tombstone.syncStatusRaw = "pendingDelete"
         tombstone.lastSyncedAt = nil
         modelContainer.mainContext.insert(tombstone)
@@ -246,7 +247,7 @@ final class BacklogStoreTests: XCTestCase {
             cloudItemIDs: [itemId]
         )
 
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
+        let descriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.id == itemId }
         )
         let cachedItems = try modelContainer.mainContext.fetch(descriptor)
@@ -273,7 +274,7 @@ final class BacklogStoreTests: XCTestCase {
             notes: "local notes",
             updatedAt: localUpdatedAt
         )
-        let cached = CachedBacklogItem(from: localItem)
+        let cached = CachedWorkItem(from: WorkItem(idea: localItem))
         cached.syncStatusRaw = "awaitingCloudEcho"
         cached.lastSyncedAt = Date()
         modelContainer.mainContext.insert(cached)
@@ -296,7 +297,7 @@ final class BacklogStoreTests: XCTestCase {
             cloudItemIDs: [localItem.id]
         )
 
-        let descriptor = FetchDescriptor<CachedBacklogItem>(
+        let descriptor = FetchDescriptor<CachedWorkItem>(
             predicate: #Predicate { $0.id == localItem.id }
         )
         guard let persisted = try modelContainer.mainContext.fetch(descriptor).first else {
@@ -339,7 +340,7 @@ final class BacklogStoreTests: XCTestCase {
             backlogCategoryId: category.id,
             taskType: .oneOff
         )
-        modelContainer.mainContext.insert(CachedTask(from: task))
+        modelContainer.mainContext.insert(CachedWorkItem(from: WorkItem(task: task)))
         try modelContainer.mainContext.save()
 
         let result = await store.deleteCategory(category)
@@ -363,7 +364,7 @@ final class BacklogStoreTests: XCTestCase {
             title: "Water plants"
         )
         modelContainer.mainContext.insert(CachedBacklogCategory(from: category))
-        modelContainer.mainContext.insert(CachedBacklogItem(from: item))
+        modelContainer.mainContext.insert(CachedWorkItem(from: WorkItem(idea: item)))
         try modelContainer.mainContext.save()
 
         let hydratedStore = BacklogStore(
@@ -389,7 +390,7 @@ final class BacklogStoreTests: XCTestCase {
             title: "Original idea"
         )
         modelContainer.mainContext.insert(CachedBacklogCategory(from: originalCategory))
-        modelContainer.mainContext.insert(CachedBacklogItem(from: originalItem))
+        modelContainer.mainContext.insert(CachedWorkItem(from: WorkItem(idea: originalItem)))
         try modelContainer.mainContext.save()
 
         await store.loadDataForDisplay()
@@ -407,7 +408,7 @@ final class BacklogStoreTests: XCTestCase {
         )
 
         let categoryDescriptor = FetchDescriptor<CachedBacklogCategory>()
-        let itemDescriptor = FetchDescriptor<CachedBacklogItem>()
+        let itemDescriptor = FetchDescriptor<CachedWorkItem>()
         for cachedCategory in try modelContainer.mainContext.fetch(categoryDescriptor) {
             modelContainer.mainContext.delete(cachedCategory)
         }
@@ -415,7 +416,7 @@ final class BacklogStoreTests: XCTestCase {
             modelContainer.mainContext.delete(cachedItem)
         }
         modelContainer.mainContext.insert(CachedBacklogCategory(from: replacementCategory))
-        modelContainer.mainContext.insert(CachedBacklogItem(from: replacementItem))
+        modelContainer.mainContext.insert(CachedWorkItem(from: WorkItem(idea: replacementItem)))
         try modelContainer.mainContext.save()
 
         store.markLocalSnapshotStale()
