@@ -483,7 +483,7 @@ final class TaskStore: ObservableObject {
                     item,
                     for: cached,
                     pendingSnapshot: pendingSnapshot,
-                    mutationEchoMatches: cloudTaskMatchesLocalMutationEcho
+                    mutationEchoMatches: cloudWorkItemMatchesLocalMutationEcho
                 ) {
                     continue
                 }
@@ -498,7 +498,7 @@ final class TaskStore: ObservableObject {
                     item,
                     for: cached,
                     pendingSnapshot: pendingSnapshot,
-                    mutationEchoMatches: cloudTaskMatchesLocalMutationEcho
+                    mutationEchoMatches: cloudWorkItemMatchesLocalMutationEcho
                 ) {
                     continue
                 }

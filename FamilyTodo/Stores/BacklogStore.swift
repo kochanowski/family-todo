@@ -921,7 +921,7 @@ final class BacklogStore: ObservableObject {
     private func deleteItemInternal(_ item: BacklogItem) async -> Bool {
         let removedItemIndex = items.firstIndex(where: { $0.id == item.id })
         if let removedItemIndex {
-            withAnimation {
+            _ = withAnimation {
                 items.remove(at: removedItemIndex)
             }
         }
