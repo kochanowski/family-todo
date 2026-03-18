@@ -292,8 +292,6 @@ enum TabBarTypographyManager {
 
         let boundedIndex = min(max(selectedIndex, 0), min(viewControllers.count, items.count) - 1)
         tabBarController.selectedIndex = boundedIndex
-        tabBarController.selectedViewController = viewControllers[boundedIndex]
-        tabBarController.tabBar.selectedItem = items[boundedIndex]
         tabBarController.tabBar.setNeedsLayout()
         tabBarController.tabBar.layoutIfNeeded()
     }

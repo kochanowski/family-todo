@@ -14,9 +14,15 @@ enum TestModelContainerFactory {
     }
 
     static func makeInMemoryContainer(profile: SchemaProfile = .appCache) throws -> ModelContainer {
+        let schema = schema(for: profile)
+        let configuration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
+        )
         try ModelContainer(
-            for: schema(for: profile),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+            for: schema,
+            configurations: [configuration]
         )
     }
 

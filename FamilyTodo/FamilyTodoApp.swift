@@ -579,8 +579,11 @@ enum LocalAppReset {
     }
 
     static func clearUserDefaults(_ userDefaults: UserDefaults = .standard) {
-        guard let domain = Bundle.main.bundleIdentifier else { return }
-        userDefaults.removePersistentDomain(forName: domain)
+        let keys = Array(userDefaults.dictionaryRepresentation().keys)
+        keys.forEach { userDefaults.removeObject(forKey: $0) }
+        if let domain = Bundle.main.bundleIdentifier {
+            userDefaults.removePersistentDomain(forName: domain)
+        }
         userDefaults.synchronize()
     }
 
