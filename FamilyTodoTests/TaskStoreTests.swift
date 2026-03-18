@@ -625,9 +625,9 @@ final class TaskStoreTests: XCTestCase {
             taskType: .oneOff
         )
 
-        [doneThisWeekA, doneThisWeekB, donePreviousWeek, activeTask]
-            .map(cachedTaskRow)
-            .forEach(modelContainer.mainContext.insert)
+        for task in [doneThisWeekA, doneThisWeekB, donePreviousWeek, activeTask] {
+            modelContainer.mainContext.insert(cachedTaskRow(task))
+        }
         try modelContainer.mainContext.save()
 
         store.setSyncMode(.localOnly)
@@ -671,9 +671,9 @@ final class TaskStoreTests: XCTestCase {
             updatedAt: previousWeekUpdatedAt
         )
 
-        [doneWithoutCompletedAtInWeek, doneWithoutCompletedAtOld]
-            .map(cachedTaskRow)
-            .forEach(modelContainer.mainContext.insert)
+        for task in [doneWithoutCompletedAtInWeek, doneWithoutCompletedAtOld] {
+            modelContainer.mainContext.insert(cachedTaskRow(task))
+        }
         try modelContainer.mainContext.save()
 
         store.setSyncMode(.localOnly)
