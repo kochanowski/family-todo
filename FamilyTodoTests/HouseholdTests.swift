@@ -210,13 +210,6 @@ final class MemberStoreProfileTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func requireContainer(
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) throws -> ModelContainer {
-        try XCTUnwrap(modelContainer, "Expected in-memory model container", file: file, line: line)
-    }
-
     func testUpdateCurrentUserProfilePersistsDisplayNameAndColorToCache() async throws {
         try await store.updateCurrentUserProfile(
             displayName: "Wojciech",
@@ -252,6 +245,13 @@ final class HouseholdStoreTests: XCTestCase {
         store = nil
         modelContainer = nil
         try await super.tearDown()
+    }
+
+    private func requireContainer(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> ModelContainer {
+        try XCTUnwrap(modelContainer, "Expected in-memory model container", file: file, line: line)
     }
 
     // MARK: - Computed Properties
