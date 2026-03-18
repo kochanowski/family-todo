@@ -221,6 +221,8 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     needs: [build-and-test, swiftlint, cloudkit-schema]
     # Run on release/testing lanes and selected feature lanes, allowing those branches to bypass the production schema gate.
+    # Temporarily disabled on feature/multi-user-sync-fixes so that branch can use CI for
+    # build + nightly regression validation without shipping every push to TestFlight.
     if: >
       always() &&
       (
@@ -234,8 +236,7 @@ jobs:
             github.ref == 'refs/heads/appleid-login' ||
             github.ref == 'refs/heads/features-and-testing' ||
             github.ref == 'refs/heads/feature/cloudkit-fixes' ||
-            github.ref == 'refs/heads/feature/next-features' ||
-            github.ref == 'refs/heads/feature/multi-user-sync-fixes'
+            github.ref == 'refs/heads/feature/next-features'
           )
         )
       ) &&

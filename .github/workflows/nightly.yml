@@ -1,6 +1,9 @@
 name: iOS Nightly Regression
 
 on:
+  push:
+    branches:
+      - feature/multi-user-sync-fixes
   schedule:
     - cron: '0 0 * * *' # Midnight UTC
   workflow_dispatch:
