@@ -1104,7 +1104,7 @@ private struct TasksContent: View {
                 return
             }
 
-            let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: destinationCategoryId)
+            let didMove = store.moveTaskToIdeas(task, destinationCategoryId: destinationCategoryId)
             if !didMove {
                 await MainActor.run {
                     processingMovedToIdeasIds.remove(task.id)

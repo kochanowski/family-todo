@@ -722,7 +722,8 @@ private struct EditProfileView: View {
                 currentUserId: userSession.userId,
                 householdOwnerId: householdStore.currentHousehold?.ownerId
             )
-            await memberStore.loadMembers()
+            hydrateInitialValues()
+            await memberStore.loadMembersForDisplay()
             hydrateInitialValues()
         }
     }

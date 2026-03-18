@@ -66,6 +66,7 @@ private struct BacklogContent: View {
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
+    @State private var suppressPromotionTipUntil = Date.distantPast
     @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
@@ -354,6 +355,7 @@ private struct BacklogContent: View {
                             notes: item.notes,
                             assigneeId: selectedAssignee
                         )
+                        suppressPromotionTip(for: 1.25)
                         guard !hadAssignee else { return }
                         if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
                            updatedItem.assigneeId != nil
@@ -704,6 +706,7 @@ private struct BacklogContent: View {
             let previousCount = visibleItems(for: categoryId).count
             await store.addItem(to: categoryId, title: trimmedText)
             await MainActor.run {
+                suppressPromotionTip(for: 1.25)
                 if visibleItems(for: categoryId).count > previousCount {
                     AppTips.donateIdeasFirstIdeaAdded()
                 }
@@ -721,6 +724,13 @@ private struct BacklogContent: View {
         focusedComposerCategoryId = nil
         activeComposerCategoryId = nil
         composerText = ""
+    }
+
+    private func suppressPromotionTip(for duration: TimeInterval) {
+        suppressPromotionTipUntil = max(
+            suppressPromotionTipUntil,
+            Date().addingTimeInterval(duration)
+        )
     }
 
     private func scheduleComposerFocus(for categoryId: UUID) {
@@ -786,6 +796,8 @@ private struct BacklogContent: View {
     }
 
     private var promoteTipItemID: UUID? {
+        guard Date() >= suppressPromotionTipUntil else { return nil }
+
         for category in store.categories {
             if let promotableItem = visibleItems(for: category.id).first(where: { $0.assigneeId != nil }) {
                 return promotableItem.id
@@ -1272,12 +1284,6 @@ struct BacklogItemRow: View {
                     .disabled(isPromotionDisabled)
                     .opacity(isPromotionDisabled ? 0.45 : 1)
                     .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
-                    .contextualPopoverTip(
-                        showsIdeaPromotionTip,
-                        IdeaPromotionTip(),
-                        arrowEdge: .trailing,
-                        generation: appTipRuntimeGeneration
-                    )
                     .transition(.opacity.combined(with: .scale))
                 }
 
@@ -1290,6 +1296,12 @@ struct BacklogItemRow: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogDeleteButton_\(item.title)")
             }
+            .contextualPopoverTip(
+                showsIdeaPromotionTip,
+                IdeaPromotionTip(),
+                arrowEdge: .trailing,
+                generation: appTipRuntimeGeneration
+            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

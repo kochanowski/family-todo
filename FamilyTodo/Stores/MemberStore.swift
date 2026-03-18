@@ -252,27 +252,43 @@ class MemberStore: ObservableObject {
         member.displayName = trimmedName
         member.colorHex = normalizedColorHex
         members[index] = member
-        updateCachedMember(member)
-
-        if syncMode == .cloud {
-            do {
-                _ = try await cloudKit.updateMemberProfile(
-                    memberId: member.id,
-                    householdId: member.householdId,
-                    newDisplayName: trimmedName,
-                    newColorHex: normalizedColorHex,
-                    scope: cloudScope
-                )
-            } catch {
-                member.displayName = oldName
-                member.colorHex = oldColorHex
-                members[index] = member
-                updateCachedMember(member)
-                throw error
-            }
+        guard upsertCachedMember(
+            member,
+            operation: "persist current user profile update"
+        ) else {
+            member.displayName = oldName
+            member.colorHex = oldColorHex
+            members[index] = member
+            _ = upsertCachedMember(
+                member,
+                operation: "rollback current user profile update"
+            )
+            throw MemberStoreError.profileLocalSaveFailed
         }
 
         NotificationCenter.default.post(name: .memberProfileDidChange, object: nil)
+
+        guard syncMode == .cloud else { return }
+
+        let memberId = member.id
+        let householdId = member.householdId
+        let scope = cloudScope
+        _ = _Concurrency.Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await cloudKit.updateMemberProfile(
+                    memberId: memberId,
+                    householdId: householdId,
+                    newDisplayName: trimmedName,
+                    newColorHex: normalizedColorHex,
+                    scope: scope
+                )
+            } catch {
+                await MainActor.run {
+                    self.error = error
+                }
+            }
+        }
     }
 
     func updateRole(id: UUID, newRole: Member.MemberRole, currentUserId: String?) async throws {
@@ -406,7 +422,12 @@ class MemberStore: ObservableObject {
     }
 
     private func updateCachedMember(_ member: Member) {
-        guard let context = modelContext else { return }
+        _ = upsertCachedMember(member, operation: "upsert cached member")
+    }
+
+    @discardableResult
+    private func upsertCachedMember(_ member: Member, operation: String) -> Bool {
+        guard let context = modelContext else { return false }
 
         let memberId = member.id
         let descriptor = FetchDescriptor<CachedMember>(
@@ -419,10 +440,11 @@ class MemberStore: ObservableObject {
             } else {
                 context.insert(CachedMember(from: member))
             }
-            saveContextOrSetError(context, operation: "upsert cached member")
+            return saveContextOrSetError(context, operation: operation)
         } catch {
             print("Cache save error: \(error)")
             self.error = error
+            return false
         }
     }
 
@@ -487,6 +509,7 @@ enum MemberStoreError: LocalizedError, Equatable {
     case lastOwnerRequired
     case invalidColorSelection
     case profileMemberNotFound
+    case profileLocalSaveFailed
 
     var errorDescription: String? {
         switch self {
@@ -502,6 +525,8 @@ enum MemberStoreError: LocalizedError, Equatable {
             "Choose one of the available profile colors."
         case .profileMemberNotFound:
             "Couldn't find your member profile in this household."
+        case .profileLocalSaveFailed:
+            "Couldn't save your profile locally right now."
         }
     }
 }

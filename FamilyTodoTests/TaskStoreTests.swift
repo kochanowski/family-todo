@@ -352,7 +352,7 @@ final class TaskStoreTests: XCTestCase {
         store.setSyncMode(.localOnly)
         await store.loadTasks()
 
-        let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: category.id)
+        let didMove = store.moveTaskToIdeas(task, destinationCategoryId: category.id)
 
         XCTAssertTrue(didMove)
         XCTAssertTrue(store.tasks.isEmpty)
@@ -408,7 +408,7 @@ final class TaskStoreTests: XCTestCase {
         store.setSyncMode(.localOnly)
         await store.loadTasks()
 
-        let didMove = await store.moveTaskToIdeas(task, destinationCategoryId: category.id)
+        let didMove = store.moveTaskToIdeas(task, destinationCategoryId: category.id)
 
         XCTAssertTrue(didMove)
         XCTAssertTrue(store.tasks.isEmpty)

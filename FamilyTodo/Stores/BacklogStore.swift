@@ -861,23 +861,34 @@ final class BacklogStore: ObservableObject {
             item,
             syncStatusRaw: isCloudSyncEnabled ? BacklogSyncStatus.pendingUpload : BacklogSyncStatus.synced,
             lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
-            shouldSave: true,
+            shouldSave: false,
             operation: "persist backlog cache"
         )
 
-        if !isCloudSyncEnabled { return }
-
-        do {
-            _ = try await cloudKit.saveWorkItem(WorkItem(idea: item), scope: cloudScope)
-            markIdeaWorkItemAwaitingCloudEcho(id: item.id, operation: "persist backlog cache")
-        } catch {
-            self.error = error
-            // Do NOT remove item from the visible list on failure — the local cache already
-            // holds it as pendingUpload and replayPendingMutationsInBackground will retry.
-            // Removing it here would violate offline-first and create the visible "delay"
-            // where the item disappears and reappears once CloudKit eventually accepts it.
+        guard let context = modelContext else {
+            postLocalBacklogRefresh()
+            guard isCloudSyncEnabled else { return }
             replayPendingMutationsInBackground()
+            return
         }
+
+        guard saveContextOrSetError(context, operation: "persist backlog cache") else {
+            withAnimation {
+                items.removeAll { $0.id == item.id }
+            }
+            removeIdeaWorkItem(
+                id: item.id,
+                shouldSave: false,
+                operation: "rollback backlog cache after add item failure"
+            )
+            _ = saveContextOrSetError(context, operation: "rollback backlog cache after add item failure")
+            return
+        }
+
+        postLocalBacklogRefresh()
+
+        guard isCloudSyncEnabled else { return }
+        replayPendingMutationsInBackground()
     }
 
     @discardableResult

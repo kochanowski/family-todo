@@ -779,17 +779,22 @@ final class TaskStore: ObservableObject {
     }
 
     @discardableResult
-    func moveTaskToIdeas(_ task: Task, destinationCategoryId: UUID) async -> Bool {
+    func moveTaskToIdeas(_ task: Task, destinationCategoryId: UUID) -> Bool {
         guard !pendingTaskMutations.contains(task.id) else { return false }
 
         beginMutation(task.id)
-        defer { endMutation(task.id) }
 
         var demotedItem = WorkItem(task: task)
         demotedItem.status = .idea
         demotedItem.categoryId = destinationCategoryId
+        demotedItem.assigneeIds = demotedItem.assigneeId.map { [$0] } ?? []
+        demotedItem.areaId = nil
+        demotedItem.dueDate = nil
+        demotedItem.lastPokedAt = nil
         demotedItem.completedAt = nil
         demotedItem.completedById = nil
+        demotedItem.taskType = .oneOff
+        demotedItem.recurringChoreId = nil
         demotedItem.order = 0
         demotedItem.updatedAt = Date()
 
@@ -817,14 +822,18 @@ final class TaskStore: ObservableObject {
                 operation: "rollback demoted task work item"
             )
             _ = saveContextOrSetError(operation: "rollback move task to ideas")
+            endMutation(task.id)
             return false
         }
 
+        endMutation(task.id)
         NotificationCenter.default.post(name: .backlogDataDidChange, object: "local")
         NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
 
-        await notificationService.removeTaskReminder(for: task)
-        await syncDailyDigestSchedule()
+        _ = _Concurrency.Task { [self] in
+            await notificationService.removeTaskReminder(for: task)
+            await syncDailyDigestSchedule()
+        }
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()

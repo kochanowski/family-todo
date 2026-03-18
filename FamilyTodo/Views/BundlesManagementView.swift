@@ -10,51 +10,15 @@ struct BundlesManagementView: View {
     @State private var hasStartedInitialLoad = false
 
     var body: some View {
-        List {
-            ForEach(store.bundles) { bundle in
-                Button {
-                    presentedEditor = .edit(bundle)
-                } label: {
-                    ShoppingBundleRow(bundle: bundle)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .listRowInsets(
-                    EdgeInsets(
-                        top: 0,
-                        leading: 16,
-                        bottom: 0,
-                        trailing: 16
-                    )
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        _ = _Concurrency.Task {
-                            await store.deleteBundle(bundle)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
-        }
-        .overlay {
+        Group {
             if !store.hasHydratedLocalSnapshot, store.bundles.isEmpty {
                 ProgressView("Loading bundles...")
             } else if store.bundles.isEmpty {
-                ThemedEmptyStateView(
-                    title: "No Bundles Yet",
-                    systemImage: ShoppingBundle.featureIcon,
-                    description: "Create reusable shopping bundles for quick add from the main Shopping button."
-                )
-                .offset(y: -24)
+                bundlesEmptyState
+            } else {
+                bundlesList
             }
         }
-        .environment(\.defaultMinListRowHeight, 10)
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .background(themeStore.canvasColor.ignoresSafeArea())
         .navigationTitle("Shopping Bundles")
         .navigationBarTitleDisplayMode(.inline)
@@ -95,6 +59,65 @@ struct BundlesManagementView: View {
                 shoppingStore: shoppingStore,
                 bundle: destination.bundle
             )
+        }
+    }
+
+    private var bundlesList: some View {
+        List {
+            ForEach(store.bundles) { bundle in
+                Button {
+                    presentedEditor = .edit(bundle)
+                } label: {
+                    ShoppingBundleRow(bundle: bundle)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 0,
+                        leading: 16,
+                        bottom: 0,
+                        trailing: 16
+                    )
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        _ = _Concurrency.Task {
+                            await store.deleteBundle(bundle)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .environment(\.defaultMinListRowHeight, 10)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var bundlesEmptyState: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+
+            ThemedEmptyStateView(
+                title: "No Bundles Yet",
+                systemImage: ShoppingBundle.featureIcon,
+                description: "Create reusable shopping sets for faster planning here"
+            )
+
+            Button {
+                presentedEditor = .create
+            } label: {
+                Text("Create your first bundle")
+                    .font(themeStore.font(for: .buttonLabel))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
         }
     }
 }
