@@ -692,7 +692,7 @@ final class TaskStoreTests: XCTestCase {
         let error = TaskStoreError.wipLimitReached
 
         XCTAssertNotNil(error.errorDescription)
-        XCTAssertTrue(error.errorDescription?.contains("WIP limit") == true)
+        XCTAssertTrue(error.errorDescription?.contains("recommended active task count") == true)
     }
 
     private func cachedTaskRow(

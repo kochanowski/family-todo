@@ -370,12 +370,12 @@ final class ShoppingListStore: ObservableObject {
 
         if let afterItemId {
             let reorderedItems = reorderedToBuyItems(inserting: item.id, after: afterItemId)
-            applyToBuyOrder(reorderedItems)
-            if let updatedItem = items.first(where: { $0.id == item.id }) {
+            let persistedOrder = applyToBuyOrder(reorderedItems)
+            if let updatedItem = persistedOrder.first(where: { $0.id == item.id }) {
                 item = updatedItem
             }
             upsertCachedItems(
-                reorderedItems,
+                persistedOrder,
                 syncStatusRaw: syncStatusRaw,
                 lastSyncedAt: lastSyncedAt
             )
@@ -569,17 +569,21 @@ final class ShoppingListStore: ObservableObject {
         }
     }
 
-    private func applyToBuyOrder(_ orderedItems: [ShoppingItem]) {
-        var sortOrderByID: [UUID: Int] = [:]
+    private func applyToBuyOrder(_ orderedItems: [ShoppingItem]) -> [ShoppingItem] {
+        var persistedOrder: [ShoppingItem] = []
+        persistedOrder.reserveCapacity(orderedItems.count)
+
         for (index, item) in orderedItems.enumerated() {
-            sortOrderByID[item.id] = index
+            var updatedItem = item
+            updatedItem.sortOrder = index
+            updatedItem.updatedAt = Date()
+            persistedOrder.append(updatedItem)
+
+            guard let localIndex = items.firstIndex(where: { $0.id == updatedItem.id }) else { continue }
+            items[localIndex] = updatedItem
         }
 
-        for index in items.indices {
-            guard let sortOrder = sortOrderByID[items[index].id] else { continue }
-            items[index].sortOrder = sortOrder
-            items[index].updatedAt = Date()
-        }
+        return persistedOrder
     }
 
     private func updateCachedOrder(for orderedItems: [ShoppingItem]) {

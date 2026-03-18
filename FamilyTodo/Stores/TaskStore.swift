@@ -816,23 +816,35 @@ final class TaskStore: ObservableObject {
         guard let destinationCategoryId else {
             return .missingDestinationCategory
         }
+        let resolvedHouseholdId = householdId ?? task.householdId
+        let existingIdea = existingDestinationBacklogItem(for: task.logicalItemID)
 
-        var demotedItem = WorkItem(task: task)
-        demotedItem.status = .idea
-        demotedItem.categoryId = destinationCategoryId
-        demotedItem.assigneeIds = demotedItem.assigneeId.map { [$0] } ?? []
-        demotedItem.areaId = nil
-        demotedItem.dueDate = nil
-        demotedItem.lastPokedAt = nil
-        demotedItem.completedAt = nil
-        demotedItem.completedById = nil
-        demotedItem.taskType = .oneOff
-        demotedItem.recurringChoreId = nil
-        demotedItem.order = 0
-        demotedItem.updatedAt = Date()
+        let demotedBacklogItem = demotedBacklogDestination(
+            from: task,
+            destinationCategoryId: destinationCategoryId,
+            householdId: resolvedHouseholdId,
+            existing: existingIdea
+        )
+        let demotedItem = WorkItem(idea: demotedBacklogItem)
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             tasks.removeAll { $0.id == task.id }
+        }
+
+        if demotedItem.id != task.id {
+            if isCloudSyncEnabled {
+                markTaskWorkItemPendingDelete(
+                    task,
+                    shouldSave: false,
+                    operation: "mark demoted task pending delete"
+                )
+            } else {
+                removeTaskWorkItem(
+                    id: task.id,
+                    shouldSave: false,
+                    operation: "remove demoted task work item"
+                )
+            }
         }
 
         WorkItemCacheStoreSupport.upsert(
@@ -846,15 +858,8 @@ final class TaskStore: ObservableObject {
         }
 
         guard saveContextOrSetError(operation: "move task to ideas locally") else {
+            modelContext.rollback()
             restoreTaskLocally(task)
-            persistTaskWorkItem(
-                task,
-                syncStatusRaw: isCloudSyncEnabled ? TaskSyncStatus.pendingUpload : TaskSyncStatus.synced,
-                lastSyncedAt: isCloudSyncEnabled ? nil : Date(),
-                shouldSave: false,
-                operation: "rollback demoted task work item"
-            )
-            _ = saveContextOrSetError(operation: "rollback move task to ideas")
             return .localSaveFailed
         }
 

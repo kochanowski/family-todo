@@ -297,7 +297,11 @@ final class SwiftDataContainerFactoryTests: XCTestCase {
     }
 
     private static func makeInMemoryContainer(schema: Schema) throws -> ModelContainer {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let configuration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
+        )
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
