@@ -20,7 +20,7 @@ enum TestModelContainerFactory {
             isStoredInMemoryOnly: true,
             cloudKitDatabase: .none
         )
-        try ModelContainer(
+        return try ModelContainer(
             for: schema,
             configurations: [configuration]
         )
