@@ -1219,21 +1219,24 @@ struct CategoryCard: View {
                         Text("Add idea")
                             .font(themeStore.font(for: .buttonLabel))
                             .foregroundStyle(themeStore.accentTabColor)
-
-                        Spacer()
                     }
+                    .overlay(alignment: .topLeading) {
+                        BacklogTipAnchor(width: 112, height: 18)
+                            .offset(x: 4, y: -8)
+                            .contextualPopoverTip(
+                                addIdeaTipCategoryID == category.id,
+                                IdeasAddIdeaTip(),
+                                arrowEdge: .top,
+                                generation: appTipRuntimeGeneration
+                            )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogAddIdeaButton_\(category.id.uuidString)")
                 .accessibilityHint("Tap to add an idea to this category.")
-                .contextualPopoverTip(
-                    addIdeaTipCategoryID == category.id,
-                    IdeasAddIdeaTip(),
-                    arrowEdge: .top,
-                    generation: appTipRuntimeGeneration
-                )
             }
         }
         .background {
@@ -1355,29 +1358,17 @@ struct BacklogItemRow: View {
                 assignButton
 
                 if canPromote {
-                    ZStack {
-                        Button(action: onPromote) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                                .frame(width: 32, height: 32)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isPromotionDisabled)
-                        .opacity(isPromotionDisabled ? 0.45 : 1)
-                        .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
-                        .transition(.opacity.combined(with: .scale))
-
-                        Color.clear
+                    Button(action: onPromote) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
                             .frame(width: 32, height: 32)
-                            .allowsHitTesting(false)
-                            .contextualPopoverTip(
-                                showsIdeaPromotionTip,
-                                IdeaPromotionTip(),
-                                arrowEdge: .trailing,
-                                generation: appTipRuntimeGeneration
-                            )
                     }
+                    .buttonStyle(.plain)
+                    .disabled(isPromotionDisabled)
+                    .opacity(isPromotionDisabled ? 0.45 : 1)
+                    .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
+                    .transition(.opacity.combined(with: .scale))
                 }
 
                 Button(action: onDelete) {
@@ -1388,6 +1379,19 @@ struct BacklogItemRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogDeleteButton_\(item.title)")
+            }
+            .overlay(alignment: .topTrailing) {
+                if canPromote {
+                    BacklogTipAnchor(width: 18, height: 18)
+                        .padding(.trailing, 48)
+                        .offset(y: -8)
+                        .contextualPopoverTip(
+                            showsIdeaPromotionTip,
+                            IdeaPromotionTip(),
+                            arrowEdge: .trailing,
+                            generation: appTipRuntimeGeneration
+                        )
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -1431,6 +1435,18 @@ struct BacklogItemRow: View {
             arrowEdge: .trailing,
             generation: appTipRuntimeGeneration
         )
+    }
+}
+
+private struct BacklogTipAnchor: View {
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        Color.clear
+            .frame(width: width, height: height)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
