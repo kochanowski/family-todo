@@ -49,15 +49,6 @@ struct MainAppView: View {
             .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
                 refreshTabBarAppearanceForHouseholdChromeChange()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .tasksTabPromotionCueRequested)) { notification in
-                let highlightColorHex = notification.userInfo?[TasksTabPromotionCueUserInfoKey.highlightColorHex] as? String
-                TabBarTypographyManager.flashPromotionCue(
-                    themeStore: themeStore,
-                    tabBarController: tabBarController,
-                    tab: .tasks,
-                    colorHex: highlightColorHex
-                )
-            }
             .task {
                 await bootstrapHouseholdIfNeeded()
             }

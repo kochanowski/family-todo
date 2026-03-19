@@ -673,17 +673,9 @@ private struct BacklogContent: View {
         let result = store.promoteItemToTask(item, assigneeId: assigneeId)
         switch result {
         case .success:
-            clearPromotionTipAnchor(matching: item.id)
             // Keep the item hidden for the rest of the session so a delayed
             // cloud echo cannot briefly show the promoted idea again.
-            let highlightColorHex = activeMembers.first(where: { $0.id == assigneeId })?.colorHex
-            NotificationCenter.default.post(
-                name: .tasksTabPromotionCueRequested,
-                object: nil,
-                userInfo: [
-                    TasksTabPromotionCueUserInfoKey.highlightColorHex: highlightColorHex as Any,
-                ]
-            )
+            clearPromotionTipAnchor(matching: item.id)
         case .assigneeRequired, .wipLimitReached, .failed:
             withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
                 hiddenPendingPromotionIds.remove(item.id)

@@ -12,11 +12,6 @@ extension Notification.Name {
     static let shoppingListDataDidChange = Notification.Name("HousePulse.shoppingListDataDidChange")
     static let householdDataDidChange = Notification.Name("HousePulse.householdDataDidChange")
     static let tabBarAppearanceRefreshRequested = Notification.Name("HousePulse.tabBarAppearanceRefreshRequested")
-    static let tasksTabPromotionCueRequested = Notification.Name("HousePulse.tasksTabPromotionCueRequested")
-}
-
-enum TasksTabPromotionCueUserInfoKey {
-    static let highlightColorHex = "highlightColorHex"
 }
 
 struct StoreContextSaveError: LocalizedError {

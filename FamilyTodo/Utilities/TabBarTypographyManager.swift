@@ -3,9 +3,6 @@ import UIKit
 
 @MainActor
 enum TabBarTypographyManager {
-    private static let promotionHighlightTag = 91204
-    private static let promotionCueDebugMode = true
-
     private struct ResolvedTabBarStyle: Equatable {
         let normalColor: UIColor
         let selectedColor: UIColor
@@ -97,79 +94,6 @@ enum TabBarTypographyManager {
             tabBarController: tabBarController,
             selectedIndex: selectedIndex
         )
-    }
-
-    static func flashPromotionCue(
-        themeStore: ThemeStore,
-        tabBarController: UITabBarController?,
-        tab: AppTab,
-        colorHex: String?
-    ) {
-        guard let tabBarController,
-              let tabIndex = AppTab.allCases.firstIndex(of: tab)
-        else {
-            debugLog("promotion cue skipped: missing tab bar controller or tab index for \(tab.rawValue)")
-            return
-        }
-
-        let tabBar = tabBarController.tabBar
-        let button = tabBarButton(in: tabBar, at: tabIndex)
-        let targetFrame = button.map { $0.convert($0.bounds, to: tabBar) } ??
-            fallbackTabFrame(
-                in: tabBar,
-                index: tabIndex,
-                itemCount: tabBar.items?.count ?? AppTab.allCases.count
-            )
-
-        if let existing = tabBar.viewWithTag(promotionHighlightTag) {
-            existing.layer.removeAllAnimations()
-            existing.removeFromSuperview()
-        }
-
-        let highlightColor = resolvedHighlightColor(themeStore: themeStore, colorHex: colorHex)
-        let frame = targetFrame.insetBy(dx: 4, dy: 2)
-        let view = UIView(frame: frame)
-        view.tag = promotionHighlightTag
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = highlightColor.withAlphaComponent(promotionCueDebugMode ? 0.32 : 0.16)
-        view.layer.cornerRadius = min(frame.height / 2, promotionCueDebugMode ? 22 : 18)
-        view.layer.borderWidth = promotionCueDebugMode ? 2 : 1
-        view.layer.borderColor = highlightColor.withAlphaComponent(promotionCueDebugMode ? 0.85 : 0.24).cgColor
-        view.layer.shadowColor = highlightColor.withAlphaComponent(promotionCueDebugMode ? 0.95 : 0.28).cgColor
-        view.layer.shadowOpacity = 1
-        view.layer.shadowOffset = .zero
-        view.layer.shadowRadius = promotionCueDebugMode ? 18 : 10
-        view.layer.zPosition = 999
-        view.alpha = 0
-        view.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
-        tabBar.addSubview(view)
-        tabBar.bringSubviewToFront(view)
-
-        debugLog(
-            "promotion cue for \(tab.rawValue) index=\(tabIndex) " +
-                "buttonFound=\(button != nil) frame=\(String(describing: frame)) " +
-                "color=\(colorHex ?? "theme")"
-        )
-
-        UIView.animate(
-            withDuration: 0.24,
-            delay: 0,
-            options: [.curveEaseOut, .beginFromCurrentState]
-        ) {
-            view.alpha = 1
-            view.transform = .identity
-        } completion: { _ in
-            UIView.animate(
-                withDuration: promotionCueDebugMode ? 0.85 : 0.55,
-                delay: promotionCueDebugMode ? 0.85 : 0.5,
-                options: [.curveEaseIn, .beginFromCurrentState]
-            ) {
-                view.alpha = 0
-                view.transform = CGAffineTransform(scaleX: 1.04, y: 1.04)
-            } completion: { _ in
-                view.removeFromSuperview()
-            }
-        }
     }
 
     private static func resolvedStyle(
@@ -370,48 +294,5 @@ enum TabBarTypographyManager {
         tabBarController.selectedIndex = boundedIndex
         tabBarController.tabBar.setNeedsLayout()
         tabBarController.tabBar.layoutIfNeeded()
-    }
-
-    private static func tabBarButton(in tabBar: UITabBar, at index: Int) -> UIControl? {
-        let buttons = tabBar.subviews
-            .compactMap { $0 as? UIControl }
-            .filter { !$0.isHidden && $0.bounds.width > 0 }
-            .sorted { $0.frame.minX < $1.frame.minX }
-
-        guard buttons.indices.contains(index) else { return nil }
-        return buttons[index]
-    }
-
-    private static func fallbackTabFrame(
-        in tabBar: UITabBar,
-        index: Int,
-        itemCount: Int
-    ) -> CGRect {
-        let safeItemCount = max(itemCount, 1)
-        let segmentWidth = tabBar.bounds.width / CGFloat(safeItemCount)
-        let x = CGFloat(index) * segmentWidth
-        return CGRect(x: x, y: 2, width: segmentWidth, height: max(tabBar.bounds.height - 4, 1))
-    }
-
-    private static func resolvedHighlightColor(
-        themeStore: ThemeStore,
-        colorHex: String?
-    ) -> UIColor {
-        guard let normalized = MemberColorToken.normalize(hex: colorHex) else {
-            return UIColor(themeStore.resolvedTabTint)
-        }
-
-        let hexValue = String(normalized.dropFirst())
-        let intValue = UInt64(hexValue, radix: 16) ?? 0
-        let red = CGFloat((intValue >> 16) & 0xFF) / 255
-        let green = CGFloat((intValue >> 8) & 0xFF) / 255
-        let blue = CGFloat(intValue & 0xFF) / 255
-
-        return UIColor(red: red, green: green, blue: blue, alpha: 1)
-    }
-
-    private static func debugLog(_ message: String) {
-        guard promotionCueDebugMode else { return }
-        print("[TabBarPromotionCue] \(message)")
     }
 }
