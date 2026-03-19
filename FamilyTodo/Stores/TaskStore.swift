@@ -15,6 +15,10 @@ extension Notification.Name {
     static let tasksTabPromotionCueRequested = Notification.Name("HousePulse.tasksTabPromotionCueRequested")
 }
 
+enum TasksTabPromotionCueUserInfoKey {
+    static let highlightColorHex = "highlightColorHex"
+}
+
 struct StoreContextSaveError: LocalizedError {
     let store: String
     let operation: String

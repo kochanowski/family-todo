@@ -393,6 +393,7 @@ private struct BacklogContent: View {
                            updatedItem.assigneeId != nil
                         {
                             AppTips.donateIdeasOwnerAssigned()
+                            appTipRuntimeGeneration += 1
                         }
                     }
                 )
@@ -662,7 +663,14 @@ private struct BacklogContent: View {
         case .success:
             // Keep the item hidden for the rest of the session so a delayed
             // cloud echo cannot briefly show the promoted idea again.
-            NotificationCenter.default.post(name: .tasksTabPromotionCueRequested, object: nil)
+            let highlightColorHex = activeMembers.first(where: { $0.id == assigneeId })?.colorHex
+            NotificationCenter.default.post(
+                name: .tasksTabPromotionCueRequested,
+                object: nil,
+                userInfo: [
+                    TasksTabPromotionCueUserInfoKey.highlightColorHex: highlightColorHex as Any,
+                ]
+            )
         case .assigneeRequired, .wipLimitReached, .failed:
             withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
                 hiddenPendingPromotionIds.remove(item.id)
