@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var showCloudDeleteConfirmation = false
     @State private var isPerformingHardReset = false
     @State private var isDeletingCloudHousehold = false
+    @State private var didJustResetTipKit = false
+    @State private var tipKitResetFeedbackTask: _Concurrency.Task<Void, Never>?
 
     var body: some View {
         List {
@@ -240,19 +242,24 @@ struct SettingsView: View {
 
             Section {
                 Button {
-                    AppTips.resetForDevelopment()
-                    HapticManager.success()
+                    resetTipKitOnly()
                 } label: {
                     HStack {
                         Spacer()
-                        Text("Reset TipKit")
+                        Image(systemName: didJustResetTipKit ? "checkmark.circle.fill" : "arrow.counterclockwise.circle")
+                        Text(didJustResetTipKit ? "TipKit Reset" : "Reset TipKit")
                         Spacer()
                     }
                     .font(themeStore.font(for: .buttonLabel))
+                    .foregroundStyle(didJustResetTipKit ? themeStore.accentTabColor : themeStore.contentPrimaryColor)
                 }
             } footer: {
-                Text("Temporary debug action. Resets TipKit/tutorial progress without clearing app data.")
-                    .font(themeStore.font(for: .bodySmall))
+                Text(
+                    didJustResetTipKit
+                        ? "TipKit/tutorial progress reset. Reopen Shopping, Ideas, or Tasks to retest tips."
+                        : "Temporary debug action. Resets TipKit/tutorial progress without clearing app data."
+                )
+                .font(themeStore.font(for: .bodySmall))
             }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
@@ -339,6 +346,20 @@ struct SettingsView: View {
                 celebrationManager: celebrationManager
             )
             isPerformingHardReset = false
+        }
+    }
+
+    private func resetTipKitOnly() {
+        tipKitResetFeedbackTask?.cancel()
+        AppTips.resetForDevelopment()
+        HapticManager.success()
+        didJustResetTipKit = true
+
+        tipKitResetFeedbackTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            didJustResetTipKit = false
+            tipKitResetFeedbackTask = nil
         }
     }
 

@@ -54,7 +54,7 @@ private struct ShoppingListContent: View {
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
     @State private var shouldRearmBundleQuickAddTipOnNextAppear = false
-    @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
+    @AppStorage(AppTipProgressKey.shoppingTutorialSeen) private var hasSeenShoppingTutorial = false
     @AppStorage(AppTipProgressKey.shoppingFirstAddCompleted)
     private var hasCompletedShoppingFirstAddTip = false
     @AppStorage(AppTipProgressKey.shoppingRecentPurchasesCompleted)

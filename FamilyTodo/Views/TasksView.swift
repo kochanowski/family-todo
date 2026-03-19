@@ -96,7 +96,7 @@ private struct TasksContent: View {
     @State private var showRecommendedLimitInfo = false
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
-    @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
+    @AppStorage(AppTipProgressKey.tasksTutorialSeen) private var hasSeenTasksTutorial = false
     @AppStorage(AppTipProgressKey.tasksSwipeActionsCompleted)
     private var hasCompletedTaskSwipeActionsTip = false
     @AppStorage(AppTips.runtimeGenerationDefaultsKey)

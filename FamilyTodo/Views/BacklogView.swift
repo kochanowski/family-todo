@@ -79,7 +79,7 @@ private struct BacklogContent: View {
     @State private var suppressPromotionTipUntil = Date.distantPast
     @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
-    @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
+    @AppStorage(AppTipProgressKey.ideasTutorialSeen) private var hasSeenIdeasTutorial = false
     @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
     private var hasCompletedIdeasCreateCategoryTip = false
     @AppStorage(AppTipProgressKey.ideasAddIdeaCompleted)

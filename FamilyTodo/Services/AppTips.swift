@@ -18,6 +18,9 @@ enum IdeasOnboardingTip: Equatable {
 }
 
 enum AppTipProgressKey {
+    static let shoppingTutorialSeen = "hasSeenShoppingTutorial"
+    static let ideasTutorialSeen = "hasSeenIdeasTutorial"
+    static let tasksTutorialSeen = "hasSeenTasksTutorial"
     static let shoppingFirstAddCompleted = "appTips.shopping.firstAddCompleted"
     static let shoppingRecentPurchasesCompleted = "appTips.shopping.recentPurchasesCompleted"
     static let shoppingBundlesLocationCompleted = "appTips.shopping.bundlesLocationCompleted"
@@ -29,6 +32,9 @@ enum AppTipProgressKey {
     static let tasksSwipeActionsCompleted = "appTips.tasks.swipeActionsCompleted"
 
     static let all = [
+        shoppingTutorialSeen,
+        ideasTutorialSeen,
+        tasksTutorialSeen,
         shoppingFirstAddCompleted,
         shoppingRecentPurchasesCompleted,
         shoppingBundlesLocationCompleted,
