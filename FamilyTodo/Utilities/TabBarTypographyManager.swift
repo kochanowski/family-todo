@@ -147,7 +147,7 @@ enum TabBarTypographyManager {
 
         debugLog(
             "promotion cue for \(tab.rawValue) index=\(tabIndex) " +
-                "buttonFound=\(button != nil) frame=\(NSStringFromCGRect(frame)) " +
+                "buttonFound=\(button != nil) frame=\(String(describing: frame)) " +
                 "color=\(colorHex ?? "theme")"
         )
 
