@@ -53,6 +53,7 @@ private struct ShoppingListContent: View {
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
+    @State private var shouldRearmBundleQuickAddTipOnNextAppear = false
     @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
     @AppStorage(AppTipProgressKey.shoppingFirstAddCompleted)
     private var hasCompletedShoppingFirstAddTip = false
@@ -100,9 +101,13 @@ private struct ShoppingListContent: View {
                     markShoppingTutorialAsSeenIfNeeded()
                 }
             }
-            .onChange(of: quickAddBundles.isEmpty) { _, isEmpty in
-                guard !isEmpty else { return }
-                appTipRuntimeGeneration += 1
+            .onChange(of: quickAddBundles.isEmpty) { oldIsEmpty, newIsEmpty in
+                guard oldIsEmpty, !newIsEmpty else { return }
+                if isScreenVisible {
+                    rearmBundleQuickAddTipIfNeeded()
+                } else {
+                    shouldRearmBundleQuickAddTipOnNextAppear = true
+                }
             }
             .newItemsBanner(manager: subscriptionManager)
             .onChange(of: isKeyboardVisible) { _, visible in
@@ -162,6 +167,17 @@ private struct ShoppingListContent: View {
             .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
             .onAppear {
                 isScreenVisible = true
+                if didPerformInitialLoad {
+                    _ = _Concurrency.Task {
+                        await bundleStore.loadBundlesForDisplay()
+                        await MainActor.run {
+                            if shouldRearmBundleQuickAddTipOnNextAppear {
+                                rearmBundleQuickAddTipIfNeeded()
+                                shouldRearmBundleQuickAddTipOnNextAppear = false
+                            }
+                        }
+                    }
+                }
             }
             .onDisappear {
                 isScreenVisible = false
@@ -852,6 +868,12 @@ private struct ShoppingListContent: View {
     private func markShoppingTutorialAsSeenIfNeeded() {
         guard !store.toBuyItems.isEmpty, !hasSeenShoppingTutorial else { return }
         hasSeenShoppingTutorial = true
+    }
+
+    private func rearmBundleQuickAddTipIfNeeded() {
+        guard !hasCompletedShoppingBundleQuickAddTip else { return }
+        guard !quickAddBundles.isEmpty else { return }
+        appTipRuntimeGeneration += 1
     }
 
     private var activeShoppingTip: ShoppingOnboardingTip? {

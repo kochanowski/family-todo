@@ -237,6 +237,23 @@ struct SettingsView: View {
                         .font(themeStore.font(for: .bodySmall))
                 }
             }
+
+            Section {
+                Button {
+                    AppTips.resetForDevelopment()
+                    HapticManager.success()
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Reset TipKit")
+                        Spacer()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+            } footer: {
+                Text("Temporary debug action. Resets TipKit/tutorial progress without clearing app data.")
+                    .font(themeStore.font(for: .bodySmall))
+            }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Settings")
