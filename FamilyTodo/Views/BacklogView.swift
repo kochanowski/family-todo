@@ -76,6 +76,7 @@ private struct BacklogContent: View {
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
+    @State private var armedPromotionTipItemID: UUID?
     @State private var suppressPromotionTipUntil = Date.distantPast
     @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
@@ -252,6 +253,7 @@ private struct BacklogContent: View {
                 // suppressions intact for IDs no longer present locally.
                 let activeItemIds = Set(store.items.map(\.id))
                 hiddenPendingPromotionIds.subtract(activeItemIds)
+                syncPromotionTipAnchorWithVisibleItems()
                 markIdeasTutorialAsSeenIfNeeded()
             } else {
                 _ = _Concurrency.Task {
@@ -393,7 +395,7 @@ private struct BacklogContent: View {
                            updatedItem.assigneeId != nil
                         {
                             AppTips.donateIdeasOwnerAssigned()
-                            appTipRuntimeGeneration += 1
+                            armPromotionTip(for: updatedItem.id)
                         }
                     }
                 )
@@ -422,12 +424,20 @@ private struct BacklogContent: View {
                     item: item,
                     members: activeMembers,
                     onSave: { title, notes, assigneeId in
+                        let hadAssignee = item.assigneeId != nil
                         store.updateItem(
                             item,
                             title: title,
                             notes: notes,
                             assigneeId: assigneeId
                         )
+                        if !hadAssignee,
+                           let updatedItem = latestItem(withID: item.id),
+                           updatedItem.assigneeId != nil
+                        {
+                            AppTips.donateIdeasOwnerAssigned()
+                            armPromotionTip(for: updatedItem.id)
+                        }
                     },
                     onDelete: {
                         performImmediateDeleteItem(withID: item.id)
@@ -497,6 +507,7 @@ private struct BacklogContent: View {
         memberStore.setSyncMode(userSession.syncMode)
         await store.loadDataForDisplay()
         await memberStore.loadMembersForDisplay()
+        syncPromotionTipAnchorWithVisibleItems()
     }
 
     private var backlogLoadingState: some View {
@@ -650,6 +661,7 @@ private struct BacklogContent: View {
 
     private func completePromotion(of itemID: UUID, assigneeId: UUID) {
         guard let item = latestItem(withID: itemID) else {
+            clearPromotionTipAnchor(matching: itemID)
             hiddenPendingPromotionIds.remove(itemID)
             return
         }
@@ -661,6 +673,7 @@ private struct BacklogContent: View {
         let result = store.promoteItemToTask(item, assigneeId: assigneeId)
         switch result {
         case .success:
+            clearPromotionTipAnchor(matching: item.id)
             // Keep the item hidden for the rest of the session so a delayed
             // cloud echo cannot briefly show the promoted idea again.
             let highlightColorHex = activeMembers.first(where: { $0.id == assigneeId })?.colorHex
@@ -836,15 +849,16 @@ private struct BacklogContent: View {
     }
 
     private var promoteTipItemID: UUID? {
-        guard Date() >= suppressPromotionTipUntil else { return nil }
-
-        for category in store.categories {
-            if let promotableItem = visibleItems(for: category.id).first(where: { $0.assigneeId != nil }) {
-                return promotableItem.id
-            }
+        guard Date() >= suppressPromotionTipUntil,
+              let armedPromotionTipItemID,
+              let item = latestItem(withID: armedPromotionTipItemID),
+              item.assigneeId != nil,
+              isVisibleIdeaItem(item)
+        else {
+            return nil
         }
 
-        return nil
+        return item.id
     }
 
     private var hasPresentedIdeasSheet: Bool {
@@ -868,6 +882,32 @@ private struct BacklogContent: View {
     private var ideaPromotionTipItemID: UUID? {
         guard activeIdeasTip == .promote else { return nil }
         return promoteTipItemID
+    }
+
+    private func armPromotionTip(for itemID: UUID) {
+        armedPromotionTipItemID = itemID
+        suppressPromotionTipUntil = .distantPast
+        appTipRuntimeGeneration += 1
+    }
+
+    private func clearPromotionTipAnchor(matching itemID: UUID? = nil) {
+        guard itemID == nil || armedPromotionTipItemID == itemID else { return }
+        armedPromotionTipItemID = nil
+    }
+
+    private func syncPromotionTipAnchorWithVisibleItems() {
+        guard let armedPromotionTipItemID,
+              let item = latestItem(withID: armedPromotionTipItemID),
+              item.assigneeId != nil,
+              isVisibleIdeaItem(item)
+        else {
+            armedPromotionTipItemID = nil
+            return
+        }
+    }
+
+    private func isVisibleIdeaItem(_ item: BacklogItem) -> Bool {
+        visibleItems(for: item.categoryId).contains(where: { $0.id == item.id })
     }
 
     private var deleteConfirmationTitle: String {
@@ -947,6 +987,7 @@ private struct BacklogContent: View {
     }
 
     private func queueDeleteItem(_ item: BacklogItem) {
+        clearPromotionTipAnchor(matching: item.id)
         if let previous = pendingDeletionItem {
             deletionTask?.cancel()
             deletionTask = nil
@@ -1314,17 +1355,29 @@ struct BacklogItemRow: View {
                 assignButton
 
                 if canPromote {
-                    Button(action: onPromote) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
+                    ZStack {
+                        Button(action: onPromote) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                                .frame(width: 32, height: 32)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isPromotionDisabled)
+                        .opacity(isPromotionDisabled ? 0.45 : 1)
+                        .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
+                        .transition(.opacity.combined(with: .scale))
+
+                        Color.clear
                             .frame(width: 32, height: 32)
+                            .allowsHitTesting(false)
+                            .contextualPopoverTip(
+                                showsIdeaPromotionTip,
+                                IdeaPromotionTip(),
+                                arrowEdge: .trailing,
+                                generation: appTipRuntimeGeneration
+                            )
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isPromotionDisabled)
-                    .opacity(isPromotionDisabled ? 0.45 : 1)
-                    .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
-                    .transition(.opacity.combined(with: .scale))
                 }
 
                 Button(action: onDelete) {
@@ -1336,12 +1389,6 @@ struct BacklogItemRow: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogDeleteButton_\(item.title)")
             }
-            .contextualPopoverTip(
-                showsIdeaPromotionTip,
-                IdeaPromotionTip(),
-                arrowEdge: .trailing,
-                generation: appTipRuntimeGeneration
-            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
