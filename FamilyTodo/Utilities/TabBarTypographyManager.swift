@@ -4,6 +4,7 @@ import UIKit
 @MainActor
 enum TabBarTypographyManager {
     private static let promotionHighlightTag = 91204
+    private static let promotionCueDebugMode = true
 
     private struct ResolvedTabBarStyle: Equatable {
         let normalColor: UIColor
@@ -105,53 +106,68 @@ enum TabBarTypographyManager {
         colorHex: String?
     ) {
         guard let tabBarController,
-              let tabIndex = AppTab.allCases.firstIndex(of: tab),
-              let button = tabBarButton(in: tabBarController.tabBar, at: tabIndex)
+              let tabIndex = AppTab.allCases.firstIndex(of: tab)
         else {
+            debugLog("promotion cue skipped: missing tab bar controller or tab index for \(tab.rawValue)")
             return
         }
 
-        let highlightView: UIView
-        if let existing = button.viewWithTag(promotionHighlightTag) {
+        let tabBar = tabBarController.tabBar
+        let button = tabBarButton(in: tabBar, at: tabIndex)
+        let targetFrame = button.map { $0.convert($0.bounds, to: tabBar) } ??
+            fallbackTabFrame(
+                in: tabBar,
+                index: tabIndex,
+                itemCount: tabBar.items?.count ?? AppTab.allCases.count
+            )
+
+        if let existing = tabBar.viewWithTag(promotionHighlightTag) {
             existing.layer.removeAllAnimations()
             existing.removeFromSuperview()
         }
 
         let highlightColor = resolvedHighlightColor(themeStore: themeStore, colorHex: colorHex)
-        let frame = button.bounds.insetBy(dx: 10, dy: 6)
+        let frame = targetFrame.insetBy(dx: 4, dy: 2)
         let view = UIView(frame: frame)
         view.tag = promotionHighlightTag
         view.isUserInteractionEnabled = false
-        view.backgroundColor = highlightColor.withAlphaComponent(0.16)
-        view.layer.cornerRadius = min(frame.height / 2, 18)
-        view.layer.borderWidth = 1
-        view.layer.borderColor = highlightColor.withAlphaComponent(0.24).cgColor
-        view.layer.shadowColor = highlightColor.withAlphaComponent(0.28).cgColor
+        view.backgroundColor = highlightColor.withAlphaComponent(promotionCueDebugMode ? 0.32 : 0.16)
+        view.layer.cornerRadius = min(frame.height / 2, promotionCueDebugMode ? 22 : 18)
+        view.layer.borderWidth = promotionCueDebugMode ? 2 : 1
+        view.layer.borderColor = highlightColor.withAlphaComponent(promotionCueDebugMode ? 0.85 : 0.24).cgColor
+        view.layer.shadowColor = highlightColor.withAlphaComponent(promotionCueDebugMode ? 0.95 : 0.28).cgColor
         view.layer.shadowOpacity = 1
         view.layer.shadowOffset = .zero
-        view.layer.shadowRadius = 10
+        view.layer.shadowRadius = promotionCueDebugMode ? 18 : 10
+        view.layer.zPosition = 999
         view.alpha = 0
-        view.transform = CGAffineTransform(scaleX: 0.94, y: 0.94)
-        button.insertSubview(view, at: 0)
-        highlightView = view
+        view.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        tabBar.addSubview(view)
+        tabBar.bringSubviewToFront(view)
+
+        debugLog(
+            "promotion cue for \(tab.rawValue) index=\(tabIndex) " +
+                "buttonFound=\(button != nil) frame=\(NSStringFromCGRect(frame)) " +
+                "color=\(colorHex ?? "theme")"
+        )
 
         UIView.animate(
-            withDuration: 0.18,
+            withDuration: 0.24,
             delay: 0,
             options: [.curveEaseOut, .beginFromCurrentState]
         ) {
-            highlightView.alpha = 1
-            highlightView.transform = .identity
+            view.alpha = 1
+            view.transform = .identity
         } completion: { _ in
             UIView.animate(
-                withDuration: 0.55,
-                delay: 0.5,
+                withDuration: promotionCueDebugMode ? 0.85 : 0.55,
+                delay: promotionCueDebugMode ? 0.85 : 0.5,
                 options: [.curveEaseIn, .beginFromCurrentState]
             ) {
-                highlightView.alpha = 0
-                highlightView.transform = CGAffineTransform(scaleX: 0.98, y: 0.98)
+                view.alpha = 0
+                view.transform = CGAffineTransform(scaleX: 1.04, y: 1.04)
             } completion: { _ in
-                highlightView.removeFromSuperview()
+                view.removeFromSuperview()
             }
         }
     }
@@ -366,6 +382,17 @@ enum TabBarTypographyManager {
         return buttons[index]
     }
 
+    private static func fallbackTabFrame(
+        in tabBar: UITabBar,
+        index: Int,
+        itemCount: Int
+    ) -> CGRect {
+        let safeItemCount = max(itemCount, 1)
+        let segmentWidth = tabBar.bounds.width / CGFloat(safeItemCount)
+        let x = CGFloat(index) * segmentWidth
+        return CGRect(x: x, y: 2, width: segmentWidth, height: max(tabBar.bounds.height - 4, 1))
+    }
+
     private static func resolvedHighlightColor(
         themeStore: ThemeStore,
         colorHex: String?
@@ -381,5 +408,10 @@ enum TabBarTypographyManager {
         let blue = CGFloat(intValue & 0xFF) / 255
 
         return UIColor(red: red, green: green, blue: blue, alpha: 1)
+    }
+
+    private static func debugLog(_ message: String) {
+        guard promotionCueDebugMode else { return }
+        print("[TabBarPromotionCue] \(message)")
     }
 }
