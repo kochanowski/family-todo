@@ -465,7 +465,8 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertEqual(try cachedHouseholds().map(\.id), [targetHousehold.id])
         XCTAssertEqual(try cachedMembers(for: targetHousehold.id).count, 1)
         XCTAssertTrue(try cachedMembers(for: staleHousehold.id).isEmpty)
-        await XCTAssertEqual(cloud.inactiveUpdateCount(for: staleHousehold.id), 1)
+        let staleInactiveUpdateCount = await cloud.inactiveUpdateCount(for: staleHousehold.id)
+        XCTAssertEqual(staleInactiveUpdateCount, 1)
     }
 
     func testJoinCreatesLocalCachedMemberImmediatelyForTargetHousehold() async throws {
@@ -627,7 +628,9 @@ final class HouseholdJoinFlowTests: XCTestCase {
 
         await store.hardResetCloudHousehold(userId: userId)
 
-        await XCTAssertEqual(cloud.inactiveUpdateCount(for: household.id), 1)
-        await XCTAssertEqual(cloud.leftSharedHouseholdsSnapshot(), [household.id])
+        let inactiveUpdateCount = await cloud.inactiveUpdateCount(for: household.id)
+        let leftSharedHouseholds = await cloud.leftSharedHouseholdsSnapshot()
+        XCTAssertEqual(inactiveUpdateCount, 1)
+        XCTAssertEqual(leftSharedHouseholds, [household.id])
     }
 }
