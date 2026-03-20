@@ -2276,6 +2276,42 @@ actor CloudKitManager {
         return members.first(where: { $0.isActive })
     }
 
+    func fetchActiveMembersByUserId(
+        _ userId: String,
+        householdId: UUID? = nil,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Member] {
+        let scope = resolvedScope(explicitScope)
+        let records: [CKRecord]
+        if let householdId {
+            records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+                let predicates = [
+                    NSPredicate(format: "userId == %@", userId),
+                    self.referenceMatchPredicate(
+                        field: "householdId",
+                        id: householdId,
+                        zoneID: zoneID
+                    ),
+                ]
+                let query = CKQuery(
+                    recordType: "Member",
+                    predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+                )
+                query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
+                return query
+            }
+        } else {
+            let query = CKQuery(
+                recordType: "Member",
+                predicate: NSPredicate(format: "userId == %@", userId)
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
+            records = try await queryRecords(query, householdId: householdId, scope: scope)
+        }
+
+        return try records.map(member(from:)).filter(\.isActive)
+    }
+
     /// Fetch all members for a household
     func fetchMembers(
         householdId: UUID,

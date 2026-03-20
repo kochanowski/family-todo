@@ -1,6 +1,9 @@
 name: iOS Nightly Regression
 
 on:
+  push:
+    branches:
+      - fix/tasks-ideas-sync
   schedule:
     - cron: '0 0 * * *' # Midnight UTC
   workflow_dispatch:

@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, fix/tasks-ideas-sync]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -229,8 +229,7 @@ jobs:
         (
           github.event_name == 'push' &&
           (
-            github.ref == 'refs/heads/main' ||
-            github.ref == 'refs/heads/fix/tasks-ideas-sync'
+            github.ref == 'refs/heads/main'
           )
         )
       )

@@ -44,6 +44,7 @@
 		9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC3E5BB230C4430890CE54E /* TaskTests.swift */; };
 		138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29641B06528147179F25068D /* TaskStoreTests.swift */; };
 		58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */; };
+		HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */; };
 		B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */; };
 			F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000001 /* InviteInputNormalizerTests.swift */; };
 			F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000002 /* OnboardingStateTests.swift */; };
@@ -165,6 +166,7 @@
 		7EC3E5BB230C4430890CE54E /* TaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTests.swift; sourceTree = "<group>"; };
 		29641B06528147179F25068D /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdTests.swift; sourceTree = "<group>"; };
+		HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdJoinFlowTests.swift; sourceTree = "<group>"; };
 		B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStoreTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000001 /* InviteInputNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizerTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000002 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
@@ -362,6 +364,7 @@
 				TSTFILE0000000000000004 /* BacklogStoreTests.swift */,
 				TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */,
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
+				HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
 				TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */,
@@ -718,6 +721,7 @@
 				TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */,
 				TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */,
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
+				HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
 				TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */,

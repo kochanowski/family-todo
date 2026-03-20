@@ -4,6 +4,143 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+protocol HouseholdCloudSyncing: Actor {
+    func ensureReady() async
+    func checkAvailability() async throws
+    func setHouseholdScope(_ scope: CloudKitManager.HouseholdDatabaseScope) async
+    func getContainer() async -> CKContainer
+
+    func ensureHouseholdOwnerZone(householdId: UUID) async throws -> CKRecordZone.ID
+    func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws
+    func repairSharedHouseholdGraphIfNeeded(householdId: UUID) async throws
+    func migrateMemberColorsIfNeeded(householdId: UUID) async
+
+    func saveHousehold(
+        _ household: Household,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> CKRecord
+    func fetchHousehold(
+        id: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> Household
+    func deleteHousehold(
+        id: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+    func updateHouseholdMetadata(
+        householdId: UUID,
+        newName: String,
+        newIconSymbol: String,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> CKRecord
+
+    func createShare(for household: Household) async throws -> CKShare
+    func fetchShare(for householdId: UUID) async throws -> CKShare?
+    func getShareURL(for householdId: UUID) async throws -> URL?
+
+    func createInviteCode(for household: Household) async throws -> InviteToken
+    func fetchInviteToken(code rawCode: String) async throws -> InviteToken
+    func deleteInviteTokens(for householdId: UUID) async throws
+    func redeemInviteCode(_ rawCode: String) async throws -> Household
+    func acceptShare(inviteCode: String) async throws -> Household
+    func acceptShare(metadata: CKShare.Metadata) async throws -> Household
+
+    func saveMember(
+        _ member: Member,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> CKRecord
+    func fetchMemberByUserId(
+        _ userId: String,
+        householdId: UUID?,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> Member?
+    func fetchActiveMembersByUserId(
+        _ userId: String,
+        householdId: UUID?,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [Member]
+    func fetchMembers(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [Member]
+    func updateMemberState(
+        memberId: UUID,
+        householdId: UUID,
+        newDisplayName: String,
+        newRole: Member.MemberRole,
+        isActive: Bool,
+        colorHex: String,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> CKRecord
+    func deleteMember(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+
+    func leaveSharedHousehold(householdId: UUID) async throws
+    func deleteHouseholdZoneIfCustom(id householdId: UUID) async throws -> Bool
+    func clearAllCachedZones(for householdId: UUID) async
+
+    func fetchTasks(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [Task]
+    func deleteTask(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+
+    func fetchShoppingItems(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [ShoppingItem]
+    func deleteShoppingItem(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+
+    func fetchShoppingBundles(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [ShoppingBundle]
+    func deleteShoppingBundle(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+
+    func fetchBacklogItems(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [BacklogItem]
+    func deleteBacklogItem(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+
+    func fetchBacklogCategories(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [BacklogCategory]
+    func deleteBacklogCategory(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
+
+    func fetchAreas(householdId: UUID) async throws -> [Area]
+    func deleteArea(id: UUID, householdId: UUID) async throws
+
+    func fetchRecurringChores(householdId: UUID) async throws -> [RecurringChore]
+    func deleteRecurringChore(id: UUID, householdId: UUID) async throws
+}
+
+extension CloudKitManager: HouseholdCloudSyncing {}
+
 @MainActor
 // swiftlint:disable type_body_length file_length
 class HouseholdStore: ObservableObject {
@@ -28,6 +165,19 @@ class HouseholdStore: ObservableObject {
     private struct PendingHouseholdMetadataSync {
         let household: Household
         let userId: String
+    }
+
+    private struct JoinTarget {
+        let household: Household
+
+        var householdId: UUID {
+            household.id
+        }
+    }
+
+    private struct ScopedMembership {
+        let member: Member
+        let source: RecoverableMembershipSource
     }
 
     enum LeaveResolution: Equatable {
@@ -75,7 +225,7 @@ class HouseholdStore: ObservableObject {
     @Published private(set) var setupResolutionState: SetupResolutionState = .idle
 
     private var modelContext: ModelContext?
-    private lazy var cloudKit = CloudKitManager.shared
+    private let cloudKit: any HouseholdCloudSyncing
     private var syncMode: SyncMode = .cloud
     private let userDefaults: UserDefaults
     private let recoverySuppressionDuration: TimeInterval
@@ -83,6 +233,7 @@ class HouseholdStore: ObservableObject {
     private var isReplayingPendingExitOperations = false
     private var pendingHouseholdMetadataSync: PendingHouseholdMetadataSync?
     private var isReplayingPendingHouseholdMetadataSync = false
+    private let joinedHouseholdPrewarmOverride: ((Household, String, ModelContext?) async throws -> Void)?
 
     // Cache for sharing controller
     private var activeShare: CKShare?
@@ -90,10 +241,14 @@ class HouseholdStore: ObservableObject {
 
     init(
         modelContext: ModelContext? = nil,
+        cloudKit: any HouseholdCloudSyncing = CloudKitManager.shared,
+        joinedHouseholdPrewarmOverride: ((Household, String, ModelContext?) async throws -> Void)? = nil,
         userDefaults: UserDefaults = .standard,
         recoverySuppressionDuration: TimeInterval = 300
     ) {
         self.modelContext = modelContext
+        self.cloudKit = cloudKit
+        self.joinedHouseholdPrewarmOverride = joinedHouseholdPrewarmOverride
         self.userDefaults = userDefaults
         self.recoverySuppressionDuration = recoverySuppressionDuration
     }
@@ -217,7 +372,7 @@ class HouseholdStore: ObservableObject {
             if let current = localHousehold {
                 do {
                     await setCloudScope(for: current, userId: userId)
-                    let fresh = try await cloudKit.fetchHousehold(id: current.id)
+                    let fresh = try await cloudKit.fetchHousehold(id: current.id, scope: nil)
                     if try await validateRecoveredMembershipOrAbandon(
                         household: fresh,
                         userId: userId
@@ -310,8 +465,8 @@ class HouseholdStore: ObservableObject {
             await cloudKit.setHouseholdScope(.ownerPrivate)
             _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: newHousehold.id)
 
-            _ = try await cloudKit.saveHousehold(newHousehold)
-            _ = try await cloudKit.saveMember(ownerMember)
+            _ = try await cloudKit.saveHousehold(newHousehold, scope: nil)
+            _ = try await cloudKit.saveMember(ownerMember, scope: nil)
             updateCache(with: ownerMember)
             updateCache(with: newHousehold)
             currentHousehold = newHousehold
@@ -431,8 +586,6 @@ class HouseholdStore: ObservableObject {
     }
 
     func joinHousehold(withInviteInput input: String, userId: String, displayName: String) async throws {
-        try await ensureUserCanStartSingleHousehold(userId: userId)
-
         isLoading = true
         defer { isLoading = false }
 
@@ -444,33 +597,28 @@ class HouseholdStore: ObservableObject {
 
         try await cloudKit.checkAvailability()
         let normalizedInvite = try InviteInputNormalizer.normalizeInput(input)
-        let isInviteCodeFlow = InviteInputNormalizer.normalizeInviteCodeToken(normalizedInvite.inviteCode) != nil
-        let household: Household
-        if isInviteCodeFlow {
-            household = try await cloudKit.redeemInviteCode(normalizedInvite.inviteCode)
-        } else {
-            await cloudKit.setHouseholdScope(.participantShared)
-            household = try await cloudKit.acceptShare(inviteCode: normalizedInvite.inviteCode)
-        }
+        let target = try await resolveJoinTarget(for: normalizedInvite)
+        try await clearConflictingJoinStateBeforeTargetedJoin(
+            targetHouseholdId: target.householdId,
+            userId: userId
+        )
         await cloudKit.setHouseholdScope(.participantShared)
-        await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
+        await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        try await upsertMembership(
-            householdId: household.id,
+        let joinedMember = try await upsertMembership(
+            householdId: target.householdId,
             userId: userId,
             displayName: validatedDisplayName,
-            role: household.ownerId == userId ? .owner : .member
+            role: target.household.ownerId == userId ? .owner : .member
         )
 
-        // Update local cache
-        updateCache(with: household)
-        currentHousehold = household
-        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
+        updateCache(with: joinedMember)
+        updateCache(with: target.household)
+        currentHousehold = target.household
+        try await prewarmJoinedHouseholdGraphIfNeeded(household: target.household, userId: userId)
     }
 
     func joinHousehold(metadata: CKShare.Metadata, userId: String, displayName: String) async throws {
-        try await ensureUserCanStartSingleHousehold(userId: userId)
-
         isLoading = true
         defer { isLoading = false }
 
@@ -481,22 +629,25 @@ class HouseholdStore: ObservableObject {
         let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
+        let target = try await resolveJoinTarget(for: metadata)
+        try await clearConflictingJoinStateBeforeTargetedJoin(
+            targetHouseholdId: target.householdId,
+            userId: userId
+        )
         await cloudKit.setHouseholdScope(.participantShared)
+        await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        let household = try await cloudKit.acceptShare(metadata: metadata)
-        await cloudKit.setHouseholdScope(.participantShared)
-        await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
-
-        try await upsertMembership(
-            householdId: household.id,
+        let joinedMember = try await upsertMembership(
+            householdId: target.householdId,
             userId: userId,
             displayName: validatedDisplayName,
-            role: household.ownerId == userId ? .owner : .member
+            role: target.household.ownerId == userId ? .owner : .member
         )
 
-        updateCache(with: household)
-        currentHousehold = household
-        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
+        updateCache(with: joinedMember)
+        updateCache(with: target.household)
+        currentHousehold = target.household
+        try await prewarmJoinedHouseholdGraphIfNeeded(household: target.household, userId: userId)
     }
 
     // MARK: - Household Management
@@ -584,7 +735,8 @@ class HouseholdStore: ObservableObject {
                     _ = try await cloudKit.updateHouseholdMetadata(
                         householdId: pendingSync.household.id,
                         newName: pendingSync.household.name,
-                        newIconSymbol: pendingSync.household.iconSymbol
+                        newIconSymbol: pendingSync.household.iconSymbol,
+                        scope: nil
                     )
                 } catch {
                     self.error = error
@@ -598,20 +750,28 @@ class HouseholdStore: ObservableObject {
 
         if let household = currentHousehold {
             await setCloudScope(for: household, userId: userId)
-            if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: household.id),
-               member.isActive
+            if let member = try? await cloudKit.fetchMemberByUserId(
+                userId,
+                householdId: household.id,
+                scope: nil
+            ),
+                member.isActive
             {
                 return member.displayName
             }
         }
 
         await cloudKit.setHouseholdScope(.participantShared)
-        if let member = try? await cloudKit.fetchMemberByUserId(userId), member.isActive {
+        if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: nil, scope: nil),
+           member.isActive
+        {
             return member.displayName
         }
 
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        if let member = try? await cloudKit.fetchMemberByUserId(userId), member.isActive {
+        if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: nil, scope: nil),
+           member.isActive
+        {
             return member.displayName
         }
 
@@ -805,8 +965,12 @@ class HouseholdStore: ObservableObject {
     ) async throws {
         await cloudKit.setHouseholdScope(.participantShared)
 
-        if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: householdId),
-           member.householdId == householdId
+        if let member = try? await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: householdId,
+            scope: nil
+        ),
+            member.householdId == householdId
         {
             do {
                 _ = try await cloudKit.updateMemberState(
@@ -815,7 +979,8 @@ class HouseholdStore: ObservableObject {
                     newDisplayName: member.displayName,
                     newRole: member.role,
                     isActive: false,
-                    colorHex: member.colorHex
+                    colorHex: member.colorHex,
+                    scope: nil
                 )
             } catch {
                 print("DEBUG: Member deactivation during leave failed: \(error)")
@@ -832,34 +997,34 @@ class HouseholdStore: ObservableObject {
         let deletedByZone = try await cloudKit.deleteHouseholdZoneIfCustom(id: householdId)
 
         if !deletedByZone {
-            let members = try await cloudKit.fetchMembers(householdId: householdId)
+            let members = try await cloudKit.fetchMembers(householdId: householdId, scope: nil)
             for member in members {
-                try await cloudKit.deleteMember(id: member.id, householdId: householdId)
+                try await cloudKit.deleteMember(id: member.id, householdId: householdId, scope: nil)
             }
 
-            let tasks = try await cloudKit.fetchTasks(householdId: householdId)
+            let tasks = try await cloudKit.fetchTasks(householdId: householdId, scope: nil)
             for task in tasks {
-                try await cloudKit.deleteTask(id: task.id, householdId: householdId)
+                try await cloudKit.deleteTask(id: task.id, householdId: householdId, scope: nil)
             }
 
-            let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: householdId)
+            let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: householdId, scope: nil)
             for item in shoppingItems {
-                try await cloudKit.deleteShoppingItem(id: item.id, householdId: householdId)
+                try await cloudKit.deleteShoppingItem(id: item.id, householdId: householdId, scope: nil)
             }
 
-            let shoppingBundles = try await cloudKit.fetchShoppingBundles(householdId: householdId)
+            let shoppingBundles = try await cloudKit.fetchShoppingBundles(householdId: householdId, scope: nil)
             for bundle in shoppingBundles {
-                try await cloudKit.deleteShoppingBundle(id: bundle.id, householdId: householdId)
+                try await cloudKit.deleteShoppingBundle(id: bundle.id, householdId: householdId, scope: nil)
             }
 
-            let backlogItems = try await cloudKit.fetchBacklogItems(householdId: householdId)
+            let backlogItems = try await cloudKit.fetchBacklogItems(householdId: householdId, scope: nil)
             for item in backlogItems {
-                try await cloudKit.deleteBacklogItem(id: item.id, householdId: householdId)
+                try await cloudKit.deleteBacklogItem(id: item.id, householdId: householdId, scope: nil)
             }
 
-            let categories = try await cloudKit.fetchBacklogCategories(householdId: householdId)
+            let categories = try await cloudKit.fetchBacklogCategories(householdId: householdId, scope: nil)
             for category in categories {
-                try await cloudKit.deleteBacklogCategory(id: category.id, householdId: householdId)
+                try await cloudKit.deleteBacklogCategory(id: category.id, householdId: householdId, scope: nil)
             }
 
             let areas = try await cloudKit.fetchAreas(householdId: householdId)
@@ -872,13 +1037,13 @@ class HouseholdStore: ObservableObject {
                 try await cloudKit.deleteRecurringChore(id: chore.id, householdId: householdId)
             }
 
-            try await cloudKit.deleteHousehold(id: householdId)
+            try await cloudKit.deleteHousehold(id: householdId, scope: nil)
         }
 
         try await cloudKit.deleteInviteTokens(for: householdId)
 
         do {
-            _ = try await cloudKit.fetchHousehold(id: householdId)
+            _ = try await cloudKit.fetchHousehold(id: householdId, scope: nil)
             throw NSError(
                 domain: "HouseholdStore",
                 code: 1,
@@ -937,14 +1102,139 @@ class HouseholdStore: ObservableObject {
         }
     }
 
+    private func resolveJoinTarget(for normalizedInvite: NormalizedInviteInput)
+        async throws -> JoinTarget
+    {
+        let isInviteCodeFlow =
+            InviteInputNormalizer.normalizeInviteCodeToken(normalizedInvite.inviteCode) != nil
+
+        if isInviteCodeFlow {
+            let token = try await cloudKit.fetchInviteToken(code: normalizedInvite.inviteCode)
+            let household = try await cloudKit.redeemInviteCode(normalizedInvite.inviteCode)
+            guard token.householdId == household.id else {
+                throw HouseholdError.invalidInviteCode
+            }
+            return JoinTarget(household: household)
+        }
+
+        await cloudKit.setHouseholdScope(.participantShared)
+        let household = try await cloudKit.acceptShare(inviteCode: normalizedInvite.inviteCode)
+        return JoinTarget(household: household)
+    }
+
+    private func resolveJoinTarget(for metadata: CKShare.Metadata) async throws -> JoinTarget {
+        await cloudKit.setHouseholdScope(.participantShared)
+        let household = try await cloudKit.acceptShare(metadata: metadata)
+        guard UUID(uuidString: metadata.rootRecordID.recordName) == household.id else {
+            throw HouseholdError.invalidInviteCode
+        }
+        return JoinTarget(household: household)
+    }
+
+    private func clearConflictingJoinStateBeforeTargetedJoin(
+        targetHouseholdId: UUID,
+        userId: String
+    ) async throws {
+        let scopedMemberships = try await fetchScopedActiveMemberships(userId: userId)
+        let conflictingMemberships = scopedMemberships.filter { $0.member.householdId != targetHouseholdId }
+
+        for scopedMembership in conflictingMemberships {
+            try await severMembershipAssociation(scopedMembership)
+            removeHouseholdFromCache(id: scopedMembership.member.householdId)
+            suppressRecovery(for: scopedMembership.member.householdId)
+        }
+
+        let staleCachedHouseholdIds = fetchRecoverableCachedHouseholds(
+            userId: userId,
+            preferredHouseholdId: nil
+        )
+        .map(\.id)
+        .filter { $0 != targetHouseholdId }
+
+        for householdId in staleCachedHouseholdIds {
+            removeHouseholdFromCache(id: householdId)
+            suppressRecovery(for: householdId)
+        }
+
+        if let currentHousehold, currentHousehold.id != targetHouseholdId {
+            suppressRecovery(for: currentHousehold.id)
+            clearCurrentHousehold()
+        }
+    }
+
+    private func fetchScopedActiveMemberships(
+        userId: String,
+        householdId: UUID? = nil
+    ) async throws -> [ScopedMembership] {
+        await cloudKit.setHouseholdScope(.participantShared)
+        let participantMembers = try await cloudKit.fetchActiveMembersByUserId(
+            userId,
+            householdId: householdId,
+            scope: .participantShared
+        )
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        let ownerMembers = try await cloudKit.fetchActiveMembersByUserId(
+            userId,
+            householdId: householdId,
+            scope: .ownerPrivate
+        )
+
+        let participantScoped = participantMembers.map { ScopedMembership(member: $0, source: .participantShared) }
+        let ownerScoped = ownerMembers.map { ScopedMembership(member: $0, source: .ownerPrivate) }
+        return deduplicatedScopedMemberships(participantScoped + ownerScoped)
+    }
+
+    private func deduplicatedScopedMemberships(_ memberships: [ScopedMembership]) -> [ScopedMembership] {
+        var byHouseholdId: [UUID: ScopedMembership] = [:]
+
+        for membership in memberships {
+            let householdId = membership.member.householdId
+            guard let existing = byHouseholdId[householdId] else {
+                byHouseholdId[householdId] = membership
+                continue
+            }
+
+            if membership.member.joinedAt >= existing.member.joinedAt {
+                byHouseholdId[householdId] = membership
+            }
+        }
+
+        return byHouseholdId.values.sorted { lhs, rhs in
+            lhs.member.joinedAt > rhs.member.joinedAt
+        }
+    }
+
+    private func severMembershipAssociation(_ scopedMembership: ScopedMembership) async throws {
+        let member = scopedMembership.member
+        let scope: CloudKitManager.HouseholdDatabaseScope =
+            scopedMembership.source == .ownerPrivate ? .ownerPrivate : .participantShared
+
+        await cloudKit.setHouseholdScope(scope)
+        _ = try await cloudKit.updateMemberState(
+            memberId: member.id,
+            householdId: member.householdId,
+            newDisplayName: member.displayName,
+            newRole: member.role,
+            isActive: false,
+            colorHex: member.colorHex,
+            scope: scope
+        )
+
+        if scopedMembership.source == .participantShared {
+            try await cloudKit.leaveSharedHousehold(householdId: member.householdId)
+        }
+
+        await cloudKit.clearAllCachedZones(for: member.householdId)
+    }
+
     private func upsertMembership(
         householdId: UUID,
         userId: String,
         displayName: String,
         role: Member.MemberRole
-    ) async throws {
+    ) async throws -> Member {
         let normalizedKey = DisplayNameValidator.normalizedKey(displayName)
-        let allMembers = try await cloudKit.fetchMembers(householdId: householdId)
+        let allMembers = try await cloudKit.fetchMembers(householdId: householdId, scope: nil)
         if allMembers.contains(where: {
             $0.isActive &&
                 $0.userId != userId &&
@@ -953,14 +1243,18 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.displayNameAlreadyTaken
         }
 
-        if let existing = try await cloudKit.fetchMemberByUserId(userId, householdId: householdId) {
+        if let existing = try await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: householdId,
+            scope: nil
+        ) {
             let resolvedRole: Member.MemberRole = existing.role == .owner ? .owner : role
             let shouldUpdate =
                 existing.displayName != displayName ||
                 !existing.isActive ||
                 existing.role != resolvedRole
 
-            guard shouldUpdate else { return }
+            guard shouldUpdate else { return existing }
 
             _ = try await cloudKit.updateMemberState(
                 memberId: existing.id,
@@ -968,9 +1262,19 @@ class HouseholdStore: ObservableObject {
                 newDisplayName: displayName,
                 newRole: resolvedRole,
                 isActive: true,
+                colorHex: existing.colorHex,
+                scope: nil
+            )
+            return Member(
+                id: existing.id,
+                householdId: existing.householdId,
+                userId: existing.userId,
+                displayName: displayName,
+                role: resolvedRole,
+                joinedAt: existing.joinedAt,
+                isActive: true,
                 colorHex: existing.colorHex
             )
-            return
         }
 
         let member = Member(
@@ -980,7 +1284,8 @@ class HouseholdStore: ObservableObject {
             role: role,
             colorHex: MemberColorToken.randomHex()
         )
-        _ = try await cloudKit.saveMember(member)
+        _ = try await cloudKit.saveMember(member, scope: nil)
+        return member
     }
 
     private func requiredMembershipDisplayName(from rawDisplayName: String) throws -> String {
@@ -1041,6 +1346,15 @@ class HouseholdStore: ObservableObject {
                 throw lastError ?? HouseholdError.memberNotFound
             }
         }
+    }
+
+    private func prewarmJoinedHouseholdGraphIfNeeded(household: Household, userId: String) async throws {
+        if let joinedHouseholdPrewarmOverride {
+            try await joinedHouseholdPrewarmOverride(household, userId, modelContext)
+            return
+        }
+
+        try await prewarmJoinedHouseholdGraph(household: household, userId: userId)
     }
 
     private func prewarmJoinedHouseholdGraph(household: Household, userId: String) async throws {
@@ -1330,8 +1644,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.alreadyInHousehold
         }
 
-        if let cachedHousehold = fetchCachedHousehold(userId: userId, preferredHouseholdId: nil) {
-            currentHousehold = cachedHousehold.toHousehold()
+        if fetchCachedHousehold(userId: userId, preferredHouseholdId: nil) != nil {
             throw HouseholdError.alreadyInHousehold
         }
     }
@@ -1341,9 +1654,8 @@ class HouseholdStore: ObservableObject {
         await cloudKit.ensureReady()
         try await cloudKit.checkAvailability()
 
-        if let existingCloudHousehold = try await resolveRecoverableCloudHousehold(userId: userId) {
-            updateCache(with: existingCloudHousehold)
-            currentHousehold = existingCloudHousehold
+        let activeMemberships = try await fetchScopedActiveMemberships(userId: userId)
+        if !activeMemberships.isEmpty {
             throw HouseholdError.alreadyInHousehold
         }
     }
@@ -1360,28 +1672,17 @@ class HouseholdStore: ObservableObject {
         preferredHouseholdId: UUID? = nil
     ) async throws -> Household? {
         if let preferredHouseholdId, !isRecoverySuppressed(for: preferredHouseholdId) {
-            await cloudKit.setHouseholdScope(.participantShared)
-            if let participantPreferredHousehold = try await recoverableHousehold(
-                from: cloudKit.fetchMemberByUserId(
-                    userId,
-                    householdId: preferredHouseholdId,
-                    scope: .participantShared
-                ),
-                source: .participantShared
-            ) {
-                return participantPreferredHousehold
-            }
-
-            await cloudKit.setHouseholdScope(.ownerPrivate)
-            if let ownerPreferredHousehold = try await recoverableHousehold(
-                from: cloudKit.fetchMemberByUserId(
-                    userId,
-                    householdId: preferredHouseholdId,
-                    scope: .ownerPrivate
-                ),
-                source: .ownerPrivate
-            ) {
-                return ownerPreferredHousehold
+            let preferredMemberships = try await fetchScopedActiveMemberships(
+                userId: userId,
+                householdId: preferredHouseholdId
+            )
+            for scopedMembership in preferredMemberships {
+                if let recoveredHousehold = try await recoverableHousehold(
+                    from: scopedMembership.member,
+                    source: scopedMembership.source
+                ) {
+                    return recoveredHousehold
+                }
             }
 
             print(
@@ -1390,23 +1691,26 @@ class HouseholdStore: ObservableObject {
             await invalidateRecoveredHousehold(preferredHouseholdId)
         }
 
-        await cloudKit.setHouseholdScope(.participantShared)
-        if let participantHousehold = try await recoverableHousehold(
-            from: cloudKit.fetchMemberByUserId(userId),
-            source: .participantShared
-        ) {
-            return participantHousehold
+        let scopedMemberships = try await fetchScopedActiveMemberships(userId: userId)
+        guard !scopedMemberships.isEmpty else { return nil }
+
+        var recoveredByHouseholdId: [UUID: Household] = [:]
+        for scopedMembership in scopedMemberships {
+            if let recoveredHousehold = try await recoverableHousehold(
+                from: scopedMembership.member,
+                source: scopedMembership.source
+            ) {
+                recoveredByHouseholdId[recoveredHousehold.id] = recoveredHousehold
+            }
         }
 
-        await cloudKit.setHouseholdScope(.ownerPrivate)
-        if let ownerHousehold = try await recoverableHousehold(
-            from: cloudKit.fetchMemberByUserId(userId),
-            source: .ownerPrivate
-        ) {
-            return ownerHousehold
+        if recoveredByHouseholdId.count > 1 {
+            let householdIds = recoveredByHouseholdId.keys.map(\.uuidString).sorted().joined(separator: ", ")
+            print("DEBUG: Ambiguous active memberships for user \(userId); refusing automatic recovery: \(householdIds)")
+            return nil
         }
 
-        return nil
+        return recoveredByHouseholdId.values.first
     }
 
     func validateRecoveredMembershipOrAbandon(
@@ -1456,7 +1760,7 @@ class HouseholdStore: ObservableObject {
         }
 
         let fetchHousehold = fetchHousehold ?? { [cloudKit] householdId in
-            try await cloudKit.fetchHousehold(id: householdId)
+            try await cloudKit.fetchHousehold(id: householdId, scope: nil)
         }
 
         do {
@@ -1501,7 +1805,8 @@ class HouseholdStore: ObservableObject {
                 newDisplayName: member.displayName,
                 newRole: member.role,
                 isActive: false,
-                colorHex: member.colorHex
+                colorHex: member.colorHex,
+                scope: nil
             )
         } catch {
             guard !isRecordMissingError(error) else { return }

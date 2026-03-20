@@ -602,6 +602,9 @@ enum LocalAppReset {
         // destructive debug action so startup/onboarding is never blocked by network work.
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
+        if userSession.syncMode == .cloud, let userId = userSession.userId {
+            await householdStore.hardResetCloudHousehold(userId: userId)
+        }
         NotificationService.shared.cancelDailyDigest()
         NotificationService.shared.removeAllDeliveredNotifications()
         NotificationService.shared.removeAllTaskReminders()
