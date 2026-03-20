@@ -7,7 +7,7 @@ import UIKit
 protocol HouseholdCloudSyncing: Actor {
     func ensureReady() async
     func checkAvailability() async throws
-    func setHouseholdScope(_ scope: CloudKitManager.HouseholdDatabaseScope) async
+    func setHouseholdScope(_ scope: CloudKitManager.HouseholdDatabaseScope)
     func getContainer() async -> CKContainer
 
     func ensureHouseholdOwnerZone(householdId: UUID) async throws -> CKRecordZone.ID
@@ -80,7 +80,7 @@ protocol HouseholdCloudSyncing: Actor {
 
     func leaveSharedHousehold(householdId: UUID) async throws
     func deleteHouseholdZoneIfCustom(id householdId: UUID) async throws -> Bool
-    func clearAllCachedZones(for householdId: UUID) async
+    func clearAllCachedZones(for householdId: UUID)
 
     func fetchTasks(
         householdId: UUID,

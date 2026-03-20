@@ -68,7 +68,7 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
 
     func ensureReady() async {}
     func checkAvailability() async throws {}
-    func setHouseholdScope(_ scope: CloudKitManager.HouseholdDatabaseScope) async {
+    func setHouseholdScope(_ scope: CloudKitManager.HouseholdDatabaseScope) {
         currentScope = scope
     }
 
@@ -285,7 +285,7 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         false
     }
 
-    func clearAllCachedZones(for _: UUID) async {}
+    func clearAllCachedZones(for _: UUID) {}
 
     func fetchTasks(
         householdId _: UUID,
