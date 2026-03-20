@@ -3464,11 +3464,32 @@ actor CloudKitManager {
     }
 
     func redeemInviteCode(_ rawCode: String) async throws -> Household {
+        let context = try await resolveAcceptedShareContext(fromInviteCode: rawCode)
+        return context.household
+    }
+
+    func resolveAcceptedShareContext(fromInviteCode rawCode: String) async throws -> AcceptedShareContext {
+        try await checkAvailability()
         let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(rawCode)
+        if normalizedCode == nil {
+            let shareURL: URL
+            do {
+                shareURL = try InviteInputNormalizer.normalizedURL(from: rawCode)
+            } catch {
+                throw HouseholdError.invalidInviteCode
+            }
+
+            let ckContainer = await container
+            let metadata = try await ckContainer.shareMetadata(for: shareURL)
+            return try await acceptShareContext(
+                metadata: metadata,
+                shareURL: shareURL
+            )
+        }
+
         let now = Date()
         var stage = "inviteCode.redeem.attemptBudget"
         do {
-            try await checkAvailability()
             try enforceInviteRedeemAttemptBudget(at: now)
 
             guard let code = normalizedCode else {
@@ -3477,6 +3498,7 @@ actor CloudKitManager {
 
             stage = "inviteCode.redeem.fetchToken"
             let db = await publicDatabase
+            logJoinStage("join.resolveInviteToken")
             guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
                 throw CloudKitManagerError.inviteCodeNotFound
             }
@@ -3499,19 +3521,27 @@ actor CloudKitManager {
             guard let shareURL = URL(string: token.shareURL) else {
                 throw CloudKitManagerError.inviteCodeInvalid
             }
+            print("CloudKitJoin: stage=join.resolveShareMetadata householdId=\(token.householdId)")
 
             let ckContainer = await container
             let metadata = try await ckContainer.shareMetadata(for: shareURL)
+            let metadataHouseholdId = UUID(uuidString: metadata.rootRecordID.recordName)
+            guard metadataHouseholdId == token.householdId else {
+                throw CloudKitManagerError.inviteCodeInvalid
+            }
 
             stage = "inviteCode.redeem.acceptShare"
-            let household = try await acceptShare(metadata: metadata)
+            let context = try await acceptShareContext(
+                metadata: metadata,
+                shareURL: shareURL
+            )
 
             stage = "inviteCode.redeem.usageUpdate"
             try await registerInviteRedeemSuccess(code: token.code, at: now, database: db)
 
             clearInviteRedeemAttemptBudget()
             clearCloudKitFailure()
-            return household
+            return context
         } catch {
             if let normalizedCode,
                shouldRegisterInviteFailureCounter(for: error)
@@ -3522,6 +3552,10 @@ actor CloudKitManager {
             recordCloudKitFailure(error, operation: stage)
             throw error
         }
+    }
+
+    func resolveAcceptedShareContext(metadata: CKShare.Metadata) async throws -> AcceptedShareContext {
+        try await acceptShareContext(metadata: metadata, shareURL: nil)
     }
 
     func revokeInviteCode(_ rawCode: String) async throws {
@@ -3542,8 +3576,54 @@ actor CloudKitManager {
 
     /// Accept a CloudKit share invitation and return shared household.
     func acceptShare(metadata: CKShare.Metadata) async throws -> Household {
+        let context = try await acceptShareContext(metadata: metadata, shareURL: nil)
+        return context.household
+    }
+
+    private func logJoinStage(
+        _ stage: String,
+        householdId: UUID? = nil,
+        zoneID: CKRecordZone.ID? = nil,
+        scope: HouseholdDatabaseScope? = nil,
+        error: Error? = nil
+    ) {
+        let householdComponent = householdId?.uuidString ?? "unknown"
+        let zoneComponent = zoneID?.zoneName ?? "unknown"
+        let scopeComponent: String = if let scope {
+            scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        } else {
+            "unspecified"
+        }
+
+        if let ckError = error as? CKError {
+            print(
+                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent) ckError=\(ckError.code.rawValue)"
+            )
+        } else if let error {
+            print(
+                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent) error=\(error.localizedDescription)"
+            )
+        } else {
+            print(
+                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent)"
+            )
+        }
+    }
+
+    private func acceptShareContext(
+        metadata: CKShare.Metadata,
+        shareURL: URL?
+    ) async throws -> AcceptedShareContext {
         var stage: AcceptShareStage = .acceptOperation
+        let householdId = UUID(uuidString: metadata.rootRecordID.recordName)
+        let zoneID = metadata.rootRecordID.zoneID
         do {
+            logJoinStage(
+                "join.acceptShare",
+                householdId: householdId,
+                zoneID: zoneID,
+                scope: .participantShared
+            )
             let ckContainer = await container
             let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             acceptOperation.qualityOfService = .userInitiated
@@ -3561,24 +3641,43 @@ actor CloudKitManager {
             }
 
             setHouseholdScope(.participantShared)
-            if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
-                setSharedZoneContext(householdId: householdId, zoneID: metadata.rootRecordID.zoneID)
+            if let householdId {
+                setSharedZoneContext(householdId: householdId, zoneID: zoneID)
             }
 
             stage = .fetchRoot
             let db = await sharedDatabase
+            logJoinStage(
+                "join.acceptShare.fetchRoot",
+                householdId: householdId,
+                zoneID: zoneID,
+                scope: .participantShared
+            )
             let record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
 
             stage = .finalize
-            if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
+            if let householdId {
                 rememberRecordZone(record, explicitHouseholdId: householdId)
             } else {
                 rememberRecordZone(record, explicitHouseholdId: nil)
             }
 
             clearCloudKitFailure()
-            return try household(from: record)
+            let household = try household(from: record)
+            return AcceptedShareContext(
+                household: household,
+                householdId: household.id,
+                zoneID: zoneID,
+                shareURL: shareURL
+            )
         } catch {
+            logJoinStage(
+                "join.acceptShare.\(stage.rawValue)",
+                householdId: householdId,
+                zoneID: zoneID,
+                scope: .participantShared,
+                error: error
+            )
             recordCloudKitFailure(error, operation: "acceptShare.\(stage.rawValue)")
             throw error
         }
@@ -3617,19 +3716,8 @@ actor CloudKitManager {
     /// Accept a share using an invite code (share URL string)
     /// Returns the shared household after accepting
     func acceptShare(inviteCode: String) async throws -> Household {
-        let shareURL: URL
-        do {
-            shareURL = try InviteInputNormalizer.normalizedURL(from: inviteCode)
-        } catch {
-            throw HouseholdError.invalidInviteCode
-        }
-
-        // Fetch share metadata from the URL
-        let ckContainer = await container
-        let metadata = try await ckContainer.shareMetadata(for: shareURL)
-
-        // Accept the share
-        return try await acceptShare(metadata: metadata)
+        let context = try await resolveAcceptedShareContext(fromInviteCode: inviteCode)
+        return context.household
     }
 
     // MARK: - Error Handling

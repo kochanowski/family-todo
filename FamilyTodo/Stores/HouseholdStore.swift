@@ -4,6 +4,13 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+struct AcceptedShareContext {
+    let household: Household
+    let householdId: UUID
+    let zoneID: CKRecordZone.ID
+    let shareURL: URL?
+}
+
 protocol HouseholdCloudSyncing: Actor {
     func ensureReady() async
     func checkAvailability() async throws
@@ -44,6 +51,8 @@ protocol HouseholdCloudSyncing: Actor {
     func redeemInviteCode(_ rawCode: String) async throws -> Household
     func acceptShare(inviteCode: String) async throws -> Household
     func acceptShare(metadata: CKShare.Metadata) async throws -> Household
+    func resolveAcceptedShareContext(fromInviteCode rawCode: String) async throws -> AcceptedShareContext
+    func resolveAcceptedShareContext(metadata: CKShare.Metadata) async throws -> AcceptedShareContext
 
     func saveMember(
         _ member: Member,
@@ -172,10 +181,18 @@ class HouseholdStore: ObservableObject {
     }
 
     private struct JoinTarget {
-        let household: Household
+        let acceptedShareContext: AcceptedShareContext
 
         var householdId: UUID {
-            household.id
+            acceptedShareContext.householdId
+        }
+
+        var household: Household {
+            acceptedShareContext.household
+        }
+
+        var zoneID: CKRecordZone.ID {
+            acceptedShareContext.zoneID
         }
     }
 
@@ -700,14 +717,21 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        let joinedMember = try await upsertMembership(
+        print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
+        _ = try await upsertMembership(
             householdId: target.householdId,
             userId: userId,
             displayName: validatedDisplayName,
-            role: target.household.ownerId == userId ? .owner : .member
+            role: target.household.ownerId == userId ? .owner : .member,
+            scope: .participantShared
+        )
+        print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
+        let verifiedMember = try await verifyParticipantSharedMembership(
+            householdId: target.householdId,
+            userId: userId
         )
 
-        updateCache(with: joinedMember)
+        updateCache(with: verifiedMember)
         updateCache(with: target.household)
         currentHousehold = target.household
         beginPendingJoinProtection(
@@ -736,14 +760,21 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        let joinedMember = try await upsertMembership(
+        print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
+        _ = try await upsertMembership(
             householdId: target.householdId,
             userId: userId,
             displayName: validatedDisplayName,
-            role: target.household.ownerId == userId ? .owner : .member
+            role: target.household.ownerId == userId ? .owner : .member,
+            scope: .participantShared
+        )
+        print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
+        let verifiedMember = try await verifyParticipantSharedMembership(
+            householdId: target.householdId,
+            userId: userId
         )
 
-        updateCache(with: joinedMember)
+        updateCache(with: verifiedMember)
         updateCache(with: target.household)
         currentHousehold = target.household
         beginPendingJoinProtection(
@@ -1208,30 +1239,18 @@ class HouseholdStore: ObservableObject {
     private func resolveJoinTarget(for normalizedInvite: NormalizedInviteInput)
         async throws -> JoinTarget
     {
-        let isInviteCodeFlow =
-            InviteInputNormalizer.normalizeInviteCodeToken(normalizedInvite.inviteCode) != nil
-
-        if isInviteCodeFlow {
-            let token = try await cloudKit.fetchInviteToken(code: normalizedInvite.inviteCode)
-            let household = try await cloudKit.redeemInviteCode(normalizedInvite.inviteCode)
-            guard token.householdId == household.id else {
-                throw HouseholdError.invalidInviteCode
-            }
-            return JoinTarget(household: household)
-        }
-
-        await cloudKit.setHouseholdScope(.participantShared)
-        let household = try await cloudKit.acceptShare(inviteCode: normalizedInvite.inviteCode)
-        return JoinTarget(household: household)
+        let acceptedShareContext = try await cloudKit.resolveAcceptedShareContext(
+            fromInviteCode: normalizedInvite.inviteCode
+        )
+        return JoinTarget(acceptedShareContext: acceptedShareContext)
     }
 
     private func resolveJoinTarget(for metadata: CKShare.Metadata) async throws -> JoinTarget {
-        await cloudKit.setHouseholdScope(.participantShared)
-        let household = try await cloudKit.acceptShare(metadata: metadata)
-        guard UUID(uuidString: metadata.rootRecordID.recordName) == household.id else {
+        let acceptedShareContext = try await cloudKit.resolveAcceptedShareContext(metadata: metadata)
+        guard UUID(uuidString: metadata.rootRecordID.recordName) == acceptedShareContext.household.id else {
             throw HouseholdError.invalidInviteCode
         }
-        return JoinTarget(household: household)
+        return JoinTarget(acceptedShareContext: acceptedShareContext)
     }
 
     private func clearConflictingJoinStateBeforeTargetedJoin(
@@ -1334,10 +1353,11 @@ class HouseholdStore: ObservableObject {
         householdId: UUID,
         userId: String,
         displayName: String,
-        role: Member.MemberRole
+        role: Member.MemberRole,
+        scope: CloudKitManager.HouseholdDatabaseScope
     ) async throws -> Member {
         let normalizedKey = DisplayNameValidator.normalizedKey(displayName)
-        let allMembers = try await cloudKit.fetchMembers(householdId: householdId, scope: nil)
+        let allMembers = try await cloudKit.fetchMembers(householdId: householdId, scope: scope)
         if allMembers.contains(where: {
             $0.isActive &&
                 $0.userId != userId &&
@@ -1349,7 +1369,7 @@ class HouseholdStore: ObservableObject {
         if let existing = try await cloudKit.fetchMemberByUserId(
             userId,
             householdId: householdId,
-            scope: nil
+            scope: scope
         ) {
             let resolvedRole: Member.MemberRole = existing.role == .owner ? .owner : role
             let shouldUpdate =
@@ -1366,7 +1386,7 @@ class HouseholdStore: ObservableObject {
                 newRole: resolvedRole,
                 isActive: true,
                 colorHex: existing.colorHex,
-                scope: nil
+                scope: scope
             )
             return Member(
                 id: existing.id,
@@ -1387,8 +1407,40 @@ class HouseholdStore: ObservableObject {
             role: role,
             colorHex: MemberColorToken.randomHex()
         )
-        _ = try await cloudKit.saveMember(member, scope: nil)
+        _ = try await cloudKit.saveMember(member, scope: scope)
         return member
+    }
+
+    private func verifyParticipantSharedMembership(
+        householdId: UUID,
+        userId: String
+    ) async throws -> Member {
+        let retryDelaysNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000]
+
+        for delay in retryDelaysNanoseconds {
+            if delay > 0 {
+                try await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            await cloudKit.setHouseholdScope(.participantShared)
+            let verifiedMember = try await cloudKit.fetchMemberByUserId(
+                userId,
+                householdId: householdId,
+                scope: .participantShared
+            )
+
+            if let verifiedMember, verifiedMember.isActive {
+                print(
+                    "DEBUG: Join verification succeeded for household \(householdId) user \(userId) in participantShared scope."
+                )
+                return verifiedMember
+            }
+        }
+
+        print(
+            "DEBUG: Join verification failed for household \(householdId) user \(userId) in participantShared scope."
+        )
+        throw HouseholdError.sharedAccessNotEstablished
     }
 
     private func requiredMembershipDisplayName(from rawDisplayName: String) throws -> String {

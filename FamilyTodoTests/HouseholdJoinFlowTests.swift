@@ -15,6 +15,12 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         let isActive: Bool
     }
 
+    struct OperationEvent: Equatable {
+        let name: String
+        let scope: CloudKitManager.HouseholdDatabaseScope
+        let householdId: UUID?
+    }
+
     private var currentScope: CloudKitManager.HouseholdDatabaseScope = .participantShared
     private var householdsById: [UUID: Household]
     private var inviteTokensByCode: [String: InviteToken]
@@ -23,19 +29,35 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private var ownerMembers: [Member]
     private var memberStateUpdates: [MemberStateUpdate] = []
     private var leftSharedHouseholds: [UUID] = []
+    private var acceptedSharedHouseholdIDs: Set<UUID>
+    private let requiresAcceptedShareForParticipantScope: Bool
+    private let participantSharedWriteDeniedHouseholds: Set<UUID>
+    private let participantSharedReadDeniedHouseholds: Set<UUID>
+    private let participantSharedVerificationDeniedHouseholds: Set<UUID>
+    private var operationEvents: [OperationEvent] = []
 
     init(
         households: [Household] = [],
         inviteTokens: [InviteToken] = [],
         inviteRedeemResults: [String: Household] = [:],
         participantMembers: [Member] = [],
-        ownerMembers: [Member] = []
+        ownerMembers: [Member] = [],
+        acceptedSharedHouseholdIDs: Set<UUID> = [],
+        requiresAcceptedShareForParticipantScope: Bool = true,
+        participantSharedWriteDeniedHouseholds: Set<UUID> = [],
+        participantSharedReadDeniedHouseholds: Set<UUID> = [],
+        participantSharedVerificationDeniedHouseholds: Set<UUID> = []
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
         inviteTokensByCode = Dictionary(uniqueKeysWithValues: inviteTokens.map { ($0.code, $0) })
         self.inviteRedeemResults = inviteRedeemResults
         self.participantMembers = participantMembers
         self.ownerMembers = ownerMembers
+        self.acceptedSharedHouseholdIDs = acceptedSharedHouseholdIDs.union(Set(participantMembers.map(\.householdId)))
+        self.requiresAcceptedShareForParticipantScope = requiresAcceptedShareForParticipantScope
+        self.participantSharedWriteDeniedHouseholds = participantSharedWriteDeniedHouseholds
+        self.participantSharedReadDeniedHouseholds = participantSharedReadDeniedHouseholds
+        self.participantSharedVerificationDeniedHouseholds = participantSharedVerificationDeniedHouseholds
     }
 
     private func resolvedScope(_ explicitScope: CloudKitManager.HouseholdDatabaseScope?)
@@ -59,6 +81,52 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
             participantMembers = members
         case .ownerPrivate:
             ownerMembers = members
+        }
+    }
+
+    private func appendOperation(
+        _ name: String,
+        scope: CloudKitManager.HouseholdDatabaseScope,
+        householdId: UUID? = nil
+    ) {
+        operationEvents.append(
+            OperationEvent(name: name, scope: scope, householdId: householdId)
+        )
+    }
+
+    private func ensureParticipantSharedAccess(
+        householdId: UUID?,
+        operation: String,
+        forWrite: Bool
+    ) throws {
+        guard requiresAcceptedShareForParticipantScope else { return }
+        guard let householdId else { return }
+
+        if forWrite, participantSharedWriteDeniedHouseholds.contains(householdId) {
+            throw CKError(.permissionFailure)
+        }
+
+        if !forWrite, participantSharedReadDeniedHouseholds.contains(householdId) {
+            throw CKError(.zoneNotFound)
+        }
+
+        if !forWrite,
+           operation == "fetchMemberByUserId",
+           participantSharedVerificationDeniedHouseholds.contains(householdId)
+        {
+            throw CKError(.zoneNotFound)
+        }
+
+        guard acceptedSharedHouseholdIDs.contains(householdId) else {
+            throw CKError(forWrite ? .permissionFailure : .zoneNotFound)
+        }
+    }
+
+    private func mirrorParticipantMemberIntoOwnerScope(_ member: Member) {
+        if let existingIndex = ownerMembers.firstIndex(where: { $0.id == member.id }) {
+            ownerMembers[existingIndex] = member
+        } else {
+            ownerMembers.append(member)
         }
     }
 
@@ -176,10 +244,44 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     }
 
     func acceptShare(inviteCode rawCode: String) async throws -> Household {
-        try await redeemInviteCode(rawCode)
+        let context = try await resolveAcceptedShareContext(fromInviteCode: rawCode)
+        return context.household
     }
 
     func acceptShare(metadata _: CKShare.Metadata) async throws -> Household {
+        throw HouseholdJoinTestError.unimplemented
+    }
+
+    func resolveAcceptedShareContext(fromInviteCode rawCode: String) async throws -> AcceptedShareContext {
+        let household: Household
+        let shareURL: URL?
+
+        if let householdFromRedeem = inviteRedeemResults[rawCode] {
+            household = householdFromRedeem
+            shareURL = URL(string: inviteTokensByCode[rawCode]?.shareURL ?? "https://www.icloud.com/share/test")
+        } else if let token = inviteTokensByCode[rawCode],
+                  let tokenHousehold = householdsById[token.householdId]
+        {
+            household = tokenHousehold
+            shareURL = URL(string: token.shareURL)
+        } else {
+            throw HouseholdJoinTestError.missingInviteToken(rawCode)
+        }
+
+        acceptedSharedHouseholdIDs.insert(household.id)
+        let zoneID = CKRecordZone.ID(
+            zoneName: "shared-\(household.id.uuidString)",
+            ownerName: "owner"
+        )
+        return AcceptedShareContext(
+            household: household,
+            householdId: household.id,
+            zoneID: zoneID,
+            shareURL: shareURL
+        )
+    }
+
+    func resolveAcceptedShareContext(metadata _: CKShare.Metadata) async throws -> AcceptedShareContext {
         throw HouseholdJoinTestError.unimplemented
     }
 
@@ -188,6 +290,14 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
+        appendOperation("saveMember", scope: scope, householdId: member.householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: member.householdId,
+                operation: "saveMember",
+                forWrite: true
+            )
+        }
         var members = members(for: scope)
         if let index = members.firstIndex(where: { $0.id == member.id }) {
             members[index] = member
@@ -195,6 +305,9 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
             members.append(member)
         }
         setMembers(members, for: scope)
+        if scope == .participantShared {
+            mirrorParticipantMemberIntoOwnerScope(member)
+        }
         return makeRecord(recordType: "Member", id: member.id)
     }
 
@@ -203,6 +316,11 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         householdId: UUID?,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> Member? {
+        appendOperation(
+            "fetchMemberByUserId",
+            scope: resolvedScope(explicitScope),
+            householdId: householdId
+        )
         try await fetchActiveMembersByUserId(
             userId,
             householdId: householdId,
@@ -216,6 +334,14 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [Member] {
         let scope = resolvedScope(explicitScope)
+        appendOperation("fetchActiveMembersByUserId", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchActiveMembersByUserId",
+                forWrite: false
+            )
+        }
         return members(for: scope)
             .filter { member in
                 member.userId == userId &&
@@ -230,6 +356,14 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [Member] {
         let scope = resolvedScope(explicitScope)
+        appendOperation("fetchMembers", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchMembers",
+                forWrite: false
+            )
+        }
         return members(for: scope)
             .filter { $0.householdId == householdId }
             .sorted { $0.joinedAt < $1.joinedAt }
@@ -245,6 +379,14 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
+        appendOperation("updateMemberState", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "updateMemberState",
+                forWrite: true
+            )
+        }
         var members = members(for: scope)
         guard let index = members.firstIndex(where: { $0.id == memberId }) else {
             throw CKError(.unknownItem)
@@ -262,6 +404,9 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
             colorHex: colorHex
         )
         setMembers(members, for: scope)
+        if scope == .participantShared {
+            mirrorParticipantMemberIntoOwnerScope(members[index])
+        }
         memberStateUpdates.append(
             MemberStateUpdate(memberId: memberId, householdId: householdId, isActive: isActive)
         )
@@ -370,6 +515,14 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
 
     func leftSharedHouseholdsSnapshot() async -> [UUID] {
         leftSharedHouseholds
+    }
+
+    func operationEventsSnapshot() async -> [OperationEvent] {
+        operationEvents
+    }
+
+    func hasAcceptedSharedHousehold(_ householdId: UUID) async -> Bool {
+        acceptedSharedHouseholdIDs.contains(householdId)
     }
 }
 
@@ -803,5 +956,88 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertTrue(validationResult)
         XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
         XCTAssertTrue(store.hasPendingJoinProtection(for: targetHousehold.id, userId: userId))
+    }
+
+    func testJoinAcceptsShareBeforeParticipantMembershipWriteAndVerifyUsesParticipantScope() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "S8H7A6R5",
+            code: "S8H7A6R5",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/verified-join",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Taylor"
+        )
+
+        let acceptedShare = await cloud.hasAcceptedSharedHousehold(targetHousehold.id)
+        let operations = await cloud.operationEventsSnapshot()
+        let memberSaveEvent = operations.first {
+            $0.name == "saveMember" && $0.householdId == targetHousehold.id
+        }
+        let memberVerifyEvent = operations.last {
+            $0.name == "fetchMemberByUserId" && $0.householdId == targetHousehold.id
+        }
+
+        XCTAssertTrue(acceptedShare)
+        XCTAssertEqual(memberSaveEvent?.scope, .participantShared)
+        XCTAssertEqual(memberVerifyEvent?.scope, .participantShared)
+        XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+    }
+
+    func testJoinDoesNotSetCurrentHouseholdWhenParticipantSharedMembershipVerificationFails() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Broken Share", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "B1R2O3K4",
+            code: "B1R2O3K4",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/broken-share",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            participantSharedVerificationDeniedHouseholds: [targetHousehold.id]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        do {
+            try await store.joinHousehold(
+                inviteCode: inviteToken.code,
+                userId: userId,
+                displayName: "Taylor"
+            )
+            XCTFail("Expected sharedAccessNotEstablished error")
+        } catch let error as HouseholdError {
+            XCTAssertEqual(error, .sharedAccessNotEstablished)
+        }
+
+        XCTAssertNil(store.currentHousehold)
+        XCTAssertTrue(try cachedHouseholds().isEmpty)
+        XCTAssertTrue(try cachedMembers(for: targetHousehold.id).isEmpty)
+        XCTAssertFalse(store.hasPendingJoinProtection(for: targetHousehold.id, userId: userId))
     }
 }
