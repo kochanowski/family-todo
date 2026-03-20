@@ -32,7 +32,6 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         HouseholdStore(
             modelContext: modelContainer.mainContext,
             cloudKit: cloud,
-            joinedHouseholdPrewarmOverride: { _, _, _ in },
             userDefaults: defaults,
             recoverySuppressionDuration: 300,
             joinHydrationConfiguration: .default
