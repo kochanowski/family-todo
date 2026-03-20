@@ -316,6 +316,7 @@ class HouseholdStore: ObservableObject {
     private let recoverySuppressionDuration: TimeInterval
     private let joinHydrationConfiguration: JoinHydrationConfiguration
     private var isRefreshingCloudHousehold = false
+    private var lastRemoteCloudRefreshSnapshot: RemoteCloudRefreshSnapshot?
     private var isReplayingPendingExitOperations = false
     private var pendingHouseholdMetadataSync: PendingHouseholdMetadataSync?
     private var isReplayingPendingHouseholdMetadataSync = false
@@ -1429,11 +1430,22 @@ class HouseholdStore: ObservableObject {
             }
 
             await cloudKit.setHouseholdScope(.participantShared)
-            let verifiedMember = try await cloudKit.fetchMemberByUserId(
-                userId,
-                householdId: householdId,
-                scope: .participantShared
-            )
+            let verifiedMember: Member?
+            do {
+                verifiedMember = try await cloudKit.fetchMemberByUserId(
+                    userId,
+                    householdId: householdId,
+                    scope: .participantShared
+                )
+            } catch {
+                if isParticipantSharedVerificationError(error) {
+                    print(
+                        "DEBUG: Join verification retry for household \(householdId) user \(userId) after shared access error: \(error)"
+                    )
+                    continue
+                }
+                throw error
+            }
 
             if let verifiedMember, verifiedMember.isActive {
                 print(
@@ -1447,6 +1459,20 @@ class HouseholdStore: ObservableObject {
             "DEBUG: Join verification failed for household \(householdId) user \(userId) in participantShared scope."
         )
         throw HouseholdError.sharedAccessNotEstablished
+    }
+
+    private func isParticipantSharedVerificationError(_ error: Error) -> Bool {
+        if let ckError = error as? CKError {
+            return ckError.code == .zoneNotFound ||
+                ckError.code == .permissionFailure ||
+                ckError.code == .unknownItem
+        }
+        if let managerError = error as? CloudKitManager.CloudKitManagerError,
+           case let .unknownError(underlying) = managerError
+        {
+            return isParticipantSharedVerificationError(underlying)
+        }
+        return false
     }
 
     private func requiredMembershipDisplayName(from rawDisplayName: String) throws -> String {
@@ -1951,6 +1977,7 @@ class HouseholdStore: ObservableObject {
         joinHydrationTask?.cancel()
         joinHydrationTask = nil
         pendingJoinState = nil
+        lastRemoteCloudRefreshSnapshot = nil
         currentHousehold = nil
         share = nil
         activeInviteCode = nil
@@ -2233,8 +2260,16 @@ class HouseholdStore: ObservableObject {
             preferredHouseholdId: preferredHouseholdId
         )
         let didChange =
-            beforeSnapshot.currentHouseholdId != afterSnapshot.currentHouseholdId ||
-            beforeSnapshot.hydrationSnapshot != refreshedHydrationSnapshot
+            lastRemoteCloudRefreshSnapshot != RemoteCloudRefreshSnapshot(
+                currentHouseholdId: afterSnapshot.currentHouseholdId,
+                observedHouseholdId: afterSnapshot.observedHouseholdId,
+                hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
+            )
+        lastRemoteCloudRefreshSnapshot = RemoteCloudRefreshSnapshot(
+            currentHouseholdId: afterSnapshot.currentHouseholdId,
+            observedHouseholdId: afterSnapshot.observedHouseholdId,
+            hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
+        )
 
         if didChange {
             publishRemoteCloudRefreshNotifications(source: "remotePush")
