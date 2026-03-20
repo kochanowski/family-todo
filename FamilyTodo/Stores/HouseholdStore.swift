@@ -139,7 +139,11 @@ protocol HouseholdCloudSyncing: Actor {
     func deleteRecurringChore(id: UUID, householdId: UUID) async throws
 }
 
-extension CloudKitManager: HouseholdCloudSyncing {}
+extension CloudKitManager: HouseholdCloudSyncing {
+    func repairSharedHouseholdGraphIfNeeded(householdId: UUID) async throws {
+        try await repairSharedHouseholdGraphIfNeeded(householdId: householdId, force: false)
+    }
+}
 
 @MainActor
 // swiftlint:disable type_body_length file_length
