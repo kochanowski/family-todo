@@ -1,6 +1,7 @@
 import CloudKit
 @testable import HousePulse
 import SwiftData
+import UIKit
 import XCTest
 
 private enum HouseholdJoinTestError: Error {
@@ -8,7 +9,9 @@ private enum HouseholdJoinTestError: Error {
     case missingInviteToken(String)
 }
 
-private actor FakeHouseholdCloud: HouseholdCloudSyncing {
+// swiftlint:enable file_length
+
+actor FakeHouseholdCloud: HouseholdCloudSyncing {
     struct MemberStateUpdate: Equatable {
         let memberId: UUID
         let householdId: UUID
@@ -27,6 +30,11 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private var inviteRedeemResults: [String: Household]
     private var participantMembers: [Member]
     private var ownerMembers: [Member]
+    private var tasks: [Task]
+    private var shoppingItems: [ShoppingItem]
+    private var shoppingBundles: [ShoppingBundle]
+    private var backlogItems: [BacklogItem]
+    private var backlogCategories: [BacklogCategory]
     private var memberStateUpdates: [MemberStateUpdate] = []
     private var leftSharedHouseholds: [UUID] = []
     private var acceptedSharedHouseholdIDs: Set<UUID>
@@ -42,6 +50,11 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         inviteRedeemResults: [String: Household] = [:],
         participantMembers: [Member] = [],
         ownerMembers: [Member] = [],
+        tasks: [Task] = [],
+        shoppingItems: [ShoppingItem] = [],
+        shoppingBundles: [ShoppingBundle] = [],
+        backlogItems: [BacklogItem] = [],
+        backlogCategories: [BacklogCategory] = [],
         acceptedSharedHouseholdIDs: Set<UUID> = [],
         requiresAcceptedShareForParticipantScope: Bool = true,
         participantSharedWriteDeniedHouseholds: Set<UUID> = [],
@@ -53,6 +66,11 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.inviteRedeemResults = inviteRedeemResults
         self.participantMembers = participantMembers
         self.ownerMembers = ownerMembers
+        self.tasks = tasks
+        self.shoppingItems = shoppingItems
+        self.shoppingBundles = shoppingBundles
+        self.backlogItems = backlogItems
+        self.backlogCategories = backlogCategories
         self.acceptedSharedHouseholdIDs = acceptedSharedHouseholdIDs.union(Set(participantMembers.map(\.householdId)))
         self.requiresAcceptedShareForParticipantScope = requiresAcceptedShareForParticipantScope
         self.participantSharedWriteDeniedHouseholds = participantSharedWriteDeniedHouseholds
@@ -433,10 +451,21 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     func clearAllCachedZones(for _: UUID) {}
 
     func fetchTasks(
-        householdId _: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [Task] {
-        []
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchTasks", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchTasks",
+                forWrite: false
+            )
+        }
+        return tasks
+            .filter { $0.householdId == householdId }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     func deleteTask(
@@ -446,10 +475,21 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws {}
 
     func fetchShoppingItems(
-        householdId _: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [ShoppingItem] {
-        []
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchShoppingItems", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchShoppingItems",
+                forWrite: false
+            )
+        }
+        return shoppingItems
+            .filter { $0.householdId == householdId }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     func deleteShoppingItem(
@@ -459,10 +499,21 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws {}
 
     func fetchShoppingBundles(
-        householdId _: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [ShoppingBundle] {
-        []
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchShoppingBundles", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchShoppingBundles",
+                forWrite: false
+            )
+        }
+        return shoppingBundles
+            .filter { $0.householdId == householdId }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     func deleteShoppingBundle(
@@ -472,10 +523,21 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws {}
 
     func fetchBacklogItems(
-        householdId _: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [BacklogItem] {
-        []
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchBacklogItems", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchBacklogItems",
+                forWrite: false
+            )
+        }
+        return backlogItems
+            .filter { $0.householdId == householdId }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     func deleteBacklogItem(
@@ -485,10 +547,21 @@ private actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws {}
 
     func fetchBacklogCategories(
-        householdId _: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [BacklogCategory] {
-        []
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchBacklogCategories", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchBacklogCategories",
+                forWrite: false
+            )
+        }
+        return backlogCategories
+            .filter { $0.householdId == householdId }
+            .sorted { $0.createdAt < $1.createdAt }
     }
 
     func deleteBacklogCategory(

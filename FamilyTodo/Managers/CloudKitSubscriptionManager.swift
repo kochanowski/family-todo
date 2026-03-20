@@ -113,13 +113,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) {
         guard let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) else {
+            print("[CloudKitSubscription] Ignoring remote notification because it was not recognized as CloudKit.")
             return
         }
 
         if let dbNotification = notification as? CKDatabaseNotification {
+            print("[CloudKitSubscription] Received database notification.")
             handleDatabaseNotification(dbNotification)
         } else if let queryNotification = notification as? CKQueryNotification {
+            let recordType = (queryNotification.recordFields?["recordType"] as? String) ?? "unknown"
+            print("[CloudKitSubscription] Received query notification for recordType=\(recordType).")
             handleQueryNotification(queryNotification)
+        } else {
+            print("[CloudKitSubscription] Received CloudKit notification of unsupported type \(notification.notificationType.rawValue).")
         }
     }
 
@@ -189,7 +195,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     private func handleDatabaseNotification(_: CKDatabaseNotification) {
-        guard !isLikelySelfNoise(recordName: nil) else { return }
+        guard !isLikelySelfNoise(recordName: nil) else {
+            print("[CloudKitSubscription] Dropping database notification as likely self-noise.")
+            return
+        }
         triggerRefreshForAllDomains(source: "remote")
 
         pendingShoppingChanges.append("Shared Update")
@@ -201,7 +210,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
         let recordType = (notification.recordFields?["recordType"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let recordName = notification.recordID?.recordName
-        guard !isLikelySelfNoise(recordName: recordName) else { return }
+        guard !isLikelySelfNoise(recordName: recordName) else {
+            print("[CloudKitSubscription] Dropping query notification as likely self-noise for recordName=\(recordName ?? "unknown").")
+            return
+        }
         triggerRefresh(for: recordType, source: "remote")
 
         guard let recordType, !recordType.isEmpty, recordType != "Unknown" else {

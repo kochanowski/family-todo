@@ -236,7 +236,7 @@ class HouseholdStore: ObservableObject {
         var hasPublishedVisibleContentNotifications = false
     }
 
-    private struct JoinedHouseholdHydrationSnapshot {
+    private struct JoinedHouseholdHydrationSnapshot: Equatable {
         let activeMemberCount: Int
         let currentUserHasCachedMembership: Bool
         let remoteMembershipConfirmed: Bool
@@ -253,6 +253,12 @@ class HouseholdStore: ObservableObject {
                 shoppingItemCount > 0 ||
                 bundleCount > 0
         }
+    }
+
+    private struct RemoteCloudRefreshSnapshot: Equatable {
+        let currentHouseholdId: UUID?
+        let observedHouseholdId: UUID?
+        let hydrationSnapshot: JoinedHouseholdHydrationSnapshot?
     }
 
     private enum JoinHydrationTimeoutError: Error {
@@ -1798,6 +1804,68 @@ class HouseholdStore: ObservableObject {
         )
     }
 
+    private func remoteCloudRefreshSnapshot(
+        userId: String,
+        preferredHouseholdId: UUID?
+    ) -> RemoteCloudRefreshSnapshot {
+        let currentHouseholdId = currentHousehold?.id
+        let observedHouseholdId = currentHouseholdId ?? preferredHouseholdId
+        let hydrationSnapshot = observedHouseholdId.map { householdId in
+            cachedJoinHydrationSnapshot(
+                householdId: householdId,
+                userId: userId,
+                remoteMembershipConfirmed: isValidCachedMembershipForRecoveredHousehold(
+                    householdId: householdId,
+                    userId: userId
+                )
+            )
+        }
+
+        return RemoteCloudRefreshSnapshot(
+            currentHouseholdId: currentHouseholdId,
+            observedHouseholdId: observedHouseholdId,
+            hydrationSnapshot: hydrationSnapshot
+        )
+    }
+
+    private func publishRemoteCloudRefreshNotifications(source: String) {
+        NotificationCenter.default.post(name: .householdDataDidChange, object: source)
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
+        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
+        NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+    }
+
+    private func describeRemoteCloudRefreshSnapshot(_ snapshot: RemoteCloudRefreshSnapshot) -> String {
+        guard let hydrationSnapshot = snapshot.hydrationSnapshot else {
+            return "current=nil observed=\(snapshot.observedHouseholdId?.uuidString ?? "none") data=empty"
+        }
+
+        return [
+            "current=\(snapshot.currentHouseholdId?.uuidString ?? "none")",
+            "observed=\(snapshot.observedHouseholdId?.uuidString ?? "none")",
+            "members=\(hydrationSnapshot.activeMemberCount)",
+            "currentUser=\(hydrationSnapshot.currentUserHasCachedMembership)",
+            "tasks=\(hydrationSnapshot.taskCount)",
+            "ideas=\(hydrationSnapshot.ideaCount)",
+            "categories=\(hydrationSnapshot.categoryCount)",
+            "shopping=\(hydrationSnapshot.shoppingItemCount)",
+            "bundles=\(hydrationSnapshot.bundleCount)",
+        ].joined(separator: " ")
+    }
+
+    private func describeBackgroundFetchResult(_ result: UIBackgroundFetchResult) -> String {
+        switch result {
+        case .newData:
+            "newData"
+        case .noData:
+            "noData"
+        case .failed:
+            "failed"
+        @unknown default:
+            "unknown"
+        }
+    }
+
     private func applyPendingJoinHydrationSnapshot(
         _ snapshot: JoinedHouseholdHydrationSnapshot,
         householdId: UUID,
@@ -2107,6 +2175,72 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             publishVisibleContentNotifications: true
         )
+    }
+
+    func handleRemoteCloudChange(
+        userId: String?,
+        preferredHouseholdId: UUID?
+    ) async -> UIBackgroundFetchResult {
+        guard syncMode == .cloud else {
+            print("[RemoteSync] Ignoring remote push because sync mode is local-only.")
+            return .noData
+        }
+
+        guard let userId else {
+            print("[RemoteSync] Ignoring remote push because there is no active cloud user.")
+            return .noData
+        }
+
+        let beforeSnapshot = remoteCloudRefreshSnapshot(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+        print(
+            "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(beforeSnapshot))"
+        )
+
+        await refreshCurrentHouseholdAndMembershipFromCloud(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+
+        if let household = currentHousehold {
+            do {
+                let hydrationSnapshot = try await runJoinedHouseholdHydrationPass(
+                    household: household,
+                    userId: userId
+                )
+                applyPendingJoinHydrationSnapshot(
+                    hydrationSnapshot,
+                    householdId: household.id,
+                    userId: userId,
+                    publishVisibleContentNotifications: false
+                )
+                print(
+                    "[RemoteSync] Hydration pass finished for household \(household.id). members=\(hydrationSnapshot.activeMemberCount) tasks=\(hydrationSnapshot.taskCount) ideas=\(hydrationSnapshot.ideaCount) shopping=\(hydrationSnapshot.shoppingItemCount) bundles=\(hydrationSnapshot.bundleCount)"
+                )
+            } catch {
+                self.error = error
+                print("[RemoteSync] Hydration pass failed: \(error)")
+                return .failed
+            }
+        }
+
+        let afterSnapshot = remoteCloudRefreshSnapshot(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+        let didChange = beforeSnapshot != afterSnapshot
+
+        if didChange {
+            publishRemoteCloudRefreshNotifications(source: "remotePush")
+        }
+
+        let fetchResult: UIBackgroundFetchResult = didChange ? .newData : .noData
+        print(
+            "[RemoteSync] Background household refresh completed with result=\(describeBackgroundFetchResult(fetchResult)). after=\(describeRemoteCloudRefreshSnapshot(afterSnapshot))"
+        )
+        return fetchResult
     }
 
     private func resolveRecoverableCloudHousehold(

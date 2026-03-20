@@ -144,6 +144,16 @@ struct FamilyTodoApp: App {
                             }
                             .task {
                                 appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                                appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] in
+                                    guard let householdStore, let userSession else {
+                                        return .noData
+                                    }
+
+                                    return await householdStore.handleRemoteCloudChange(
+                                        userId: userSession.userId,
+                                        preferredHouseholdId: userSession.currentHouseholdID
+                                    )
+                                }
                                 appDelegate.flushPendingInviteIfNeeded()
                                 WorkItemCacheMigrator.migrateIfNeeded(
                                     context: sharedModelContainer.mainContext
