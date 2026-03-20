@@ -398,12 +398,25 @@ final class HouseholdJoinFlowTests: XCTestCase {
     }
 
     private func makeStore(cloud: FakeHouseholdCloud) -> HouseholdStore {
+        makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, _ in },
+            joinHydrationConfiguration: .default
+        )
+    }
+
+    private func makeStore(
+        cloud: FakeHouseholdCloud,
+        joinedHouseholdPrewarmOverride: @escaping (Household, String, ModelContext?) async throws -> Void,
+        joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration
+    ) -> HouseholdStore {
         HouseholdStore(
             modelContext: modelContainer.mainContext,
             cloudKit: cloud,
-            joinedHouseholdPrewarmOverride: { _, _, _ in },
+            joinedHouseholdPrewarmOverride: joinedHouseholdPrewarmOverride,
             userDefaults: defaults,
-            recoverySuppressionDuration: 300
+            recoverySuppressionDuration: 300,
+            joinHydrationConfiguration: joinHydrationConfiguration
         )
     }
 
@@ -417,6 +430,14 @@ final class HouseholdJoinFlowTests: XCTestCase {
 
     private func cachedHouseholds() throws -> [CachedHousehold] {
         try modelContainer.mainContext.fetch(FetchDescriptor<CachedHousehold>())
+    }
+
+    private func cachedWorkItems(for householdId: UUID) throws -> [CachedWorkItem] {
+        try modelContainer.mainContext.fetch(
+            FetchDescriptor<CachedWorkItem>(
+                predicate: #Predicate { $0.householdId == householdId }
+            )
+        )
     }
 
     func testJoinInviteCodeUsesResolvedTargetHouseholdAndIgnoresStaleRecoveredHousehold() async throws {
@@ -632,5 +653,155 @@ final class HouseholdJoinFlowTests: XCTestCase {
         let leftSharedHouseholds = await cloud.leftSharedHouseholdsSnapshot()
         XCTAssertEqual(inactiveUpdateCount, 1)
         XCTAssertEqual(leftSharedHouseholds, [household.id])
+    }
+
+    func testJoinWaitsForInitialHydrationWhenSharedDataArrivesQuickly() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "Q2W3E4R5",
+            code: "Q2W3E4R5",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/test-quick",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let quickIdea = TestCacheFixtures.idea(
+            householdId: targetHousehold.id,
+            categoryId: UUID(),
+            title: "Plan weekend"
+        )
+        let hydrationConfig = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 500_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30
+        )
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            inviteRedeemResults: [inviteToken.code: targetHousehold]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                try await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
+                guard let context else { return }
+                context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(idea: quickIdea)))
+                try context.save()
+            },
+            joinHydrationConfiguration: hydrationConfig
+        )
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Taylor"
+        )
+
+        XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+        XCTAssertEqual(try cachedWorkItems(for: targetHousehold.id).count, 1)
+        XCTAssertEqual(try cachedMembers(for: targetHousehold.id).count, 1)
+    }
+
+    func testJoinTimeoutKeepsLocalHouseholdAndCachedMember() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Timeout Home", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "T1M3O5U7",
+            code: "T1M3O5U7",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/test-timeout",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let hydrationConfig = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 20_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30
+        )
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            inviteRedeemResults: [inviteToken.code: targetHousehold]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, _ in
+                try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+            },
+            joinHydrationConfiguration: hydrationConfig
+        )
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Taylor"
+        )
+
+        XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+        XCTAssertEqual(try cachedMembers(for: targetHousehold.id).count, 1)
+    }
+
+    func testPendingJoinProtectionPreventsImmediateInvalidationDuringEchoGap() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Echo Gap Home", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "E1C2H3O4",
+            code: "E1C2H3O4",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/test-echo",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let hydrationConfig = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 20_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30
+        )
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            inviteRedeemResults: [inviteToken.code: targetHousehold]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, _ in
+                try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+            },
+            joinHydrationConfiguration: hydrationConfig
+        )
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Taylor"
+        )
+
+        let validationResult = try await store.validateRecoveredMembershipOrAbandon(
+            household: targetHousehold,
+            userId: userId,
+            retryDelaysNanoseconds: [0],
+            fetchActiveMember: { _, _ in nil }
+        )
+
+        XCTAssertTrue(validationResult)
+        XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+        XCTAssertTrue(store.hasPendingJoinProtection(for: targetHousehold.id, userId: userId))
     }
 }

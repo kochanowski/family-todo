@@ -138,11 +138,15 @@ class MemberStore: ObservableObject {
 
         do {
             await cloudKit.ensureReady()
+            let cachedMembers = fetchCachedMembers(householdId: householdId)
             let fetchedMembers = try await cloudKit.fetchMembers(
                 householdId: householdId,
                 scope: cloudScope
             )
-            let mergedMembers = mergeCloudMembersWithPendingProfileOverrides(fetchedMembers)
+            let mergedMembers = mergedVisibleMembersAfterCloudRefresh(
+                fetchedMembers,
+                cachedMembers: cachedMembers
+            )
             updateCache(with: mergedMembers, for: householdId)
             members = mergedMembers
         } catch {
@@ -454,6 +458,32 @@ class MemberStore: ObservableObject {
             }
 
             return override
+        }
+    }
+
+    private func mergedVisibleMembersAfterCloudRefresh(
+        _ fetchedMembers: [Member],
+        cachedMembers: [Member]
+    ) -> [Member] {
+        let mergedRemoteMembers = mergeCloudMembersWithPendingProfileOverrides(fetchedMembers)
+
+        if mergedRemoteMembers.isEmpty, !cachedMembers.isEmpty {
+            return cachedMembers
+        }
+
+        var mergedById = Dictionary(uniqueKeysWithValues: mergedRemoteMembers.map { ($0.id, $0) })
+
+        if let currentUserId,
+           !mergedRemoteMembers.contains(where: { $0.userId == currentUserId && $0.isActive }),
+           let cachedCurrentUserMember = cachedMembers.first(where: {
+               $0.userId == currentUserId && $0.isActive
+           })
+        {
+            mergedById[cachedCurrentUserMember.id] = cachedCurrentUserMember
+        }
+
+        return mergedById.values.sorted { lhs, rhs in
+            lhs.joinedAt < rhs.joinedAt
         }
     }
 

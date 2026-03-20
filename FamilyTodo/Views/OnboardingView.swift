@@ -189,6 +189,7 @@ struct CreateHouseholdSheet: View {
 
 struct JoinHouseholdSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var themeStore: ThemeStore
     @ObservedObject var householdStore: HouseholdStore
     let userId: String
     let displayName: String
@@ -199,33 +200,33 @@ struct JoinHouseholdSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("8-character invite code", text: $inviteInput)
-                        .textContentType(.oneTimeCode)
-                        .textInputAutocapitalization(.characters)
-                        .disableAutocorrection(true)
-                        .onChange(of: inviteInput) { _, newValue in
-                            inviteInput = normalizedInviteCodeInput(newValue)
+            ZStack {
+                Form {
+                    Section {
+                        TextField("8-character invite code", text: $inviteInput)
+                            .textContentType(.oneTimeCode)
+                            .textInputAutocapitalization(.characters)
+                            .disableAutocorrection(true)
+                            .onChange(of: inviteInput) { _, newValue in
+                                inviteInput = normalizedInviteCodeInput(newValue)
+                            }
+                    } footer: {
+                        Text("Ask the household owner for the 8-character invite code.")
+                    }
+
+                    if let errorMessage {
+                        Section {
+                            Text(errorMessage)
+                                .foregroundStyle(.red)
                         }
-                } footer: {
-                    Text("Ask the household owner for the 8-character invite code.")
+                    }
                 }
+                .disabled(isJoining)
 
                 if isJoining {
-                    Section {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Joining household...")
-                        }
-                    }
-                }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                    }
+                    JoiningHouseholdLoadingView(isActive: isJoining)
+                        .environmentObject(themeStore)
+                        .transition(.opacity)
                 }
             }
             .navigationTitle("Join Household")
@@ -233,6 +234,7 @@ struct JoinHouseholdSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isJoining)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Join") {

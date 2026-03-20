@@ -238,7 +238,7 @@ struct RootView: View {
                         SignInView()
                             .transition(.opacity)
                     } else if shouldShowHouseholdSetupLoader {
-                        HouseholdSetupLoadingView()
+                        HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
                             .transition(.opacity)
                     } else {
                         CreateHouseholdView()
@@ -522,14 +522,16 @@ struct RootView: View {
         var didClear = false
 
         if let householdId = userSession.currentHouseholdID,
-           householdStore.isRecoverySuppressed(for: householdId)
+           householdStore.isRecoverySuppressed(for: householdId),
+           !householdStore.hasPendingJoinProtection(for: householdId, userId: userSession.userId)
         {
             userSession.clearCurrentHousehold()
             didClear = true
         }
 
         if let household = householdStore.currentHousehold,
-           householdStore.isRecoverySuppressed(for: household.id)
+           householdStore.isRecoverySuppressed(for: household.id),
+           !householdStore.hasPendingJoinProtection(for: household.id, userId: userSession.userId)
         {
             householdStore.clearCurrentHousehold()
             didClear = true
@@ -545,16 +547,25 @@ struct RootView: View {
 }
 
 private struct HouseholdSetupLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-                .progressViewStyle(.circular)
+    var isJoiningHousehold = false
 
-            Text("Loading household...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    var body: some View {
+        if isJoiningHousehold {
+            JoiningHouseholdLoadingView(
+                isActive: true,
+                title: "Joining household..."
+            )
+        } else {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+
+                Text("Loading household...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

@@ -15,10 +15,15 @@ struct MainAppView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
+    @Query(sort: \CachedMember.joinedAt) private var cachedMembers: [CachedMember]
 
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
     @State private var tabBarController: UITabBarController?
+    @State private var hasPrimedActiveMemberBaseline = false
+    @State private var knownActiveMemberIDs = Set<UUID>()
+    @State private var activeJoinToastMessage: String?
+    @State private var joinToastDismissTask: _Concurrency.Task<Void, Never>?
 
     var body: some View {
         legacyTabView
@@ -31,8 +36,18 @@ struct MainAppView: View {
                 }
             )
             .background(AppBackgroundView())
+            .overlay(alignment: .top) {
+                if let activeJoinToastMessage {
+                    ToastView(message: activeJoinToastMessage)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(2)
+                }
+            }
             .onAppear {
                 reconcileTabBarAppearance()
+                primeActiveMemberBaseline()
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
                 reconcileTabBarAppearance()
@@ -46,9 +61,19 @@ struct MainAppView: View {
             .onChange(of: activeTab) { _, _ in
                 reconcileTabBarAppearance()
             }
+            .onChange(of: userSession.currentHouseholdID) { _, _ in
+                primeActiveMemberBaseline()
+            }
+            .onChange(of: householdStore.currentHousehold?.id) { _, _ in
+                primeActiveMemberBaseline()
+            }
+            .onChange(of: activeMemberSnapshot) { oldValue, newValue in
+                handleActiveMemberSnapshotChange(from: oldValue, to: newValue)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .tabBarAppearanceRefreshRequested)) { _ in
                 refreshTabBarAppearanceForHouseholdChromeChange()
             }
+            .animation(.spring(response: 0.32, dampingFraction: 0.88), value: activeJoinToastMessage)
             .task {
                 await bootstrapHouseholdIfNeeded()
             }
@@ -88,6 +113,31 @@ struct MainAppView: View {
             }
             .tag(AppTab.more)
         }
+    }
+
+    private var activeMemberSnapshot: ActiveMemberSnapshot {
+        let householdId = userSession.currentHouseholdID ?? householdStore.currentHousehold?.id
+        let activeMembers = cachedMembers
+            .filter { cachedMember in
+                guard let householdId else { return false }
+                return cachedMember.householdId == householdId && cachedMember.isActive
+            }
+            .map {
+                ActiveMemberSnapshot.Entry(
+                    id: $0.id,
+                    userId: $0.userId,
+                    displayName: $0.displayName
+                )
+            }
+            .sorted { lhs, rhs in
+                lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
+
+        return ActiveMemberSnapshot(
+            householdId: householdId,
+            currentUserId: userSession.userId,
+            members: activeMembers
+        )
     }
 
     private func bootstrapHouseholdIfNeeded() async {
@@ -179,12 +229,82 @@ struct MainAppView: View {
             return false
         }
 
+        if householdStore.hasPendingJoinProtection(for: householdId, userId: userSession.userId) {
+            return false
+        }
+
         householdStore.clearCurrentHousehold()
         userSession.clearCurrentHousehold()
         householdStore.resetSetupResolution()
         onboardingState.openHouseholdSetup()
         return true
     }
+
+    private func primeActiveMemberBaseline() {
+        let snapshot = activeMemberSnapshot
+        hasPrimedActiveMemberBaseline = !snapshot.members.isEmpty || snapshot.householdId == nil
+        knownActiveMemberIDs = Set(snapshot.members.map(\.id))
+        dismissJoinToastIfNeeded()
+    }
+
+    private func handleActiveMemberSnapshotChange(
+        from oldValue: ActiveMemberSnapshot,
+        to newValue: ActiveMemberSnapshot
+    ) {
+        guard oldValue != newValue else { return }
+
+        if !hasPrimedActiveMemberBaseline || oldValue.householdId != newValue.householdId {
+            knownActiveMemberIDs = Set(newValue.members.map(\.id))
+            hasPrimedActiveMemberBaseline = true
+            return
+        }
+
+        let knownIds = knownActiveMemberIDs
+        knownActiveMemberIDs = Set(newValue.members.map(\.id))
+
+        let newlyJoinedMembers = newValue.members.filter { member in
+            !knownIds.contains(member.id) && member.userId != newValue.currentUserId
+        }
+
+        guard !newlyJoinedMembers.isEmpty else { return }
+        presentJoinToast(for: newlyJoinedMembers)
+    }
+
+    private func presentJoinToast(for members: [ActiveMemberSnapshot.Entry]) {
+        let message = if members.count == 1 {
+            "\(members[0].displayName) joined the household!"
+        } else {
+            "\(members.count) people joined the household!"
+        }
+
+        joinToastDismissTask?.cancel()
+        activeJoinToastMessage = message
+
+        joinToastDismissTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 2_500_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            activeJoinToastMessage = nil
+            joinToastDismissTask = nil
+        }
+    }
+
+    private func dismissJoinToastIfNeeded() {
+        joinToastDismissTask?.cancel()
+        joinToastDismissTask = nil
+        activeJoinToastMessage = nil
+    }
+}
+
+private struct ActiveMemberSnapshot: Equatable {
+    struct Entry: Equatable, Hashable {
+        let id: UUID
+        let userId: String
+        let displayName: String
+    }
+
+    let householdId: UUID?
+    let currentUserId: String?
+    let members: [Entry]
 }
 
 private struct TabBarControllerAccessor: UIViewControllerRepresentable {
