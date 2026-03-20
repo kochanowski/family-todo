@@ -2195,6 +2195,7 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         )
+        var refreshedHydrationSnapshot = beforeSnapshot.hydrationSnapshot
         print(
             "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(beforeSnapshot))"
         )
@@ -2210,6 +2211,7 @@ class HouseholdStore: ObservableObject {
                     household: household,
                     userId: userId
                 )
+                refreshedHydrationSnapshot = hydrationSnapshot
                 applyPendingJoinHydrationSnapshot(
                     hydrationSnapshot,
                     householdId: household.id,
@@ -2230,7 +2232,9 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         )
-        let didChange = beforeSnapshot != afterSnapshot
+        let didChange =
+            beforeSnapshot.currentHouseholdId != afterSnapshot.currentHouseholdId ||
+            beforeSnapshot.hydrationSnapshot != refreshedHydrationSnapshot
 
         if didChange {
             publishRemoteCloudRefreshNotifications(source: "remotePush")

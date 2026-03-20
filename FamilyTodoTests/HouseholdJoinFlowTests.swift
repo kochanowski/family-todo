@@ -334,11 +334,19 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         householdId: UUID?,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> Member? {
+        let scope = resolvedScope(explicitScope)
         appendOperation(
             "fetchMemberByUserId",
-            scope: resolvedScope(explicitScope),
+            scope: scope,
             householdId: householdId
         )
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchMemberByUserId",
+                forWrite: false
+            )
+        }
         return try await fetchActiveMembersByUserId(
             userId,
             householdId: householdId,
