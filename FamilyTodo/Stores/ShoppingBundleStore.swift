@@ -192,7 +192,7 @@ final class ShoppingBundleStore: ObservableObject {
         return cachedBundles
     }
 
-    private func syncToCache(_ bundles: [ShoppingBundle], cloudBundleIDs: Set<UUID>) {
+    func syncToCache(_ bundles: [ShoppingBundle], cloudBundleIDs: Set<UUID>) {
         guard let context = modelContext, let householdId else { return }
 
         let descriptor = FetchDescriptor<CachedShoppingBundle>(

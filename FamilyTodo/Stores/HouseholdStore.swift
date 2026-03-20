@@ -724,19 +724,27 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
-        _ = try await upsertMembership(
-            householdId: target.householdId,
-            userId: userId,
-            displayName: validatedDisplayName,
-            role: target.household.ownerId == userId ? .owner : .member,
-            scope: .participantShared
-        )
-        print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
-        let verifiedMember = try await verifyParticipantSharedMembership(
-            householdId: target.householdId,
-            userId: userId
-        )
+        let verifiedMember: Member
+        do {
+            print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
+            _ = try await upsertMembership(
+                householdId: target.householdId,
+                userId: userId,
+                displayName: validatedDisplayName,
+                role: target.household.ownerId == userId ? .owner : .member,
+                scope: .participantShared
+            )
+            print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
+            verifiedMember = try await verifyParticipantSharedMembership(
+                householdId: target.householdId,
+                userId: userId
+            )
+        } catch {
+            if isParticipantSharedVerificationError(error) {
+                throw HouseholdError.sharedAccessNotEstablished
+            }
+            throw error
+        }
 
         updateCache(with: verifiedMember)
         updateCache(with: target.household)
@@ -767,19 +775,27 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
-        _ = try await upsertMembership(
-            householdId: target.householdId,
-            userId: userId,
-            displayName: validatedDisplayName,
-            role: target.household.ownerId == userId ? .owner : .member,
-            scope: .participantShared
-        )
-        print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
-        let verifiedMember = try await verifyParticipantSharedMembership(
-            householdId: target.householdId,
-            userId: userId
-        )
+        let verifiedMember: Member
+        do {
+            print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
+            _ = try await upsertMembership(
+                householdId: target.householdId,
+                userId: userId,
+                displayName: validatedDisplayName,
+                role: target.household.ownerId == userId ? .owner : .member,
+                scope: .participantShared
+            )
+            print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
+            verifiedMember = try await verifyParticipantSharedMembership(
+                householdId: target.householdId,
+                userId: userId
+            )
+        } catch {
+            if isParticipantSharedVerificationError(error) {
+                throw HouseholdError.sharedAccessNotEstablished
+            }
+            throw error
+        }
 
         updateCache(with: verifiedMember)
         updateCache(with: target.household)
@@ -1731,42 +1747,52 @@ class HouseholdStore: ObservableObject {
             )
         }
 
-        let ownerId = household.ownerId
-
-        let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
-        memberStore.setSyncMode(syncMode)
-        memberStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
-        await memberStore.loadMembers()
-        if let error = memberStore.error {
-            throw error
-        }
+        await cloudKit.ensureReady()
+        await setCloudScope(for: household, userId: userId)
+        await refreshMemberCacheFromCloudIfNeeded(household: household, userId: userId)
 
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(household.id)
-        taskStore.setSyncMode(syncMode)
-        taskStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
-
         let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
-        shoppingStore.setSyncMode(syncMode)
-        shoppingStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
-
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
-        bundleStore.setSyncMode(syncMode)
-        bundleStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
-
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
-        backlogStore.setSyncMode(syncMode)
-        backlogStore.setCloudContext(currentUserId: userId, householdOwnerId: ownerId)
 
-        async let loadTasks: Void = taskStore.loadTasks()
-        async let loadShoppingItems: Void = shoppingStore.loadItems()
-        async let loadBundles: Void = bundleStore.loadBundles()
-        async let loadBacklog: Void = backlogStore.loadData()
-        _ = await (loadTasks, loadShoppingItems, loadBundles, loadBacklog)
+        async let fetchedTasks = cloudKit.fetchTasks(
+            householdId: household.id,
+            scope: nil
+        )
+        async let fetchedShoppingItems = cloudKit.fetchShoppingItems(
+            householdId: household.id,
+            scope: nil
+        )
+        async let fetchedBundles = cloudKit.fetchShoppingBundles(
+            householdId: household.id,
+            scope: nil
+        )
+        async let fetchedCategories = cloudKit.fetchBacklogCategories(
+            householdId: household.id,
+            scope: nil
+        )
+        async let fetchedBacklogItems = cloudKit.fetchBacklogItems(
+            householdId: household.id,
+            scope: nil
+        )
 
-        if let error = taskStore.error ?? shoppingStore.error ?? bundleStore.error ?? backlogStore.error {
-            throw error
-        }
+        let tasks = try await fetchedTasks
+        let shoppingItems = try await fetchedShoppingItems
+        let bundles = try await fetchedBundles
+        let categories = try await fetchedCategories
+        let backlogItems = try await fetchedBacklogItems
+
+        taskStore.syncToCache(tasks, cloudTaskIDs: Set(tasks.map(\.id)))
+        shoppingStore.syncToCache(shoppingItems)
+        bundleStore.syncToCache(bundles, cloudBundleIDs: Set(bundles.map(\.id)))
+        backlogStore.syncToCache(
+            categories: categories,
+            items: backlogItems,
+            cloudCategoryIDs: Set(categories.map(\.id)),
+            cloudItemIDs: Set(backlogItems.map(\.id))
+        )
 
         let remoteMembershipConfirmed = try await confirmRemoteMembershipPresence(
             household: household,

@@ -220,7 +220,7 @@ final class ShoppingListStore: ObservableObject {
         return cachedItems
     }
 
-    private func syncToCache(_ items: [ShoppingItem]) {
+    func syncToCache(_ items: [ShoppingItem]) {
         guard let context = modelContext, let householdId else { return }
 
         let cacheDescriptor = FetchDescriptor<CachedShoppingItem>(
