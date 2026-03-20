@@ -339,7 +339,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             scope: resolvedScope(explicitScope),
             householdId: householdId
         )
-        try await fetchActiveMembersByUserId(
+        return try await fetchActiveMembersByUserId(
             userId,
             householdId: householdId,
             scope: explicitScope
@@ -896,8 +896,8 @@ final class HouseholdJoinFlowTests: XCTestCase {
         )
 
         let quickIdea = TestCacheFixtures.idea(
-            householdId: targetHousehold.id,
             categoryId: UUID(),
+            householdId: targetHousehold.id,
             title: "Plan weekend"
         )
         let hydrationConfig = HouseholdStore.JoinHydrationConfiguration(
@@ -922,7 +922,7 @@ final class HouseholdJoinFlowTests: XCTestCase {
             },
             joinHydrationConfiguration: hydrationConfig
         )
-        store.setSyncMode(.cloud)
+        store.setSyncMode(SyncMode.cloud)
 
         try await store.joinHousehold(
             inviteCode: inviteToken.code,
