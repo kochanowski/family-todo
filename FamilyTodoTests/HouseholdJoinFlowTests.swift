@@ -632,10 +632,16 @@ final class HouseholdJoinFlowTests: XCTestCase {
     }
 
     private func makeStore(cloud: FakeHouseholdCloud) -> HouseholdStore {
+        let defaultHydrationConfiguration = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 20_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30
+        )
         makeStore(
             cloud: cloud,
             joinedHouseholdPrewarmOverride: { _, _, _ in },
-            joinHydrationConfiguration: .default
+            joinHydrationConfiguration: defaultHydrationConfiguration
         )
     }
 

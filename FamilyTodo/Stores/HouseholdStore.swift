@@ -344,6 +344,10 @@ class HouseholdStore: ObservableObject {
         self.joinHydrationConfiguration = joinHydrationConfiguration
     }
 
+    deinit {
+        joinHydrationTask?.cancel()
+    }
+
     func setModelContext(_ context: ModelContext) {
         modelContext = context
     }
