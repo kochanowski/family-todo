@@ -638,7 +638,7 @@ final class HouseholdJoinFlowTests: XCTestCase {
             backgroundRetryDelaysNanoseconds: [],
             pendingJoinGraceDuration: 30
         )
-        makeStore(
+        return makeStore(
             cloud: cloud,
             joinedHouseholdPrewarmOverride: { _, _, _ in },
             joinHydrationConfiguration: defaultHydrationConfiguration
