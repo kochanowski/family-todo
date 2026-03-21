@@ -788,7 +788,7 @@ final class CloudKitManagerScopeTests: XCTestCase {
                 CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID),
                 "Expected shared root parent for \(recordType)"
             )
-            XCTAssertEqual(parent.action.rawValue, CKReferenceAction.none.rawValue)
+            XCTAssertEqual(parent.action.rawValue, CKRecord.ReferenceAction.none.rawValue)
         }
     }
 
