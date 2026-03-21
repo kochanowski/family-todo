@@ -546,6 +546,10 @@ final class TaskStore: ObservableObject {
         syncCloudWorkItemsToCache(cloudTasks.map(WorkItem.init(task:)))
     }
 
+    func syncUnifiedWorkItemsToCache(_ cloudItems: [WorkItem]) {
+        syncCloudWorkItemsToCache(cloudItems)
+    }
+
     private func replayPendingMutationsInBackground() {
         if isReplayingPendingMutations {
             shouldReplayPendingMutationsAfterCurrentPass = true

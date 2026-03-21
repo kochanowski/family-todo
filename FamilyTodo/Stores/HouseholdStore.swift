@@ -100,6 +100,10 @@ protocol HouseholdCloudSyncing: Actor {
         householdId: UUID,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [Task]
+    func fetchUnifiedWorkItems(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [WorkItem]
     func deleteTask(
         id: UUID,
         householdId: UUID,
@@ -277,6 +281,8 @@ class HouseholdStore: ObservableObject {
     private struct RemoteCloudRefreshSnapshot: Equatable {
         let currentHouseholdId: UUID?
         let observedHouseholdId: UUID?
+        let householdName: String?
+        let householdIconSymbol: String?
         let hydrationSnapshot: JoinedHouseholdHydrationSnapshot?
     }
 
@@ -1951,19 +1957,22 @@ class HouseholdStore: ObservableObject {
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
 
         let scope = cloudScope(for: household, userId: userId)
-        async let fetchedTasks = cloudKit.fetchTasks(householdId: household.id, scope: scope)
+        async let fetchedUnifiedWorkItems = cloudKit.fetchUnifiedWorkItems(
+            householdId: household.id,
+            scope: scope
+        )
         async let fetchedShoppingItems = cloudKit.fetchShoppingItems(householdId: household.id, scope: scope)
         async let fetchedBundles = cloudKit.fetchShoppingBundles(householdId: household.id, scope: scope)
         async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: household.id, scope: scope)
         async let fetchedBacklogItems = cloudKit.fetchBacklogItems(householdId: household.id, scope: scope)
 
-        let tasks = try await fetchedTasks
+        let unifiedWorkItems = try await fetchedUnifiedWorkItems
         let shoppingItems = try await fetchedShoppingItems
         let bundles = try await fetchedBundles
         let categories = try await fetchedCategories
         let backlogItems = try await fetchedBacklogItems
 
-        taskStore.syncToCache(tasks, cloudTaskIDs: Set(tasks.map(\.id)))
+        taskStore.syncUnifiedWorkItemsToCache(unifiedWorkItems)
         shoppingStore.syncToCache(shoppingItems)
         bundleStore.syncToCache(bundles, cloudBundleIDs: Set(bundles.map(\.id)))
         backlogStore.syncToCache(
@@ -2056,6 +2065,8 @@ class HouseholdStore: ObservableObject {
         return RemoteCloudRefreshSnapshot(
             currentHouseholdId: currentHouseholdId,
             observedHouseholdId: observedHouseholdId,
+            householdName: currentHousehold?.name,
+            householdIconSymbol: currentHousehold?.iconSymbol,
             hydrationSnapshot: hydrationSnapshot
         )
     }
@@ -2093,6 +2104,8 @@ class HouseholdStore: ObservableObject {
         return [
             "current=\(snapshot.currentHouseholdId?.uuidString ?? "none")",
             "observed=\(snapshot.observedHouseholdId?.uuidString ?? "none")",
+            "name=\(snapshot.householdName ?? "none")",
+            "icon=\(snapshot.householdIconSymbol ?? "none")",
             "members=\(hydrationSnapshot.activeMemberCount)",
             "currentUser=\(hydrationSnapshot.currentUserHasCachedMembership)",
             "tasks=\(hydrationSnapshot.taskCount)",
@@ -2503,11 +2516,15 @@ class HouseholdStore: ObservableObject {
             lastRemoteCloudRefreshSnapshot != RemoteCloudRefreshSnapshot(
                 currentHouseholdId: afterSnapshot.currentHouseholdId,
                 observedHouseholdId: afterSnapshot.observedHouseholdId,
+                householdName: afterSnapshot.householdName,
+                householdIconSymbol: afterSnapshot.householdIconSymbol,
                 hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
             )
         lastRemoteCloudRefreshSnapshot = RemoteCloudRefreshSnapshot(
             currentHouseholdId: afterSnapshot.currentHouseholdId,
             observedHouseholdId: afterSnapshot.observedHouseholdId,
+            householdName: afterSnapshot.householdName,
+            householdIconSymbol: afterSnapshot.householdIconSymbol,
             hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
         )
 

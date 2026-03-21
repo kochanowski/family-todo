@@ -508,6 +508,35 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
+    func fetchUnifiedWorkItems(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [WorkItem] {
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchUnifiedWorkItems", scope: scope, householdId: householdId)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchUnifiedWorkItems",
+                forWrite: false
+            )
+        }
+
+        let taskItems = tasks
+            .filter { $0.householdId == householdId }
+            .map(WorkItem.init(task:))
+        let ideaItems = backlogItems
+            .filter { $0.householdId == householdId }
+            .map(WorkItem.init(idea:))
+
+        return (taskItems + ideaItems).sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
     func deleteTask(
         id _: UUID,
         householdId _: UUID,

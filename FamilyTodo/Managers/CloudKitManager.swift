@@ -630,9 +630,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "Member",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -645,9 +644,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "Area",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -660,9 +658,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "Task",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -675,9 +672,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "WorkItem",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -690,9 +686,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "RecurringChore",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -705,9 +700,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "ShoppingItem",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -720,9 +714,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "ShoppingBundle",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -735,9 +728,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "BacklogCategory",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -750,9 +742,8 @@ actor CloudKitManager {
                 { zoneID in
                     let query = CKQuery(
                         recordType: "BacklogItem",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
@@ -969,6 +960,37 @@ actor CloudKitManager {
             field: field,
             references: [scopedReference, legacyReference]
         )
+    }
+
+    func householdReferenceMatchPredicate(
+        householdId: UUID,
+        zoneID: CKRecordZone.ID?
+    ) -> NSPredicate {
+        var candidateZoneKeys = Set<String>()
+        var candidateZoneIDs: [CKRecordZone.ID] = []
+
+        func appendZone(_ candidateZoneID: CKRecordZone.ID?) {
+            guard let candidateZoneID else { return }
+            let key = Self.encodedZoneID(candidateZoneID)
+            guard candidateZoneKeys.insert(key).inserted else { return }
+            candidateZoneIDs.append(candidateZoneID)
+        }
+
+        appendZone(zoneID)
+        appendZone(ownerZoneID(for: householdId))
+        appendZone(resolveCachedZone(for: householdId, scope: .ownerPrivate))
+        appendZone(resolveCachedZone(for: householdId, scope: .participantShared))
+
+        for resolvedZoneID in zoneContext(for: .ownerPrivate).lastResolvedZones {
+            appendZone(resolvedZoneID)
+        }
+        for resolvedZoneID in zoneContext(for: .participantShared).lastResolvedZones {
+            appendZone(resolvedZoneID)
+        }
+
+        var references = [reference(for: householdId)]
+        references.append(contentsOf: candidateZoneIDs.map { reference(for: householdId, in: $0) })
+        return Self.referenceMatchPredicate(field: "householdId", references: references)
     }
 
     private static let householdGraphRecordTypes: Set<String> = [
@@ -1223,6 +1245,16 @@ actor CloudKitManager {
 
     private func resolveHouseholdZone(for householdId: UUID) async throws -> CKRecordZone.ID? {
         try await resolveHouseholdZone(for: householdId, scope: householdScope)
+    }
+
+    private func resolveParticipantSharedSaveZone(
+        householdId: UUID?
+    ) async throws -> CKRecordZone.ID? {
+        guard let householdId else { return nil }
+        if let cachedZone = resolveCachedZone(for: householdId, scope: .participantShared) {
+            return cachedZone
+        }
+        return try await resolveHouseholdZone(for: householdId, scope: .participantShared)
     }
 
     func resolveSubscriptionZone(
@@ -1567,12 +1599,17 @@ actor CloudKitManager {
         householdId: UUID?,
         scope: HouseholdDatabaseScope
     ) async throws -> CKRecord {
-        var zoneID = resolveCachedZone(for: householdId, scope: scope)
-        if zoneID == nil {
-            zoneID = resolveZoneForRecordName(record.recordID.recordName, scope: scope)
-        }
-        if zoneID == nil, let householdId {
-            zoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
+        let zoneID: CKRecordZone.ID? = if scope == .participantShared {
+            try await resolveParticipantSharedSaveZone(householdId: householdId)
+        } else {
+            var resolvedZoneID = resolveCachedZone(for: householdId, scope: scope)
+            if resolvedZoneID == nil {
+                resolvedZoneID = resolveZoneForRecordName(record.recordID.recordName, scope: scope)
+            }
+            if resolvedZoneID == nil, let householdId {
+                resolvedZoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
+            }
+            resolvedZoneID
         }
 
         guard let zoneID else {
@@ -1675,8 +1712,16 @@ actor CloudKitManager {
         let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
         let scopedRecord = try await recordForSave(record, householdId: householdId, scope: scope)
         do {
+            let parentZoneSummary = scopedRecord.parent.map {
+                "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)"
+            } ?? "none"
+            let householdReferenceSummary = (scopedRecord["householdId"] as? CKRecord.Reference).map {
+                "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)"
+            } ?? "none"
             print(
-                "CloudKitScope: save \(record.recordType) in \(scopeName) zone \(scopedRecord.recordID.zoneID.zoneName)"
+                "CloudKitScope: save \(record.recordType) in \(scopeName) zone " +
+                    "\(scopedRecord.recordID.zoneID.zoneName)|\(scopedRecord.recordID.zoneID.ownerName) " +
+                    "parentZone=\(parentZoneSummary) householdRefZone=\(householdReferenceSummary)"
             )
             let saved = try await saveRecordWithChangedKeys(scopedRecord, database: db)
             rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
@@ -2037,9 +2082,8 @@ actor CloudKitManager {
             let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
                 let query = CKQuery(
                     recordType: "Member",
-                    predicate: self.referenceMatchPredicate(
-                        field: "householdId",
-                        id: householdId,
+                    predicate: self.householdReferenceMatchPredicate(
+                        householdId: householdId,
                         zoneID: zoneID
                     )
                 )
@@ -2491,9 +2535,8 @@ actor CloudKitManager {
             records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
                 let predicates = [
                     NSPredicate(format: "userId == %@", userId),
-                    self.referenceMatchPredicate(
-                        field: "householdId",
-                        id: householdId,
+                    self.householdReferenceMatchPredicate(
+                        householdId: householdId,
                         zoneID: zoneID
                     ),
                 ]
@@ -2528,9 +2571,8 @@ actor CloudKitManager {
             records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
                 let predicates = [
                     NSPredicate(format: "userId == %@", userId),
-                    self.referenceMatchPredicate(
-                        field: "householdId",
-                        id: householdId,
+                    self.householdReferenceMatchPredicate(
+                        householdId: householdId,
                         zoneID: zoneID
                     ),
                 ]
@@ -2562,9 +2604,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Member",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2624,9 +2665,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Area",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2686,9 +2726,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Task",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2707,9 +2746,8 @@ actor CloudKitManager {
         let scope = resolvedScope(explicitScope)
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let predicates = [
-                self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 ),
                 NSPredicate(format: "status == %@", status.rawValue),
@@ -2812,9 +2850,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "WorkItem",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2941,9 +2978,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "RecurringChore",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -3003,9 +3039,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "ShoppingItem",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -3064,9 +3099,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "ShoppingBundle",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -3176,9 +3210,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "BacklogCategory",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -3260,9 +3293,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "BacklogItem",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -3496,6 +3528,9 @@ actor CloudKitManager {
 
             stage = .migrate
             try await migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
+
+            stage = .migrate
+            try await repairSharedHouseholdGraphIfNeeded(householdId: household.id)
 
             stage = .fetchRoot
             let db = await privateDatabase

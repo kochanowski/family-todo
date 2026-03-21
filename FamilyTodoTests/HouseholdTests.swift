@@ -895,6 +895,40 @@ final class CloudKitManagerScopeTests: XCTestCase {
         }
     }
 
+    func testHouseholdReferenceMatchPredicateIncludesOwnerParticipantAndLegacyVariants() {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let participantSharedZoneID = CKRecordZone.ID(
+            zoneName: ownerZoneID.zoneName,
+            ownerName: "_otherOwner"
+        )
+
+        manager.setSharedZoneContext(
+            householdId: householdId,
+            zoneID: ownerZoneID,
+            scope: .ownerPrivate
+        )
+        manager.setSharedZoneContext(
+            householdId: householdId,
+            zoneID: participantSharedZoneID,
+            scope: .participantShared
+        )
+
+        let predicate = manager.householdReferenceMatchPredicate(
+            householdId: householdId,
+            zoneID: ownerZoneID
+        )
+
+        let comparisonPredicate = try? XCTUnwrap(predicate as? NSComparisonPredicate)
+        let references = ((comparisonPredicate?.rightExpression.constantValue as? NSArray)?
+            .compactMap { $0 as? CKRecord.Reference }) ?? []
+
+        XCTAssertEqual(references.count, 3)
+        XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == defaultZoneID }))
+        XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == ownerZoneID }))
+        XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == participantSharedZoneID }))
+    }
+
     func testReferenceMatchPredicateUsesInOperatorForMultipleReferences() {
         let scopedReference = CKRecord.Reference(
             recordID: CKRecord.ID(

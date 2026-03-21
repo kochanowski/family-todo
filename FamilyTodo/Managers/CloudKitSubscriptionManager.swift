@@ -95,12 +95,14 @@ final class CloudKitSubscriptionManager: ObservableObject {
         database: CKDatabase
     ) async {
         do {
-            // Check if subscription already exists
-            _ = try await database.subscription(for: subscriptionId)
+            let existingSubscription = try await database.subscription(for: subscriptionId)
             databaseSubscriptionIds.insert(subscriptionId)
-            return // Already exists
+            print(
+                "[CloudKitSubscription] Reusing database subscription id=\(subscriptionId) type=\(type(of: existingSubscription))"
+            )
+            return
         } catch {
-            // Subscription doesn't exist, proceed to create
+            print("[CloudKitSubscription] Database subscription lookup missed for id=\(subscriptionId): \(error.localizedDescription)")
         }
 
         let subscription = CKDatabaseSubscription(subscriptionID: subscriptionId)
@@ -110,10 +112,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
         do {
             _ = try await database.save(subscription)
+            let confirmedSubscription = try await database.subscription(for: subscriptionId)
             databaseSubscriptionIds.insert(subscriptionId)
-            print("✅ Created database subscription: \(subscriptionId)")
+            print(
+                "✅ Created database subscription id=\(subscriptionId) confirmedType=\(type(of: confirmedSubscription))"
+            )
         } catch {
-            print("❌ Failed to create database subscription: \(error)")
+            reportSubscriptionFailure(
+                error,
+                context: "createDatabaseSubscription.\(subscriptionId)"
+            )
         }
     }
 
@@ -167,11 +175,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
         zoneID: CKRecordZone.ID
     ) async {
         do {
-            _ = try await database.subscription(for: subscriptionId)
+            let existingSubscription = try await database.subscription(for: subscriptionId)
             householdZoneSubscriptionIds.insert(subscriptionId)
+            print(
+                "[CloudKitSubscription] Reusing zone subscription id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: existingSubscription))"
+            )
             return
         } catch {
-            // Subscription doesn't exist yet.
+            print(
+                "[CloudKitSubscription] Zone subscription lookup missed for id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName): \(error.localizedDescription)"
+            )
         }
 
         let subscription = CKRecordZoneSubscription(
@@ -184,10 +197,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
         do {
             _ = try await database.save(subscription)
+            let confirmedSubscription = try await database.subscription(for: subscriptionId)
             householdZoneSubscriptionIds.insert(subscriptionId)
-            print("✅ Created zone subscription: \(subscriptionId) for zone \(zoneID.zoneName)")
+            print(
+                "✅ Created zone subscription id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) confirmedType=\(type(of: confirmedSubscription))"
+            )
         } catch {
-            print("❌ Failed to create zone subscription: \(subscriptionId) error=\(error)")
+            reportSubscriptionFailure(
+                error,
+                context: "createZoneSubscription.\(subscriptionId).\(zoneID.zoneName)"
+            )
         }
     }
 
@@ -202,7 +221,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 continue
             } catch {
-                print("❌ Failed to remove subscription: \(subscriptionId) error=\(error)")
+                reportSubscriptionFailure(
+                    error,
+                    context: "deleteSubscriptionIfPresent.\(subscriptionId)"
+                )
             }
         }
     }
@@ -293,40 +315,14 @@ final class CloudKitSubscriptionManager: ObservableObject {
         return false
     }
 
-    private func triggerRefreshForAllDomains(source: String) {
-        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
-        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
-        NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
-        NotificationCenter.default.post(name: .householdDataDidChange, object: source)
-    }
-
-    private func triggerRefresh(for recordType: String?, source: String) {
-        switch recordType {
-        case "ShoppingItem", "ShoppingBundle":
-            NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
-        case "WorkItem":
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
-            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
-        case "Task":
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
-        case "BacklogItem":
-            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
-        case "BacklogCategory":
-            NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
-            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
-        case "Household", "Member":
-            NotificationCenter.default.post(name: .householdDataDidChange, object: source)
-        default:
-            return
-        }
-    }
-
     private func handleDatabaseNotification(_: CKDatabaseNotification) {
         guard !isLikelySelfNoise(recordName: nil) else {
             print("[CloudKitSubscription] Dropping database notification as likely self-noise.")
             return
         }
-        triggerRefreshForAllDomains(source: "remote")
+        print(
+            "[CloudKitSubscription] Database notification accepted. Waiting for AppDelegate background refresh to publish store updates."
+        )
 
         pendingShoppingChanges.append("Shared Update")
         scheduleAggregatedNotification()
@@ -338,7 +334,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
             print("[CloudKitSubscription] Dropping record-zone notification as likely self-noise.")
             return
         }
-        triggerRefreshForAllDomains(source: "remote")
+        print(
+            "[CloudKitSubscription] Record-zone notification accepted. Waiting for AppDelegate background refresh to publish store updates."
+        )
 
         pendingShoppingChanges.append("Zone Update")
         scheduleAggregatedNotification()
@@ -353,7 +351,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
             print("[CloudKitSubscription] Dropping query notification as likely self-noise for recordName=\(recordName ?? "unknown").")
             return
         }
-        triggerRefresh(for: recordType, source: "remote")
 
         guard let recordType, !recordType.isEmpty, recordType != "Unknown" else {
             return
@@ -387,6 +384,11 @@ final class CloudKitSubscriptionManager: ObservableObject {
                 showNewItemsBanner = true
             }
         }
+    }
+
+    private func reportSubscriptionFailure(_ error: Error, context: String) {
+        print("[CloudKitSubscription] \(context) failed: \(error.localizedDescription)")
+        CloudKitDiagnosticsState.shared.record(error: error, operation: context)
     }
 
     func dismissBanner() {

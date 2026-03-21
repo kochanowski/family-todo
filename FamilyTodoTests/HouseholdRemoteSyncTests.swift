@@ -153,7 +153,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
         let operations = await cloud.operationEventsSnapshot()
         XCTAssertTrue(operations.contains {
-            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
             $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
@@ -208,6 +208,56 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
         XCTAssertEqual(firstResult, .newData)
         XCTAssertEqual(secondResult, .noData)
+    }
+
+    func testHandleRemoteCloudChangeReturnsNewDataWhenHouseholdMetadataChanges() async throws {
+        let userId = "joined-user"
+        let localHousehold = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let refreshedHousehold = Household(
+            id: localHousehold.id,
+            name: "Nowy Dom",
+            iconSymbol: "building.2.fill",
+            ownerId: localHousehold.ownerId,
+            createdAt: localHousehold.createdAt,
+            updatedAt: Date(timeIntervalSince1970: 2000)
+        )
+        let membership = TestCacheFixtures.member(
+            householdId: localHousehold.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [refreshedHousehold],
+            participantMembers: [membership],
+            acceptedSharedHouseholdIDs: [localHousehold.id]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = localHousehold
+
+        modelContainer.mainContext.insert(CachedHousehold(from: localHousehold))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let householdExpectation = expectation(
+            forNotification: .householdDataDidChange,
+            object: nil,
+            handler: nil
+        )
+
+        let result = await store.handleRemoteCloudChange(
+            userId: userId,
+            preferredHouseholdId: localHousehold.id
+        )
+
+        await fulfillment(of: [householdExpectation], timeout: 1.0)
+
+        XCTAssertEqual(result, .newData)
+        XCTAssertEqual(store.currentHousehold?.name, "Nowy Dom")
+        XCTAssertEqual(store.currentHousehold?.iconSymbol, "building.2.fill")
     }
 
     func testForceCloudSyncDebugPublishesStoreNotificationsAndRefreshesParticipantSharedCaches() async throws {
@@ -274,7 +324,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             $0.name == "fetchMembers" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
-            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
             $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id

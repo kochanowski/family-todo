@@ -46,6 +46,27 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         }
     }
 
+    func application(
+        _: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        let tokenPreview = deviceToken.map { String(format: "%02x", $0) }.joined()
+        print(
+            "[RemoteSync] Registered for remote notifications. tokenPrefix=\(tokenPreview.prefix(16)) length=\(tokenPreview.count)"
+        )
+    }
+
+    func application(
+        _: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        print("[RemoteSync] Failed to register for remote notifications: \(error.localizedDescription)")
+        CloudKitDiagnosticsState.shared.record(
+            error: error,
+            operation: "registerForRemoteNotifications"
+        )
+    }
+
     func flushPendingInviteIfNeeded() {
         guard let pendingMetadata, let shareAcceptanceCoordinator else { return }
         shareAcceptanceCoordinator.enqueue(metadata: pendingMetadata)
