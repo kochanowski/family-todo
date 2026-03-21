@@ -22,6 +22,11 @@ protocol HouseholdCloudSyncing: Actor {
     func repairSharedHouseholdGraphIfNeeded(householdId: UUID) async throws
     func migrateMemberColorsIfNeeded(householdId: UUID) async
 
+    func createHouseholdWithMember(
+        _ household: Household,
+        member: Member
+    ) async throws -> (householdRecord: CKRecord, memberRecord: CKRecord)
+
     func saveHousehold(
         _ household: Household,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
@@ -586,10 +591,9 @@ class HouseholdStore: ObservableObject {
             // Check CloudKit availability first
             try await cloudKit.checkAvailability()
             await cloudKit.setHouseholdScope(.ownerPrivate)
-            _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: newHousehold.id)
 
-            _ = try await cloudKit.saveHousehold(newHousehold, scope: nil)
-            _ = try await cloudKit.saveMember(ownerMember, scope: nil)
+            // Batch: zone ensure + household + member in minimal round-trips
+            _ = try await cloudKit.createHouseholdWithMember(newHousehold, member: ownerMember)
             updateCache(with: ownerMember)
             updateCache(with: newHousehold)
             currentHousehold = newHousehold
@@ -679,7 +683,9 @@ class HouseholdStore: ObservableObject {
         }
 
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
+        // repairSharedHouseholdGraphIfNeeded is already called inside
+        // createInviteCode -> createShare, so skip it here to avoid
+        // a redundant full-zone-scan round-trip.
 
         if let activeInviteCode {
             do {

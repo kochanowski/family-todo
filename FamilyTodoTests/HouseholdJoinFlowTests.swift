@@ -170,6 +170,24 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     func repairSharedHouseholdGraphIfNeeded(householdId _: UUID) async throws {}
     func migrateMemberColorsIfNeeded(householdId _: UUID) async {}
 
+    func createHouseholdWithMember(
+        _ household: Household,
+        member: Member
+    ) async throws -> (householdRecord: CKRecord, memberRecord: CKRecord) {
+        householdsById[household.id] = household
+        var members = members(for: .ownerPrivate)
+        if let index = members.firstIndex(where: { $0.id == member.id }) {
+            members[index] = member
+        } else {
+            members.append(member)
+        }
+        setMembers(members, for: .ownerPrivate)
+        return (
+            makeRecord(recordType: "Household", id: household.id),
+            makeRecord(recordType: "Member", id: member.id)
+        )
+    }
+
     func saveHousehold(
         _ household: Household,
         scope _: CloudKitManager.HouseholdDatabaseScope?

@@ -1951,9 +1951,8 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
-        if scope == .ownerPrivate {
-            _ = try await ensureHouseholdOwnerZone(householdId: household.id)
-        }
+        // Zone is expected to be ensured by the caller (createHousehold, createShare, etc.).
+        // saveRecordWithZoneRecovery handles missing-zone fallback if needed.
         let record = householdRecord(from: household)
         let saved = try await saveRecordWithZoneRecovery(
             record,
@@ -2084,6 +2083,50 @@ actor CloudKitManager {
             householdId: member.householdId,
             scope: scope
         )
+    }
+
+    /// Batched household creation: ensures zone in one round-trip, then saves
+    /// household + member records together in a single CKModifyRecordsOperation.
+    func createHouseholdWithMember(
+        _ household: Household,
+        member: Member
+    ) async throws -> (householdRecord: CKRecord, memberRecord: CKRecord) {
+        let zoneID = try await ensureHouseholdOwnerZone(householdId: household.id)
+
+        let householdRec = householdRecord(from: household)
+        let memberRec = memberRecord(from: member)
+
+        let scopedHousehold = try await recordForSave(
+            householdRec,
+            householdId: household.id,
+            scope: .ownerPrivate
+        )
+        let scopedMember = try await recordForSave(
+            memberRec,
+            householdId: member.householdId,
+            scope: .ownerPrivate
+        )
+
+        let db = await privateDatabase
+        let result = try await modifyRecordsBatch(
+            recordsToSave: [scopedHousehold, scopedMember],
+            recordIDsToDelete: [],
+            database: db
+        )
+
+        for saved in result.saved {
+            rememberRecordZone(
+                saved,
+                explicitHouseholdId: household.id,
+                scope: .ownerPrivate
+            )
+        }
+        clearCloudKitFailure()
+
+        let savedHousehold = result.saved.first { $0.recordType == "Household" } ?? scopedHousehold
+        let savedMember = result.saved.first { $0.recordType == "Member" } ?? scopedMember
+        print("CloudKitScope: batched createHouseholdWithMember in zone \(zoneID.zoneName)")
+        return (savedHousehold, savedMember)
     }
 
     private func updateMemberRecord(
@@ -3352,16 +3395,10 @@ actor CloudKitManager {
         try await checkAvailability()
         setHouseholdScope(.ownerPrivate)
 
-        var stage = "inviteCode.create.ensureShare"
+        var stage = "inviteCode.create.lookupExisting"
         do {
-            let share = try await createShare(for: household)
-            guard let shareURL = share.url else {
-                let error = CloudKitManagerError.shareNotCreated
-                recordCloudKitFailure(error, operation: stage)
-                throw error
-            }
-
-            stage = "inviteCode.create.lookupExisting"
+            // Fast path: check public DB for existing active tokens BEFORE
+            // running the full createShare pipeline (~4 round-trips).
             let db = await publicDatabase
             let now = Date()
             let existingPredicate = NSPredicate(
@@ -3378,6 +3415,15 @@ actor CloudKitManager {
                     clearCloudKitFailure()
                     return token
                 }
+            }
+
+            // Slow path: no active token exists, need to ensure share first.
+            stage = "inviteCode.create.ensureShare"
+            let share = try await createShare(for: household)
+            guard let shareURL = share.url else {
+                let error = CloudKitManagerError.shareNotCreated
+                recordCloudKitFailure(error, operation: stage)
+                throw error
             }
 
             stage = "inviteCode.create.save"
@@ -3688,11 +3734,9 @@ actor CloudKitManager {
         database: CKDatabase
     ) async throws -> CKRecord {
         let backoffDelays: [UInt64] = [
-            500_000_000,
-            1_000_000_000,
-            2_000_000_000,
-            3_000_000_000,
-            4_000_000_000,
+            300_000_000,
+            800_000_000,
+            1_500_000_000,
         ]
 
         var lastError: Error?
