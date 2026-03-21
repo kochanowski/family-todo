@@ -38,6 +38,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private let participantSharedReadDeniedHouseholds: Set<UUID>
     private let participantSharedVerificationDeniedHouseholds: Set<UUID>
     private var operationEvents: [OperationEvent] = []
+    private let createInviteCodeResultsByHouseholdId: [UUID: InviteToken]
+    private var createInviteCodeCalls = 0
 
     init(
         households: [Household] = [],
@@ -54,7 +56,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         requiresAcceptedShareForParticipantScope: Bool = true,
         participantSharedWriteDeniedHouseholds: Set<UUID> = [],
         participantSharedReadDeniedHouseholds: Set<UUID> = [],
-        participantSharedVerificationDeniedHouseholds: Set<UUID> = []
+        participantSharedVerificationDeniedHouseholds: Set<UUID> = [],
+        createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:]
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
         inviteTokensByCode = Dictionary(uniqueKeysWithValues: inviteTokens.map { ($0.code, $0) })
@@ -71,6 +74,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.participantSharedWriteDeniedHouseholds = participantSharedWriteDeniedHouseholds
         self.participantSharedReadDeniedHouseholds = participantSharedReadDeniedHouseholds
         self.participantSharedVerificationDeniedHouseholds = participantSharedVerificationDeniedHouseholds
+        self.createInviteCodeResultsByHouseholdId = createInviteCodeResultsByHouseholdId
     }
 
     private func resolvedScope(_ explicitScope: CloudKitManager.HouseholdDatabaseScope?)
@@ -237,6 +241,12 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     }
 
     func createInviteCode(for household: Household) async throws -> InviteToken {
+        createInviteCodeCalls += 1
+        if let token = createInviteCodeResultsByHouseholdId[household.id] {
+            inviteTokensByCode[token.code] = token
+            return token
+        }
+
         let token = InviteToken(
             id: "A7B9XQ2M",
             code: "A7B9XQ2M",
@@ -617,5 +627,9 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
 
     func hasAcceptedSharedHousehold(_ householdId: UUID) async -> Bool {
         acceptedSharedHouseholdIDs.contains(householdId)
+    }
+
+    func createInviteCodeCallCount() async -> Int {
+        createInviteCodeCalls
     }
 }

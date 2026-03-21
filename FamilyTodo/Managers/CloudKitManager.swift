@@ -3314,6 +3314,22 @@ actor CloudKitManager {
         recentInviteRedeemAttempts.removeAll()
     }
 
+    static func canReuseInviteToken(
+        _ token: InviteToken,
+        shareURL: String?,
+        at now: Date
+    ) -> Bool {
+        guard token.isActive(at: now),
+              token.usesCount < inviteCodeMaxUses,
+              let shareURL,
+              !shareURL.isEmpty
+        else {
+            return false
+        }
+
+        return token.shareURL == shareURL
+    }
+
     private func isInviteTokenLocked(_ token: InviteToken, at now: Date) -> Bool {
         guard token.failedAttempts >= Self.inviteCodeMaxFailedAttempts,
               let lastAttemptAt = token.lastAttemptAt
@@ -3401,6 +3417,7 @@ actor CloudKitManager {
             // running the full createShare pipeline (~4 round-trips).
             let db = await publicDatabase
             let now = Date()
+            var activeExistingTokens: [InviteToken] = []
             let existingPredicate = NSPredicate(
                 format: "householdId == %@ AND isRevoked == %@",
                 household.id.uuidString,
@@ -3412,18 +3429,50 @@ actor CloudKitManager {
             for record in existingRecords {
                 let token = try inviteToken(from: record)
                 if token.isActive(at: now), token.usesCount < Self.inviteCodeMaxUses {
-                    clearCloudKitFailure()
-                    return token
+                    activeExistingTokens.append(token)
                 }
             }
 
-            // Slow path: no active token exists, need to ensure share first.
+            if !activeExistingTokens.isEmpty {
+                stage = "inviteCode.create.verifyShare"
+                let existingShareURL = try await fetchShare(for: household.id)?.url?.absoluteString
+                if let matchingToken = activeExistingTokens.first(where: {
+                    Self.canReuseInviteToken($0, shareURL: existingShareURL, at: now)
+                }) {
+                    clearCloudKitFailure()
+                    return matchingToken
+                }
+            }
+
+            if !activeExistingTokens.isEmpty {
+                stage = "inviteCode.create.repairShare"
+                try await repairSharedHouseholdGraphIfNeeded(householdId: household.id)
+            }
+
+            // Slow path: no reusable token exists, need to ensure share first.
             stage = "inviteCode.create.ensureShare"
             let share = try await createShare(for: household)
             guard let shareURL = share.url else {
                 let error = CloudKitManagerError.shareNotCreated
                 recordCloudKitFailure(error, operation: stage)
                 throw error
+            }
+            let shareURLString = shareURL.absoluteString
+
+            if let matchingToken = activeExistingTokens.first(where: {
+                Self.canReuseInviteToken($0, shareURL: shareURLString, at: now)
+            }) {
+                clearCloudKitFailure()
+                return matchingToken
+            }
+
+            if !activeExistingTokens.isEmpty {
+                stage = "inviteCode.create.revokeStale"
+                for token in activeExistingTokens {
+                    _ = try await mutateInviteTokenRecord(code: token.code, database: db) { record in
+                        record["isRevoked"] = Int64(1) as CKRecordValue
+                    }
+                }
             }
 
             stage = "inviteCode.create.save"
@@ -3437,7 +3486,7 @@ actor CloudKitManager {
                     id: code,
                     code: code,
                     householdId: household.id,
-                    shareURL: shareURL.absoluteString,
+                    shareURL: shareURLString,
                     createdAt: now,
                     expiresAt: now.addingTimeInterval(InviteToken.ttl),
                     isRevoked: false,

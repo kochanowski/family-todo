@@ -523,4 +523,36 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertTrue(try cachedMembers(for: targetHousehold.id).isEmpty)
         XCTAssertFalse(store.hasPendingJoinProtection(for: targetHousehold.id, userId: userId))
     }
+
+    func testFetchOrCreateInviteCodeDelegatesReuseDecisionToCloudKitManager() async throws {
+        let household = TestCacheFixtures.household(name: "Invite Home", ownerId: "owner-1")
+        let cachedToken = InviteToken(
+            id: "C4C4E4D1",
+            code: "C4C4E4D1",
+            householdId: household.id,
+            shareURL: "https://www.icloud.com/share/stale"
+        )
+        let refreshedToken = InviteToken(
+            id: "R3F2R1S9",
+            code: "R3F2R1S9",
+            householdId: household.id,
+            shareURL: "https://www.icloud.com/share/live"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            inviteTokens: [cachedToken],
+            createInviteCodeResultsByHouseholdId: [household.id: refreshedToken]
+        )
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+        store.activeInviteCode = cachedToken.code
+
+        let code = try await store.fetchOrCreateInviteCode()
+
+        XCTAssertEqual(code, refreshedToken.code)
+        XCTAssertEqual(store.activeInviteCode, refreshedToken.code)
+        await XCTAssertEqual(cloud.createInviteCodeCallCount(), 1)
+    }
 }

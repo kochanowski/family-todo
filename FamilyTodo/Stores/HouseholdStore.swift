@@ -683,22 +683,8 @@ class HouseholdStore: ObservableObject {
         }
 
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        // repairSharedHouseholdGraphIfNeeded is already called inside
-        // createInviteCode -> createShare, so skip it here to avoid
-        // a redundant full-zone-scan round-trip.
-
-        if let activeInviteCode {
-            do {
-                let token = try await cloudKit.fetchInviteToken(code: activeInviteCode)
-                if token.householdId == household.id, token.isActive() {
-                    self.activeInviteCode = token.code
-                    return token.code
-                }
-            } catch {
-                // Token may no longer exist or be inactive - fall through and recreate.
-            }
-        }
-
+        // CloudKitManager owns the reuse decision and validates that an existing
+        // token still points at a live attached share before returning it.
         let token = try await cloudKit.createInviteCode(for: household)
         activeInviteCode = token.code
         return token.code
