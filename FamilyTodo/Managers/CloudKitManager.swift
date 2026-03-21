@@ -1599,8 +1599,9 @@ actor CloudKitManager {
         householdId: UUID?,
         scope: HouseholdDatabaseScope
     ) async throws -> CKRecord {
-        let zoneID: CKRecordZone.ID? = if scope == .participantShared {
-            try await resolveParticipantSharedSaveZone(householdId: householdId)
+        let zoneID: CKRecordZone.ID?
+        if scope == .participantShared {
+            zoneID = try await resolveParticipantSharedSaveZone(householdId: householdId)
         } else {
             var resolvedZoneID = resolveCachedZone(for: householdId, scope: scope)
             if resolvedZoneID == nil {
@@ -1609,7 +1610,7 @@ actor CloudKitManager {
             if resolvedZoneID == nil, let householdId {
                 resolvedZoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
             }
-            resolvedZoneID
+            zoneID = resolvedZoneID
         }
 
         guard let zoneID else {
