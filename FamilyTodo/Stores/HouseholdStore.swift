@@ -757,9 +757,8 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        let verifiedMember: Member
+        print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
         do {
-            print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
             _ = try await upsertMembership(
                 householdId: target.householdId,
                 userId: userId,
@@ -767,17 +766,19 @@ class HouseholdStore: ObservableObject {
                 role: target.household.ownerId == userId ? .owner : .member,
                 scope: .participantShared
             )
-            print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
-            verifiedMember = try await verifyParticipantSharedMembership(
-                householdId: target.householdId,
-                userId: userId
-            )
         } catch {
-            if isParticipantSharedVerificationError(error) {
-                throw HouseholdError.sharedAccessNotEstablished
-            }
-            throw error
+            logJoinError(stage: "memberUpsert", householdId: target.householdId, error: error)
+            throw debugJoinFailure(
+                prefix: "Member upsert failed",
+                error: error
+            )
         }
+
+        print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
+        let verifiedMember = try await verifyParticipantSharedMembership(
+            householdId: target.householdId,
+            userId: userId
+        )
 
         updateCache(with: verifiedMember)
         updateCache(with: target.household)
@@ -808,9 +809,8 @@ class HouseholdStore: ObservableObject {
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
-        let verifiedMember: Member
+        print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
         do {
-            print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
             _ = try await upsertMembership(
                 householdId: target.householdId,
                 userId: userId,
@@ -818,17 +818,19 @@ class HouseholdStore: ObservableObject {
                 role: target.household.ownerId == userId ? .owner : .member,
                 scope: .participantShared
             )
-            print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
-            verifiedMember = try await verifyParticipantSharedMembership(
-                householdId: target.householdId,
-                userId: userId
-            )
         } catch {
-            if isParticipantSharedVerificationError(error) {
-                throw HouseholdError.sharedAccessNotEstablished
-            }
-            throw error
+            logJoinError(stage: "memberUpsert", householdId: target.householdId, error: error)
+            throw debugJoinFailure(
+                prefix: "Member upsert failed",
+                error: error
+            )
         }
+
+        print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
+        let verifiedMember = try await verifyParticipantSharedMembership(
+            householdId: target.householdId,
+            userId: userId
+        )
 
         updateCache(with: verifiedMember)
         updateCache(with: target.household)
@@ -1472,6 +1474,7 @@ class HouseholdStore: ObservableObject {
         userId: String
     ) async throws -> Member {
         let retryDelaysNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000]
+        var lastError: Error?
 
         for delay in retryDelaysNanoseconds {
             if delay > 0 {
@@ -1487,13 +1490,20 @@ class HouseholdStore: ObservableObject {
                     scope: .participantShared
                 )
             } catch {
+                lastError = error
                 if isParticipantSharedVerificationError(error) {
-                    print(
-                        "DEBUG: Join verification retry for household \(householdId) user \(userId) after shared access error: \(error)"
+                    logJoinError(
+                        stage: "memberVerify.retry",
+                        householdId: householdId,
+                        error: error
                     )
                     continue
                 }
-                throw error
+                logJoinError(stage: "memberVerify.fetch", householdId: householdId, error: error)
+                throw debugJoinFailure(
+                    prefix: "Shared membership verification failed",
+                    error: error
+                )
             }
 
             if let verifiedMember, verifiedMember.isActive {
@@ -1502,12 +1512,20 @@ class HouseholdStore: ObservableObject {
                 )
                 return verifiedMember
             }
+
+            lastError = HouseholdError.memberNotFound
         }
 
-        print(
-            "DEBUG: Join verification failed for household \(householdId) user \(userId) in participantShared scope."
+        let resolvedError = lastError ?? HouseholdError.sharedAccessNotEstablished
+        logJoinError(
+            stage: "memberVerify.failed",
+            householdId: householdId,
+            error: resolvedError
         )
-        throw HouseholdError.sharedAccessNotEstablished
+        throw debugJoinFailure(
+            prefix: "Shared membership verification failed",
+            error: resolvedError
+        )
     }
 
     private func isParticipantSharedVerificationError(_ error: Error) -> Bool {
@@ -1522,6 +1540,52 @@ class HouseholdStore: ObservableObject {
             return isParticipantSharedVerificationError(underlying)
         }
         return false
+    }
+
+    private func logJoinError(stage: String, householdId: UUID? = nil, error: Error) {
+        let householdComponent = householdId?.uuidString ?? "unknown"
+        print(
+            "HouseholdJoin: stage=\(stage) householdId=\(householdComponent) error=\(rawJoinErrorDescription(error))"
+        )
+    }
+
+    private func debugJoinFailure(prefix: String, error: Error) -> HouseholdError {
+        HouseholdError.debugJoinFailure(
+            "\(prefix): \(rawJoinErrorDescription(error))"
+        )
+    }
+
+    private func rawJoinErrorDescription(_ error: Error) -> String {
+        let localized = error.localizedDescription
+        let reflected = String(describing: error)
+        var components: [String] = []
+
+        if !localized.isEmpty {
+            components.append(localized)
+        }
+        if reflected != localized {
+            components.append(reflected)
+        }
+
+        if let ckError = error as? CKError {
+            components.append("CKError.\(ckError.code)")
+
+            if let retryAfter = ckError.userInfo[CKErrorRetryAfterKey] {
+                components.append("retryAfter=\(retryAfter)")
+            }
+            if let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error],
+               !partialErrors.isEmpty
+            {
+                let partialDescriptions = partialErrors
+                    .map { key, value in "\(key): \(rawJoinErrorDescription(value))" }
+                    .sorted()
+                    .joined(separator: "; ")
+                components.append("partialErrors=\(partialDescriptions)")
+            }
+        }
+
+        let filtered = components.filter { !$0.isEmpty }
+        return filtered.joined(separator: " | ")
     }
 
     private func requiredMembershipDisplayName(from rawDisplayName: String) throws -> String {

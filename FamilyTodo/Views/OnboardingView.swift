@@ -213,13 +213,6 @@ struct JoinHouseholdSheet: View {
                     } footer: {
                         Text("Ask the household owner for the 6-character invite code. Older 8-character codes still work.")
                     }
-
-                    if let errorMessage {
-                        Section {
-                            Text(errorMessage)
-                                .foregroundStyle(.red)
-                        }
-                    }
                 }
                 .disabled(isJoining)
 
@@ -244,6 +237,17 @@ struct JoinHouseholdSheet: View {
                 }
             }
             .interactiveDismissDisabled(isJoining)
+            .alert(
+                "Join failed",
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Unknown error")
+            }
         }
     }
 

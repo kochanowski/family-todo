@@ -513,9 +513,14 @@ final class HouseholdJoinFlowTests: XCTestCase {
                 userId: userId,
                 displayName: "Taylor"
             )
-            XCTFail("Expected sharedAccessNotEstablished error")
+            XCTFail("Expected detailed shared membership verification error")
         } catch let error as HouseholdError {
-            XCTAssertEqual(error, .sharedAccessNotEstablished)
+            guard case let .debugJoinFailure(message) = error else {
+                XCTFail("Expected debugJoinFailure, got \(error)")
+                return
+            }
+            XCTAssertTrue(message.contains("Shared membership verification failed"))
+            XCTAssertTrue(message.contains("CKError.zoneNotFound"))
         }
 
         XCTAssertNil(store.currentHousehold)

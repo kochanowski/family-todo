@@ -1894,8 +1894,13 @@ actor CloudKitManager {
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord
         case shareNotCreated
+        case sharePermissionValidationFailed(String)
         case inviteCodeInvalid
         case inviteCodeNotFound
+        case inviteTokenFetchFailed(String)
+        case shareMetadataFetchFailed(String)
+        case acceptShareFailed(String)
+        case sharedHouseholdFetchFailed(String)
         case inviteCodeExpired
         case inviteCodeRevoked
         case inviteCodeLocked
@@ -1914,6 +1919,12 @@ actor CloudKitManager {
                 "Invalid record data"
             case .shareNotCreated:
                 "Failed to create share"
+            case let .sharePermissionValidationFailed(message),
+                 let .inviteTokenFetchFailed(message),
+                 let .shareMetadataFetchFailed(message),
+                 let .acceptShareFailed(message),
+                 let .sharedHouseholdFetchFailed(message):
+                message
             case .inviteCodeInvalid:
                 "The invite code is invalid."
             case .inviteCodeNotFound:
@@ -3054,6 +3065,46 @@ actor CloudKitManager {
         return try await fetchShareRecord(withID: shareReference.recordID, database: database)
     }
 
+    private func debugErrorDescription(_ error: Error) -> String {
+        let localized = error.localizedDescription
+        let reflected = String(describing: error)
+        var components: [String] = []
+
+        if !localized.isEmpty {
+            components.append(localized)
+        }
+        if reflected != localized {
+            components.append(reflected)
+        }
+
+        if let ckError = error as? CKError {
+            components.append("CKError.\(ckError.code)")
+
+            if let retryAfter = ckError.userInfo[CKErrorRetryAfterKey] {
+                components.append("retryAfter=\(retryAfter)")
+            }
+            if let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error],
+               !partialErrors.isEmpty
+            {
+                let partialDescriptions = partialErrors
+                    .map { key, value in "\(key): \(debugErrorDescription(value))" }
+                    .sorted()
+                    .joined(separator: "; ")
+                components.append("partialErrors=\(partialDescriptions)")
+            }
+        }
+
+        if let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? Error {
+            let underlyingDescription = debugErrorDescription(underlying)
+            if !underlyingDescription.isEmpty {
+                components.append("underlying=\(underlyingDescription)")
+            }
+        }
+
+        let filtered = components.filter { !$0.isEmpty }
+        return filtered.joined(separator: " | ")
+    }
+
     private func ensureShareMetadata(
         _ share: CKShare,
         householdName: String,
@@ -3078,6 +3129,11 @@ actor CloudKitManager {
         let saved = try await saveRecordWithChangedKeys(share, database: database)
         guard let savedShare = saved as? CKShare else {
             throw CloudKitManagerError.invalidRecord
+        }
+        guard savedShare.publicPermission == .readWrite else {
+            throw CloudKitManagerError.sharePermissionValidationFailed(
+                "Share permission failed: expected readWrite, got \(savedShare.publicPermission)."
+            )
         }
         return savedShare
     }
@@ -3143,6 +3199,14 @@ actor CloudKitManager {
                 case .success:
                     if let firstFailure {
                         continuation.resume(throwing: firstFailure)
+                        return
+                    }
+                    if let savedShare, savedShare.publicPermission != .readWrite {
+                        continuation.resume(
+                            throwing: CloudKitManagerError.sharePermissionValidationFailed(
+                                "Share permission failed: expected readWrite, got \(savedShare.publicPermission)."
+                            )
+                        )
                         return
                     }
                     continuation.resume(returning: savedShare)
@@ -3563,6 +3627,116 @@ actor CloudKitManager {
         return context.household
     }
 
+    private func fetchShareMetadata(for shareURL: URL) async throws -> CKShare.Metadata {
+        let ckContainer = await container
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let operation = CKFetchShareMetadataOperation(shareURLs: [shareURL])
+            operation.qualityOfService = .userInitiated
+
+            var fetchedMetadata: CKShare.Metadata?
+            var firstFailure: Error?
+
+            operation.perShareMetadataResultBlock = { _, result in
+                switch result {
+                case let .success(metadata):
+                    fetchedMetadata = metadata
+                case let .failure(error):
+                    if firstFailure == nil {
+                        firstFailure = error
+                    }
+                }
+            }
+
+            operation.fetchShareMetadataResultBlock = { result in
+                switch result {
+                case .success:
+                    if let firstFailure {
+                        continuation.resume(throwing: firstFailure)
+                        return
+                    }
+                    if let fetchedMetadata {
+                        continuation.resume(returning: fetchedMetadata)
+                        return
+                    }
+                    continuation.resume(
+                        throwing: CloudKitManagerError.shareMetadataFetchFailed(
+                            "Metadata fetch failed: CKFetchShareMetadataOperation returned no metadata."
+                        )
+                    )
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            ckContainer.add(operation)
+        }
+    }
+
+    private func resolveJoinShareMetadata(
+        for shareURL: URL,
+        expectedHouseholdId: UUID? = nil
+    ) async throws -> CKShare.Metadata {
+        let metadata: CKShare.Metadata
+        do {
+            metadata = try await fetchShareMetadata(for: shareURL)
+        } catch let error as CloudKitManagerError {
+            throw error
+        } catch {
+            throw CloudKitManagerError.shareMetadataFetchFailed(
+                "Metadata fetch failed: \(debugErrorDescription(error))"
+            )
+        }
+
+        if let expectedHouseholdId {
+            let metadataHouseholdId = UUID(uuidString: metadata.rootRecordID.recordName)
+            guard metadataHouseholdId == expectedHouseholdId else {
+                throw CloudKitManagerError.shareMetadataFetchFailed(
+                    "Metadata fetch failed: Share metadata household mismatch."
+                )
+            }
+        }
+
+        return metadata
+    }
+
+    private func fetchRedeemableInviteToken(
+        code: String,
+        at now: Date,
+        database: CKDatabase
+    ) async throws -> InviteToken {
+        let record: CKRecord
+        do {
+            guard let fetchedRecord = try await fetchInviteTokenRecordIfExists(code: code, database: database) else {
+                throw CloudKitManagerError.inviteTokenFetchFailed(
+                    "Token fetch failed: Invite code was not found."
+                )
+            }
+            record = fetchedRecord
+        } catch let error as CloudKitManagerError {
+            throw error
+        } catch {
+            throw CloudKitManagerError.inviteTokenFetchFailed(
+                "Token fetch failed: \(debugErrorDescription(error))"
+            )
+        }
+
+        let token = try inviteToken(from: record)
+        if token.isRevoked {
+            throw CloudKitManagerError.inviteCodeRevoked
+        }
+        if token.isExpired(at: now) {
+            throw CloudKitManagerError.inviteCodeExpired
+        }
+        if token.usesCount >= Self.inviteCodeMaxUses {
+            throw CloudKitManagerError.inviteCodeUsageLimitReached
+        }
+        if isInviteTokenLocked(token, at: now) {
+            throw CloudKitManagerError.inviteCodeLocked
+        }
+        return token
+    }
+
     func resolveAcceptedShareContext(fromInviteCode rawCode: String) async throws -> AcceptedShareContext {
         try await checkAvailability()
         let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(rawCode)
@@ -3574,8 +3748,7 @@ actor CloudKitManager {
                 throw HouseholdError.invalidInviteCode
             }
 
-            let ckContainer = await container
-            let metadata = try await ckContainer.shareMetadata(for: shareURL)
+            let metadata = try await resolveJoinShareMetadata(for: shareURL)
             return try await acceptShareContext(
                 metadata: metadata,
                 shareURL: shareURL
@@ -3594,36 +3767,20 @@ actor CloudKitManager {
             stage = "inviteCode.redeem.fetchToken"
             let db = await publicDatabase
             logJoinStage("join.resolveInviteToken")
-            guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
-                throw CloudKitManagerError.inviteCodeNotFound
-            }
-            let token = try inviteToken(from: record)
-
-            if token.isRevoked {
-                throw CloudKitManagerError.inviteCodeRevoked
-            }
-            if token.isExpired(at: now) {
-                throw CloudKitManagerError.inviteCodeExpired
-            }
-            if token.usesCount >= Self.inviteCodeMaxUses {
-                throw CloudKitManagerError.inviteCodeUsageLimitReached
-            }
-            if isInviteTokenLocked(token, at: now) {
-                throw CloudKitManagerError.inviteCodeLocked
-            }
+            let token = try await fetchRedeemableInviteToken(code: code, at: now, database: db)
 
             stage = "inviteCode.redeem.metadata"
             guard let shareURL = URL(string: token.shareURL) else {
-                throw CloudKitManagerError.inviteCodeInvalid
+                throw CloudKitManagerError.shareMetadataFetchFailed(
+                    "Metadata fetch failed: Invite token contains an invalid share URL."
+                )
             }
             print("CloudKitJoin: stage=join.resolveShareMetadata householdId=\(token.householdId)")
 
-            let ckContainer = await container
-            let metadata = try await ckContainer.shareMetadata(for: shareURL)
-            let metadataHouseholdId = UUID(uuidString: metadata.rootRecordID.recordName)
-            guard metadataHouseholdId == token.householdId else {
-                throw CloudKitManagerError.inviteCodeInvalid
-            }
+            let metadata = try await resolveJoinShareMetadata(
+                for: shareURL,
+                expectedHouseholdId: token.householdId
+            )
 
             stage = "inviteCode.redeem.acceptShare"
             let context = try await acceptShareContext(
@@ -3690,13 +3847,9 @@ actor CloudKitManager {
             "unspecified"
         }
 
-        if let ckError = error as? CKError {
+        if let error {
             print(
-                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent) ckError=\(ckError.code.rawValue)"
-            )
-        } else if let error {
-            print(
-                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent) error=\(error.localizedDescription)"
+                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent) error=\(debugErrorDescription(error))"
             )
         } else {
             print(
@@ -3748,7 +3901,14 @@ actor CloudKitManager {
                 zoneID: zoneID,
                 scope: .participantShared
             )
-            let record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+            let record: CKRecord
+            do {
+                record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+            } catch {
+                throw CloudKitManagerError.sharedHouseholdFetchFailed(
+                    "Shared household fetch failed: \(debugErrorDescription(error))"
+                )
+            }
 
             stage = .finalize
             if let householdId {
@@ -3766,15 +3926,35 @@ actor CloudKitManager {
                 shareURL: shareURL
             )
         } catch {
+            let wrappedError: Error = switch stage {
+            case .acceptOperation:
+                if error is CloudKitManagerError {
+                    error
+                } else {
+                    CloudKitManagerError.acceptShareFailed(
+                        "Accept share failed: \(debugErrorDescription(error))"
+                    )
+                }
+            case .fetchRoot:
+                if error is CloudKitManagerError {
+                    error
+                } else {
+                    CloudKitManagerError.sharedHouseholdFetchFailed(
+                        "Shared household fetch failed: \(debugErrorDescription(error))"
+                    )
+                }
+            case .finalize:
+                error
+            }
             logJoinStage(
                 "join.acceptShare.\(stage.rawValue)",
                 householdId: householdId,
                 zoneID: zoneID,
                 scope: .participantShared,
-                error: error
+                error: wrappedError
             )
-            recordCloudKitFailure(error, operation: "acceptShare.\(stage.rawValue)")
-            throw error
+            recordCloudKitFailure(wrappedError, operation: "acceptShare.\(stage.rawValue)")
+            throw wrappedError
         }
     }
 

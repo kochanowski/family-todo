@@ -178,6 +178,7 @@ enum HouseholdError: Error, Equatable {
     case cloudSyncRequired
     case invalidInviteCode
     case sharedAccessNotEstablished
+    case debugJoinFailure(String)
     case alreadyInHousehold
     case displayNameRequired
     case displayNameAlreadyTaken
@@ -199,6 +200,8 @@ extension HouseholdError: LocalizedError {
             "The invite code is invalid."
         case .sharedAccessNotEstablished:
             "Could not complete household access. Please try joining again in a moment."
+        case let .debugJoinFailure(message):
+            message
         case .alreadyInHousehold:
             "Leave your current household before creating or joining another one."
         case .displayNameRequired:
