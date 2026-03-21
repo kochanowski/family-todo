@@ -105,6 +105,15 @@ struct FamilyTodoApp: App {
         }
     }
 
+    private func activeHouseholdSubscriptionScope(
+        userId: String
+    ) -> CloudKitManager.HouseholdDatabaseScope? {
+        guard let ownerId = householdStore.currentHousehold?.ownerId else {
+            return nil
+        }
+        return ownerId == userId ? .ownerPrivate : .participantShared
+    }
+
     var body: some Scene {
         WindowGroup {
             AppChromeContainer(themeStore: themeStore) {
