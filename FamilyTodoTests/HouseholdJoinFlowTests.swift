@@ -553,6 +553,7 @@ final class HouseholdJoinFlowTests: XCTestCase {
 
         XCTAssertEqual(code, refreshedToken.code)
         XCTAssertEqual(store.activeInviteCode, refreshedToken.code)
-        await XCTAssertEqual(cloud.createInviteCodeCallCount(), 1)
+        let createInviteCodeCallCount = await cloud.createInviteCodeCallCount()
+        XCTAssertEqual(createInviteCodeCallCount, 1)
     }
 }
