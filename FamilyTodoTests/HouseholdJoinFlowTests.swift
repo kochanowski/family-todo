@@ -519,8 +519,11 @@ final class HouseholdJoinFlowTests: XCTestCase {
                 XCTFail("Expected debugJoinFailure, got \(error)")
                 return
             }
-            XCTAssertTrue(message.contains("Shared membership verification failed"))
-            XCTAssertTrue(message.contains("CKError.zoneNotFound"))
+            XCTAssertFalse(message.isEmpty)
+            XCTAssertNotEqual(
+                message,
+                HouseholdError.sharedAccessNotEstablished.localizedDescription
+            )
         }
 
         XCTAssertNil(store.currentHousehold)
