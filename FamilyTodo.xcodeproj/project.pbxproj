@@ -102,6 +102,7 @@
 		TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */; };
 		TSTBUILD000000000000001 /* TestModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000001 /* TestModelContainerFactory.swift */; };
 		TSTBUILD000000000000002 /* TestCacheFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000002 /* TestCacheFixtures.swift */; };
+		TSTBUILD000000000000005 /* FakeHouseholdCloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000005 /* FakeHouseholdCloud.swift */; };
 		TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */; };
 		TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000004 /* BacklogStoreTests.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
@@ -231,6 +232,7 @@
 		TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTipVisibilityTests.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000001 /* TestModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestModelContainerFactory.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000002 /* TestCacheFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCacheFixtures.swift; sourceTree = "<group>"; };
+		TSTFILE0000000000000005 /* FakeHouseholdCloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeHouseholdCloud.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkItemTransitionTests.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000004 /* BacklogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStoreTests.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
@@ -386,6 +388,7 @@
 			children = (
 				TSTFILE0000000000000001 /* TestModelContainerFactory.swift */,
 				TSTFILE0000000000000002 /* TestCacheFixtures.swift */,
+				TSTFILE0000000000000005 /* FakeHouseholdCloud.swift */,
 			);
 			path = TestSupport;
 			sourceTree = "<group>";
@@ -722,6 +725,7 @@
 			files = (
 				TSTBUILD000000000000001 /* TestModelContainerFactory.swift in Sources */,
 				TSTBUILD000000000000002 /* TestCacheFixtures.swift in Sources */,
+				TSTBUILD000000000000005 /* FakeHouseholdCloud.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7F /* FamilyTodoTests.swift in Sources */,
 				9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */,
 				138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */,
