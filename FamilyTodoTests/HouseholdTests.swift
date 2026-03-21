@@ -895,7 +895,7 @@ final class CloudKitManagerScopeTests: XCTestCase {
         }
     }
 
-    func testHouseholdReferenceMatchPredicateIncludesOwnerParticipantAndLegacyVariants() {
+    func testHouseholdReferenceMatchPredicateIncludesOwnerParticipantAndLegacyVariants() async {
         let manager = CloudKitManager()
         let householdId = UUID()
         let participantSharedZoneID = CKRecordZone.ID(
@@ -903,18 +903,18 @@ final class CloudKitManagerScopeTests: XCTestCase {
             ownerName: "_otherOwner"
         )
 
-        manager.setSharedZoneContext(
+        await manager.setSharedZoneContext(
             householdId: householdId,
             zoneID: ownerZoneID,
             scope: .ownerPrivate
         )
-        manager.setSharedZoneContext(
+        await manager.setSharedZoneContext(
             householdId: householdId,
             zoneID: participantSharedZoneID,
             scope: .participantShared
         )
 
-        let predicate = manager.householdReferenceMatchPredicate(
+        let predicate = await manager.householdReferenceMatchPredicate(
             householdId: householdId,
             zoneID: ownerZoneID
         )
