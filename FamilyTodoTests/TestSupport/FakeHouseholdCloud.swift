@@ -610,17 +610,31 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         scope _: CloudKitManager.HouseholdDatabaseScope?
     ) async throws {}
 
-    func fetchAreas(householdId _: UUID) async throws -> [Area] {
+    func fetchAreas(
+        householdId _: UUID,
+        scope _: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [Area] {
         []
     }
 
-    func deleteArea(id _: UUID, householdId _: UUID) async throws {}
+    func deleteArea(
+        id _: UUID,
+        householdId _: UUID,
+        scope _: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws {}
 
-    func fetchRecurringChores(householdId _: UUID) async throws -> [RecurringChore] {
+    func fetchRecurringChores(
+        householdId _: UUID,
+        scope _: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [RecurringChore] {
         []
     }
 
-    func deleteRecurringChore(id _: UUID, householdId _: UUID) async throws {}
+    func deleteRecurringChore(
+        id _: UUID,
+        householdId _: UUID,
+        scope _: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws {}
 
     func inactiveUpdateCount(for householdId: UUID) async -> Int {
         memberStateUpdates.filter { $0.householdId == householdId && !$0.isActive }.count

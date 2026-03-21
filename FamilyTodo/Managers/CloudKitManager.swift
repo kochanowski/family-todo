@@ -926,25 +926,51 @@ actor CloudKitManager {
         )
     }
 
+    private static let householdGraphRecordTypes: Set<String> = [
+        "Household",
+        "Member",
+        "Area",
+        "Task",
+        "WorkItem",
+        "RecurringChore",
+        "ShoppingItem",
+        "ShoppingBundle",
+        "BacklogCategory",
+        "BacklogItem",
+    ]
+
+    private static let participantSharedChildRecordTypes: Set<String> = [
+        "Member",
+        "Area",
+        "Task",
+        "WorkItem",
+        "RecurringChore",
+        "ShoppingItem",
+        "ShoppingBundle",
+        "BacklogCategory",
+        "BacklogItem",
+    ]
+
+    private static let singleGraphReferenceKeys = [
+        "householdId",
+        "assigneeId",
+        "backlogCategoryId",
+        "areaId",
+        "recurringChoreId",
+        "defaultAssigneeId",
+        "categoryId",
+    ]
+
+    private static let arrayGraphReferenceKeys = [
+        "assigneeIds",
+        "defaultAssigneeIds",
+    ]
+
     private func rewriteGraphReferenceFields(
         in record: CKRecord,
         targetZoneID: CKRecordZone.ID
     ) {
-        let singleReferenceKeys = [
-            "householdId",
-            "assigneeId",
-            "backlogCategoryId",
-            "areaId",
-            "recurringChoreId",
-            "defaultAssigneeId",
-            "categoryId",
-        ]
-        let arrayReferenceKeys = [
-            "assigneeIds",
-            "defaultAssigneeIds",
-        ]
-
-        for key in singleReferenceKeys {
+        for key in Self.singleGraphReferenceKeys {
             guard let reference = record[key] as? CKRecord.Reference,
                   UUID(uuidString: reference.recordID.recordName) != nil
             else {
@@ -959,7 +985,7 @@ actor CloudKitManager {
             )
         }
 
-        for key in arrayReferenceKeys {
+        for key in Self.arrayGraphReferenceKeys {
             guard let references = record[key] as? [CKRecord.Reference] else { continue }
             record[key] = references.map { reference in
                 CKRecord.Reference(
@@ -970,6 +996,43 @@ actor CloudKitManager {
                     action: reference.action
                 )
             } as CKRecordValue
+        }
+    }
+
+    func validateGraphReferenceFields(
+        in record: CKRecord,
+        targetZoneID: CKRecordZone.ID,
+        scope: HouseholdDatabaseScope
+    ) throws {
+        guard Self.householdGraphRecordTypes.contains(record.recordType) else {
+            return
+        }
+
+        func validate(reference: CKRecord.Reference, key: String) throws {
+            let actualZoneID = reference.recordID.zoneID
+            guard actualZoneID == targetZoneID else {
+                let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+                throw CloudKitManagerError.crossZoneReferenceViolation(
+                    "Cross-zone reference violation for \(record.recordType).\(key) in \(scopeName): " +
+                        "expected \(targetZoneID.zoneName), got \(actualZoneID.zoneName)."
+                )
+            }
+        }
+
+        for key in Self.singleGraphReferenceKeys {
+            guard let reference = record[key] as? CKRecord.Reference,
+                  UUID(uuidString: reference.recordID.recordName) != nil
+            else {
+                continue
+            }
+            try validate(reference: reference, key: key)
+        }
+
+        for key in Self.arrayGraphReferenceKeys {
+            guard let references = record[key] as? [CKRecord.Reference] else { continue }
+            for reference in references where UUID(uuidString: reference.recordID.recordName) != nil {
+                try validate(reference: reference, key: key)
+            }
         }
     }
 
@@ -1460,10 +1523,24 @@ actor CloudKitManager {
             zoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
         }
 
-        guard let zoneID else { return record }
+        guard let zoneID else {
+            if Self.householdGraphRecordTypes.contains(record.recordType) {
+                let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+                throw CloudKitManagerError.missingTargetZone(
+                    "Could not resolve a target zone for \(record.recordType) in \(scopeName)." +
+                        (householdId.map { " householdId=\($0.uuidString)" } ?? "")
+                )
+            }
+            return record
+        }
         let currentID = record.recordID
         if currentID.zoneID == zoneID {
             rewriteGraphReferenceFields(in: record, targetZoneID: zoneID)
+            try validateGraphReferenceFields(
+                in: record,
+                targetZoneID: zoneID,
+                scope: scope
+            )
             attachParticipantSharedRootParentIfNeeded(
                 to: record,
                 householdId: householdId,
@@ -1479,6 +1556,11 @@ actor CloudKitManager {
             rewritten[key] = record[key]
         }
         rewriteGraphReferenceFields(in: rewritten, targetZoneID: zoneID)
+        try validateGraphReferenceFields(
+            in: rewritten,
+            targetZoneID: zoneID,
+            scope: scope
+        )
         attachParticipantSharedRootParentIfNeeded(
             to: rewritten,
             householdId: householdId,
@@ -1495,7 +1577,7 @@ actor CloudKitManager {
         zoneID: CKRecordZone.ID
     ) {
         guard scope == .participantShared,
-              record.recordType == "Member",
+              Self.participantSharedChildRecordTypes.contains(record.recordType),
               let householdId
         else {
             return
@@ -1930,6 +2012,8 @@ actor CloudKitManager {
         case invalidRecord
         case shareNotCreated
         case sharePermissionValidationFailed(String)
+        case missingTargetZone(String)
+        case crossZoneReferenceViolation(String)
         case inviteCodeInvalid
         case inviteCodeNotFound
         case inviteTokenFetchFailed(String)
@@ -1955,6 +2039,8 @@ actor CloudKitManager {
             case .shareNotCreated:
                 "Failed to create share"
             case let .sharePermissionValidationFailed(message),
+                 let .missingTargetZone(message),
+                 let .crossZoneReferenceViolation(message),
                  let .inviteTokenFetchFailed(message),
                  let .shareMetadataFetchFailed(message),
                  let .acceptShareFailed(message),
@@ -2424,27 +2510,52 @@ actor CloudKitManager {
 
     // MARK: - Area
 
-    func saveArea(_ area: Area) async throws -> CKRecord {
+    func saveArea(
+        _ area: Area,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = areaRecord(from: area)
-        return try await saveRecordWithZoneRecovery(record, householdId: area.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: area.householdId,
+            scope: scope
+        )
     }
 
-    func fetchArea(id: UUID) async throws -> Area {
-        let record = try await fetchRecord(id: id)
+    func fetchArea(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Area {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try area(from: record)
     }
 
-    func deleteArea(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteArea(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteArea(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteArea(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all areas for a household
-    func fetchAreas(householdId: UUID) async throws -> [Area] {
-        let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+    func fetchAreas(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Area] {
+        let scope = resolvedScope(explicitScope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Area",
                 predicate: self.referenceMatchPredicate(
@@ -2549,27 +2660,41 @@ actor CloudKitManager {
 
     /// Fetch tasks assigned to a specific member in "next" status (for WIP limit check)
     func fetchNextTasks(
+        householdId: UUID,
         assigneeId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [Task] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "assigneeId == %@ AND status == %@",
-            CKRecord.Reference(recordID: recordID(for: assigneeId), action: .none),
-            Task.TaskStatus.next.rawValue
-        )
-        let query = CKQuery(recordType: "Task", predicate: predicate)
-
-        let records = try await queryRecords(query, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let predicates = [
+                self.referenceMatchPredicate(
+                    field: "assigneeId",
+                    id: assigneeId,
+                    zoneID: zoneID
+                ),
+                NSPredicate(format: "status == %@", Task.TaskStatus.next.rawValue),
+            ]
+            let query = CKQuery(
+                recordType: "Task",
+                predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+            return query
+        }
         return try records.map(task(from:))
     }
 
     /// Count tasks in "next" for a member (WIP limit = 3)
     func countNextTasks(
+        householdId: UUID,
         assigneeId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> Int {
-        try await fetchNextTasks(assigneeId: assigneeId, scope: explicitScope).count
+        try await fetchNextTasks(
+            householdId: householdId,
+            assigneeId: assigneeId,
+            scope: explicitScope
+        ).count
     }
 
     // MARK: - WorkItem
@@ -2702,27 +2827,52 @@ actor CloudKitManager {
 
     // MARK: - Recurring Chore
 
-    func saveRecurringChore(_ chore: RecurringChore) async throws -> CKRecord {
+    func saveRecurringChore(
+        _ chore: RecurringChore,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = recurringChoreRecord(from: chore)
-        return try await saveRecordWithZoneRecovery(record, householdId: chore.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: chore.householdId,
+            scope: scope
+        )
     }
 
-    func fetchRecurringChore(id: UUID) async throws -> RecurringChore {
-        let record = try await fetchRecord(id: id)
+    func fetchRecurringChore(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> RecurringChore {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try recurringChore(from: record)
     }
 
-    func deleteRecurringChore(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteRecurringChore(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteRecurringChore(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteRecurringChore(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all recurring chores for a household
-    func fetchRecurringChores(householdId: UUID) async throws -> [RecurringChore] {
-        let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+    func fetchRecurringChores(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [RecurringChore] {
+        let scope = resolvedScope(explicitScope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "RecurringChore",
                 predicate: self.referenceMatchPredicate(
@@ -3016,17 +3166,22 @@ actor CloudKitManager {
     /// Fetch all backlog items for a category
     func fetchBacklogItems(
         categoryId: UUID,
+        householdId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [BacklogItem] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "categoryId == %@",
-            CKRecord.Reference(recordID: recordID(for: categoryId), action: .none)
-        )
-        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-
-        let records = try await queryRecords(query, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "BacklogItem",
+                predicate: self.referenceMatchPredicate(
+                    field: "categoryId",
+                    id: categoryId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            return query
+        }
         return try records.map(backlogItem(from:))
     }
 

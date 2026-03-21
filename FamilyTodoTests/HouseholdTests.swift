@@ -746,33 +746,48 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
     }
 
-    func testAttachParticipantSharedRootParentIfNeededSetsDeleteSelfParentForSharedMember() async {
+    func testAttachParticipantSharedRootParentIfNeededSetsDeleteSelfParentForAllSharedChildTypes() async {
         let manager = CloudKitManager()
         let householdId = UUID()
         let zoneID = CKRecordZone.ID(
             zoneName: "SharedZone-\(UUID().uuidString)",
             ownerName: "_otherOwner"
         )
-        let record = CKRecord(
-            recordType: "Member",
-            recordID: CKRecord.ID(recordName: UUID().uuidString)
-        )
+        let sharedChildTypes = [
+            "Member",
+            "Area",
+            "Task",
+            "WorkItem",
+            "RecurringChore",
+            "ShoppingItem",
+            "ShoppingBundle",
+            "BacklogCategory",
+            "BacklogItem",
+        ]
 
-        await manager.attachParticipantSharedRootParentIfNeeded(
-            to: record,
-            householdId: householdId,
-            scope: .participantShared,
-            zoneID: zoneID
-        )
+        for recordType in sharedChildTypes {
+            let record = CKRecord(
+                recordType: recordType,
+                recordID: CKRecord.ID(recordName: UUID().uuidString)
+            )
 
-        XCTAssertEqual(
-            record.parent?.recordID,
-            CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID)
-        )
-        XCTAssertEqual(record.parent?.action, .deleteSelf)
+            await manager.attachParticipantSharedRootParentIfNeeded(
+                to: record,
+                householdId: householdId,
+                scope: .participantShared,
+                zoneID: zoneID
+            )
+
+            XCTAssertEqual(
+                record.parent?.recordID,
+                CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID),
+                "Expected shared root parent for \(recordType)"
+            )
+            XCTAssertEqual(record.parent?.action, .deleteSelf)
+        }
     }
 
-    func testAttachParticipantSharedRootParentIfNeededDoesNothingOutsideSharedMemberSaves() async {
+    func testAttachParticipantSharedRootParentIfNeededDoesNothingOutsideSharedChildSaves() async {
         let manager = CloudKitManager()
         let record = CKRecord(
             recordType: "Household",
@@ -787,6 +802,69 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
 
         XCTAssertNil(record.parent)
+    }
+
+    func testValidateGraphReferenceFieldsAllowsTargetZoneReferences() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let assigneeId = UUID()
+        let zoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zoneID)
+        )
+        record["householdId"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID),
+            action: .none
+        )
+        record["assigneeId"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: assigneeId.uuidString, zoneID: zoneID),
+            action: .none
+        )
+
+        try await manager.validateGraphReferenceFields(
+            in: record,
+            targetZoneID: zoneID,
+            scope: .participantShared
+        )
+    }
+
+    func testValidateGraphReferenceFieldsRejectsCrossZoneReferences() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let targetZoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let wrongZoneID = CKRecordZone.ID(
+            zoneName: "WrongZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: targetZoneID)
+        )
+        record["householdId"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: householdId.uuidString, zoneID: wrongZoneID),
+            action: .none
+        )
+
+        do {
+            try await manager.validateGraphReferenceFields(
+                in: record,
+                targetZoneID: targetZoneID,
+                scope: .participantShared
+            )
+            XCTFail("Expected crossZoneReferenceViolation")
+        } catch let error as CloudKitManager.CloudKitManagerError {
+            guard case let .crossZoneReferenceViolation(message) = error else {
+                return XCTFail("Expected crossZoneReferenceViolation, got \(error)")
+            }
+            XCTAssertTrue(message.contains("Task.householdId"))
+        }
     }
 
     func testReferenceMatchPredicateUsesInOperatorForMultipleReferences() {

@@ -146,11 +146,25 @@ protocol HouseholdCloudSyncing: Actor {
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws
 
-    func fetchAreas(householdId: UUID) async throws -> [Area]
-    func deleteArea(id: UUID, householdId: UUID) async throws
+    func fetchAreas(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [Area]
+    func deleteArea(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
 
-    func fetchRecurringChores(householdId: UUID) async throws -> [RecurringChore]
-    func deleteRecurringChore(id: UUID, householdId: UUID) async throws
+    func fetchRecurringChores(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [RecurringChore]
+    func deleteRecurringChore(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws
 }
 
 extension CloudKitManager: HouseholdCloudSyncing {
@@ -494,7 +508,10 @@ class HouseholdStore: ObservableObject {
             if let current = localHousehold {
                 do {
                     await setCloudScope(for: current, userId: userId)
-                    let fresh = try await cloudKit.fetchHousehold(id: current.id, scope: nil)
+                    let fresh = try await cloudKit.fetchHousehold(
+                        id: current.id,
+                        scope: cloudScope(for: current, userId: userId)
+                    )
                     if try await validateRecoveredMembershipOrAbandon(
                         household: fresh,
                         userId: userId
@@ -927,12 +944,13 @@ class HouseholdStore: ObservableObject {
                 pendingHouseholdMetadataSync = nil
 
                 do {
+                    let scope = cloudScope(for: pendingSync.household, userId: pendingSync.userId)
                     await setCloudScope(for: pendingSync.household, userId: pendingSync.userId)
                     _ = try await cloudKit.updateHouseholdMetadata(
                         householdId: pendingSync.household.id,
                         newName: pendingSync.household.name,
                         newIconSymbol: pendingSync.household.iconSymbol,
-                        scope: nil
+                        scope: scope
                     )
                 } catch {
                     self.error = error
@@ -945,11 +963,12 @@ class HouseholdStore: ObservableObject {
         guard syncMode == .cloud else { return nil }
 
         if let household = currentHousehold {
+            let scope = cloudScope(for: household, userId: userId)
             await setCloudScope(for: household, userId: userId)
             if let member = try? await cloudKit.fetchMemberByUserId(
                 userId,
                 householdId: household.id,
-                scope: nil
+                scope: scope
             ),
                 member.isActive
             {
@@ -958,15 +977,23 @@ class HouseholdStore: ObservableObject {
         }
 
         await cloudKit.setHouseholdScope(.participantShared)
-        if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: nil, scope: nil),
-           member.isActive
+        if let member = try? await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: nil,
+            scope: .participantShared
+        ),
+            member.isActive
         {
             return member.displayName
         }
 
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        if let member = try? await cloudKit.fetchMemberByUserId(userId, householdId: nil, scope: nil),
-           member.isActive
+        if let member = try? await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: nil,
+            scope: .ownerPrivate
+        ),
+            member.isActive
         {
             return member.displayName
         }
@@ -1071,9 +1098,14 @@ class HouseholdStore: ObservableObject {
     }
 
     private func setCloudScope(for household: Household, userId: String) async {
-        let scope: CloudKitManager.HouseholdDatabaseScope =
-            household.ownerId == userId ? .ownerPrivate : .participantShared
-        await cloudKit.setHouseholdScope(scope)
+        await cloudKit.setHouseholdScope(cloudScope(for: household, userId: userId))
+    }
+
+    private func cloudScope(
+        for household: Household,
+        userId: String
+    ) -> CloudKitManager.HouseholdDatabaseScope {
+        household.ownerId == userId ? .ownerPrivate : .participantShared
     }
 
     private func resolveLocalLeaveBehavior(
@@ -1164,7 +1196,7 @@ class HouseholdStore: ObservableObject {
         if let member = try? await cloudKit.fetchMemberByUserId(
             userId,
             householdId: householdId,
-            scope: nil
+            scope: .participantShared
         ),
             member.householdId == householdId
         {
@@ -1176,7 +1208,7 @@ class HouseholdStore: ObservableObject {
                     newRole: member.role,
                     isActive: false,
                     colorHex: member.colorHex,
-                    scope: nil
+                    scope: .participantShared
                 )
             } catch {
                 print("DEBUG: Member deactivation during leave failed: \(error)")
@@ -1193,53 +1225,100 @@ class HouseholdStore: ObservableObject {
         let deletedByZone = try await cloudKit.deleteHouseholdZoneIfCustom(id: householdId)
 
         if !deletedByZone {
-            let members = try await cloudKit.fetchMembers(householdId: householdId, scope: nil)
+            let members = try await cloudKit.fetchMembers(householdId: householdId, scope: .ownerPrivate)
             for member in members {
-                try await cloudKit.deleteMember(id: member.id, householdId: householdId, scope: nil)
+                try await cloudKit.deleteMember(
+                    id: member.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let tasks = try await cloudKit.fetchTasks(householdId: householdId, scope: nil)
+            let tasks = try await cloudKit.fetchTasks(householdId: householdId, scope: .ownerPrivate)
             for task in tasks {
-                try await cloudKit.deleteTask(id: task.id, householdId: householdId, scope: nil)
+                try await cloudKit.deleteTask(
+                    id: task.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let shoppingItems = try await cloudKit.fetchShoppingItems(householdId: householdId, scope: nil)
+            let shoppingItems = try await cloudKit.fetchShoppingItems(
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
             for item in shoppingItems {
-                try await cloudKit.deleteShoppingItem(id: item.id, householdId: householdId, scope: nil)
+                try await cloudKit.deleteShoppingItem(
+                    id: item.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let shoppingBundles = try await cloudKit.fetchShoppingBundles(householdId: householdId, scope: nil)
+            let shoppingBundles = try await cloudKit.fetchShoppingBundles(
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
             for bundle in shoppingBundles {
-                try await cloudKit.deleteShoppingBundle(id: bundle.id, householdId: householdId, scope: nil)
+                try await cloudKit.deleteShoppingBundle(
+                    id: bundle.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let backlogItems = try await cloudKit.fetchBacklogItems(householdId: householdId, scope: nil)
+            let backlogItems = try await cloudKit.fetchBacklogItems(
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
             for item in backlogItems {
-                try await cloudKit.deleteBacklogItem(id: item.id, householdId: householdId, scope: nil)
+                try await cloudKit.deleteBacklogItem(
+                    id: item.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let categories = try await cloudKit.fetchBacklogCategories(householdId: householdId, scope: nil)
+            let categories = try await cloudKit.fetchBacklogCategories(
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
             for category in categories {
-                try await cloudKit.deleteBacklogCategory(id: category.id, householdId: householdId, scope: nil)
+                try await cloudKit.deleteBacklogCategory(
+                    id: category.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let areas = try await cloudKit.fetchAreas(householdId: householdId)
+            let areas = try await cloudKit.fetchAreas(householdId: householdId, scope: .ownerPrivate)
             for area in areas {
-                try await cloudKit.deleteArea(id: area.id, householdId: householdId)
+                try await cloudKit.deleteArea(
+                    id: area.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            let recurringChores = try await cloudKit.fetchRecurringChores(householdId: householdId)
+            let recurringChores = try await cloudKit.fetchRecurringChores(
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
             for chore in recurringChores {
-                try await cloudKit.deleteRecurringChore(id: chore.id, householdId: householdId)
+                try await cloudKit.deleteRecurringChore(
+                    id: chore.id,
+                    householdId: householdId,
+                    scope: .ownerPrivate
+                )
             }
 
-            try await cloudKit.deleteHousehold(id: householdId, scope: nil)
+            try await cloudKit.deleteHousehold(id: householdId, scope: .ownerPrivate)
         }
 
         try await cloudKit.deleteInviteTokens(for: householdId)
 
         do {
-            _ = try await cloudKit.fetchHousehold(id: householdId, scope: nil)
+            _ = try await cloudKit.fetchHousehold(id: householdId, scope: .ownerPrivate)
             throw NSError(
                 domain: "HouseholdStore",
                 code: 1,
@@ -1871,26 +1950,12 @@ class HouseholdStore: ObservableObject {
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
 
-        async let fetchedTasks = cloudKit.fetchTasks(
-            householdId: household.id,
-            scope: nil
-        )
-        async let fetchedShoppingItems = cloudKit.fetchShoppingItems(
-            householdId: household.id,
-            scope: nil
-        )
-        async let fetchedBundles = cloudKit.fetchShoppingBundles(
-            householdId: household.id,
-            scope: nil
-        )
-        async let fetchedCategories = cloudKit.fetchBacklogCategories(
-            householdId: household.id,
-            scope: nil
-        )
-        async let fetchedBacklogItems = cloudKit.fetchBacklogItems(
-            householdId: household.id,
-            scope: nil
-        )
+        let scope = cloudScope(for: household, userId: userId)
+        async let fetchedTasks = cloudKit.fetchTasks(householdId: household.id, scope: scope)
+        async let fetchedShoppingItems = cloudKit.fetchShoppingItems(householdId: household.id, scope: scope)
+        async let fetchedBundles = cloudKit.fetchShoppingBundles(householdId: household.id, scope: scope)
+        async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: household.id, scope: scope)
+        async let fetchedBacklogItems = cloudKit.fetchBacklogItems(householdId: household.id, scope: scope)
 
         let tasks = try await fetchedTasks
         let shoppingItems = try await fetchedShoppingItems
@@ -1925,10 +1990,11 @@ class HouseholdStore: ObservableObject {
         userId: String
     ) async throws -> Bool {
         await setCloudScope(for: household, userId: userId)
+        let scope = cloudScope(for: household, userId: userId)
         return try await cloudKit.fetchMemberByUserId(
             userId,
             householdId: household.id,
-            scope: nil
+            scope: scope
         )?.isActive ?? false
     }
 
@@ -2528,7 +2594,9 @@ class HouseholdStore: ObservableObject {
         }
 
         let fetchHousehold = fetchHousehold ?? { [cloudKit] householdId in
-            try await cloudKit.fetchHousehold(id: householdId, scope: nil)
+            let scope: CloudKitManager.HouseholdDatabaseScope =
+                source == .ownerPrivate ? .ownerPrivate : .participantShared
+            return try await cloudKit.fetchHousehold(id: householdId, scope: scope)
         }
 
         do {
@@ -2567,6 +2635,8 @@ class HouseholdStore: ObservableObject {
         await cloudKit.clearAllCachedZones(for: member.householdId)
 
         do {
+            let scope: CloudKitManager.HouseholdDatabaseScope =
+                source == .ownerPrivate ? .ownerPrivate : .participantShared
             _ = try await cloudKit.updateMemberState(
                 memberId: member.id,
                 householdId: member.householdId,
@@ -2574,7 +2644,7 @@ class HouseholdStore: ObservableObject {
                 newRole: member.role,
                 isActive: false,
                 colorHex: member.colorHex,
-                scope: nil
+                scope: scope
             )
         } catch {
             guard !isRecordMissingError(error) else { return }
@@ -2779,9 +2849,10 @@ class HouseholdStore: ObservableObject {
     ) async {
         do {
             await setCloudScope(for: household, userId: userId)
+            let scope = cloudScope(for: household, userId: userId)
             let remoteMembers = try await cloudKit.fetchMembers(
                 householdId: household.id,
-                scope: nil
+                scope: scope
             )
             let mergedMembers = mergeRemoteMembersWithLocalJoinFallback(
                 remoteMembers,
