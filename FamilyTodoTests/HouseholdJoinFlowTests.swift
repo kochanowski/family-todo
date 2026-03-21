@@ -532,6 +532,49 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertFalse(store.hasPendingJoinProtection(for: targetHousehold.id, userId: userId))
     }
 
+    func testJoinSurfacesSharedMemberVisibilityFailureWhenSaveDoesNotBecomeReadable() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Invisible Member", ownerId: "owner-3")
+        let inviteToken = InviteToken(
+            id: "H1D2E3N4",
+            code: "H1D2E3N4",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/invisible-member",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            participantSharedInvisibleSavedMemberHouseholds: [targetHousehold.id]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        do {
+            try await store.joinHousehold(
+                inviteCode: inviteToken.code,
+                userId: userId,
+                displayName: "Taylor"
+            )
+            XCTFail("Expected detailed shared member visibility error")
+        } catch let error as HouseholdError {
+            guard case let .debugJoinFailure(message) = error else {
+                XCTFail("Expected debugJoinFailure, got \(error)")
+                return
+            }
+            XCTAssertTrue(message.contains("Guest member write succeeded"))
+            XCTAssertFalse(message.contains("Member not found"))
+        }
+
+        XCTAssertNil(store.currentHousehold)
+        XCTAssertTrue(try cachedMembers(for: targetHousehold.id).isEmpty)
+    }
+
     func testFetchOrCreateInviteCodeReturnsCachedActiveTokenWithoutSecondCloudValidation() async throws {
         let household = TestCacheFixtures.household(name: "Invite Home", ownerId: "owner-1")
         let activeToken = InviteToken(

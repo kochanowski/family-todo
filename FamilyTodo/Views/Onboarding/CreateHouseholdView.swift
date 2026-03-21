@@ -382,21 +382,15 @@ struct HouseholdJoinSheet: View {
                         Button {
                             onJoin()
                         } label: {
-                            HStack(spacing: 10) {
-                                if isJoining {
-                                    ProgressView()
-                                        .tint(.white)
-                                }
-                                Text(isJoining ? "Joining..." : "Join with code")
-                                    .font(themeStore.font(for: .buttonLabel))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                Capsule()
-                                    .fill(canJoinWithCode && !isJoining ? themeStore.accentTabColor : Color.secondary)
-                            )
+                            Text("Join with code")
+                                .font(themeStore.font(for: .buttonLabel))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    Capsule()
+                                        .fill(canJoinWithCode && !isJoining ? themeStore.accentTabColor : Color.secondary)
+                                )
                         }
                         .disabled(!canJoinWithCode || isJoining)
 

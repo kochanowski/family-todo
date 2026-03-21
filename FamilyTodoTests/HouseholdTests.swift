@@ -746,6 +746,49 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
     }
 
+    func testAttachParticipantSharedRootParentIfNeededSetsDeleteSelfParentForSharedMember() async {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let zoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let record = CKRecord(
+            recordType: "Member",
+            recordID: CKRecord.ID(recordName: UUID().uuidString)
+        )
+
+        await manager.attachParticipantSharedRootParentIfNeeded(
+            to: record,
+            householdId: householdId,
+            scope: .participantShared,
+            zoneID: zoneID
+        )
+
+        XCTAssertEqual(
+            record.parent?.recordID,
+            CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID)
+        )
+        XCTAssertEqual(record.parent?.action, .deleteSelf)
+    }
+
+    func testAttachParticipantSharedRootParentIfNeededDoesNothingOutsideSharedMemberSaves() async {
+        let manager = CloudKitManager()
+        let record = CKRecord(
+            recordType: "Household",
+            recordID: CKRecord.ID(recordName: UUID().uuidString)
+        )
+
+        await manager.attachParticipantSharedRootParentIfNeeded(
+            to: record,
+            householdId: UUID(),
+            scope: .ownerPrivate,
+            zoneID: ownerZoneID
+        )
+
+        XCTAssertNil(record.parent)
+    }
+
     func testReferenceMatchPredicateUsesInOperatorForMultipleReferences() {
         let scopedReference = CKRecord.Reference(
             recordID: CKRecord.ID(

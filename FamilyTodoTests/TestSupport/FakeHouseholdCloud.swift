@@ -37,6 +37,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private let participantSharedWriteDeniedHouseholds: Set<UUID>
     private let participantSharedReadDeniedHouseholds: Set<UUID>
     private let participantSharedVerificationDeniedHouseholds: Set<UUID>
+    private let participantSharedInvisibleSavedMemberHouseholds: Set<UUID>
     private var operationEvents: [OperationEvent] = []
     private let createInviteCodeResultsByHouseholdId: [UUID: InviteToken]
     private var createInviteCodeCalls = 0
@@ -57,6 +58,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         participantSharedWriteDeniedHouseholds: Set<UUID> = [],
         participantSharedReadDeniedHouseholds: Set<UUID> = [],
         participantSharedVerificationDeniedHouseholds: Set<UUID> = [],
+        participantSharedInvisibleSavedMemberHouseholds: Set<UUID> = [],
         createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:]
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
@@ -74,6 +76,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.participantSharedWriteDeniedHouseholds = participantSharedWriteDeniedHouseholds
         self.participantSharedReadDeniedHouseholds = participantSharedReadDeniedHouseholds
         self.participantSharedVerificationDeniedHouseholds = participantSharedVerificationDeniedHouseholds
+        self.participantSharedInvisibleSavedMemberHouseholds = participantSharedInvisibleSavedMemberHouseholds
         self.createInviteCodeResultsByHouseholdId = createInviteCodeResultsByHouseholdId
     }
 
@@ -339,6 +342,11 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
                 operation: "saveMember",
                 forWrite: true
             )
+        }
+        if scope == .participantShared,
+           participantSharedInvisibleSavedMemberHouseholds.contains(member.householdId)
+        {
+            return makeRecord(recordType: "Member", id: member.id)
         }
         var members = members(for: scope)
         if let index = members.firstIndex(where: { $0.id == member.id }) {

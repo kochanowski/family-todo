@@ -758,8 +758,9 @@ class HouseholdStore: ObservableObject {
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
         print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
+        let joinedMember: Member
         do {
-            _ = try await upsertMembership(
+            joinedMember = try await upsertMembership(
                 householdId: target.householdId,
                 userId: userId,
                 displayName: validatedDisplayName,
@@ -777,7 +778,8 @@ class HouseholdStore: ObservableObject {
         print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
         let verifiedMember = try await verifyParticipantSharedMembership(
             householdId: target.householdId,
-            userId: userId
+            userId: userId,
+            expectedMember: joinedMember
         )
 
         updateCache(with: verifiedMember)
@@ -810,8 +812,9 @@ class HouseholdStore: ObservableObject {
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
         print("DEBUG: Join member upsert starting for household \(target.householdId) in participantShared scope.")
+        let joinedMember: Member
         do {
-            _ = try await upsertMembership(
+            joinedMember = try await upsertMembership(
                 householdId: target.householdId,
                 userId: userId,
                 displayName: validatedDisplayName,
@@ -829,7 +832,8 @@ class HouseholdStore: ObservableObject {
         print("DEBUG: Join member verification starting for household \(target.householdId) in participantShared scope.")
         let verifiedMember = try await verifyParticipantSharedMembership(
             householdId: target.householdId,
-            userId: userId
+            userId: userId,
+            expectedMember: joinedMember
         )
 
         updateCache(with: verifiedMember)
@@ -1471,7 +1475,8 @@ class HouseholdStore: ObservableObject {
 
     private func verifyParticipantSharedMembership(
         householdId: UUID,
-        userId: String
+        userId: String,
+        expectedMember: Member? = nil
     ) async throws -> Member {
         let retryDelaysNanoseconds: [UInt64] = [0, 250_000_000, 750_000_000]
         var lastError: Error?
@@ -1514,6 +1519,18 @@ class HouseholdStore: ObservableObject {
             }
 
             lastError = HouseholdError.memberNotFound
+        }
+
+        if expectedMember != nil,
+           lastError as? HouseholdError == .memberNotFound
+        {
+            let message = "Shared membership verification failed: Guest member write succeeded, but the shared Member record is still not visible after save."
+            logJoinError(
+                stage: "memberVerify.failed",
+                householdId: householdId,
+                error: HouseholdError.debugJoinFailure(message)
+            )
+            throw HouseholdError.debugJoinFailure(message)
         }
 
         let resolvedError = lastError ?? HouseholdError.sharedAccessNotEstablished

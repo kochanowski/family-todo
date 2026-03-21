@@ -1464,6 +1464,12 @@ actor CloudKitManager {
         let currentID = record.recordID
         if currentID.zoneID == zoneID {
             rewriteGraphReferenceFields(in: record, targetZoneID: zoneID)
+            attachParticipantSharedRootParentIfNeeded(
+                to: record,
+                householdId: householdId,
+                scope: scope,
+                zoneID: zoneID
+            )
             return record
         }
 
@@ -1473,7 +1479,36 @@ actor CloudKitManager {
             rewritten[key] = record[key]
         }
         rewriteGraphReferenceFields(in: rewritten, targetZoneID: zoneID)
+        attachParticipantSharedRootParentIfNeeded(
+            to: rewritten,
+            householdId: householdId,
+            scope: scope,
+            zoneID: zoneID
+        )
         return rewritten
+    }
+
+    func attachParticipantSharedRootParentIfNeeded(
+        to record: CKRecord,
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope,
+        zoneID: CKRecordZone.ID
+    ) {
+        guard scope == .participantShared,
+              record.recordType == "Member",
+              let householdId
+        else {
+            return
+        }
+
+        let householdRecordID = CKRecord.ID(
+            recordName: householdId.uuidString,
+            zoneID: zoneID
+        )
+        record.parent = CKRecord.Reference(
+            recordID: householdRecordID,
+            action: .deleteSelf
+        )
     }
 
     private func recordForSave(
