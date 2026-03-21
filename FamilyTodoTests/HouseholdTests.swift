@@ -746,7 +746,7 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
     }
 
-    func testAttachParticipantSharedRootParentIfNeededSetsDeleteSelfParentForAllSharedChildTypes() async {
+    func testAttachParticipantSharedRootParentIfNeededSetsNoneParentActionForAllSharedChildTypes() async {
         let manager = CloudKitManager()
         let householdId = UUID()
         let zoneID = CKRecordZone.ID(
@@ -783,7 +783,7 @@ final class CloudKitManagerScopeTests: XCTestCase {
                 CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID),
                 "Expected shared root parent for \(recordType)"
             )
-            XCTAssertEqual(record.parent?.action, .deleteSelf)
+            XCTAssertEqual(record.parent?.action, .none)
         }
     }
 

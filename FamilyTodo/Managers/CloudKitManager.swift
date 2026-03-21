@@ -1589,7 +1589,7 @@ actor CloudKitManager {
         )
         record.parent = CKRecord.Reference(
             recordID: householdRecordID,
-            action: .deleteSelf
+            action: .none
         )
     }
 
