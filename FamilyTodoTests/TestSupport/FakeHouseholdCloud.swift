@@ -247,13 +247,14 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             return token
         }
 
+        let now = Date()
         let token = InviteToken(
-            id: "A7B9XQ2M",
-            code: "A7B9XQ2M",
+            id: "A7B9XQ",
+            code: "A7B9XQ",
             householdId: household.id,
             shareURL: "https://www.icloud.com/share/test",
-            createdAt: Date(timeIntervalSince1970: 0),
-            expiresAt: Date(timeIntervalSince1970: InviteToken.ttl),
+            createdAt: now,
+            expiresAt: now.addingTimeInterval(InviteToken.ttl),
             isRevoked: false,
             usesCount: 0
         )

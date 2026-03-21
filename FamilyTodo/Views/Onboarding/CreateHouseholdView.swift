@@ -306,9 +306,7 @@ struct CreateHouseholdView: View {
     }
 
     private func preferredJoinCode() -> String? {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode),
-              normalizedCode.count == 8
-        else {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode) else {
             return nil
         }
         return normalizedCode
@@ -361,7 +359,7 @@ struct HouseholdJoinSheet: View {
                             .foregroundStyle(themeStore.contentPrimaryColor)
                             .multilineTextAlignment(.center)
 
-                        TextField("A7B9XQ2M", text: $inviteCodeToken, axis: .vertical)
+                        TextField("A7B9XQ", text: $inviteCodeToken, axis: .vertical)
                             .font(.system(size: 24, weight: .semibold, design: .monospaced))
                             .multilineTextAlignment(.center)
                             .textInputAutocapitalization(.characters)
@@ -376,7 +374,7 @@ struct HouseholdJoinSheet: View {
                                 inviteCodeToken = normalizedInviteCodeInput(newValue)
                             }
 
-                        Text("Use the 8-character invite code (A-Z, 0-9). QR codes fill this field automatically.")
+                        Text("Use the 6-character invite code (A-Z, 0-9). Older 8-character codes still work. QR codes fill this field automatically.")
                             .font(themeStore.font(for: .bodySmall))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
@@ -484,17 +482,14 @@ struct HouseholdJoinSheet: View {
     }
 
     private var canJoinWithCode: Bool {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteCodeToken) else {
-            return false
-        }
-        return normalizedCode.count == 8
+        InviteInputNormalizer.normalizeInviteCodeToken(inviteCodeToken) != nil
     }
 
     private func normalizedInviteCodeInput(_ raw: String) -> String {
         let uppercased = raw.uppercased()
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         let filtered = String(uppercased.unicodeScalars.filter { allowed.contains($0) })
-        return String(filtered.prefix(8))
+        return String(filtered.prefix(InviteInputNormalizer.maximumInviteCodeLength))
     }
 }
 

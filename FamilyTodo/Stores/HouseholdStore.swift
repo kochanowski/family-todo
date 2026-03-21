@@ -307,7 +307,13 @@ class HouseholdStore: ObservableObject {
         case ownerPrivate
     }
 
-    @Published var currentHousehold: Household?
+    @Published var currentHousehold: Household? {
+        didSet {
+            guard oldValue?.id != currentHousehold?.id else { return }
+            resetInvitePresentationState()
+        }
+    }
+
     @Published var isLoading = false
     @Published var error: Error?
     @Published var share: CKShare?
@@ -328,6 +334,7 @@ class HouseholdStore: ObservableObject {
     private let joinedHouseholdPrewarmOverride: ((Household, String, ModelContext?) async throws -> Void)?
     private var pendingJoinState: PendingJoinState?
     private var joinHydrationTask: _Concurrency.Task<Void, Never>?
+    private var activeInviteToken: InviteToken?
 
     // Cache for sharing controller
     private var activeShare: CKShare?
@@ -359,6 +366,21 @@ class HouseholdStore: ObservableObject {
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
+        if mode != .cloud {
+            resetInvitePresentationState()
+        }
+    }
+
+    func cacheInviteToken(_ token: InviteToken?) {
+        activeInviteToken = token
+        activeInviteCode = token?.code
+    }
+
+    private func resetInvitePresentationState() {
+        share = nil
+        activeContainer = nil
+        activeShare = nil
+        cacheInviteToken(nil)
     }
 
     var isModelContextReady: Bool {
@@ -675,6 +697,11 @@ class HouseholdStore: ObservableObject {
     }
 
     func fetchOrCreateInviteCode() async throws -> String {
+        let token = try await fetchOrCreateInviteToken()
+        return token.code
+    }
+
+    func fetchOrCreateInviteToken() async throws -> InviteToken {
         guard let household = currentHousehold else {
             throw HouseholdError.householdNotFound
         }
@@ -682,12 +709,22 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.cloudSyncRequired
         }
 
+        if let activeInviteToken {
+            if activeInviteToken.householdId == household.id,
+               activeInviteToken.isActive(at: Date())
+            {
+                if activeInviteCode != activeInviteToken.code {
+                    activeInviteCode = activeInviteToken.code
+                }
+                return activeInviteToken
+            }
+            cacheInviteToken(nil)
+        }
+
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        // CloudKitManager owns the reuse decision and validates that an existing
-        // token still points at a live attached share before returning it.
         let token = try await cloudKit.createInviteCode(for: household)
-        activeInviteCode = token.code
-        return token.code
+        cacheInviteToken(token)
+        return token
     }
 
     // MARK: - Join Household
@@ -2001,10 +2038,6 @@ class HouseholdStore: ObservableObject {
         pendingJoinState = nil
         lastRemoteCloudRefreshSnapshot = nil
         currentHousehold = nil
-        share = nil
-        activeInviteCode = nil
-        activeContainer = nil
-        activeShare = nil
         _ = _Concurrency.Task { [cloudKit] in
             await cloudKit.setHouseholdScope(.participantShared)
         }

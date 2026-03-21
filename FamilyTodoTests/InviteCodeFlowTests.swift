@@ -8,7 +8,7 @@ final class InviteCodeFlowTests: XCTestCase {
 
         for _ in 0 ..< 100 {
             let code = CloudKitManager.generateInviteCode()
-            XCTAssertEqual(code.count, 8)
+            XCTAssertEqual(code.count, InviteInputNormalizer.preferredInviteCodeLength)
             XCTAssertTrue(code.unicodeScalars.allSatisfy { allowed.contains($0) })
         }
     }
@@ -16,12 +16,12 @@ final class InviteCodeFlowTests: XCTestCase {
     func testGenerateInviteCodeHonorsCustomLengthWithinBounds() {
         let allowed = CharacterSet(charactersIn: "ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
 
-        let shorter = CloudKitManager.generateInviteCode(length: 6)
-        XCTAssertEqual(shorter.count, 8)
+        let shorter = CloudKitManager.generateInviteCode(length: 4)
+        XCTAssertEqual(shorter.count, InviteInputNormalizer.preferredInviteCodeLength)
         XCTAssertTrue(shorter.unicodeScalars.allSatisfy { allowed.contains($0) })
 
-        let exact = CloudKitManager.generateInviteCode(length: 8)
-        XCTAssertEqual(exact.count, 8)
+        let exact = CloudKitManager.generateInviteCode(length: InviteInputNormalizer.legacyInviteCodeLength)
+        XCTAssertEqual(exact.count, InviteInputNormalizer.legacyInviteCodeLength)
         XCTAssertTrue(exact.unicodeScalars.allSatisfy { allowed.contains($0) })
     }
 
@@ -51,6 +51,10 @@ final class InviteCodeFlowTests: XCTestCase {
         let code = try InviteInputNormalizer.normalizeInput("A7B9XQ")
         XCTAssertEqual(code.kind, .shortCode)
         XCTAssertEqual(code.inviteCode, "A7B9XQ")
+
+        let legacyCode = try InviteInputNormalizer.normalizeInput("A7B9XQ2M")
+        XCTAssertEqual(legacyCode.kind, .shortCode)
+        XCTAssertEqual(legacyCode.inviteCode, "A7B9XQ2M")
 
         let url = try InviteInputNormalizer.normalizeInput("https://www.icloud.com/share/abc123")
         XCTAssertEqual(url.kind, .iCloudURL)

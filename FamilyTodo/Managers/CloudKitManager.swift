@@ -68,7 +68,7 @@ actor CloudKitManager {
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
-    private static let inviteCodeLength = 8
+    private static let inviteCodeLength = InviteInputNormalizer.preferredInviteCodeLength
     private static let inviteCodeMaxAttempts = 24
     private static let inviteCodeMaxUses = 100
     private static let inviteCodeMaxFailedAttempts = 8

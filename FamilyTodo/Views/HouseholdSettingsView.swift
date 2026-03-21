@@ -1,28 +1,7 @@
-import CloudKit
 import SwiftData
 import SwiftUI
-import UIKit
 
 // swiftlint:disable file_length
-@MainActor
-final class HouseholdSettingsUIState: ObservableObject {
-    enum Route: Identifiable {
-        case inviteMember(share: CKShare, container: CKContainer)
-        case inviteQR
-
-        var id: String {
-            switch self {
-            case let .inviteMember(share, _):
-                "share-\(share.recordID.recordName)"
-            case .inviteQR:
-                "invite-qr"
-            }
-        }
-    }
-
-    @Published var route: Route?
-}
-
 struct ProfileView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
@@ -32,11 +11,10 @@ struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var memberStore = MemberStore(householdId: nil)
-    @StateObject private var uiState = HouseholdSettingsUIState()
 
     @State private var showEditProfile = false
     @State private var householdBeingEdited: Household?
-    @State private var isPreparingShareInvite = false
+    @State private var showInviteMember = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
     @State private var showDeleteMemberConfirmation = false
@@ -67,15 +45,9 @@ struct ProfileView: View {
                     .id(household.id)
             }
         }
-        .sheet(item: $uiState.route) { route in
-            switch route {
-            case let .inviteMember(share, container):
-                InviteMemberView(share: share, container: container)
-                    .environmentObject(householdStore)
-            case .inviteQR:
-                InviteQRCodeView()
-                    .environmentObject(householdStore)
-            }
+        .sheet(isPresented: $showInviteMember) {
+            InviteMemberView()
+                .environmentObject(householdStore)
         }
         .sheet(isPresented: $showLeaveConfirmation) {
             AppConfirmationSheet(
@@ -259,32 +231,19 @@ struct ProfileView: View {
         if householdStore.currentHousehold != nil {
             Section {
                 Button {
-                    _ = _Concurrency.Task { await prepareShareInvite() }
+                    showInviteMember = true
                 } label: {
-                    if isPreparingShareInvite {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Preparing invite...")
-                                .font(themeStore.font(for: .bodyStrong))
-                        }
-                    } else {
-                        Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
-                            .font(themeStore.font(for: .bodyStrong))
-                    }
-                }
-                .disabled(isPreparingShareInvite || !currentUserIsOwner)
-
-                Button {
-                    uiState.route = .inviteQR
-                } label: {
-                    Label("Show Invite QR", systemImage: "qrcode")
+                    Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
                         .font(themeStore.font(for: .bodyStrong))
                 }
-                .disabled(isPreparingShareInvite || !currentUserIsOwner)
+                .disabled(!canCreateInvite)
 
                 if !currentUserIsOwner {
                     Text("Only the household owner can create invites.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                } else if userSession.syncMode != .cloud {
+                    Text("Invites are available only when iCloud sync is enabled.")
                         .font(themeStore.font(for: .bodySmall))
                         .foregroundStyle(themeStore.contentSecondaryColor)
                 }
@@ -343,6 +302,10 @@ struct ProfileView: View {
             activeMembers: activeMembers
         )
         return leaveResolution == .deactivateMembership
+    }
+
+    private var canCreateInvite: Bool {
+        currentUserIsOwner && userSession.syncMode == .cloud
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -414,20 +377,6 @@ struct ProfileView: View {
         }
     }
 
-    private func prepareShareInvite() async {
-        guard !isPreparingShareInvite else { return }
-        isPreparingShareInvite = true
-        defer { isPreparingShareInvite = false }
-
-        do {
-            let (share, container) = try await householdStore.createShare()
-            _ = try? await householdStore.fetchOrCreateInviteCode()
-            uiState.route = .inviteMember(share: share, container: container)
-        } catch {
-            actionErrorMessage = error.localizedDescription
-        }
-    }
-
     private func leaveHousehold() {
         guard let userId = userSession.userId else {
             actionErrorMessage = "Session expired. Sign in again to manage household."
@@ -482,20 +431,14 @@ private struct InviteMemberView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
-    let share: CKShare
-    let container: CKContainer
-
-    @State private var inviteCode: String?
-    @State private var inviteCodeShareText = ""
-    @State private var showCodeShareSheet = false
-    @State private var showQRCode = false
+    @State private var inviteToken: InviteToken?
     @State private var isLoadingInviteCode = true
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 34, weight: .semibold))
                         .foregroundStyle(themeStore.accentTabColor)
@@ -511,7 +454,7 @@ private struct InviteMemberView: View {
                             .foregroundStyle(themeStore.contentPrimaryColor)
                             .multilineTextAlignment(.center)
 
-                        Text("Share the 8-character invite code or show the QR code so someone can join this household.")
+                        Text("Share the 6-character invite code or let someone scan the QR code to join this household.")
                             .font(themeStore.font(for: .bodyStrong))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
@@ -521,44 +464,44 @@ private struct InviteMemberView: View {
                         ProgressView("Preparing invite code...")
                             .font(themeStore.font(for: .bodyStrong))
                     } else if let errorMessage {
-                        Text(errorMessage)
-                            .font(themeStore.font(for: .bodySmall))
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                    } else {
-                        if let inviteCode {
+                        ThemedEmptyStateView(
+                            title: "Invite unavailable",
+                            systemImage: "exclamationmark.triangle",
+                            description: errorMessage
+                        )
+                    } else if let inviteToken {
+                        VStack(spacing: 18) {
+                            InviteQRCodeCard(inviteCode: inviteToken.code)
+
                             VStack(spacing: 8) {
                                 Text("Invite code")
                                     .font(themeStore.font(for: .bodySmall))
                                     .foregroundStyle(themeStore.contentSecondaryColor)
-                                Text(inviteCode)
-                                    .font(.system(size: 30, weight: .bold, design: .monospaced))
-                                    .textSelection(.enabled)
+                                Text(inviteToken.code)
+                                    .font(.system(size: 34, weight: .bold, design: .monospaced))
                                     .foregroundStyle(themeStore.contentPrimaryColor)
+                                    .textSelection(.enabled)
                             }
-                        }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                            .padding(.horizontal, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(themeStore.surfaceElevatedColor)
+                            )
+                            .accessibilityElement(children: .combine)
 
-                        VStack(spacing: 12) {
-                            Button {
-                                inviteCodeShareText = shareText(for: inviteCode)
-                                showCodeShareSheet = true
-                            } label: {
+                            ShareLink(item: shareText(for: inviteToken.code)) {
                                 Label("Share Invite Code", systemImage: "square.and.arrow.up")
                                     .font(themeStore.font(for: .buttonLabel))
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(inviteCode == nil)
 
-                            Button {
-                                showQRCode = true
-                            } label: {
-                                Label("Show Invite QR", systemImage: "qrcode")
-                                    .font(themeStore.font(for: .buttonLabel))
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(inviteCode == nil)
+                            Text("The other person can scan the QR code or type the code into HousePulse to join.")
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                                .multilineTextAlignment(.center)
                         }
                     }
                 }
@@ -579,13 +522,6 @@ private struct InviteMemberView: View {
                         .foregroundStyle(themeStore.contentPrimaryColor)
                 }
             }
-            .sheet(isPresented: $showCodeShareSheet) {
-                ActivityView(activityItems: [inviteCodeShareText])
-            }
-            .sheet(isPresented: $showQRCode) {
-                InviteQRCodeView()
-                    .environmentObject(householdStore)
-            }
             .task {
                 await loadInviteCode()
             }
@@ -597,29 +533,17 @@ private struct InviteMemberView: View {
         defer { isLoadingInviteCode = false }
 
         do {
-            inviteCode = try await householdStore.fetchOrCreateInviteCode()
+            inviteToken = try await householdStore.fetchOrCreateInviteToken()
             errorMessage = nil
         } catch {
+            inviteToken = nil
             errorMessage = "Could not prepare the invite code right now."
         }
     }
 
-    private func shareText(for inviteCode: String?) -> String {
-        guard let inviteCode else {
-            return "Join my household in HousePulse."
-        }
-        return "Join my household in HousePulse with code: \(inviteCode)"
+    private func shareText(for inviteCode: String) -> String {
+        "Join my household in HousePulse with code: \(inviteCode)"
     }
-}
-
-private struct ActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context _: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
 }
 
 private struct EditProfileView: View {

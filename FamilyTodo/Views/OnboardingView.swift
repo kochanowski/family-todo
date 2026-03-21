@@ -203,7 +203,7 @@ struct JoinHouseholdSheet: View {
             ZStack {
                 Form {
                     Section {
-                        TextField("8-character invite code", text: $inviteInput)
+                        TextField("6-character invite code", text: $inviteInput)
                             .textContentType(.oneTimeCode)
                             .textInputAutocapitalization(.characters)
                             .disableAutocorrection(true)
@@ -211,7 +211,7 @@ struct JoinHouseholdSheet: View {
                                 inviteInput = normalizedInviteCodeInput(newValue)
                             }
                     } footer: {
-                        Text("Ask the household owner for the 8-character invite code.")
+                        Text("Ask the household owner for the 6-character invite code. Older 8-character codes still work.")
                     }
 
                     if let errorMessage {
@@ -280,13 +280,11 @@ struct JoinHouseholdSheet: View {
         let uppercased = raw.uppercased()
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         let filtered = String(uppercased.unicodeScalars.filter { allowed.contains($0) })
-        return String(filtered.prefix(8))
+        return String(filtered.prefix(InviteInputNormalizer.maximumInviteCodeLength))
     }
 
     private func preferredInviteCode() -> String? {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput),
-              normalizedCode.count == 8
-        else {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput) else {
             return nil
         }
         return normalizedCode

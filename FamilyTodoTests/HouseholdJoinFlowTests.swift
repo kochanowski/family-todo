@@ -524,35 +524,103 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertFalse(store.hasPendingJoinProtection(for: targetHousehold.id, userId: userId))
     }
 
-    func testFetchOrCreateInviteCodeDelegatesReuseDecisionToCloudKitManager() async throws {
+    func testFetchOrCreateInviteCodeReturnsCachedActiveTokenWithoutSecondCloudValidation() async throws {
         let household = TestCacheFixtures.household(name: "Invite Home", ownerId: "owner-1")
-        let cachedToken = InviteToken(
-            id: "C4C4E4D1",
-            code: "C4C4E4D1",
-            householdId: household.id,
-            shareURL: "https://www.icloud.com/share/stale"
-        )
-        let refreshedToken = InviteToken(
-            id: "R3F2R1S9",
-            code: "R3F2R1S9",
+        let activeToken = InviteToken(
+            id: "R3F2R1",
+            code: "R3F2R1",
             householdId: household.id,
             shareURL: "https://www.icloud.com/share/live"
         )
 
         let cloud = FakeHouseholdCloud(
             households: [household],
-            inviteTokens: [cachedToken],
+            createInviteCodeResultsByHouseholdId: [household.id: activeToken]
+        )
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        let firstCode = try await store.fetchOrCreateInviteCode()
+        let secondCode = try await store.fetchOrCreateInviteCode()
+
+        XCTAssertEqual(firstCode, activeToken.code)
+        XCTAssertEqual(secondCode, activeToken.code)
+        XCTAssertEqual(store.activeInviteCode, activeToken.code)
+        let createInviteCodeCallCount = await cloud.createInviteCodeCallCount()
+        XCTAssertEqual(createInviteCodeCallCount, 1)
+    }
+
+    func testFetchOrCreateInviteCodeRefreshesExpiredCachedToken() async throws {
+        let household = TestCacheFixtures.household(name: "Invite Home", ownerId: "owner-1")
+        let expiredToken = InviteToken(
+            id: "OLD123",
+            code: "OLD123",
+            householdId: household.id,
+            shareURL: "https://www.icloud.com/share/stale",
+            createdAt: Date(timeIntervalSince1970: 0),
+            expiresAt: Date(timeIntervalSince1970: 60),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let refreshedToken = InviteToken(
+            id: "NEW456",
+            code: "NEW456",
+            householdId: household.id,
+            shareURL: "https://www.icloud.com/share/live"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
             createInviteCodeResultsByHouseholdId: [household.id: refreshedToken]
         )
         let store = makeStore(cloud: cloud)
         store.setSyncMode(.cloud)
         store.currentHousehold = household
-        store.activeInviteCode = cachedToken.code
+        store.cacheInviteToken(expiredToken)
 
         let code = try await store.fetchOrCreateInviteCode()
 
         XCTAssertEqual(code, refreshedToken.code)
         XCTAssertEqual(store.activeInviteCode, refreshedToken.code)
+        let createInviteCodeCallCount = await cloud.createInviteCodeCallCount()
+        XCTAssertEqual(createInviteCodeCallCount, 1)
+    }
+
+    func testChangingHouseholdClearsCachedInviteCode() async throws {
+        let firstHousehold = TestCacheFixtures.household(name: "Invite Home", ownerId: "owner-1")
+        let secondHousehold = TestCacheFixtures.household(name: "Second Home", ownerId: "owner-2")
+        let cachedToken = InviteToken(
+            id: "CACHE1",
+            code: "CACHE1",
+            householdId: firstHousehold.id,
+            shareURL: "https://www.icloud.com/share/first"
+        )
+        let secondToken = InviteToken(
+            id: "NEXT22",
+            code: "NEXT22",
+            householdId: secondHousehold.id,
+            shareURL: "https://www.icloud.com/share/second"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [firstHousehold, secondHousehold],
+            createInviteCodeResultsByHouseholdId: [secondHousehold.id: secondToken]
+        )
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = firstHousehold
+        store.cacheInviteToken(cachedToken)
+
+        XCTAssertEqual(store.activeInviteCode, cachedToken.code)
+
+        store.currentHousehold = secondHousehold
+
+        XCTAssertNil(store.activeInviteCode)
+
+        let code = try await store.fetchOrCreateInviteCode()
+
+        XCTAssertEqual(code, secondToken.code)
         let createInviteCodeCallCount = await cloud.createInviteCodeCallCount()
         XCTAssertEqual(createInviteCodeCallCount, 1)
     }
