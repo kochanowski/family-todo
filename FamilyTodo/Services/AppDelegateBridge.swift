@@ -1,11 +1,16 @@
 import CloudKit
 import UIKit
+import UserNotifications
 
 @MainActor
-final class AppDelegateBridge: NSObject, UIApplicationDelegate {
+final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     weak var shareAcceptanceCoordinator: ShareAcceptanceCoordinator?
     var remoteCloudChangeHandler: (@MainActor () async -> UIBackgroundFetchResult)?
     private var pendingMetadata: CKShare.Metadata?
+
+    func installNotificationCenterDelegate() {
+        UNUserNotificationCenter.current().delegate = self
+    }
 
     func application(_: UIApplication, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
         if let shareAcceptanceCoordinator {
@@ -45,6 +50,18 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate {
         guard let pendingMetadata, let shareAcceptanceCoordinator else { return }
         shareAcceptanceCoordinator.enqueue(metadata: pendingMetadata)
         self.pendingMetadata = nil
+    }
+
+    nonisolated func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        if notification.request.content.sound != nil {
+            completionHandler([.banner, .list, .sound])
+        } else {
+            completionHandler([.banner, .list])
+        }
     }
 
     private func notificationTypeLabel(_ notification: CKNotification) -> String {

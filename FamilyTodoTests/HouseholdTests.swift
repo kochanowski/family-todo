@@ -809,6 +809,29 @@ final class CloudKitManagerScopeTests: XCTestCase {
         XCTAssertNil(record.parent)
     }
 
+    func testAttachParticipantSharedRootParentIfNeededAlsoSetsParentForOwnerPrivateSharedChildren() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: ownerZoneID)
+        )
+
+        await manager.attachParticipantSharedRootParentIfNeeded(
+            to: record,
+            householdId: householdId,
+            scope: .ownerPrivate,
+            zoneID: ownerZoneID
+        )
+
+        let parent = try XCTUnwrap(record.parent)
+        XCTAssertEqual(
+            parent.recordID,
+            CKRecord.ID(recordName: householdId.uuidString, zoneID: ownerZoneID)
+        )
+        XCTAssertEqual(parent.action.rawValue, CKRecord.ReferenceAction.none.rawValue)
+    }
+
     func testValidateGraphReferenceFieldsAllowsTargetZoneReferences() async throws {
         let manager = CloudKitManager()
         let householdId = UUID()

@@ -144,6 +144,7 @@ final class ShareAcceptanceCoordinator: ObservableObject {
 
             if let household = householdStore.currentHousehold {
                 userSession.setCurrentHousehold(household.id)
+                await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
                 onboardingState.completeHouseholdSetup(withHousehold: true)
             }
         } catch {
@@ -174,6 +175,7 @@ final class ShareAcceptanceCoordinator: ObservableObject {
 
             if let household = householdStore.currentHousehold {
                 userSession.setCurrentHousehold(household.id)
+                await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
                 onboardingState.completeHouseholdSetup(withHousehold: true)
             }
         } catch {

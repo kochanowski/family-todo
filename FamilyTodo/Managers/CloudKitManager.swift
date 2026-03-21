@@ -641,10 +641,55 @@ actor CloudKitManager {
                 }
             ),
             (
+                "Area",
+                { zoneID in
+                    let query = CKQuery(
+                        recordType: "Area",
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
+                    return query
+                }
+            ),
+            (
                 "Task",
                 { zoneID in
                     let query = CKQuery(
                         recordType: "Task",
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+                    return query
+                }
+            ),
+            (
+                "WorkItem",
+                { zoneID in
+                    let query = CKQuery(
+                        recordType: "WorkItem",
+                        predicate: self.referenceMatchPredicate(
+                            field: "householdId",
+                            id: householdId,
+                            zoneID: zoneID
+                        )
+                    )
+                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+                    return query
+                }
+            ),
+            (
+                "RecurringChore",
+                { zoneID in
+                    let query = CKQuery(
+                        recordType: "RecurringChore",
                         predicate: self.referenceMatchPredicate(
                             field: "householdId",
                             id: householdId,
@@ -939,7 +984,7 @@ actor CloudKitManager {
         "BacklogItem",
     ]
 
-    private static let participantSharedChildRecordTypes: Set<String> = [
+    private static let sharedChildRecordTypes: Set<String> = [
         "Member",
         "Area",
         "Task",
@@ -1178,6 +1223,13 @@ actor CloudKitManager {
 
     private func resolveHouseholdZone(for householdId: UUID) async throws -> CKRecordZone.ID? {
         try await resolveHouseholdZone(for: householdId, scope: householdScope)
+    }
+
+    func resolveSubscriptionZone(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> CKRecordZone.ID? {
+        try await resolveHouseholdZone(for: householdId, scope: scope)
     }
 
     private func candidateZoneIDs(
@@ -1541,7 +1593,7 @@ actor CloudKitManager {
                 targetZoneID: zoneID,
                 scope: scope
             )
-            attachParticipantSharedRootParentIfNeeded(
+            attachSharedRootParentIfNeeded(
                 to: record,
                 householdId: householdId,
                 scope: scope,
@@ -1561,7 +1613,7 @@ actor CloudKitManager {
             targetZoneID: zoneID,
             scope: scope
         )
-        attachParticipantSharedRootParentIfNeeded(
+        attachSharedRootParentIfNeeded(
             to: rewritten,
             householdId: householdId,
             scope: scope,
@@ -1576,8 +1628,22 @@ actor CloudKitManager {
         scope: HouseholdDatabaseScope,
         zoneID: CKRecordZone.ID
     ) {
-        guard scope == .participantShared,
-              Self.participantSharedChildRecordTypes.contains(record.recordType),
+        attachSharedRootParentIfNeeded(
+            to: record,
+            householdId: householdId,
+            scope: scope,
+            zoneID: zoneID
+        )
+    }
+
+    func attachSharedRootParentIfNeeded(
+        to record: CKRecord,
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope,
+        zoneID: CKRecordZone.ID
+    ) {
+        guard scope == .ownerPrivate || scope == .participantShared,
+              Self.sharedChildRecordTypes.contains(record.recordType),
               let householdId
         else {
             return

@@ -74,7 +74,16 @@ struct FamilyTodoApp: App {
                    let userId = userSession.userId,
                    let householdId = userSession.currentHouseholdID
                 {
-                    subscriptionManager.configure(userId: userId, householdId: householdId)
+                    let subscriptionScope = await MainActor.run {
+                        activeHouseholdSubscriptionScope(userId: userId)
+                    }
+                    await MainActor.run {
+                        subscriptionManager.configure(
+                            userId: userId,
+                            householdId: householdId,
+                            scope: subscriptionScope
+                        )
+                    }
                 }
             #endif
 
@@ -144,6 +153,9 @@ struct FamilyTodoApp: App {
                             }
                             .task {
                                 appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                                #if !CI
+                                    appDelegate.installNotificationCenterDelegate()
+                                #endif
                                 appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] in
                                     guard let householdStore, let userSession else {
                                         return .noData
@@ -169,7 +181,13 @@ struct FamilyTodoApp: App {
                                        let userId = userSession.userId,
                                        let householdId = userSession.currentHouseholdID
                                     {
-                                        subscriptionManager.configure(userId: userId, householdId: householdId)
+                                        subscriptionManager.configure(
+                                            userId: userId,
+                                            householdId: householdId,
+                                            scope: activeHouseholdSubscriptionScope(
+                                                userId: userId
+                                            )
+                                        )
                                     }
                                 #endif
                                 scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
@@ -351,6 +369,7 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.id.uuidString ?? "none",
+            householdStore.currentHousehold?.ownerId ?? "unknownOwner",
             householdStore.isModelContextReady ? "contextReady" : "contextMissing",
             shareAcceptanceCoordinator.pendingInviteCode ?? "noPendingInvite",
             shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "noPendingMetadata",
@@ -373,6 +392,7 @@ struct RootView: View {
             userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
+            householdStore.currentHousehold?.ownerId ?? "unknownOwner",
         ].joined(separator: "|")
     }
 
@@ -493,7 +513,20 @@ struct RootView: View {
             return
         }
 
-        subscriptionManager.configure(userId: userId, householdId: householdId)
+        subscriptionManager.configure(
+            userId: userId,
+            householdId: householdId,
+            scope: activeHouseholdSubscriptionScope(userId: userId)
+        )
+    }
+
+    private func activeHouseholdSubscriptionScope(
+        userId: String
+    ) -> CloudKitManager.HouseholdDatabaseScope? {
+        guard let ownerId = householdStore.currentHousehold?.ownerId else {
+            return nil
+        }
+        return ownerId == userId ? .ownerPrivate : .participantShared
     }
 
     private var shouldShowCreateHouseholdView: Bool {

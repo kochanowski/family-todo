@@ -177,6 +177,9 @@ struct GuidedEmptyStateView: View {
 
         joinInviteCode = ""
         showJoinSheet = false
+        if userSession.syncMode == .cloud {
+            await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
+        }
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 

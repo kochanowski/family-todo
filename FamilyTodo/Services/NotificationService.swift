@@ -119,9 +119,25 @@ enum NotificationSchedulePlanner {
             }
         }
 
+        func requestCollaborationAuthorizationIfNeeded() async {
+            let settings = await center.notificationSettings()
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                await requestAuthorization()
+            case .authorized, .provisional, .ephemeral:
+                isAuthorized = true
+            case .denied:
+                isAuthorized = false
+            @unknown default:
+                isAuthorized = false
+            }
+        }
+
         func checkAuthorizationStatus() async {
             let settings = await center.notificationSettings()
-            isAuthorized = settings.authorizationStatus == .authorized
+            isAuthorized = settings.authorizationStatus == .authorized ||
+                settings.authorizationStatus == .provisional ||
+                settings.authorizationStatus == .ephemeral
         }
 
         // MARK: - Task Notifications
@@ -327,6 +343,49 @@ enum NotificationSchedulePlanner {
                 .map(\.identifier)
                 .filter { $0.hasPrefix("task-") }
         }
+
+        func deliverSharedShoppingItemsAddedAlert(
+            itemTitles: [String],
+            householdId: UUID,
+            householdName: String?
+        ) async {
+            await checkAuthorizationStatus()
+            guard isAuthorized else { return }
+
+            let notificationsEnabled = settingsStore?.isEnabled ?? true
+            guard notificationsEnabled else { return }
+
+            let deduplicatedTitles = Array(NSOrderedSet(array: itemTitles)) as? [String] ?? itemTitles
+            guard !deduplicatedTitles.isEmpty else { return }
+
+            let content = UNMutableNotificationContent()
+            let resolvedTitle: String = if let householdName, !householdName.isEmpty {
+                householdName
+            } else {
+                "Shopping List"
+            }
+            content.title = resolvedTitle
+            if deduplicatedTitles.count == 1, let title = deduplicatedTitles.first {
+                content.body = "\(title) was added to the shopping list."
+            } else {
+                content.body = "\(deduplicatedTitles.count) new items were added to the shopping list."
+            }
+            content.sound = (settingsStore?.soundEnabled ?? true) ? .default : nil
+            content.threadIdentifier = "shared-shopping-\(householdId.uuidString)"
+            content.categoryIdentifier = "SHARED_SHOPPING_UPDATE"
+
+            let request = UNNotificationRequest(
+                identifier: "shared-shopping-\(householdId.uuidString)-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+
+            do {
+                try await center.add(request)
+            } catch {
+                // Visible shared shopping alerts are optional and should not break sync.
+            }
+        }
     }
 #else
     @MainActor
@@ -340,6 +399,10 @@ enum NotificationSchedulePlanner {
         func setSettingsStore(_: NotificationSettingsStore) {}
 
         func requestAuthorization() async {
+            isAuthorized = false
+        }
+
+        func requestCollaborationAuthorizationIfNeeded() async {
             isAuthorized = false
         }
 
@@ -367,6 +430,12 @@ enum NotificationSchedulePlanner {
         func refreshDailyDigest(
             householdId _: UUID?,
             modelContext _: ModelContext
+        ) async {}
+
+        func deliverSharedShoppingItemsAddedAlert(
+            itemTitles _: [String],
+            householdId _: UUID,
+            householdName _: String?
         ) async {}
     }
 #endif

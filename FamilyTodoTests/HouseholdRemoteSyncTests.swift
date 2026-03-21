@@ -209,4 +209,78 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(firstResult, .newData)
         XCTAssertEqual(secondResult, .noData)
     }
+
+    func testForceCloudSyncDebugPublishesStoreNotificationsAndRefreshesParticipantSharedCaches() async throws {
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let category = TestCacheFixtures.category(householdId: household.id, title: "Planning")
+        let task = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash",
+            backlogCategoryId: category.id
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            tasks: [task],
+            shoppingItems: [shoppingItem],
+            backlogCategories: [category],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let householdExpectation = expectation(forNotification: .householdDataDidChange, object: nil)
+        let shoppingExpectation = expectation(forNotification: .shoppingListDataDidChange, object: nil)
+        let taskExpectation = expectation(forNotification: .taskBoardDataDidChange, object: nil)
+        let backlogExpectation = expectation(forNotification: .backlogDataDidChange, object: nil)
+
+        await store.forceCloudSyncDebug(userId: userId)
+
+        await fulfillment(
+            of: [
+                householdExpectation,
+                shoppingExpectation,
+                taskExpectation,
+                backlogExpectation,
+            ],
+            timeout: 1.0
+        )
+
+        XCTAssertEqual(try cachedMembers(for: household.id).count, 1)
+        XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
+        XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
+        XCTAssertEqual(try cachedBacklogCategories(for: household.id).count, 1)
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchMembers" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchBacklogCategories" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+    }
 }

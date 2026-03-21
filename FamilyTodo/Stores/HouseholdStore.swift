@@ -2067,6 +2067,24 @@ class HouseholdStore: ObservableObject {
         NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
     }
 
+    private func shoppingItemTitleSnapshot(householdId: UUID) -> [UUID: String] {
+        Dictionary(
+            uniqueKeysWithValues: fetchCachedShoppingItems(householdId: householdId)
+                .filter { $0.syncStatusRaw != "pendingDelete" }
+                .map { ($0.id, $0.title) }
+        )
+    }
+
+    private func remoteInsertedShoppingTitles(
+        before: [UUID: String],
+        after: [UUID: String]
+    ) -> [String] {
+        after.compactMap { id, title in
+            before[id] == nil ? title : nil
+        }
+        .sorted()
+    }
+
     private func describeRemoteCloudRefreshSnapshot(_ snapshot: RemoteCloudRefreshSnapshot) -> String {
         guard let hydrationSnapshot = snapshot.hydrationSnapshot else {
             return "current=nil observed=\(snapshot.observedHouseholdId?.uuidString ?? "none") data=empty"
@@ -2404,6 +2422,7 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             publishVisibleContentNotifications: true
         )
+        publishRemoteCloudRefreshNotifications(source: "forceCloudSync")
     }
 
     func handleRemoteCloudChange(
@@ -2424,6 +2443,7 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         )
+        let beforeShoppingSnapshot = beforeSnapshot.observedHouseholdId.map(shoppingItemTitleSnapshot)
         var refreshedHydrationSnapshot = beforeSnapshot.hydrationSnapshot
         print(
             "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(beforeSnapshot))"
@@ -2454,6 +2474,24 @@ class HouseholdStore: ObservableObject {
                 self.error = error
                 print("[RemoteSync] Hydration pass failed: \(error)")
                 return .failed
+            }
+        }
+
+        if let household = currentHousehold,
+           beforeSnapshot.observedHouseholdId == household.id,
+           let beforeShoppingSnapshot
+        {
+            let afterShoppingSnapshot = shoppingItemTitleSnapshot(householdId: household.id)
+            let newShoppingTitles = remoteInsertedShoppingTitles(
+                before: beforeShoppingSnapshot,
+                after: afterShoppingSnapshot
+            )
+            if !newShoppingTitles.isEmpty {
+                await NotificationService.shared.deliverSharedShoppingItemsAddedAlert(
+                    itemTitles: newShoppingTitles,
+                    householdId: household.id,
+                    householdName: household.name
+                )
             }
         }
 

@@ -21,9 +21,11 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     /// Use CloudKitManager for consistent container access
     private let cloudKit = CloudKitManager.shared
-    private var subscriptionIds: [String] = []
+    private var databaseSubscriptionIds: Set<String> = []
+    private var householdZoneSubscriptionIds: Set<String> = []
     private var configuredUserId: String?
     private var configuredHouseholdId: UUID?
+    private var configuredScope: CloudKitManager.HouseholdDatabaseScope?
     private var aggregationTimer: Timer?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
     private var lastLocalMutationAt: Date?
@@ -37,20 +39,33 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     // MARK: - Setup
 
-    func configure(userId: String, householdId: UUID) {
-        guard configuredUserId != userId || configuredHouseholdId != householdId else { return }
+    func configure(
+        userId: String,
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope?
+    ) {
+        let configurationChanged =
+            configuredUserId != userId ||
+            configuredHouseholdId != householdId ||
+            configuredScope != scope
+        guard configurationChanged else { return }
+
         configuredUserId = userId
         configuredHouseholdId = householdId
+        configuredScope = scope
 
         _Concurrency.Task {
-            await setupSubscriptions(householdId: householdId)
+            await setupSubscriptions(householdId: householdId, scope: scope)
             await registerForRemoteNotifications()
         }
     }
 
     // MARK: - Subscriptions
 
-    private func setupSubscriptions(householdId _: UUID) async {
+    private func setupSubscriptions(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope?
+    ) async {
         // Ensure CloudKit is ready before accessing
         await cloudKit.ensureReady()
 
@@ -66,6 +81,13 @@ final class CloudKitSubscriptionManager: ObservableObject {
             subscriptionId: "private-database-changes",
             database: privateDatabase
         )
+
+        await syncHouseholdZoneSubscriptions(
+            householdId: householdId,
+            scope: scope,
+            sharedDatabase: sharedDatabase,
+            privateDatabase: privateDatabase
+        )
     }
 
     private func createDatabaseSubscription(
@@ -75,9 +97,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             // Check if subscription already exists
             _ = try await database.subscription(for: subscriptionId)
-            if !subscriptionIds.contains(subscriptionId) {
-                subscriptionIds.append(subscriptionId)
-            }
+            databaseSubscriptionIds.insert(subscriptionId)
             return // Already exists
         } catch {
             // Subscription doesn't exist, proceed to create
@@ -90,13 +110,117 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
         do {
             _ = try await database.save(subscription)
-            if !subscriptionIds.contains(subscriptionId) {
-                subscriptionIds.append(subscriptionId)
-            }
+            databaseSubscriptionIds.insert(subscriptionId)
             print("✅ Created database subscription: \(subscriptionId)")
         } catch {
             print("❌ Failed to create database subscription: \(error)")
         }
+    }
+
+    private func syncHouseholdZoneSubscriptions(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope?,
+        sharedDatabase: CKDatabase,
+        privateDatabase: CKDatabase
+    ) async {
+        let requiredSubscriptionIds = Set(zoneSubscriptionIDs(for: householdId, scope: scope))
+        let obsoleteSubscriptionIds = householdZoneSubscriptionIds.subtracting(requiredSubscriptionIds)
+
+        for subscriptionId in obsoleteSubscriptionIds {
+            await deleteSubscriptionIfPresent(
+                subscriptionId: subscriptionId,
+                databases: [sharedDatabase, privateDatabase]
+            )
+            householdZoneSubscriptionIds.remove(subscriptionId)
+        }
+
+        guard let scope,
+              let zoneID = try? await cloudKit.resolveSubscriptionZone(
+                  householdId: householdId,
+                  scope: scope
+              )
+        else {
+            return
+        }
+
+        let database: CKDatabase = switch scope {
+        case .ownerPrivate:
+            privateDatabase
+        case .participantShared:
+            sharedDatabase
+        }
+
+        let subscriptionId = zoneSubscriptionID(
+            householdId: householdId,
+            scope: scope
+        )
+        await createZoneSubscription(
+            subscriptionId: subscriptionId,
+            database: database,
+            zoneID: zoneID
+        )
+    }
+
+    private func createZoneSubscription(
+        subscriptionId: String,
+        database: CKDatabase,
+        zoneID: CKRecordZone.ID
+    ) async {
+        do {
+            _ = try await database.subscription(for: subscriptionId)
+            householdZoneSubscriptionIds.insert(subscriptionId)
+            return
+        } catch {
+            // Subscription doesn't exist yet.
+        }
+
+        let subscription = CKRecordZoneSubscription(
+            zoneID: zoneID,
+            subscriptionID: subscriptionId
+        )
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+
+        do {
+            _ = try await database.save(subscription)
+            householdZoneSubscriptionIds.insert(subscriptionId)
+            print("✅ Created zone subscription: \(subscriptionId) for zone \(zoneID.zoneName)")
+        } catch {
+            print("❌ Failed to create zone subscription: \(subscriptionId) error=\(error)")
+        }
+    }
+
+    private func deleteSubscriptionIfPresent(
+        subscriptionId: String,
+        databases: [CKDatabase]
+    ) async {
+        for database in databases {
+            do {
+                try await database.deleteSubscription(withID: subscriptionId)
+                print("🗑️ Removed subscription: \(subscriptionId)")
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                continue
+            } catch {
+                print("❌ Failed to remove subscription: \(subscriptionId) error=\(error)")
+            }
+        }
+    }
+
+    private func zoneSubscriptionID(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope
+    ) -> String {
+        let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        return "household-zone-\(scopeName)-\(householdId.uuidString)"
+    }
+
+    private func zoneSubscriptionIDs(
+        for householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope?
+    ) -> [String] {
+        guard let scope else { return [] }
+        return [zoneSubscriptionID(householdId: householdId, scope: scope)]
     }
 
     // MARK: - Push Notification Registration
@@ -120,6 +244,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         if let dbNotification = notification as? CKDatabaseNotification {
             print("[CloudKitSubscription] Received database notification.")
             handleDatabaseNotification(dbNotification)
+        } else if let zoneNotification = notification as? CKRecordZoneNotification {
+            print("[CloudKitSubscription] Received record-zone notification.")
+            handleRecordZoneNotification(zoneNotification)
         } else if let queryNotification = notification as? CKQueryNotification {
             let recordType = (queryNotification.recordFields?["recordType"] as? String) ?? "unknown"
             print("[CloudKitSubscription] Received query notification for recordType=\(recordType).")
@@ -206,6 +333,18 @@ final class CloudKitSubscriptionManager: ObservableObject {
         showInAppBanner(for: "Shared Update")
     }
 
+    private func handleRecordZoneNotification(_: CKRecordZoneNotification) {
+        guard !isLikelySelfNoise(recordName: nil) else {
+            print("[CloudKitSubscription] Dropping record-zone notification as likely self-noise.")
+            return
+        }
+        triggerRefreshForAllDomains(source: "remote")
+
+        pendingShoppingChanges.append("Zone Update")
+        scheduleAggregatedNotification()
+        showInAppBanner(for: "Zone Update")
+    }
+
     private func handleQueryNotification(_ notification: CKQueryNotification) {
         let recordType = (notification.recordFields?["recordType"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -263,6 +402,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     private func scheduleAggregatedNotification() {
         aggregationTimer?.invalidate()
+        guard UIApplication.shared.applicationState != .active else { return }
         aggregationTimer = Timer.scheduledTimer(withTimeInterval: aggregationWindow, repeats: false) { [weak self] _ in
             _Concurrency.Task { @MainActor in
                 self?.sendAggregatedNotification()
@@ -309,16 +449,13 @@ final class CloudKitSubscriptionManager: ObservableObject {
             container.privateCloudDatabase,
         ]
 
-        for subscriptionId in subscriptionIds {
-            for database in databases {
-                do {
-                    try await database.deleteSubscription(withID: subscriptionId)
-                    print("🗑️ Removed subscription: \(subscriptionId)")
-                } catch {
-                    print("❌ Failed to remove subscription: \(error)")
-                }
-            }
+        for subscriptionId in databaseSubscriptionIds.union(householdZoneSubscriptionIds) {
+            await deleteSubscriptionIfPresent(subscriptionId: subscriptionId, databases: databases)
         }
-        subscriptionIds.removeAll()
+        databaseSubscriptionIds.removeAll()
+        householdZoneSubscriptionIds.removeAll()
+        configuredUserId = nil
+        configuredHouseholdId = nil
+        configuredScope = nil
     }
 }
