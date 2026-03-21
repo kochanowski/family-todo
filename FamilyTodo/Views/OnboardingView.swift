@@ -82,14 +82,16 @@ struct OnboardingView: View {
                 CreateHouseholdSheet(
                     householdStore: householdStore,
                     userId: userId,
-                    displayName: displayName
+                    displayName: displayName,
+                    isCloudSyncEnabled: isCloudSyncEnabled
                 )
             }
             .sheet(isPresented: $showJoinSheet) {
                 JoinHouseholdSheet(
                     householdStore: householdStore,
                     userId: userId,
-                    displayName: displayName
+                    displayName: displayName,
+                    isCloudSyncEnabled: isCloudSyncEnabled
                 )
             }
         }
@@ -103,6 +105,7 @@ struct CreateHouseholdSheet: View {
     @ObservedObject var householdStore: HouseholdStore
     let userId: String
     let displayName: String
+    let isCloudSyncEnabled: Bool
 
     @State private var householdName = ""
     @State private var isCreating = false
@@ -196,6 +199,7 @@ struct JoinHouseholdSheet: View {
     @ObservedObject var householdStore: HouseholdStore
     let userId: String
     let displayName: String
+    let isCloudSyncEnabled: Bool
 
     @State private var inviteInput = ""
     @State private var isJoining = false
