@@ -768,7 +768,7 @@ final class CloudKitManagerScopeTests: XCTestCase {
         for recordType in sharedChildTypes {
             let record = CKRecord(
                 recordType: recordType,
-                recordID: CKRecord.ID(recordName: UUID().uuidString)
+                recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zoneID)
             )
 
             await manager.attachParticipantSharedRootParentIfNeeded(
