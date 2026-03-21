@@ -923,10 +923,14 @@ final class CloudKitManagerScopeTests: XCTestCase {
         let references = ((comparisonPredicate?.rightExpression.constantValue as? NSArray)?
             .compactMap { $0 as? CKRecord.Reference }) ?? []
 
-        XCTAssertEqual(references.count, 3)
+        XCTAssertEqual(references.count, 4)
         XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == defaultZoneID }))
         XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == ownerZoneID }))
         XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == participantSharedZoneID }))
+        XCTAssertTrue(references.contains(where: {
+            $0.recordID.zoneID.ownerName == CKCurrentUserDefaultName &&
+                $0.recordID.zoneID.zoneName == "HouseholdZone-\(householdId.uuidString)"
+        }))
     }
 
     func testReferenceMatchPredicateUsesInOperatorForMultipleReferences() {
