@@ -1151,6 +1151,8 @@ actor CloudKitManager {
         let db = await privateDatabase
         let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
         let defaultZoneID = CKRecordZone.default().zoneID
+        let recordType = queryFactory(targetZoneID).recordType
+        let baselineSortDescriptors = queryFactory(targetZoneID).sortDescriptors ?? []
 
         var zoneIDs: [CKRecordZone.ID] = [targetZoneID, defaultZoneID]
         for zoneID in try await allPrivateZoneIDs() where !zoneIDs.contains(zoneID) {
@@ -1160,18 +1162,32 @@ actor CloudKitManager {
         var scannedRecords: [CKRecord] = []
         for zoneID in zoneIDs {
             let query = queryFactory(zoneID)
-            let zoneRecords = try await queryRecordsPaginated(
-                query,
-                database: db,
-                zoneID: zoneID
-            )
-            scannedRecords.append(contentsOf: zoneRecords)
+            do {
+                let zoneRecords = try await queryRecordsPaginated(
+                    query,
+                    database: db,
+                    zoneID: zoneID
+                )
+                scannedRecords.append(contentsOf: zoneRecords)
+            } catch {
+                if Self.isMissingRecordTypeError(error) {
+                    print(
+                        "CloudKitScope: skipping ownerPrivate scan for missing record type " +
+                            "\(recordType) while scanning household \(householdId)"
+                    )
+                    return OwnerPrivateScanResult(
+                        authoritativeRecords: [],
+                        legacyDuplicateRecordIDs: []
+                    )
+                }
+                throw error
+            }
         }
 
         return Self.mergeOwnerPrivateRecords(
             scannedRecords,
             targetZoneID: targetZoneID,
-            sortDescriptors: queryFactory(targetZoneID).sortDescriptors ?? []
+            sortDescriptors: baselineSortDescriptors
         )
     }
 
@@ -1224,6 +1240,22 @@ actor CloudKitManager {
                 return partialErrors.values.contains { isRetryableZoneResolutionError($0) }
             }
             return true
+        default:
+            return false
+        }
+    }
+
+    private static func isMissingRecordTypeError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+
+        switch ckError.code {
+        case .unknownItem:
+            return true
+        case .partialFailure:
+            guard let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] else {
+                return false
+            }
+            return partialErrors.values.contains { isMissingRecordTypeError($0) }
         default:
             return false
         }
