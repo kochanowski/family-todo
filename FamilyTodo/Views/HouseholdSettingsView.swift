@@ -541,9 +541,9 @@ private struct InviteMemberView: View {
         inviteToken = nil
         errorMessage = nil
 
-        let timeoutTask = Task { @MainActor in
+        let timeoutTask = _Concurrency.Task { @MainActor in
             try? await _Concurrency.Task.sleep(nanoseconds: Self.inviteLoadTimeoutNanoseconds)
-            guard !Task.isCancelled,
+            guard !_Concurrency.Task.isCancelled,
                   inviteLoadGeneration == generation,
                   isLoadingInviteCode
             else {
