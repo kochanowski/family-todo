@@ -329,6 +329,7 @@ struct RootView: View {
         }
         .task(id: tipContextKey) {
             guard onboardingState.currentState == .mainApp else { return }
+            AppTips.configureIfNeeded()
             AppTips.syncContextIfNeeded(
                 sessionMode: userSession.sessionMode,
                 userId: userSession.userId,

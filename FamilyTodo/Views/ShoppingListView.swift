@@ -433,6 +433,7 @@ private struct ShoppingListContent: View {
                 })
                 .contextualPopoverTip(
                     activeShoppingTip == .bundlesLocation,
+                    tipID: "shopping.bundlesLocation",
                     ShoppingBundlesLocationTip(),
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
@@ -454,6 +455,7 @@ private struct ShoppingListContent: View {
                 .pulseAnimation(trigger: restockPulse.pulseToken)
                 .contextualPopoverTip(
                     activeShoppingTip == .recentPurchases,
+                    tipID: "shopping.recentPurchases",
                     ShoppingRecentlyPurchasedTip(),
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
@@ -519,12 +521,14 @@ private struct ShoppingListContent: View {
         )
         .contextualPopoverTip(
             activeShoppingTip == .firstAdd,
+            tipID: "shopping.firstAdd",
             ShoppingFirstAddTip(),
             arrowEdge: .bottom,
             generation: appTipRuntimeGeneration
         )
         .contextualPopoverTip(
             activeShoppingTip == .bundleQuickAdd,
+            tipID: "shopping.bundleQuickAdd",
             ShoppingBundleQuickAddTip(),
             arrowEdge: .bottom,
             generation: appTipRuntimeGeneration

@@ -580,6 +580,7 @@ private struct BacklogContent: View {
             .accessibilityIdentifier("backlogAddCategoryButton")
             .contextualPopoverTip(
                 activeIdeasTip == .createCategory,
+                tipID: "ideas.createCategory",
                 IdeasCreateCategoryTip(),
                 arrowEdge: .top,
                 generation: appTipRuntimeGeneration
@@ -1217,6 +1218,7 @@ struct CategoryCard: View {
                             .offset(x: 4, y: -8)
                             .contextualPopoverTip(
                                 addIdeaTipCategoryID == category.id,
+                                tipID: "ideas.addIdea",
                                 IdeasAddIdeaTip(),
                                 arrowEdge: .top,
                                 generation: appTipRuntimeGeneration
@@ -1379,6 +1381,7 @@ struct BacklogItemRow: View {
                         .offset(y: -8)
                         .contextualPopoverTip(
                             showsIdeaPromotionTip,
+                            tipID: "ideas.promote",
                             IdeaPromotionTip(),
                             arrowEdge: .trailing,
                             generation: appTipRuntimeGeneration
@@ -1423,6 +1426,7 @@ struct BacklogItemRow: View {
         .accessibilityIdentifier("backlogAssignButton_\(item.title)")
         .contextualPopoverTip(
             showsAssignOwnerTip,
+            tipID: "ideas.assignOwner",
             IdeasAssignOwnerTip(),
             arrowEdge: .trailing,
             generation: appTipRuntimeGeneration

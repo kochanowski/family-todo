@@ -628,127 +628,109 @@ actor CloudKitManager {
             (
                 "Member",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "Member",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
-                    return query
                 }
             ),
             (
                 "Area",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "Area",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "Task",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "Task",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
-                    return query
                 }
             ),
             (
                 "WorkItem",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "WorkItem",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
-                    return query
                 }
             ),
             (
                 "RecurringChore",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "RecurringChore",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
-                    return query
                 }
             ),
             (
                 "ShoppingItem",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "ShoppingItem",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "ShoppingBundle",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "ShoppingBundle",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "BacklogCategory",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "BacklogCategory",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "BacklogItem",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "BacklogItem",
                         predicate: self.householdReferenceMatchPredicate(
                             householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-                    return query
                 }
             ),
         ]

@@ -1330,6 +1330,7 @@ struct TaskRow: View {
             .opacity(isDimmedOverLimit ? 0.72 : 1.0)
             .contextualPopoverTip(
                 showsSwipeActionsTip,
+                tipID: "tasks.swipeActions",
                 TaskSwipeActionsTip(),
                 arrowEdge: .top,
                 generation: appTipRuntimeGeneration
