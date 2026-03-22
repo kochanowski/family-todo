@@ -25,6 +25,11 @@ actor CloudKitManager {
         case finalize
     }
 
+    private enum SharedGraphRepairMode: String {
+        case interactivePrimaryZones
+        case backgroundExhaustive
+    }
+
     private struct DatabaseZoneContext {
         var zoneByHouseholdId: [UUID: CKRecordZone.ID] = [:]
         var zoneByRecordName: [String: CKRecordZone.ID] = [:]
@@ -59,12 +64,15 @@ actor CloudKitManager {
     private var householdScope: HouseholdDatabaseScope = .participantShared
     private var sharedZoneContext = SharedZoneContext()
     private var migratedMemberColorHouseholds: Set<UUID>
+    private var backgroundSharedGraphRepairsInFlight: Set<UUID> = []
     private var recentInviteRedeemAttempts: [Date] = []
 
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
     private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds.v3"
+    private static let exhaustiveSharedGraphRepairDefaultsKey =
+        "CloudKit.sharedGraphRepairCompletedHouseholds.exhaustive.v1"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
@@ -341,21 +349,47 @@ actor CloudKitManager {
         return Set(raw.compactMap(UUID.init(uuidString:)))
     }
 
-    private func markSharedGraphRepairCompleted(householdId: UUID) {
-        var repaired = Self.loadRepairedSharedGraphHouseholds()
+    private static func sharedGraphRepairDefaultsKey(for mode: SharedGraphRepairMode) -> String {
+        switch mode {
+        case .interactivePrimaryZones:
+            sharedGraphRepairDefaultsKey
+        case .backgroundExhaustive:
+            exhaustiveSharedGraphRepairDefaultsKey
+        }
+    }
+
+    private func markSharedGraphRepairCompleted(
+        householdId: UUID,
+        mode: SharedGraphRepairMode
+    ) {
+        var repaired = Self.loadRepairedSharedGraphHouseholds(mode: mode)
         repaired.insert(householdId)
         UserDefaults.standard.set(
             repaired.map(\.uuidString),
-            forKey: Self.sharedGraphRepairDefaultsKey
+            forKey: Self.sharedGraphRepairDefaultsKey(for: mode)
         )
+
+        if mode == .backgroundExhaustive {
+            var primary = Self.loadRepairedSharedGraphHouseholds(mode: .interactivePrimaryZones)
+            primary.insert(householdId)
+            UserDefaults.standard.set(
+                primary.map(\.uuidString),
+                forKey: Self.sharedGraphRepairDefaultsKey(for: .interactivePrimaryZones)
+            )
+        }
     }
 
-    private func hasCompletedSharedGraphRepair(householdId: UUID) -> Bool {
-        Self.loadRepairedSharedGraphHouseholds().contains(householdId)
+    private func hasCompletedSharedGraphRepair(
+        householdId: UUID,
+        mode: SharedGraphRepairMode
+    ) -> Bool {
+        Self.loadRepairedSharedGraphHouseholds(mode: mode).contains(householdId)
     }
 
-    private static func loadRepairedSharedGraphHouseholds() -> Set<UUID> {
-        guard let raw = UserDefaults.standard.array(forKey: sharedGraphRepairDefaultsKey) as? [String] else {
+    private static func loadRepairedSharedGraphHouseholds(mode: SharedGraphRepairMode) -> Set<UUID> {
+        guard let raw = UserDefaults.standard.array(
+            forKey: sharedGraphRepairDefaultsKey(for: mode)
+        ) as? [String] else {
             return []
         }
         return Set(raw.compactMap(UUID.init(uuidString:)))
@@ -536,8 +570,7 @@ actor CloudKitManager {
     }
 
     // swiftlint:disable cyclomatic_complexity function_body_length
-    func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
-        guard householdScope == .ownerPrivate else { return }
+    private func migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
         do {
             let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
             let db = await privateDatabase
@@ -618,6 +651,11 @@ actor CloudKitManager {
         }
     }
 
+    func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
+        guard householdScope == .ownerPrivate else { return }
+        try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: householdId)
+    }
+
     // swiftlint:enable cyclomatic_complexity function_body_length
 
     // swiftlint:disable function_body_length
@@ -626,10 +664,113 @@ actor CloudKitManager {
         force: Bool = false
     ) async throws {
         guard householdScope == .ownerPrivate else { return }
-        guard force || !hasCompletedSharedGraphRepair(householdId: householdId) else { return }
+        try await repairSharedOwnerHouseholdGraphIfNeeded(
+            householdId: householdId,
+            force: force,
+            mode: .interactivePrimaryZones
+        )
+    }
 
-        recordCloudKitProgress("repairSharedHouseholdGraphIfNeeded.migrate")
-        try await migrateHouseholdToCustomZoneIfNeeded(householdId: householdId)
+    private func sharedGraphRepairZoneIDs(
+        householdId: UUID,
+        targetZoneID: CKRecordZone.ID,
+        mode: SharedGraphRepairMode
+    ) async throws -> [CKRecordZone.ID] {
+        var seen = Set<String>()
+        var zoneIDs: [CKRecordZone.ID] = []
+
+        func append(_ zoneID: CKRecordZone.ID?) {
+            guard let zoneID else { return }
+            let key = Self.encodedZoneID(zoneID)
+            guard seen.insert(key).inserted else { return }
+            zoneIDs.append(zoneID)
+        }
+
+        append(targetZoneID)
+        append(CKRecordZone.default().zoneID)
+        append(resolveCachedZone(for: householdId, scope: .ownerPrivate))
+
+        if mode == .backgroundExhaustive {
+            for zoneID in try await allPrivateZoneIDs() {
+                append(zoneID)
+            }
+        }
+
+        return zoneIDs
+    }
+
+    private func queryOwnerPrivateRecordsAcrossZones(
+        _ queryFactory: ZoneScopedQueryFactory,
+        householdId: UUID,
+        targetZoneID: CKRecordZone.ID,
+        zoneIDs: [CKRecordZone.ID]
+    ) async throws -> OwnerPrivateScanResult {
+        let db = await privateDatabase
+        let recordType = queryFactory(targetZoneID).recordType
+        let baselineSortDescriptors = queryFactory(targetZoneID).sortDescriptors ?? []
+
+        var scannedRecords: [CKRecord] = []
+        for zoneID in zoneIDs {
+            let query = queryFactory(zoneID)
+            do {
+                let zoneRecords = try await queryRecordsPaginated(
+                    query,
+                    database: db,
+                    zoneID: zoneID
+                )
+                scannedRecords.append(contentsOf: zoneRecords)
+            } catch {
+                if Self.isMissingRecordTypeError(error) {
+                    print(
+                        "CloudKitScope: skipping ownerPrivate scan for missing record type " +
+                            "\(recordType) while scanning household \(householdId)"
+                    )
+                    return OwnerPrivateScanResult(
+                        authoritativeRecords: [],
+                        legacyDuplicateRecordIDs: []
+                    )
+                }
+                throw error
+            }
+        }
+
+        return Self.mergeOwnerPrivateRecords(
+            scannedRecords,
+            targetZoneID: targetZoneID,
+            sortDescriptors: baselineSortDescriptors
+        )
+    }
+
+    private func repairProgressPrefix(for mode: SharedGraphRepairMode) -> String {
+        switch mode {
+        case .interactivePrimaryZones:
+            "repairSharedHouseholdGraphIfNeeded.primary"
+        case .backgroundExhaustive:
+            "repairSharedHouseholdGraphIfNeeded.background"
+        }
+    }
+
+    private func shouldRecordRepairDiagnostics(for mode: SharedGraphRepairMode) -> Bool {
+        mode == .interactivePrimaryZones
+    }
+
+    private func repairSharedOwnerHouseholdGraphIfNeeded(
+        householdId: UUID,
+        force: Bool = false,
+        mode: SharedGraphRepairMode
+    ) async throws {
+        guard force || !hasCompletedSharedGraphRepair(householdId: householdId, mode: mode) else { return }
+
+        if shouldRecordRepairDiagnostics(for: mode) {
+            recordCloudKitProgress("\(repairProgressPrefix(for: mode)).migrate")
+        }
+        try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: householdId)
+        let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+        let zoneIDs = try await sharedGraphRepairZoneIDs(
+            householdId: householdId,
+            targetZoneID: targetZoneID,
+            mode: mode
+        )
 
         let querySpecs: [(String, ZoneScopedQueryFactory)] = [
             (
@@ -744,11 +885,20 @@ actor CloudKitManager {
 
         do {
             for (recordType, query) in querySpecs {
-                recordCloudKitProgress("repairSharedHouseholdGraphIfNeeded.scan.\(recordType)")
-                let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(query, householdId: householdId)
+                if shouldRecordRepairDiagnostics(for: mode) {
+                    recordCloudKitProgress("\(repairProgressPrefix(for: mode)).scan.\(recordType)")
+                }
+                let scanResult = try await queryOwnerPrivateRecordsAcrossZones(
+                    query,
+                    householdId: householdId,
+                    targetZoneID: targetZoneID,
+                    zoneIDs: zoneIDs
+                )
                 guard !scanResult.authoritativeRecords.isEmpty else { continue }
                 print("CloudKitScope: repairing \(recordType) records into owner zone for household \(householdId)")
-                recordCloudKitProgress("repairSharedHouseholdGraphIfNeeded.save.\(recordType)")
+                if shouldRecordRepairDiagnostics(for: mode) {
+                    recordCloudKitProgress("\(repairProgressPrefix(for: mode)).save.\(recordType)")
+                }
                 _ = try await saveRecordsBatchWithZoneRecovery(
                     scanResult.authoritativeRecords,
                     householdId: householdId,
@@ -759,11 +909,53 @@ actor CloudKitManager {
                 )
             }
 
-            markSharedGraphRepairCompleted(householdId: householdId)
-            clearCloudKitFailure()
+            markSharedGraphRepairCompleted(householdId: householdId, mode: mode)
+            if shouldRecordRepairDiagnostics(for: mode) {
+                clearCloudKitFailure()
+            }
         } catch {
-            recordCloudKitFailure(error, operation: "repairSharedHouseholdGraphIfNeeded")
+            if shouldRecordRepairDiagnostics(for: mode) {
+                recordCloudKitFailure(error, operation: repairProgressPrefix(for: mode))
+            } else {
+                print(
+                    "CloudKitScope: background shared-graph repair failed for household \(householdId): " +
+                        debugErrorDescription(error)
+                )
+            }
             throw error
+        }
+    }
+
+    private func scheduleBackgroundSharedGraphRepairIfNeeded(householdId: UUID) {
+        guard !hasCompletedSharedGraphRepair(
+            householdId: householdId,
+            mode: .backgroundExhaustive
+        ) else {
+            return
+        }
+        guard backgroundSharedGraphRepairsInFlight.insert(householdId).inserted else { return }
+
+        _ = _Concurrency.Task { [householdId] in
+            await self.runBackgroundSharedGraphRepair(householdId: householdId)
+        }
+    }
+
+    private func runBackgroundSharedGraphRepair(householdId: UUID) async {
+        defer {
+            backgroundSharedGraphRepairsInFlight.remove(householdId)
+        }
+
+        do {
+            try await repairSharedOwnerHouseholdGraphIfNeeded(
+                householdId: householdId,
+                force: false,
+                mode: .backgroundExhaustive
+            )
+        } catch {
+            print(
+                "CloudKitScope: background shared-graph repair finished with error for household \(householdId): " +
+                    debugErrorDescription(error)
+            )
         }
     }
 
@@ -1139,46 +1331,17 @@ actor CloudKitManager {
         _ queryFactory: ZoneScopedQueryFactory,
         householdId: UUID
     ) async throws -> OwnerPrivateScanResult {
-        let db = await privateDatabase
         let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
-        let defaultZoneID = CKRecordZone.default().zoneID
-        let recordType = queryFactory(targetZoneID).recordType
-        let baselineSortDescriptors = queryFactory(targetZoneID).sortDescriptors ?? []
-
-        var zoneIDs: [CKRecordZone.ID] = [targetZoneID, defaultZoneID]
-        for zoneID in try await allPrivateZoneIDs() where !zoneIDs.contains(zoneID) {
-            zoneIDs.append(zoneID)
-        }
-
-        var scannedRecords: [CKRecord] = []
-        for zoneID in zoneIDs {
-            let query = queryFactory(zoneID)
-            do {
-                let zoneRecords = try await queryRecordsPaginated(
-                    query,
-                    database: db,
-                    zoneID: zoneID
-                )
-                scannedRecords.append(contentsOf: zoneRecords)
-            } catch {
-                if Self.isMissingRecordTypeError(error) {
-                    print(
-                        "CloudKitScope: skipping ownerPrivate scan for missing record type " +
-                            "\(recordType) while scanning household \(householdId)"
-                    )
-                    return OwnerPrivateScanResult(
-                        authoritativeRecords: [],
-                        legacyDuplicateRecordIDs: []
-                    )
-                }
-                throw error
-            }
-        }
-
-        return Self.mergeOwnerPrivateRecords(
-            scannedRecords,
+        let zoneIDs = try await sharedGraphRepairZoneIDs(
+            householdId: householdId,
             targetZoneID: targetZoneID,
-            sortDescriptors: baselineSortDescriptors
+            mode: .backgroundExhaustive
+        )
+        return try await queryOwnerPrivateRecordsAcrossZones(
+            queryFactory,
+            householdId: householdId,
+            targetZoneID: targetZoneID,
+            zoneIDs: zoneIDs
         )
     }
 
@@ -3557,10 +3720,12 @@ actor CloudKitManager {
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
 
             markStage(.migrate)
-            try await migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
-
-            markStage(.migrate)
-            try await repairSharedHouseholdGraphIfNeeded(householdId: household.id)
+            try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: household.id)
+            try await repairSharedOwnerHouseholdGraphIfNeeded(
+                householdId: household.id,
+                force: false,
+                mode: .interactivePrimaryZones
+            )
 
             markStage(.fetchRoot)
             let db = await privateDatabase
@@ -3575,6 +3740,7 @@ actor CloudKitManager {
                     householdName: household.name,
                     database: db
                 )
+                scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -3609,6 +3775,7 @@ actor CloudKitManager {
                     householdName: household.name,
                     database: db
                 )
+                scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -3623,6 +3790,7 @@ actor CloudKitManager {
                     householdName: household.name,
                     database: db
                 )
+                scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                 clearCloudKitFailure()
                 return normalizedShare
             }
@@ -3872,14 +4040,10 @@ actor CloudKitManager {
                 if let matchingToken = activeExistingTokens.first(where: {
                     Self.canReuseInviteToken($0, shareURL: existingShareURL, at: now)
                 }) {
+                    scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                     clearCloudKitFailure()
                     return matchingToken
                 }
-            }
-
-            if !activeExistingTokens.isEmpty {
-                markStage("inviteCode.create.repairShare")
-                try await repairSharedHouseholdGraphIfNeeded(householdId: household.id)
             }
 
             // Slow path: no reusable token exists, need to ensure share first.

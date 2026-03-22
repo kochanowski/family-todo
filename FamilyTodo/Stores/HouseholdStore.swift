@@ -668,12 +668,8 @@ class HouseholdStore: ObservableObject {
         // Check availability and get container from CloudKitManager
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        _ = try await cloudKit.ensureHouseholdOwnerZone(householdId: household.id)
-        try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
-        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
-        let container = await cloudKit.getContainer()
-
         let share = try await cloudKit.createShare(for: household)
+        let container = await cloudKit.getContainer()
         self.share = share
         activeContainer = container
         return (share, container)
@@ -686,11 +682,17 @@ class HouseholdStore: ObservableObject {
 
         try await cloudKit.checkAvailability()
         await cloudKit.setHouseholdScope(.ownerPrivate)
-        try await cloudKit.migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
-        try await cloudKit.repairSharedHouseholdGraphIfNeeded(householdId: household.id)
 
         if let existingURL = share?.url {
             return existingURL
+        }
+
+        if let existingShare = try await cloudKit.fetchShare(for: household.id) {
+            share = existingShare
+            activeContainer = await cloudKit.getContainer()
+            if let existingURL = existingShare.url {
+                return existingURL
+            }
         }
 
         do {
