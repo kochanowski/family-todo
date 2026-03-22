@@ -7,6 +7,8 @@ final class CloudKitDiagnosticsState: ObservableObject {
     @Published var lastCloudKitError: String?
     @Published var lastCloudKitOperation: String?
     @Published var lastCloudKitErrorTimestampISO8601: String?
+    @Published var lastCloudKitProgressOperation: String?
+    @Published var lastCloudKitProgressTimestampISO8601: String?
 
     private init() {}
 
@@ -27,9 +29,16 @@ final class CloudKitDiagnosticsState: ObservableObject {
         lastCloudKitError = payload
     }
 
+    func recordProgress(operation: String) {
+        lastCloudKitProgressOperation = operation
+        lastCloudKitProgressTimestampISO8601 = ISO8601DateFormatter().string(from: Date())
+    }
+
     func clear() {
         lastCloudKitError = nil
         lastCloudKitOperation = nil
         lastCloudKitErrorTimestampISO8601 = nil
+        lastCloudKitProgressOperation = nil
+        lastCloudKitProgressTimestampISO8601 = nil
     }
 }

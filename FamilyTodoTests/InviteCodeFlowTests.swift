@@ -155,4 +155,57 @@ final class InviteCodeFlowTests: XCTestCase {
             )
         )
     }
+
+    func testPrioritizedActiveInviteTokensSortsLocallyByNewestCreatedAt() {
+        let householdId = UUID()
+        let now = Date(timeIntervalSince1970: 5000)
+        let older = InviteToken(
+            id: "OLDER1",
+            code: "OLDER1",
+            householdId: householdId,
+            shareURL: "https://www.icloud.com/share/live",
+            createdAt: now.addingTimeInterval(-600),
+            expiresAt: now.addingTimeInterval(600),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let newer = InviteToken(
+            id: "NEWER1",
+            code: "NEWER1",
+            householdId: householdId,
+            shareURL: "https://www.icloud.com/share/live",
+            createdAt: now.addingTimeInterval(-60),
+            expiresAt: now.addingTimeInterval(600),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let expired = InviteToken(
+            id: "EXPIRE",
+            code: "EXPIRE",
+            householdId: householdId,
+            shareURL: "https://www.icloud.com/share/live",
+            createdAt: now.addingTimeInterval(-10),
+            expiresAt: now.addingTimeInterval(-1),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let prioritized = CloudKitManager.prioritizedActiveInviteTokens(
+            [older, expired, newer],
+            at: now
+        )
+
+        XCTAssertEqual(prioritized.map(\.code), ["NEWER1", "OLDER1"])
+    }
+
+    func testInviteCodeCreateFailedUsesDetailedDescription() {
+        let error = CloudKitManager.CloudKitManagerError.inviteCodeCreateFailed(
+            "Invite lookup failed: Field 'createdAt' is not marked sortable."
+        )
+
+        XCTAssertEqual(
+            error.errorDescription,
+            "Invite lookup failed: Field 'createdAt' is not marked sortable."
+        )
+    }
 }

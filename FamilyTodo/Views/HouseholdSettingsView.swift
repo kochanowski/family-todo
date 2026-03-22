@@ -48,6 +48,7 @@ struct ProfileView: View {
         .sheet(isPresented: $showInviteMember) {
             InviteMemberView()
                 .environmentObject(householdStore)
+                .environmentObject(cloudKitDiagnostics)
         }
         .sheet(isPresented: $showLeaveConfirmation) {
             AppConfirmationSheet(
@@ -429,11 +430,15 @@ struct ProfileView: View {
 private struct InviteMemberView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @Environment(\.dismiss) private var dismiss
 
+    @State private var inviteLoadGeneration = 0
     @State private var inviteToken: InviteToken?
     @State private var isLoadingInviteCode = true
     @State private var errorMessage: String?
+
+    private static let inviteLoadTimeoutNanoseconds: UInt64 = 20_000_000_000
 
     var body: some View {
         NavigationStack {
@@ -528,17 +533,61 @@ private struct InviteMemberView: View {
         }
     }
 
+    @MainActor
     private func loadInviteCode() async {
+        inviteLoadGeneration += 1
+        let generation = inviteLoadGeneration
         isLoadingInviteCode = true
-        defer { isLoadingInviteCode = false }
+        inviteToken = nil
+        errorMessage = nil
+
+        let timeoutTask = Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: Self.inviteLoadTimeoutNanoseconds)
+            guard !Task.isCancelled,
+                  inviteLoadGeneration == generation,
+                  isLoadingInviteCode
+            else {
+                return
+            }
+
+            inviteToken = nil
+            isLoadingInviteCode = false
+            errorMessage = inviteTimeoutMessage()
+        }
+        defer { timeoutTask.cancel() }
 
         do {
-            inviteToken = try await householdStore.fetchOrCreateInviteToken()
+            let token = try await householdStore.fetchOrCreateInviteToken()
+            guard inviteLoadGeneration == generation else { return }
+            inviteToken = token
             errorMessage = nil
         } catch {
+            guard inviteLoadGeneration == generation else { return }
             inviteToken = nil
-            errorMessage = "Could not prepare the invite code right now."
+            errorMessage = inviteErrorMessage(for: error)
         }
+
+        guard inviteLoadGeneration == generation else { return }
+        isLoadingInviteCode = false
+    }
+
+    @MainActor
+    private func inviteTimeoutMessage() -> String {
+        let stage = cloudKitDiagnostics.lastCloudKitProgressOperation ??
+            cloudKitDiagnostics.lastCloudKitOperation
+        if let stage, !stage.isEmpty {
+            return "Invite loading timed out during \(stage)."
+        }
+        return "Invite loading timed out before CloudKit returned a result."
+    }
+
+    private func inviteErrorMessage(for error: Error) -> String {
+        let localized = error.localizedDescription
+        let reflected = String(describing: error)
+        if reflected.isEmpty || reflected == localized {
+            return localized
+        }
+        return "\(localized) | \(reflected)"
     }
 
     private func shareText(for inviteCode: String) -> String {

@@ -487,6 +487,12 @@ actor CloudKitManager {
         }
     }
 
+    private nonisolated func recordCloudKitProgress(_ operation: String) {
+        _Concurrency.Task { @MainActor in
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+        }
+    }
+
     private nonisolated func clearCloudKitFailure() {
         _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.clear()
@@ -622,6 +628,7 @@ actor CloudKitManager {
         guard householdScope == .ownerPrivate else { return }
         guard force || !hasCompletedSharedGraphRepair(householdId: householdId) else { return }
 
+        recordCloudKitProgress("repairSharedHouseholdGraphIfNeeded.migrate")
         try await migrateHouseholdToCustomZoneIfNeeded(householdId: householdId)
 
         let querySpecs: [(String, ZoneScopedQueryFactory)] = [
@@ -737,9 +744,11 @@ actor CloudKitManager {
 
         do {
             for (recordType, query) in querySpecs {
+                recordCloudKitProgress("repairSharedHouseholdGraphIfNeeded.scan.\(recordType)")
                 let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(query, householdId: householdId)
                 guard !scanResult.authoritativeRecords.isEmpty else { continue }
                 print("CloudKitScope: repairing \(recordType) records into owner zone for household \(householdId)")
+                recordCloudKitProgress("repairSharedHouseholdGraphIfNeeded.save.\(recordType)")
                 _ = try await saveRecordsBatchWithZoneRecovery(
                     scanResult.authoritativeRecords,
                     householdId: householdId,
@@ -2141,6 +2150,7 @@ actor CloudKitManager {
         case crossZoneReferenceViolation(String)
         case inviteCodeInvalid
         case inviteCodeNotFound
+        case inviteCodeCreateFailed(String)
         case inviteTokenFetchFailed(String)
         case shareMetadataFetchFailed(String)
         case acceptShareFailed(String)
@@ -2166,6 +2176,7 @@ actor CloudKitManager {
             case let .sharePermissionValidationFailed(message),
                  let .missingTargetZone(message),
                  let .crossZoneReferenceViolation(message),
+                 let .inviteCodeCreateFailed(message),
                  let .inviteTokenFetchFailed(message),
                  let .shareMetadataFetchFailed(message),
                  let .acceptShareFailed(message),
@@ -3535,26 +3546,30 @@ actor CloudKitManager {
     // swiftlint:disable function_body_length
     func createShare(for household: Household) async throws -> CKShare {
         var stage: ShareCreationStage = .ensureZone
+        func markStage(_ newStage: ShareCreationStage) {
+            stage = newStage
+            recordCloudKitProgress("createShare.\(newStage.rawValue)")
+        }
         do {
             setHouseholdScope(.ownerPrivate)
 
-            stage = .ensureZone
+            markStage(.ensureZone)
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
 
-            stage = .migrate
+            markStage(.migrate)
             try await migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
 
-            stage = .migrate
+            markStage(.migrate)
             try await repairSharedHouseholdGraphIfNeeded(householdId: household.id)
 
-            stage = .fetchRoot
+            markStage(.fetchRoot)
             let db = await privateDatabase
             var householdRecord = try await fetchOwnerHouseholdRecordStrict(householdId: household.id)
 
             if let shareReference = householdRecord.share,
                let existingShare = try await fetchShareRecord(withID: shareReference.recordID, database: db)
             {
-                stage = .modifyRecords
+                markStage(.modifyRecords)
                 let normalizedShare = try await ensureShareMetadata(
                     existingShare,
                     householdName: household.name,
@@ -3564,7 +3579,7 @@ actor CloudKitManager {
                 return normalizedShare
             }
 
-            stage = .modifyRecords
+            markStage(.modifyRecords)
             var createdShare: CKShare?
             do {
                 createdShare = try await saveShareRecords(
@@ -3598,7 +3613,7 @@ actor CloudKitManager {
                 return normalizedShare
             }
 
-            stage = .fallbackPoll
+            markStage(.fallbackPoll)
             if let fallbackShare = try await pollForExistingShare(
                 rootRecordID: householdRecord.recordID,
                 database: db
@@ -3612,7 +3627,7 @@ actor CloudKitManager {
                 return normalizedShare
             }
 
-            stage = .final
+            markStage(.final)
             let shareError = CloudKitManagerError.shareNotCreated
             recordCloudKitFailure(shareError, operation: "createShare.\(stage.rawValue)")
             throw shareError
@@ -3700,6 +3715,50 @@ actor CloudKitManager {
         return token.shareURL == shareURL
     }
 
+    static func prioritizedActiveInviteTokens(
+        _ tokens: [InviteToken],
+        at now: Date
+    ) -> [InviteToken] {
+        tokens
+            .filter { $0.isActive(at: now) && $0.usesCount < inviteCodeMaxUses }
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.code < rhs.code
+            }
+    }
+
+    private func wrapInviteCodeCreateError(_ error: Error, stage: String) -> CloudKitManagerError {
+        if let managerError = error as? CloudKitManagerError {
+            switch managerError {
+            case .inviteCodeUnavailable, .inviteCodeCreateFailed:
+                return managerError
+            default:
+                break
+            }
+        }
+
+        let prefix = switch stage {
+        case "inviteCode.create.lookupExisting":
+            "Invite lookup failed"
+        case "inviteCode.create.verifyShare":
+            "Invite share verification failed"
+        case "inviteCode.create.repairShare":
+            "Share repair failed"
+        case "inviteCode.create.ensureShare":
+            "Share creation failed"
+        case "inviteCode.create.revokeStale":
+            "Invite cleanup failed"
+        case "inviteCode.create.save":
+            "Invite save failed"
+        default:
+            "Invite creation failed"
+        }
+
+        return .inviteCodeCreateFailed("\(prefix): \(debugErrorDescription(error))")
+    }
+
     private func isInviteTokenLocked(_ token: InviteToken, at now: Date) -> Bool {
         guard token.failedAttempts >= Self.inviteCodeMaxFailedAttempts,
               let lastAttemptAt = token.lastAttemptAt
@@ -3782,29 +3841,33 @@ actor CloudKitManager {
         setHouseholdScope(.ownerPrivate)
 
         var stage = "inviteCode.create.lookupExisting"
+        func markStage(_ newStage: String) {
+            stage = newStage
+            recordCloudKitProgress(newStage)
+        }
         do {
             // Fast path: check public DB for existing active tokens BEFORE
             // running the full createShare pipeline (~4 round-trips).
+            markStage("inviteCode.create.lookupExisting")
             let db = await publicDatabase
             let now = Date()
-            var activeExistingTokens: [InviteToken] = []
             let existingPredicate = NSPredicate(
                 format: "householdId == %@ AND isRevoked == %@",
                 household.id.uuidString,
                 NSNumber(value: Int64(0))
             )
             let existingQuery = CKQuery(recordType: "InviteToken", predicate: existingPredicate)
-            existingQuery.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
             let existingRecords = try await queryRecordsPaginated(existingQuery, database: db)
-            for record in existingRecords {
-                let token = try inviteToken(from: record)
-                if token.isActive(at: now), token.usesCount < Self.inviteCodeMaxUses {
-                    activeExistingTokens.append(token)
-                }
+            let existingTokens = try existingRecords.map { record in
+                try inviteToken(from: record)
             }
+            let activeExistingTokens = try Self.prioritizedActiveInviteTokens(
+                existingTokens,
+                at: now
+            )
 
             if !activeExistingTokens.isEmpty {
-                stage = "inviteCode.create.verifyShare"
+                markStage("inviteCode.create.verifyShare")
                 let existingShareURL = try await fetchShare(for: household.id)?.url?.absoluteString
                 if let matchingToken = activeExistingTokens.first(where: {
                     Self.canReuseInviteToken($0, shareURL: existingShareURL, at: now)
@@ -3815,17 +3878,15 @@ actor CloudKitManager {
             }
 
             if !activeExistingTokens.isEmpty {
-                stage = "inviteCode.create.repairShare"
+                markStage("inviteCode.create.repairShare")
                 try await repairSharedHouseholdGraphIfNeeded(householdId: household.id)
             }
 
             // Slow path: no reusable token exists, need to ensure share first.
-            stage = "inviteCode.create.ensureShare"
+            markStage("inviteCode.create.ensureShare")
             let share = try await createShare(for: household)
             guard let shareURL = share.url else {
-                let error = CloudKitManagerError.shareNotCreated
-                recordCloudKitFailure(error, operation: stage)
-                throw error
+                throw CloudKitManagerError.shareNotCreated
             }
             let shareURLString = shareURL.absoluteString
 
@@ -3837,7 +3898,7 @@ actor CloudKitManager {
             }
 
             if !activeExistingTokens.isEmpty {
-                stage = "inviteCode.create.revokeStale"
+                markStage("inviteCode.create.revokeStale")
                 for token in activeExistingTokens {
                     _ = try await mutateInviteTokenRecord(code: token.code, database: db) { record in
                         record["isRevoked"] = Int64(1) as CKRecordValue
@@ -3845,7 +3906,7 @@ actor CloudKitManager {
                 }
             }
 
-            stage = "inviteCode.create.save"
+            markStage("inviteCode.create.save")
             for _ in 0 ..< Self.inviteCodeMaxAttempts {
                 let code = Self.generateInviteCode(length: Self.inviteCodeLength)
                 if try await fetchInviteTokenRecordIfExists(code: code, database: db) != nil {
@@ -3875,9 +3936,6 @@ actor CloudKitManager {
                     return token
                 } catch let ckError as CKError where ckError.code == .serverRecordChanged {
                     continue
-                } catch {
-                    recordCloudKitFailure(error, operation: stage)
-                    throw error
                 }
             }
 
@@ -3885,13 +3943,9 @@ actor CloudKitManager {
             recordCloudKitFailure(error, operation: "inviteCode.create.exhausted")
             throw error
         } catch {
-            if let managerError = error as? CloudKitManagerError,
-               case .inviteCodeUnavailable = managerError
-            {
-                throw error
-            }
-            recordCloudKitFailure(error, operation: stage)
-            throw error
+            let wrappedError = wrapInviteCodeCreateError(error, stage: stage)
+            recordCloudKitFailure(wrappedError, operation: stage)
+            throw wrappedError
         }
     }
 
