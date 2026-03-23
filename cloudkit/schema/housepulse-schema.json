@@ -236,7 +236,7 @@
     {
       "name": "_icloud",
       "recordTypePermissions": [
-        { "recordType": "cloudkit.share", "read": true },
+        { "recordType": "cloudkit.share", "create": true },
         { "recordType": "InviteToken", "create": true, "read": true }
       ]
     },

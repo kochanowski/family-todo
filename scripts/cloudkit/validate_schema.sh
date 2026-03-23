@@ -108,7 +108,7 @@ required_role_permissions='{
     "InviteToken": ["read"]
   },
   "_icloud": {
-    "cloudkit.share": ["read"],
+    "cloudkit.share": ["create"],
     "InviteToken": ["create", "read"]
   },
   "_creator": {
