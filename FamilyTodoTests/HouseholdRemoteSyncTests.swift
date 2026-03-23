@@ -333,4 +333,36 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             $0.name == "fetchBacklogCategories" && $0.scope == .participantShared && $0.householdId == household.id
         })
     }
+
+    func testRemoteVisibleContentDiffCountsRealInsertedRecords() {
+        let existingTaskID = UUID()
+        let addedTaskID = UUID()
+        let existingShoppingID = UUID()
+        let addedShoppingID = UUID()
+
+        let before = RemoteVisibleContentSnapshot(
+            shoppingTitlesByID: [existingShoppingID: "Milk"],
+            shoppingBundleIDs: [UUID()],
+            workItemIDs: [existingTaskID],
+            backlogCategoryIDs: [UUID()]
+        )
+
+        let after = RemoteVisibleContentSnapshot(
+            shoppingTitlesByID: [
+                existingShoppingID: "Milk",
+                addedShoppingID: "Bread",
+            ],
+            shoppingBundleIDs: before.shoppingBundleIDs.union([UUID()]),
+            workItemIDs: before.workItemIDs.union([addedTaskID]),
+            backlogCategoryIDs: before.backlogCategoryIDs.union([UUID()])
+        )
+
+        let diff = after.diff(from: before)
+
+        XCTAssertEqual(diff.addedShoppingTitles, ["Bread"])
+        XCTAssertEqual(diff.addedShoppingBundleCount, 1)
+        XCTAssertEqual(diff.addedWorkItemCount, 1)
+        XCTAssertEqual(diff.addedBacklogCategoryCount, 1)
+        XCTAssertEqual(diff.totalAddedCount, 4)
+    }
 }

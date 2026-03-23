@@ -37,6 +37,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     init() {}
 
+    static func shouldCreateZoneSubscription(
+        for scope: CloudKitManager.HouseholdDatabaseScope
+    ) -> Bool {
+        scope == .ownerPrivate
+    }
+
     // MARK: - Setup
 
     func configure(
@@ -143,6 +149,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
 
         guard let scope,
+              Self.shouldCreateZoneSubscription(for: scope),
               let zoneID = try? await cloudKit.resolveSubscriptionZone(
                   householdId: householdId,
                   scope: scope
@@ -241,7 +248,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         for householdId: UUID,
         scope: CloudKitManager.HouseholdDatabaseScope?
     ) -> [String] {
-        guard let scope else { return [] }
+        guard let scope, Self.shouldCreateZoneSubscription(for: scope) else { return [] }
         return [zoneSubscriptionID(householdId: householdId, scope: scope)]
     }
 
@@ -321,12 +328,8 @@ final class CloudKitSubscriptionManager: ObservableObject {
             return
         }
         print(
-            "[CloudKitSubscription] Database notification accepted. Waiting for AppDelegate background refresh to publish store updates."
+            "[CloudKitSubscription] Database notification accepted. Waiting for hydrated refresh summary."
         )
-
-        pendingShoppingChanges.append("Shared Update")
-        scheduleAggregatedNotification()
-        showInAppBanner(for: "Shared Update")
     }
 
     private func handleRecordZoneNotification(_: CKRecordZoneNotification) {
@@ -335,12 +338,8 @@ final class CloudKitSubscriptionManager: ObservableObject {
             return
         }
         print(
-            "[CloudKitSubscription] Record-zone notification accepted. Waiting for AppDelegate background refresh to publish store updates."
+            "[CloudKitSubscription] Record-zone notification accepted. Waiting for hydrated refresh summary."
         )
-
-        pendingShoppingChanges.append("Zone Update")
-        scheduleAggregatedNotification()
-        showInAppBanner(for: "Zone Update")
     }
 
     private func handleQueryNotification(_ notification: CKQueryNotification) {
@@ -359,31 +358,34 @@ final class CloudKitSubscriptionManager: ObservableObject {
         if recordType == "Household" || recordType == "Member" {
             return
         }
-
-        // Add to pending notifications for aggregation
-        if recordType == "ShoppingItem" || recordType == "ShoppingBundle" {
-            pendingShoppingChanges.append(recordType)
-        } else if recordType == "Task" || recordType == "BacklogItem" || recordType == "BacklogCategory" || recordType == "WorkItem" {
-            pendingTaskChanges.append(recordType)
-        } else {
-            pendingTaskChanges.append(recordType)
-        }
-
-        scheduleAggregatedNotification()
-        showInAppBanner(for: recordType)
+        print(
+            "[CloudKitSubscription] Query notification accepted for recordType=\(recordType). Waiting for hydrated refresh summary."
+        )
     }
 
     // MARK: - In-App Banner
 
-    private func showInAppBanner(for _: String) {
-        // Update banner state
-        newItemsCount = pendingShoppingChanges.count + pendingTaskChanges.count
-        if newItemsCount > 0 {
+    func publishHydratedRemoteChanges(
+        count: Int,
+        shouldDeliverBackgroundNotification: Bool = false
+    ) {
+        guard count > 0 else { return }
+
+        pendingShoppingChanges.removeAll()
+        pendingTaskChanges.removeAll()
+        newItemsCount = count
+
+        if UIApplication.shared.applicationState == .active {
             HapticManager.selection()
             withAnimation(WowAnimation.spring) {
                 showNewItemsBanner = true
             }
+            return
         }
+
+        guard shouldDeliverBackgroundNotification else { return }
+        let body = count == 1 ? "1 new shared change." : "\(count) new shared changes."
+        sendLocalNotification(title: "Household updated", body: body)
     }
 
     private func reportSubscriptionFailure(_ error: Error, context: String) {
@@ -395,33 +397,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
         withAnimation(WowAnimation.easeOut) {
             showNewItemsBanner = false
         }
-        pendingShoppingChanges.removeAll()
-        pendingTaskChanges.removeAll()
-        newItemsCount = 0
-    }
-
-    // MARK: - Aggregation
-
-    private func scheduleAggregatedNotification() {
-        aggregationTimer?.invalidate()
-        guard UIApplication.shared.applicationState != .active else { return }
-        aggregationTimer = Timer.scheduledTimer(withTimeInterval: aggregationWindow, repeats: false) { [weak self] _ in
-            _Concurrency.Task { @MainActor in
-                self?.sendAggregatedNotification()
-            }
-        }
-    }
-
-    private func sendAggregatedNotification() {
-        // Simple aggregation since we might not have details from Shared DB
-        let count = pendingShoppingChanges.count + pendingTaskChanges.count
-        guard count > 0 else { return }
-
-        let message = count == 1 ? "New shared item added" : "\(count) new shared items added"
-
-        // Send local notification (app is in background)
-        sendLocalNotification(title: "FamilySync", body: message)
-
         pendingShoppingChanges.removeAll()
         pendingTaskChanges.removeAll()
         newItemsCount = 0

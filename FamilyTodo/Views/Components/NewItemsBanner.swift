@@ -45,9 +45,9 @@ struct NewItemsBanner: View {
 
     private var bannerText: String {
         if count == 1 {
-            "1 new item added"
+            "1 new shared change"
         } else {
-            "\(count) new items added"
+            "\(count) new shared changes"
         }
     }
 }

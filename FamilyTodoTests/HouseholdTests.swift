@@ -71,6 +71,70 @@ final class HouseholdTests: XCTestCase {
         XCTAssertEqual(original.name, decoded.name)
         XCTAssertEqual(original.ownerId, decoded.ownerId)
     }
+
+    func testCloudKitSchemaIncludesWorkItemRecordTypeContract() throws {
+        let schema = try loadCloudKitSchemaJSON()
+        let recordTypes = try XCTUnwrap(schema["recordTypes"] as? [[String: Any]])
+        let workItem = try XCTUnwrap(
+            recordTypes.first(where: { $0["name"] as? String == "WorkItem" }),
+            "Expected WorkItem to be present in CloudKit schema contract."
+        )
+
+        let fields = try XCTUnwrap(workItem["fields"] as? [[String: Any]])
+        let fieldNames = Set(fields.compactMap { $0["name"] as? String })
+        let expectedFields: Set = [
+            "id",
+            "logicalItemId",
+            "householdId",
+            "title",
+            "status",
+            "assigneeId",
+            "assigneeIds",
+            "categoryId",
+            "areaId",
+            "dueDate",
+            "lastPokedAt",
+            "completedAt",
+            "completedById",
+            "taskType",
+            "recurringChoreId",
+            "notes",
+            "order",
+            "createdAt",
+            "updatedAt",
+        ]
+
+        XCTAssertEqual(fieldNames, expectedFields)
+
+        let indexes = try XCTUnwrap(workItem["indexes"] as? [String: Any])
+        let queryIndexes = Set((indexes["query"] as? [String]) ?? [])
+        let sortIndexes = Set((indexes["sort"] as? [String]) ?? [])
+
+        XCTAssertEqual(queryIndexes, Set(["householdId"]))
+        XCTAssertEqual(sortIndexes, Set(["updatedAt"]))
+    }
+
+    private func loadCloudKitSchemaJSON(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> [String: Any] {
+        let testFileURL = URL(fileURLWithPath: String(describing: file))
+        let repoRootURL = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let schemaURL = repoRootURL
+            .appendingPathComponent("cloudkit")
+            .appendingPathComponent("schema")
+            .appendingPathComponent("housepulse-schema.json")
+        let data = try Data(contentsOf: schemaURL)
+        let object = try JSONSerialization.jsonObject(with: data)
+        return try XCTUnwrap(
+            object as? [String: Any],
+            "Expected CloudKit schema JSON dictionary.",
+            file: file,
+            line: line
+        )
+    }
 }
 
 // MARK: - Member Tests
@@ -695,6 +759,17 @@ final class HouseholdStoreTests: XCTestCase {
         let decision = store.resolveLeaveBehavior(for: owner, activeMembers: [owner, member])
 
         XCTAssertEqual(decision, .requireTransfer)
+    }
+}
+
+final class CloudKitSubscriptionManagerTests: XCTestCase {
+    func testParticipantSharedSkipsZoneSubscriptions() {
+        XCTAssertFalse(
+            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
+        )
+        XCTAssertTrue(
+            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .ownerPrivate)
+        )
     }
 }
 

@@ -3054,12 +3054,58 @@ actor CloudKitManager {
         householdId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [WorkItem] {
-        async let fetchedWorkItems = fetchWorkItems(householdId: householdId, scope: explicitScope)
-        async let fetchedTasks = fetchTasks(householdId: householdId, scope: explicitScope)
-        async let fetchedIdeas = fetchBacklogItems(householdId: householdId, scope: explicitScope)
+        let scope = resolvedScope(explicitScope)
+        async let fetchedWorkItems = fetchWorkItemsIfAvailable(
+            householdId: householdId,
+            scope: scope
+        )
+        async let fetchedTasks = fetchTasksIfAvailable(
+            householdId: householdId,
+            scope: scope
+        )
+        async let fetchedIdeas = fetchBacklogItemsIfAvailable(
+            householdId: householdId,
+            scope: scope
+        )
 
         let (workItems, tasks, ideas) = try await (fetchedWorkItems, fetchedTasks, fetchedIdeas)
         return mergeUnifiedWorkItems(workItems: workItems, tasks: tasks, ideas: ideas)
+    }
+
+    private func fetchWorkItemsIfAvailable(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [WorkItem] {
+        do {
+            return try await fetchWorkItems(householdId: householdId, scope: scope)
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return []
+        }
+    }
+
+    private func fetchTasksIfAvailable(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [Task] {
+        do {
+            return try await fetchTasks(householdId: householdId, scope: scope)
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return []
+        }
+    }
+
+    private func fetchBacklogItemsIfAvailable(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [BacklogItem] {
+        do {
+            return try await fetchBacklogItems(householdId: householdId, scope: scope)
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return []
+        }
     }
 
     private func mergeUnifiedWorkItems(
