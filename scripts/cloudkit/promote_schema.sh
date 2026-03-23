@@ -325,8 +325,14 @@ list_security_role_permissions_from_ckdb() {
     in_record && /^[[:space:]]*GRANT[[:space:]]+/ {
       line = $0
       gsub(/\r/, "", line)
-      if (match(line, /^[[:space:]]*GRANT[[:space:]]+([A-Z]+)[[:space:]]+TO[[:space:]]+"([^"]+)"/, captures)) {
-        print captures[2] "|" record_type "|" captures[1]
+      sub(/^[[:space:]]*GRANT[[:space:]]+/, "", line)
+      split(line, segments, /[[:space:]]+TO[[:space:]]+"/)
+      permission = toupper(trim(segments[1]))
+      role = trim(segments[2])
+      sub(/".*$/, "", role)
+      gsub(/[,)]/, "", role)
+      if (permission != "" && role != "") {
+        print role "|" record_type "|" permission
       }
     }
   ' "$ckdb_file" | sort -u
