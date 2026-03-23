@@ -366,3 +366,15 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(diff.totalAddedCount, 4)
     }
 }
+
+final class CloudKitSubscriptionManagerTests: XCTestCase {
+    @MainActor
+    func testParticipantSharedSkipsZoneSubscriptions() {
+        XCTAssertFalse(
+            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
+        )
+        XCTAssertTrue(
+            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .ownerPrivate)
+        )
+    }
+}

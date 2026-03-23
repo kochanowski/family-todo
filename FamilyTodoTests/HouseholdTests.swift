@@ -762,17 +762,6 @@ final class HouseholdStoreTests: XCTestCase {
     }
 }
 
-final class CloudKitSubscriptionManagerTests: XCTestCase {
-    func testParticipantSharedSkipsZoneSubscriptions() {
-        XCTAssertFalse(
-            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
-        )
-        XCTAssertTrue(
-            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .ownerPrivate)
-        )
-    }
-}
-
 final class CloudKitManagerScopeTests: XCTestCase {
     private let ownerZoneID = CKRecordZone.ID(
         zoneName: "HouseholdZone-owner",
