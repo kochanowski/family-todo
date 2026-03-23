@@ -538,7 +538,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         let inviteRolePermissions = securityRoles.flatMap { role -> [String] in
             let roleName = role["name"] as? String ?? ""
             let recordPermissions = (role["recordTypePermissions"] as? [[String: Any]]) ?? []
-            return recordPermissions.compactMap { permission in
+            return recordPermissions.compactMap { permission -> [String]? in
                 guard permission["recordType"] as? String == "InviteToken" else { return nil }
                 let actions = [
                     (permission["create"] as? Bool == true) ? "create" : nil,
