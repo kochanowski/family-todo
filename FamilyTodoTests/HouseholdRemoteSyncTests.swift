@@ -377,4 +377,46 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
             CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .ownerPrivate)
         )
     }
+
+    func testCloudKitSchemaKeepsHouseholdMemberRecordIndexesAndInviteTokenRoles() throws {
+        let schemaURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("cloudkit")
+            .appendingPathComponent("schema")
+            .appendingPathComponent("housepulse-schema.json")
+        let data = try Data(contentsOf: schemaURL)
+        let object = try JSONSerialization.jsonObject(with: data)
+        let schema = try XCTUnwrap(object as? [String: Any])
+        let recordTypes = try XCTUnwrap(schema["recordTypes"] as? [[String: Any]])
+
+        let household = try XCTUnwrap(recordTypes.first { $0["name"] as? String == "Household" })
+        let householdIndexes = try XCTUnwrap(household["indexes"] as? [String: Any])
+        XCTAssertTrue(((householdIndexes["query"] as? [String]) ?? []).contains("___recordID"))
+
+        let member = try XCTUnwrap(recordTypes.first { $0["name"] as? String == "Member" })
+        let memberIndexes = try XCTUnwrap(member["indexes"] as? [String: Any])
+        XCTAssertTrue(((memberIndexes["query"] as? [String]) ?? []).contains("___recordID"))
+
+        let securityRoles = try XCTUnwrap(schema["securityRoles"] as? [[String: Any]])
+        let inviteRolePermissions = securityRoles.flatMap { role -> [String] in
+            let roleName = role["name"] as? String ?? ""
+            let recordPermissions = (role["recordTypePermissions"] as? [[String: Any]]) ?? []
+            return recordPermissions.compactMap { permission in
+                guard permission["recordType"] as? String == "InviteToken" else { return nil }
+                let actions = [
+                    (permission["create"] as? Bool == true) ? "create" : nil,
+                    (permission["read"] as? Bool == true) ? "read" : nil,
+                    (permission["write"] as? Bool == true) ? "write" : nil,
+                ].compactMap { $0 }
+                return actions.map { "\(roleName):\($0)" }
+            }.flatMap { $0 }
+        }
+
+        XCTAssertTrue(inviteRolePermissions.contains("_world:read"))
+        XCTAssertTrue(inviteRolePermissions.contains("_icloud:create"))
+        XCTAssertTrue(inviteRolePermissions.contains("_icloud:read"))
+        XCTAssertTrue(inviteRolePermissions.contains("_creator:read"))
+        XCTAssertTrue(inviteRolePermissions.contains("_creator:write"))
+    }
 }

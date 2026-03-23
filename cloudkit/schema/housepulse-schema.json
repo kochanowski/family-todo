@@ -5,6 +5,7 @@
     {
       "name": "Household",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": true, "sortable": false },
         { "name": "name", "type": "String", "queryable": false, "sortable": false },
         { "name": "colorHex", "type": "String", "queryable": false, "sortable": false },
@@ -15,13 +16,14 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["id"],
+        "query": ["___recordID", "id"],
         "sort": []
       }
     },
     {
       "name": "Member",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "userId", "type": "String", "queryable": true, "sortable": false },
@@ -32,7 +34,7 @@
         { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["householdId", "userId"],
+        "query": ["___recordID", "householdId", "userId"],
         "sort": ["joinedAt"]
       }
     },
