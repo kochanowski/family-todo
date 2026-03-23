@@ -365,6 +365,142 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(diff.addedBacklogCategoryCount, 1)
         XCTAssertEqual(diff.totalAddedCount, 4)
     }
+
+    func testHandleRemoteCloudChangeReturnsNewDataForFieldOnlyShoppingToggle() async throws {
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let itemID = UUID()
+        let localShoppingItem = ShoppingItem(
+            id: itemID,
+            householdId: household.id,
+            title: "Milk",
+            isBought: false,
+            sortOrder: 0,
+            updatedAt: Date(timeIntervalSince1970: 1_736_900_000)
+        )
+        let remoteShoppingItem = ShoppingItem(
+            id: itemID,
+            householdId: household.id,
+            title: "Milk",
+            isBought: true,
+            boughtAt: Date(timeIntervalSince1970: 1_736_900_030),
+            sortOrder: 0,
+            updatedAt: Date(timeIntervalSince1970: 1_736_900_030)
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            shoppingItems: [remoteShoppingItem],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        modelContainer.mainContext.insert(CachedShoppingItem(from: localShoppingItem))
+        try modelContainer.mainContext.save()
+
+        let shoppingExpectation = expectation(
+            forNotification: .shoppingListDataDidChange,
+            object: nil,
+            handler: nil
+        )
+
+        let result = await store.handleRemoteCloudChange(
+            userId: userId,
+            preferredHouseholdId: household.id
+        )
+
+        await fulfillment(of: [shoppingExpectation], timeout: 1.0)
+
+        XCTAssertEqual(result, .newData)
+
+        let cachedItems = try cachedShoppingItems(for: household.id)
+        XCTAssertEqual(cachedItems.count, 1)
+        XCTAssertEqual(cachedItems.first?.isBought, true)
+    }
+
+    func testHandleRemoteCloudChangeReturnsNewDataForFieldOnlyTaskUpdate() async throws {
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let taskID = UUID()
+        let taskLogicalID = UUID()
+        let assigneeID = UUID()
+        let localTask = Task(
+            id: taskID,
+            logicalItemID: taskLogicalID,
+            householdId: household.id,
+            title: "Take out trash",
+            status: .next,
+            assigneeId: assigneeID,
+            taskType: .oneOff,
+            updatedAt: Date(timeIntervalSince1970: 1_736_900_000)
+        )
+        let remoteTask = Task(
+            id: taskID,
+            logicalItemID: taskLogicalID,
+            householdId: household.id,
+            title: "Take out trash",
+            status: .done,
+            assigneeId: assigneeID,
+            completedAt: Date(timeIntervalSince1970: 1_736_900_060),
+            completedById: "user-1",
+            taskType: .oneOff,
+            updatedAt: Date(timeIntervalSince1970: 1_736_900_060)
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            tasks: [remoteTask],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        modelContainer.mainContext.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(task: localTask)))
+        try modelContainer.mainContext.save()
+
+        let taskExpectation = expectation(
+            forNotification: .taskBoardDataDidChange,
+            object: nil,
+            handler: nil
+        )
+
+        let result = await store.handleRemoteCloudChange(
+            userId: userId,
+            preferredHouseholdId: household.id
+        )
+
+        await fulfillment(of: [taskExpectation], timeout: 1.0)
+
+        XCTAssertEqual(result, .newData)
+
+        let cachedItems = try cachedWorkItems(for: household.id)
+        XCTAssertEqual(cachedItems.count, 1)
+        XCTAssertEqual(cachedItems.first?.statusRaw, WorkItem.Status.done.rawValue)
+        XCTAssertEqual(cachedItems.first?.completedById, "user-1")
+    }
 }
 
 final class CloudKitSubscriptionManagerTests: XCTestCase {
@@ -418,5 +554,66 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(inviteRolePermissions.contains("_icloud:read"))
         XCTAssertTrue(inviteRolePermissions.contains("_creator:read"))
         XCTAssertTrue(inviteRolePermissions.contains("_creator:write"))
+    }
+}
+
+final class SharedShoppingNotificationAccumulatorTests: XCTestCase {
+    func testAccumulatorBatchesTitlesIntoSingleAlert() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = SharedShoppingNotificationAccumulator(window: 3)
+
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: "Dom",
+                itemTitles: ["Milk"],
+                at: start
+            )
+        )
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: "Dom",
+                itemTitles: ["Bread", "Eggs"],
+                at: start.addingTimeInterval(1)
+            )
+        )
+
+        let batch = accumulator.flushReady(at: start.addingTimeInterval(3.1))
+
+        XCTAssertEqual(batch.count, 1)
+        XCTAssertEqual(batch.first?.householdId, householdId)
+        XCTAssertEqual(batch.first?.householdName, "Dom")
+        XCTAssertEqual(batch.first?.itemTitles, ["Bread", "Eggs", "Milk"])
+    }
+
+    func testAccumulatorSeparatesBatchesOutsideWindow() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = SharedShoppingNotificationAccumulator(window: 3)
+
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: nil,
+                itemTitles: ["Milk"],
+                at: start
+            )
+        )
+
+        let firstBatch = accumulator.record(
+            householdId: householdId,
+            householdName: nil,
+            itemTitles: ["Bread"],
+            at: start.addingTimeInterval(4)
+        )
+
+        XCTAssertEqual(firstBatch?.count, 1)
+        XCTAssertEqual(firstBatch?.itemTitles, ["Milk"])
+
+        let trailingBatch = accumulator.flushReady(at: start.addingTimeInterval(8))
+        XCTAssertEqual(trailingBatch.count, 1)
+        XCTAssertEqual(trailingBatch.first?.itemTitles, ["Bread"])
     }
 }

@@ -165,14 +165,15 @@ struct FamilyTodoApp: App {
                                 #if !CI
                                     appDelegate.installNotificationCenterDelegate()
                                 #endif
-                                appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] in
+                                appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] context in
                                     guard let householdStore, let userSession else {
                                         return .noData
                                     }
 
                                     return await householdStore.handleRemoteCloudChange(
                                         userId: userSession.userId,
-                                        preferredHouseholdId: userSession.currentHouseholdID
+                                        preferredHouseholdId: userSession.currentHouseholdID,
+                                        context: context
                                     )
                                 }
                                 appDelegate.flushPendingInviteIfNeeded()

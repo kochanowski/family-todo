@@ -11,16 +11,133 @@ struct AcceptedShareContext {
     let shareURL: URL?
 }
 
+struct RemoteShoppingItemState: Equatable {
+    let title: String
+    let isBought: Bool
+    let boughtAt: Date?
+    let restockCount: Int
+    let sortOrder: Int
+    let updatedAt: Date
+}
+
+struct RemoteShoppingBundleState: Equatable {
+    let name: String
+    let updatedAt: Date
+}
+
+struct RemoteWorkItemState: Equatable {
+    let logicalItemID: UUID
+    let title: String
+    let status: WorkItem.Status
+    let assigneeId: UUID?
+    let assigneeIds: [UUID]
+    let completedAt: Date?
+    let completedById: String?
+    let order: Int
+    let updatedAt: Date
+}
+
+struct RemoteBacklogCategoryState: Equatable {
+    let title: String
+    let sortOrder: Int
+    let updatedAt: Date
+}
+
 struct RemoteVisibleContentSnapshot: Equatable {
-    let shoppingTitlesByID: [UUID: String]
-    let shoppingBundleIDs: Set<UUID>
-    let workItemIDs: Set<UUID>
-    let backlogCategoryIDs: Set<UUID>
+    let shoppingItemsByID: [UUID: RemoteShoppingItemState]
+    let shoppingBundlesByID: [UUID: RemoteShoppingBundleState]
+    let workItemsByID: [UUID: RemoteWorkItemState]
+    let backlogCategoriesByID: [UUID: RemoteBacklogCategoryState]
+
+    init(
+        shoppingItemsByID: [UUID: RemoteShoppingItemState],
+        shoppingBundlesByID: [UUID: RemoteShoppingBundleState],
+        workItemsByID: [UUID: RemoteWorkItemState],
+        backlogCategoriesByID: [UUID: RemoteBacklogCategoryState]
+    ) {
+        self.shoppingItemsByID = shoppingItemsByID
+        self.shoppingBundlesByID = shoppingBundlesByID
+        self.workItemsByID = workItemsByID
+        self.backlogCategoriesByID = backlogCategoriesByID
+    }
+
+    init(
+        shoppingTitlesByID: [UUID: String],
+        shoppingBundleIDs: Set<UUID>,
+        workItemIDs: Set<UUID>,
+        backlogCategoryIDs: Set<UUID>
+    ) {
+        self.init(
+            shoppingItemsByID: Dictionary(
+                uniqueKeysWithValues: shoppingTitlesByID.map { id, title in
+                    (
+                        id,
+                        RemoteShoppingItemState(
+                            title: title,
+                            isBought: false,
+                            boughtAt: nil,
+                            restockCount: 0,
+                            sortOrder: 0,
+                            updatedAt: .distantPast
+                        )
+                    )
+                }
+            ),
+            shoppingBundlesByID: Dictionary(
+                uniqueKeysWithValues: shoppingBundleIDs.map { id in
+                    (id, RemoteShoppingBundleState(name: "", updatedAt: .distantPast))
+                }
+            ),
+            workItemsByID: Dictionary(
+                uniqueKeysWithValues: workItemIDs.map { id in
+                    (
+                        id,
+                        RemoteWorkItemState(
+                            logicalItemID: id,
+                            title: "",
+                            status: .backlog,
+                            assigneeId: nil,
+                            assigneeIds: [],
+                            completedAt: nil,
+                            completedById: nil,
+                            order: 0,
+                            updatedAt: .distantPast
+                        )
+                    )
+                }
+            ),
+            backlogCategoriesByID: Dictionary(
+                uniqueKeysWithValues: backlogCategoryIDs.map { id in
+                    (id, RemoteBacklogCategoryState(title: "", sortOrder: 0, updatedAt: .distantPast))
+                }
+            )
+        )
+    }
+
+    var shoppingTitlesByID: [UUID: String] {
+        Dictionary(uniqueKeysWithValues: shoppingItemsByID.map { ($0.key, $0.value.title) })
+    }
+
+    var shoppingBundleIDs: Set<UUID> {
+        Set(shoppingBundlesByID.keys)
+    }
+
+    var workItemIDs: Set<UUID> {
+        Set(workItemsByID.keys)
+    }
+
+    var backlogCategoryIDs: Set<UUID> {
+        Set(backlogCategoriesByID.keys)
+    }
+
+    var nextWorkItemCount: Int {
+        workItemsByID.values.filter { $0.status == .next }.count
+    }
 
     func diff(from previous: RemoteVisibleContentSnapshot) -> RemoteVisibleContentDiff {
-        let addedShoppingIDs = Set(shoppingTitlesByID.keys).subtracting(previous.shoppingTitlesByID.keys)
+        let addedShoppingIDs = Set(shoppingItemsByID.keys).subtracting(previous.shoppingItemsByID.keys)
         let addedShoppingTitles = addedShoppingIDs
-            .compactMap { shoppingTitlesByID[$0] }
+            .compactMap { shoppingItemsByID[$0]?.title }
             .sorted {
                 $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
             }
@@ -29,7 +146,31 @@ struct RemoteVisibleContentSnapshot: Equatable {
             addedShoppingTitles: addedShoppingTitles,
             addedShoppingBundleCount: shoppingBundleIDs.subtracting(previous.shoppingBundleIDs).count,
             addedWorkItemCount: workItemIDs.subtracting(previous.workItemIDs).count,
-            addedBacklogCategoryCount: backlogCategoryIDs.subtracting(previous.backlogCategoryIDs).count
+            addedBacklogCategoryCount: backlogCategoryIDs.subtracting(previous.backlogCategoryIDs).count,
+            removedShoppingItemCount: Set(previous.shoppingItemsByID.keys).subtracting(shoppingItemsByID.keys).count,
+            removedShoppingBundleCount: previous.shoppingBundleIDs.subtracting(shoppingBundleIDs).count,
+            removedWorkItemCount: previous.workItemIDs.subtracting(workItemIDs).count,
+            removedBacklogCategoryCount: previous.backlogCategoryIDs.subtracting(backlogCategoryIDs).count,
+            changedShoppingItemIDs: Set(
+                Set(shoppingItemsByID.keys).intersection(previous.shoppingItemsByID.keys).filter {
+                    shoppingItemsByID[$0] != previous.shoppingItemsByID[$0]
+                }
+            ),
+            changedShoppingBundleIDs: Set(
+                Set(shoppingBundlesByID.keys).intersection(previous.shoppingBundlesByID.keys).filter {
+                    shoppingBundlesByID[$0] != previous.shoppingBundlesByID[$0]
+                }
+            ),
+            changedWorkItemIDs: Set(
+                Set(workItemsByID.keys).intersection(previous.workItemsByID.keys).filter {
+                    workItemsByID[$0] != previous.workItemsByID[$0]
+                }
+            ),
+            changedBacklogCategoryIDs: Set(
+                Set(backlogCategoriesByID.keys).intersection(previous.backlogCategoriesByID.keys).filter {
+                    backlogCategoriesByID[$0] != previous.backlogCategoriesByID[$0]
+                }
+            )
         )
     }
 }
@@ -39,12 +180,32 @@ struct RemoteVisibleContentDiff: Equatable {
     let addedShoppingBundleCount: Int
     let addedWorkItemCount: Int
     let addedBacklogCategoryCount: Int
+    let removedShoppingItemCount: Int
+    let removedShoppingBundleCount: Int
+    let removedWorkItemCount: Int
+    let removedBacklogCategoryCount: Int
+    let changedShoppingItemIDs: Set<UUID>
+    let changedShoppingBundleIDs: Set<UUID>
+    let changedWorkItemIDs: Set<UUID>
+    let changedBacklogCategoryIDs: Set<UUID>
 
     var totalAddedCount: Int {
         addedShoppingTitles.count +
             addedShoppingBundleCount +
             addedWorkItemCount +
             addedBacklogCategoryCount
+    }
+
+    var hasAnyChange: Bool {
+        totalAddedCount > 0 ||
+            removedShoppingItemCount > 0 ||
+            removedShoppingBundleCount > 0 ||
+            removedWorkItemCount > 0 ||
+            removedBacklogCategoryCount > 0 ||
+            !changedShoppingItemIDs.isEmpty ||
+            !changedShoppingBundleIDs.isEmpty ||
+            !changedWorkItemIDs.isEmpty ||
+            !changedBacklogCategoryIDs.isEmpty
     }
 }
 
@@ -2126,45 +2287,132 @@ class HouseholdStore: ObservableObject {
     }
 
     private func remoteVisibleContentSnapshot(householdId: UUID) -> RemoteVisibleContentSnapshot {
-        let shoppingTitlesByID = Dictionary(
+        let shoppingItemsByID = Dictionary(
             uniqueKeysWithValues: fetchCachedShoppingItems(householdId: householdId)
                 .filter { $0.syncStatusRaw != "pendingDelete" }
-                .map { ($0.id, $0.title) }
+                .map {
+                    (
+                        $0.id,
+                        RemoteShoppingItemState(
+                            title: $0.title,
+                            isBought: $0.isBought,
+                            boughtAt: $0.boughtAt,
+                            restockCount: $0.restockCount,
+                            sortOrder: $0.sortOrder,
+                            updatedAt: $0.updatedAt
+                        )
+                    )
+                }
         )
-        let shoppingBundleIDs = Set(
-            fetchCachedShoppingBundles(householdId: householdId)
+        let shoppingBundlesByID = Dictionary(
+            uniqueKeysWithValues: fetchCachedShoppingBundles(householdId: householdId)
                 .filter {
                     $0.syncStatusRaw != "pendingDelete" &&
                         $0.syncStatusRaw != "awaitingDeleteEcho"
                 }
-                .map(\.id)
+                .map {
+                    (
+                        $0.id,
+                        RemoteShoppingBundleState(
+                            name: $0.name,
+                            updatedAt: $0.updatedAt
+                        )
+                    )
+                }
         )
-        let workItemIDs = Set(
-            fetchCachedWorkItems(householdId: householdId)
+        let workItemsByID = Dictionary(
+            uniqueKeysWithValues: fetchCachedWorkItems(householdId: householdId)
                 .filter { $0.syncStatusRaw != "pendingDelete" }
-                .map(\.id)
+                .map {
+                    (
+                        $0.id,
+                        RemoteWorkItemState(
+                            logicalItemID: $0.logicalItemID,
+                            title: $0.title,
+                            status: WorkItem.Status(rawValue: $0.statusRaw) ?? .idea,
+                            assigneeId: $0.assigneeId,
+                            assigneeIds: $0.toWorkItem().assigneeIds,
+                            completedAt: $0.completedAt,
+                            completedById: $0.completedById,
+                            order: $0.order,
+                            updatedAt: $0.updatedAt
+                        )
+                    )
+                }
         )
-        let backlogCategoryIDs = Set(
-            fetchCachedBacklogCategories(householdId: householdId)
-                .map(\.id)
+        let backlogCategoriesByID = Dictionary(
+            uniqueKeysWithValues: fetchCachedBacklogCategories(householdId: householdId)
+                .map {
+                    (
+                        $0.id,
+                        RemoteBacklogCategoryState(
+                            title: $0.title,
+                            sortOrder: $0.sortOrder,
+                            updatedAt: $0.updatedAt
+                        )
+                    )
+                }
         )
 
         return RemoteVisibleContentSnapshot(
-            shoppingTitlesByID: shoppingTitlesByID,
-            shoppingBundleIDs: shoppingBundleIDs,
-            workItemIDs: workItemIDs,
-            backlogCategoryIDs: backlogCategoryIDs
+            shoppingItemsByID: shoppingItemsByID,
+            shoppingBundlesByID: shoppingBundlesByID,
+            workItemsByID: workItemsByID,
+            backlogCategoriesByID: backlogCategoriesByID
         )
     }
 
-    private func remoteInsertedShoppingTitles(
-        before: [UUID: String],
-        after: [UUID: String]
-    ) -> [String] {
-        after.compactMap { id, title in
-            before[id] == nil ? title : nil
+    private func resolvedCelebrationMemberName(
+        userId: String,
+        householdId: UUID
+    ) -> String {
+        fetchCachedMembers(householdId: householdId)
+            .first(where: { $0.userId == userId && $0.isActive })?
+            .displayName ?? "A household member"
+    }
+
+    private func sharedTaskCelebrationAlert(
+        before: RemoteVisibleContentSnapshot,
+        after: RemoteVisibleContentSnapshot,
+        diff: RemoteVisibleContentDiff,
+        currentUserId: String,
+        householdId: UUID
+    ) -> (title: String, body: String)? {
+        let newlyCompleted = diff.changedWorkItemIDs.compactMap { id -> RemoteWorkItemState? in
+            guard let previous = before.workItemsByID[id],
+                  let current = after.workItemsByID[id],
+                  previous.status != .done,
+                  current.status == .done,
+                  let completedById = current.completedById,
+                  completedById != currentUserId
+            else {
+                return nil
+            }
+            return current
         }
-        .sorted()
+
+        guard let mostRecentCompletion = newlyCompleted.max(by: { $0.updatedAt < $1.updatedAt }),
+              let completedById = mostRecentCompletion.completedById
+        else {
+            return nil
+        }
+
+        let memberName = resolvedCelebrationMemberName(
+            userId: completedById,
+            householdId: householdId
+        )
+
+        if before.nextWorkItemCount > 0, after.nextWorkItemCount == 0 {
+            return (
+                title: "💙 \(memberName) is on fire!",
+                body: "Cleared all tasks! 🏡"
+            )
+        }
+
+        return (
+            title: "💙 \(memberName) is on fire!",
+            body: "\(mostRecentCompletion.title) — done!"
+        )
     }
 
     private func describeRemoteCloudRefreshSnapshot(_ snapshot: RemoteCloudRefreshSnapshot) -> String {
@@ -2511,7 +2759,8 @@ class HouseholdStore: ObservableObject {
 
     func handleRemoteCloudChange(
         userId: String?,
-        preferredHouseholdId: UUID?
+        preferredHouseholdId: UUID?,
+        context: RemoteCloudChangeContext = .unknown
     ) async -> UIBackgroundFetchResult {
         guard syncMode == .cloud else {
             print("[RemoteSync] Ignoring remote push because sync mode is local-only.")
@@ -2528,80 +2777,43 @@ class HouseholdStore: ObservableObject {
             preferredHouseholdId: preferredHouseholdId
         )
         let beforeVisibleContentSnapshot = beforeSnapshot.observedHouseholdId.map(remoteVisibleContentSnapshot)
-        var refreshedHydrationSnapshot = beforeSnapshot.hydrationSnapshot
         print(
             "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(beforeSnapshot))"
         )
 
-        await refreshCurrentHouseholdAndMembershipFromCloud(
+        let refreshedHydrationSnapshot: JoinedHouseholdHydrationSnapshot?
+        do {
+            refreshedHydrationSnapshot = try await refreshCurrentHouseholdForRemoteCloudChange(
+                userId: userId,
+                preferredHouseholdId: preferredHouseholdId
+            ) ?? beforeSnapshot.hydrationSnapshot
+        } catch {
+            self.error = error
+            print("[RemoteSync] Hydration pass failed: \(error)")
+            return .failed
+        }
+
+        let didVisibleContentChange = await processRemoteVisibleContentChangeIfNeeded(
+            beforeSnapshot: beforeSnapshot,
+            beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
             userId: userId,
-            preferredHouseholdId: preferredHouseholdId
+            context: context
         )
-
-        if let household = currentHousehold {
-            do {
-                let hydrationSnapshot = try await runJoinedHouseholdHydrationPass(
-                    household: household,
-                    userId: userId
-                )
-                refreshedHydrationSnapshot = hydrationSnapshot
-                applyPendingJoinHydrationSnapshot(
-                    hydrationSnapshot,
-                    householdId: household.id,
-                    userId: userId,
-                    publishVisibleContentNotifications: false
-                )
-                print(
-                    "[RemoteSync] Hydration pass finished for household \(household.id). members=\(hydrationSnapshot.activeMemberCount) tasks=\(hydrationSnapshot.taskCount) ideas=\(hydrationSnapshot.ideaCount) shopping=\(hydrationSnapshot.shoppingItemCount) bundles=\(hydrationSnapshot.bundleCount)"
-                )
-            } catch {
-                self.error = error
-                print("[RemoteSync] Hydration pass failed: \(error)")
-                return .failed
-            }
-        }
-
-        if let household = currentHousehold,
-           beforeSnapshot.observedHouseholdId == household.id,
-           let beforeVisibleContentSnapshot
-        {
-            let afterVisibleContentSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
-            let contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
-
-            if !contentDiff.addedShoppingTitles.isEmpty {
-                await NotificationService.shared.deliverSharedShoppingItemsAddedAlert(
-                    itemTitles: contentDiff.addedShoppingTitles,
-                    householdId: household.id,
-                    householdName: household.name
-                )
-            }
-
-            CloudKitSubscriptionManager.shared.publishHydratedRemoteChanges(
-                count: contentDiff.totalAddedCount,
-                shouldDeliverBackgroundNotification: contentDiff.totalAddedCount > 0 &&
-                    contentDiff.addedShoppingTitles.isEmpty
-            )
-        }
 
         let afterSnapshot = remoteCloudRefreshSnapshot(
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         )
-        let didChange =
-            lastRemoteCloudRefreshSnapshot != RemoteCloudRefreshSnapshot(
-                currentHouseholdId: afterSnapshot.currentHouseholdId,
-                observedHouseholdId: afterSnapshot.observedHouseholdId,
-                householdName: afterSnapshot.householdName,
-                householdIconSymbol: afterSnapshot.householdIconSymbol,
-                hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
-            )
-        lastRemoteCloudRefreshSnapshot = RemoteCloudRefreshSnapshot(
+        let refreshedSnapshot = RemoteCloudRefreshSnapshot(
             currentHouseholdId: afterSnapshot.currentHouseholdId,
             observedHouseholdId: afterSnapshot.observedHouseholdId,
             householdName: afterSnapshot.householdName,
             householdIconSymbol: afterSnapshot.householdIconSymbol,
             hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
         )
+        let didMetadataOrHydrationChange = lastRemoteCloudRefreshSnapshot != refreshedSnapshot
+        let didChange = didVisibleContentChange || didMetadataOrHydrationChange
+        lastRemoteCloudRefreshSnapshot = refreshedSnapshot
 
         if didChange {
             publishRemoteCloudRefreshNotifications(source: "remotePush")
@@ -2612,6 +2824,146 @@ class HouseholdStore: ObservableObject {
             "[RemoteSync] Background household refresh completed with result=\(describeBackgroundFetchResult(fetchResult)). after=\(describeRemoteCloudRefreshSnapshot(afterSnapshot))"
         )
         return fetchResult
+    }
+
+    private func refreshCurrentHouseholdForRemoteCloudChange(
+        userId: String,
+        preferredHouseholdId: UUID?
+    ) async throws -> JoinedHouseholdHydrationSnapshot? {
+        await refreshCurrentHouseholdAndMembershipFromCloud(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+
+        guard let household = currentHousehold else {
+            return nil
+        }
+
+        let hydrationSnapshot = try await runJoinedHouseholdHydrationPass(
+            household: household,
+            userId: userId
+        )
+        applyPendingJoinHydrationSnapshot(
+            hydrationSnapshot,
+            householdId: household.id,
+            userId: userId,
+            publishVisibleContentNotifications: false
+        )
+        print(
+            "[RemoteSync] Hydration pass finished for household \(household.id). members=\(hydrationSnapshot.activeMemberCount) tasks=\(hydrationSnapshot.taskCount) ideas=\(hydrationSnapshot.ideaCount) shopping=\(hydrationSnapshot.shoppingItemCount) bundles=\(hydrationSnapshot.bundleCount)"
+        )
+        return hydrationSnapshot
+    }
+
+    private func processRemoteVisibleContentChangeIfNeeded(
+        beforeSnapshot: RemoteCloudRefreshSnapshot,
+        beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?,
+        userId: String,
+        context: RemoteCloudChangeContext
+    ) async -> Bool {
+        guard let household = currentHousehold,
+              beforeSnapshot.observedHouseholdId == household.id,
+              let beforeVisibleContentSnapshot
+        else {
+            return false
+        }
+
+        let resolvedChange = await resolveRemoteVisibleContentChange(
+            household: household,
+            beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
+            userId: userId,
+            context: context
+        )
+        await deliverRemoteVisibleContentAlerts(
+            household: household,
+            beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
+            resolvedChange: resolvedChange,
+            currentUserId: userId
+        )
+        return resolvedChange.diff.hasAnyChange
+    }
+
+    private func resolveRemoteVisibleContentChange(
+        household: Household,
+        beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot,
+        userId: String,
+        context: RemoteCloudChangeContext
+    ) async -> (snapshot: RemoteVisibleContentSnapshot, diff: RemoteVisibleContentDiff) {
+        var afterVisibleContentSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
+        var contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
+
+        guard !contentDiff.hasAnyChange,
+              context.databaseScope == .shared,
+              household.ownerId == userId
+        else {
+            return (afterVisibleContentSnapshot, contentDiff)
+        }
+
+        for delay in [2.0, 5.0, 10.0] {
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: UInt64(delay * 1_000_000_000)
+            )
+            if let retryHydrationSnapshot = try? await runJoinedHouseholdHydrationPass(
+                household: household,
+                userId: userId
+            ) {
+                applyPendingJoinHydrationSnapshot(
+                    retryHydrationSnapshot,
+                    householdId: household.id,
+                    userId: userId,
+                    publishVisibleContentNotifications: false
+                )
+            }
+
+            afterVisibleContentSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
+            contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
+            if contentDiff.hasAnyChange {
+                print(
+                    "[RemoteSync] Owner follow-up refresh surfaced shared changes after \(delay)s for household \(household.id)."
+                )
+                break
+            }
+        }
+
+        return (afterVisibleContentSnapshot, contentDiff)
+    }
+
+    private func deliverRemoteVisibleContentAlerts(
+        household: Household,
+        beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot,
+        resolvedChange: (snapshot: RemoteVisibleContentSnapshot, diff: RemoteVisibleContentDiff),
+        currentUserId: String
+    ) async {
+        let afterVisibleContentSnapshot = resolvedChange.snapshot
+        let contentDiff = resolvedChange.diff
+
+        if !contentDiff.addedShoppingTitles.isEmpty {
+            await NotificationService.shared.deliverSharedShoppingItemsAddedAlert(
+                itemTitles: contentDiff.addedShoppingTitles,
+                householdId: household.id,
+                householdName: household.name
+            )
+        }
+
+        if let celebrationAlert = sharedTaskCelebrationAlert(
+            before: beforeVisibleContentSnapshot,
+            after: afterVisibleContentSnapshot,
+            diff: contentDiff,
+            currentUserId: currentUserId,
+            householdId: household.id
+        ) {
+            await NotificationService.shared.deliverHouseholdCelebrationAlert(
+                title: celebrationAlert.title,
+                body: celebrationAlert.body,
+                householdId: household.id
+            )
+        }
+
+        CloudKitSubscriptionManager.shared.publishHydratedRemoteChanges(
+            count: contentDiff.totalAddedCount,
+            shouldDeliverBackgroundNotification: contentDiff.totalAddedCount > 0 &&
+                contentDiff.addedShoppingTitles.isEmpty
+        )
     }
 
     private func resolveRecoverableCloudHousehold(

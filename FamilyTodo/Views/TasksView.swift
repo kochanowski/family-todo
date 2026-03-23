@@ -780,12 +780,6 @@ private struct TasksContent: View {
                         HapticManager.success()
                         if themeStore.celebrationsEnabled {
                             celebrationManager.celebrateAllTasksComplete()
-                            if activeMembers.count > 1, let name = currentMember?.displayName {
-                                celebrationManager.notifyPartner(
-                                    completedBy: name,
-                                    action: "Cleared all tasks! 🏡"
-                                )
-                            }
                         }
                     } else {
                         HapticManager.mediumTap()
@@ -795,12 +789,6 @@ private struct TasksContent: View {
                                 taskTitle: task.title,
                                 weeklyCompletedCount: weeklyCompletedCount
                             )
-                            if activeMembers.count > 1, let name = currentMember?.displayName {
-                                celebrationManager.notifyPartner(
-                                    completedBy: name,
-                                    action: "\(task.title) — done!"
-                                )
-                            }
                         }
                     }
                 }

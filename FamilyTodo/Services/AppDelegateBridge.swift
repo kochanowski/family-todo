@@ -2,11 +2,41 @@ import CloudKit
 import UIKit
 import UserNotifications
 
+struct RemoteCloudChangeContext: Equatable {
+    let databaseScope: CKDatabase.Scope?
+    let notificationType: CKNotification.NotificationType
+    let receivedAt: Date
+
+    static let unknown = RemoteCloudChangeContext(
+        databaseScope: nil,
+        notificationType: .readNotification,
+        receivedAt: Date.distantPast
+    )
+
+    func merged(with newer: RemoteCloudChangeContext) -> RemoteCloudChangeContext {
+        let preferredScope: CKDatabase.Scope? = if databaseScope == .shared || newer.databaseScope == .shared {
+            .shared
+        } else if databaseScope == .private || newer.databaseScope == .private {
+            .private
+        } else {
+            newer.databaseScope ?? databaseScope
+        }
+
+        return RemoteCloudChangeContext(
+            databaseScope: preferredScope,
+            notificationType: newer.notificationType,
+            receivedAt: max(receivedAt, newer.receivedAt)
+        )
+    }
+}
+
 @MainActor
 final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     weak var shareAcceptanceCoordinator: ShareAcceptanceCoordinator?
-    var remoteCloudChangeHandler: (@MainActor () async -> UIBackgroundFetchResult)?
+    var remoteCloudChangeHandler: (@MainActor (RemoteCloudChangeContext) async -> UIBackgroundFetchResult)?
     private var pendingMetadata: CKShare.Metadata?
+    private var activeRemoteRefreshTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
+    private var pendingRemoteRefreshContext: RemoteCloudChangeContext?
 
     func installNotificationCenterDelegate() {
         UNUserNotificationCenter.current().delegate = self
@@ -39,8 +69,38 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
             return
         }
 
+        let context = remoteCloudChangeContext(for: notification)
+        pendingRemoteRefreshContext = pendingRemoteRefreshContext?.merged(with: context) ?? context
+
+        if let activeRemoteRefreshTask {
+            _ = _Concurrency.Task { @MainActor in
+                let result = await activeRemoteRefreshTask.value
+                completionHandler(result)
+            }
+            return
+        }
+
+        let refreshTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return UIBackgroundFetchResult.noData }
+
+            var aggregateResult: UIBackgroundFetchResult = .noData
+
+            while let nextContext = pendingRemoteRefreshContext {
+                pendingRemoteRefreshContext = nil
+                let result = await remoteCloudChangeHandler(nextContext)
+                aggregateResult = mergedBackgroundFetchResult(
+                    aggregateResult,
+                    with: result
+                )
+            }
+
+            activeRemoteRefreshTask = nil
+            return aggregateResult
+        }
+        activeRemoteRefreshTask = refreshTask
+
         _ = _Concurrency.Task { @MainActor in
-            let result = await remoteCloudChangeHandler()
+            let result = await refreshTask.value
             print("[RemoteSync] AppDelegate completed background push refresh with result \(backgroundFetchResultLabel(result)).")
             completionHandler(result)
         }
@@ -98,6 +158,35 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         @unknown default:
             "unknown"
         }
+    }
+
+    private func remoteCloudChangeContext(
+        for notification: CKNotification
+    ) -> RemoteCloudChangeContext {
+        let databaseScope: CKDatabase.Scope? = if let databaseNotification = notification as? CKDatabaseNotification {
+            databaseNotification.databaseScope
+        } else {
+            nil
+        }
+
+        return RemoteCloudChangeContext(
+            databaseScope: databaseScope,
+            notificationType: notification.notificationType,
+            receivedAt: Date()
+        )
+    }
+
+    private func mergedBackgroundFetchResult(
+        _ lhs: UIBackgroundFetchResult,
+        with rhs: UIBackgroundFetchResult
+    ) -> UIBackgroundFetchResult {
+        if lhs == .failed || rhs == .failed {
+            return .failed
+        }
+        if lhs == .newData || rhs == .newData {
+            return .newData
+        }
+        return .noData
     }
 
     private func backgroundFetchResultLabel(_ result: UIBackgroundFetchResult) -> String {
