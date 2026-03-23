@@ -217,7 +217,9 @@ jobs:
   cloudkit-schema:
     name: CloudKit Schema Gate
     needs: [swiftlint]
-    # On the sync-fix branch, run schema validation + development apply without waiting for Apple build jobs.
+    # On the sync-fix branch, keep schema validation in push CI but avoid re-applying dev schema,
+    # because InviteToken security roles are still manually managed in CloudKit Console.
+    # Use workflow_dispatch when you intentionally want to run a development apply on this branch.
     if: >
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/v') ||
@@ -231,7 +233,7 @@ jobs:
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
       promote_to_production: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      dry_run: false
+      dry_run: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/tasks-ideas-sync' }}
       schema_source: cloudkit/schema/housepulse-schema.json
     secrets: inherit
 
