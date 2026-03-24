@@ -88,6 +88,9 @@ private struct TasksContent: View {
     @State private var pendingCleanupAction: CompletedCleanupAction?
     @State private var pendingDeletedTask: Task?
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
+    @State private var remoteHighlightedTaskIDs: Set<UUID> = []
+    @State private var isApplyingRemoteSyncAnimation = false
+    @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
     @State private var processingMovedToIdeasIds: Set<UUID> = []
@@ -246,13 +249,13 @@ private struct TasksContent: View {
                 store.rehydrateVisibleSnapshotFromCache()
                 markTasksTutorialAsSeenIfNeeded()
             } else if selectedTab == .tasks {
-                _ = _Concurrency.Task {
-                    await refreshData()
-                    markTasksTutorialAsSeenIfNeeded()
-                }
+                handleRemoteTaskBoardChange(notification)
             } else {
                 store.replayPendingMutationsIfNeeded()
             }
+        }
+        .onDisappear {
+            cancelRemoteSyncAnimationReset()
         }
         .sheet(item: $pendingCleanupAction) { action in
             AppConfirmationSheet(
@@ -409,6 +412,11 @@ private struct TasksContent: View {
                     }
                 }
                 .accessibilityIdentifier("taskRow_\(task.title)")
+                .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
+                .remoteSyncHighlight(
+                    isActive: remoteHighlightedTaskIDs.contains(task.id),
+                    cornerRadius: 8
+                )
                 .tasksListRowStyle(taskListRowInsets)
             }
         }
@@ -448,6 +456,11 @@ private struct TasksContent: View {
                 .tint(.orange)
             }
             .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+            .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
+            .remoteSyncHighlight(
+                isActive: remoteHighlightedTaskIDs.contains(task.id),
+                cornerRadius: 8
+            )
             .tasksListRowStyle(taskListRowInsets)
         }
         .animation(.default, value: completedTaskAnimationIDs)
@@ -1118,6 +1131,58 @@ private struct TasksContent: View {
 
     private func isLocalStoreNotification(_ notification: Notification) -> Bool {
         (notification.object as? String) == "local"
+    }
+
+    private func handleRemoteTaskBoardChange(_ notification: Notification) {
+        let beforeVisibleLocations = visibleTaskLocations()
+        let changedIDs = notification.remoteSyncAnimationPayload?.workItemChangedIDs ?? []
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        withAnimation(WowAnimation.spring) {
+            store.rehydrateVisibleSnapshotFromCache()
+        }
+
+        let afterVisibleLocations = visibleTaskLocations()
+        let delta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: beforeVisibleLocations,
+            afterLocations: afterVisibleLocations,
+            changedIDs: changedIDs
+        )
+
+        remoteHighlightedTaskIDs = delta.highlightedIDs
+        scheduleRemoteSyncAnimationReset()
+        markTasksTutorialAsSeenIfNeeded()
+    }
+
+    private func visibleTaskLocations() -> [UUID: Int] {
+        let visibleTasks = activeFilter == .active ? filteredActiveTasks : filteredCompletedTasks
+        return Dictionary(uniqueKeysWithValues: visibleTasks.map { ($0.id, 0) })
+    }
+
+    private func scheduleRemoteSyncAnimationReset() {
+        remoteSyncResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncStructureResetNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            isApplyingRemoteSyncAnimation = false
+
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncHighlightDurationNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            remoteHighlightedTaskIDs.removeAll()
+            remoteSyncResetTask = nil
+        }
+    }
+
+    private func cancelRemoteSyncAnimationReset() {
+        remoteSyncResetTask?.cancel()
+        remoteSyncResetTask = nil
+        isApplyingRemoteSyncAnimation = false
+        remoteHighlightedTaskIDs.removeAll()
     }
 
     private func queueDeleteTask(_ task: Task) {

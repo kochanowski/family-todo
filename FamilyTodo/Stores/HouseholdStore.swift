@@ -2271,11 +2271,54 @@ class HouseholdStore: ObservableObject {
         )
     }
 
-    private func publishRemoteCloudRefreshNotifications(source: String) {
-        NotificationCenter.default.post(name: .householdDataDidChange, object: source)
-        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: source)
-        NotificationCenter.default.post(name: .shoppingListDataDidChange, object: source)
-        NotificationCenter.default.post(name: .backlogDataDidChange, object: source)
+    private func publishRemoteCloudRefreshNotifications(
+        source: String,
+        remoteVisibleContentDiff: RemoteVisibleContentDiff? = nil
+    ) {
+        let userInfo = remoteSyncNotificationUserInfo(
+            source: source,
+            diff: remoteVisibleContentDiff
+        )
+        NotificationCenter.default.post(
+            name: .householdDataDidChange,
+            object: source,
+            userInfo: userInfo
+        )
+        NotificationCenter.default.post(
+            name: .taskBoardDataDidChange,
+            object: source,
+            userInfo: userInfo
+        )
+        NotificationCenter.default.post(
+            name: .shoppingListDataDidChange,
+            object: source,
+            userInfo: userInfo
+        )
+        NotificationCenter.default.post(
+            name: .backlogDataDidChange,
+            object: source,
+            userInfo: userInfo
+        )
+    }
+
+    private func remoteSyncNotificationUserInfo(
+        source: String,
+        diff: RemoteVisibleContentDiff?
+    ) -> [AnyHashable: Any]? {
+        guard source == "remotePush" else { return nil }
+
+        return [
+            RemoteSyncNotificationPayloadKey.batchToken: UUID().uuidString,
+            RemoteSyncNotificationPayloadKey.shoppingChangedItemIDs: Array(
+                diff?.changedShoppingItemIDs.map(\.uuidString) ?? []
+            ),
+            RemoteSyncNotificationPayloadKey.workItemChangedIDs: Array(
+                diff?.changedWorkItemIDs.map(\.uuidString) ?? []
+            ),
+            RemoteSyncNotificationPayloadKey.backlogChangedCategoryIDs: Array(
+                diff?.changedBacklogCategoryIDs.map(\.uuidString) ?? []
+            ),
+        ]
     }
 
     private func shoppingItemTitleSnapshot(householdId: UUID) -> [UUID: String] {
@@ -2793,7 +2836,7 @@ class HouseholdStore: ObservableObject {
             return .failed
         }
 
-        let didVisibleContentChange = await processRemoteVisibleContentChangeIfNeeded(
+        let visibleContentDiff = await processRemoteVisibleContentChangeIfNeeded(
             beforeSnapshot: beforeSnapshot,
             beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
             userId: userId,
@@ -2811,12 +2854,16 @@ class HouseholdStore: ObservableObject {
             householdIconSymbol: afterSnapshot.householdIconSymbol,
             hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
         )
+        let didVisibleContentChange = visibleContentDiff?.hasAnyChange == true
         let didMetadataOrHydrationChange = lastRemoteCloudRefreshSnapshot != refreshedSnapshot
         let didChange = didVisibleContentChange || didMetadataOrHydrationChange
         lastRemoteCloudRefreshSnapshot = refreshedSnapshot
 
         if didChange {
-            publishRemoteCloudRefreshNotifications(source: "remotePush")
+            publishRemoteCloudRefreshNotifications(
+                source: "remotePush",
+                remoteVisibleContentDiff: visibleContentDiff
+            )
         }
 
         let fetchResult: UIBackgroundFetchResult = didChange ? .newData : .noData
@@ -2860,12 +2907,12 @@ class HouseholdStore: ObservableObject {
         beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?,
         userId: String,
         context: RemoteCloudChangeContext
-    ) async -> Bool {
+    ) async -> RemoteVisibleContentDiff? {
         guard let household = currentHousehold,
               beforeSnapshot.observedHouseholdId == household.id,
               let beforeVisibleContentSnapshot
         else {
-            return false
+            return nil
         }
 
         let resolvedChange = await resolveRemoteVisibleContentChange(
@@ -2880,7 +2927,7 @@ class HouseholdStore: ObservableObject {
             resolvedChange: resolvedChange,
             currentUserId: userId
         )
-        return resolvedChange.diff.hasAnyChange
+        return resolvedChange.diff
     }
 
     private func resolveRemoteVisibleContentChange(

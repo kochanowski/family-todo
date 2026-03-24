@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 // MARK: - Animation Tokens
@@ -23,9 +24,87 @@ enum WowAnimation {
     static func staggerDelay(index: Int) -> Double {
         Double(index) * 0.05
     }
+
+    static let remoteSyncHighlightDurationNanoseconds: UInt64 = 1_800_000_000
+    static let remoteSyncStructureResetNanoseconds: UInt64 = 420_000_000
 }
 
 // MARK: - View Modifiers for Common Animations
+
+struct RemoteSyncVisibleDelta: Equatable {
+    let insertedIDs: Set<UUID>
+    let updatedIDs: Set<UUID>
+    let removedIDs: Set<UUID>
+
+    var highlightedIDs: Set<UUID> {
+        insertedIDs.union(updatedIDs)
+    }
+}
+
+enum RemoteSyncVisibleDeltaResolver {
+    static func resolve<Location: Equatable>(
+        beforeLocations: [UUID: Location],
+        afterLocations: [UUID: Location],
+        changedIDs: Set<UUID>
+    ) -> RemoteSyncVisibleDelta {
+        let beforeIDs = Set(beforeLocations.keys)
+        let afterIDs = Set(afterLocations.keys)
+        let sharedIDs = beforeIDs.intersection(afterIDs)
+
+        let movedIDs = Set(sharedIDs.filter { beforeLocations[$0] != afterLocations[$0] })
+        let insertedIDs = afterIDs.subtracting(beforeIDs).union(movedIDs)
+        let removedIDs = beforeIDs.subtracting(afterIDs).union(movedIDs)
+        let updatedIDs = Set(sharedIDs.filter {
+            beforeLocations[$0] == afterLocations[$0] && changedIDs.contains($0)
+        })
+
+        return RemoteSyncVisibleDelta(
+            insertedIDs: insertedIDs,
+            updatedIDs: updatedIDs,
+            removedIDs: removedIDs
+        )
+    }
+}
+
+enum RemoteSyncNotificationPayloadKey {
+    static let batchToken = "remoteSync.batchToken"
+    static let shoppingChangedItemIDs = "remoteSync.shopping.changedItemIDs"
+    static let workItemChangedIDs = "remoteSync.workItem.changedIDs"
+    static let backlogChangedCategoryIDs = "remoteSync.backlog.changedCategoryIDs"
+}
+
+struct RemoteSyncAnimationPayload: Equatable {
+    let batchToken: UUID
+    let shoppingChangedItemIDs: Set<UUID>
+    let workItemChangedIDs: Set<UUID>
+    let backlogChangedCategoryIDs: Set<UUID>
+}
+
+extension Notification {
+    var remoteSyncAnimationPayload: RemoteSyncAnimationPayload? {
+        guard (object as? String) == "remotePush",
+              let userInfo,
+              let batchTokenString = userInfo[RemoteSyncNotificationPayloadKey.batchToken] as? String,
+              let batchToken = UUID(uuidString: batchTokenString)
+        else {
+            return nil
+        }
+
+        return RemoteSyncAnimationPayload(
+            batchToken: batchToken,
+            shoppingChangedItemIDs: remoteSyncUUIDSet(for: RemoteSyncNotificationPayloadKey.shoppingChangedItemIDs),
+            workItemChangedIDs: remoteSyncUUIDSet(for: RemoteSyncNotificationPayloadKey.workItemChangedIDs),
+            backlogChangedCategoryIDs: remoteSyncUUIDSet(
+                for: RemoteSyncNotificationPayloadKey.backlogChangedCategoryIDs
+            )
+        )
+    }
+
+    private func remoteSyncUUIDSet(for key: String) -> Set<UUID> {
+        guard let rawValues = userInfo?[key] as? [String] else { return [] }
+        return Set(rawValues.compactMap(UUID.init(uuidString:)))
+    }
+}
 
 extension View {
     /// Apply standard row insertion animation
@@ -55,6 +134,19 @@ extension View {
     /// Crossfade transition for appearance changes
     func crossfadeTransition() -> some View {
         transition(.opacity.animation(.easeInOut(duration: WowAnimation.duration)))
+    }
+
+    func remoteSyncStructuralTransition(enabled: Bool) -> some View {
+        modifier(RemoteSyncStructuralTransitionModifier(enabled: enabled))
+    }
+
+    func remoteSyncHighlight(isActive: Bool, cornerRadius: CGFloat) -> some View {
+        modifier(
+            RemoteSyncHighlightModifier(
+                isActive: isActive,
+                cornerRadius: cornerRadius
+            )
+        )
     }
 }
 
@@ -90,5 +182,66 @@ private struct PulseAnimationModifier: ViewModifier {
                 }
             }
             .animation(WowAnimation.quickSpring, value: isPulsing)
+    }
+}
+
+private struct RemoteSyncStructuralTransitionModifier: ViewModifier {
+    let enabled: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transition(enabled ? activeTransition : .identity)
+    }
+
+    private var activeTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+
+        return .asymmetric(
+            insertion: .opacity
+                .combined(with: .scale(scale: 0.985))
+                .combined(with: .offset(y: 6)),
+            removal: .opacity
+                .combined(with: .scale(scale: 0.985))
+                .combined(with: .offset(y: -6))
+        )
+    }
+}
+
+private struct RemoteSyncHighlightModifier: ViewModifier {
+    let isActive: Bool
+    let cornerRadius: CGFloat
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(themeStore.accentTabColor.opacity(fillOpacity))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .stroke(themeStore.accentTabColor.opacity(strokeOpacity), lineWidth: 1)
+                    }
+                    .allowsHitTesting(false)
+            }
+            .animation(highlightAnimation, value: isActive)
+    }
+
+    private var highlightAnimation: Animation {
+        reduceMotion ? .easeOut(duration: WowAnimation.quick) : WowAnimation.quickSpring
+    }
+
+    private var fillOpacity: Double {
+        guard isActive else { return 0 }
+        return themeStore.usesRetroChrome ? 0.16 : 0.12
+    }
+
+    private var strokeOpacity: Double {
+        guard isActive else { return 0 }
+        return themeStore.usesRetroChrome ? 0.32 : 0.22
     }
 }

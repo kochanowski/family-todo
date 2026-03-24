@@ -74,6 +74,11 @@ private struct BacklogContent: View {
     @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
+    @State private var remoteHighlightedItemIDs: Set<UUID> = []
+    @State private var remoteHighlightedCategoryIDs: Set<UUID> = []
+    @State private var lastProcessedRemoteAnimationBatchToken: UUID?
+    @State private var isApplyingRemoteSyncAnimation = false
+    @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
     @State private var armedPromotionTipItemID: UUID?
@@ -139,6 +144,11 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
+                                    highlightedItemIDs: remoteHighlightedItemIDs,
+                                    isCategoryHighlighted: remoteHighlightedCategoryIDs.contains(
+                                        category.id
+                                    ),
+                                    isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
                                     appTipRuntimeGeneration: appTipRuntimeGeneration,
                                     addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
                                     ideaAssignTipItemID: ideaAssignTipAnchorItemID,
@@ -237,11 +247,10 @@ private struct BacklogContent: View {
             if selectedNotificationIsLocal(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else if selectedTab == .backlog {
+                handleRemoteBacklogRefresh(notification)
             } else {
-                _ = _Concurrency.Task {
-                    await loadBacklogData()
-                    markIdeasTutorialAsSeenIfNeeded()
-                }
+                store.replayPendingMutationsIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { notification in
@@ -255,11 +264,10 @@ private struct BacklogContent: View {
                 hiddenPendingPromotionIds.subtract(activeItemIds)
                 syncPromotionTipAnchorWithVisibleItems()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else if selectedTab == .backlog {
+                handleRemoteBacklogRefresh(notification)
             } else {
-                _ = _Concurrency.Task {
-                    await loadBacklogData()
-                    markIdeasTutorialAsSeenIfNeeded()
-                }
+                store.replayPendingMutationsIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
@@ -271,6 +279,9 @@ private struct BacklogContent: View {
                     await memberStore.loadMembersForDisplay()
                 }
             }
+        }
+        .onDisappear {
+            cancelRemoteSyncAnimationReset()
         }
         .sheet(isPresented: $isAddingCategory) {
             CategoryEditorSheet(
@@ -726,6 +737,87 @@ private struct BacklogContent: View {
         (notification.object as? String) == "local"
     }
 
+    private func handleRemoteBacklogRefresh(_ notification: Notification) {
+        let payload = notification.remoteSyncAnimationPayload
+        if let batchToken = payload?.batchToken,
+           lastProcessedRemoteAnimationBatchToken == batchToken
+        {
+            return
+        }
+
+        let beforeCategoryLocations = backlogCategoryLocations()
+        let beforeIdeaLocations = backlogIdeaLocations()
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        withAnimation(WowAnimation.spring) {
+            store.rehydrateVisibleSnapshotFromCache()
+        }
+
+        let afterCategoryLocations = backlogCategoryLocations()
+        let afterIdeaLocations = backlogIdeaLocations()
+
+        let categoryDelta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: beforeCategoryLocations,
+            afterLocations: afterCategoryLocations,
+            changedIDs: payload?.backlogChangedCategoryIDs ?? []
+        )
+        let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: beforeIdeaLocations,
+            afterLocations: afterIdeaLocations,
+            changedIDs: payload?.workItemChangedIDs ?? []
+        )
+
+        remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
+        remoteHighlightedItemIDs = itemDelta.highlightedIDs
+
+        if let batchToken = payload?.batchToken {
+            lastProcessedRemoteAnimationBatchToken = batchToken
+        }
+
+        let activeItemIds = Set(store.items.map(\.id))
+        hiddenPendingPromotionIds.subtract(activeItemIds)
+        syncPromotionTipAnchorWithVisibleItems()
+        scheduleRemoteSyncAnimationReset()
+        markIdeasTutorialAsSeenIfNeeded()
+    }
+
+    private func backlogCategoryLocations() -> [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: store.categories.map { ($0.id, 0) })
+    }
+
+    private func backlogIdeaLocations() -> [UUID: UUID] {
+        let visibleIdeas = store.categories.flatMap { visibleItems(for: $0.id) }
+        return Dictionary(uniqueKeysWithValues: visibleIdeas.map { ($0.id, $0.categoryId) })
+    }
+
+    private func scheduleRemoteSyncAnimationReset() {
+        remoteSyncResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncStructureResetNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            isApplyingRemoteSyncAnimation = false
+
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncHighlightDurationNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            remoteHighlightedItemIDs.removeAll()
+            remoteHighlightedCategoryIDs.removeAll()
+            remoteSyncResetTask = nil
+        }
+    }
+
+    private func cancelRemoteSyncAnimationReset() {
+        remoteSyncResetTask?.cancel()
+        remoteSyncResetTask = nil
+        isApplyingRemoteSyncAnimation = false
+        remoteHighlightedItemIDs.removeAll()
+        remoteHighlightedCategoryIDs.removeAll()
+    }
+
     private func activateComposer(for categoryId: UUID, scrollProxy: ScrollViewProxy) {
         activeComposerCategoryId = categoryId
         composerText = ""
@@ -1058,6 +1150,9 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let highlightedItemIDs: Set<UUID>
+    let isCategoryHighlighted: Bool
+    let isApplyingRemoteSyncAnimation: Bool
     let appTipRuntimeGeneration: Int
     let addIdeaTipCategoryID: UUID?
     let ideaAssignTipItemID: UUID?
@@ -1137,6 +1232,7 @@ struct CategoryCard: View {
                     BacklogItemRow(
                         item: item,
                         assignee: assigneeFor(item.assigneeId),
+                        isHighlighted: highlightedItemIDs.contains(item.id),
                         appTipRuntimeGeneration: appTipRuntimeGeneration,
                         canPromote: canPromote,
                         isPromotionDisabled: isPromoting,
@@ -1165,6 +1261,7 @@ struct CategoryCard: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
+                    .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
                 }
             }
             .padding(.horizontal, 8)
@@ -1233,6 +1330,10 @@ struct CategoryCard: View {
                 .accessibilityHint("Tap to add an idea to this category.")
             }
         }
+        .remoteSyncHighlight(
+            isActive: isCategoryHighlighted,
+            cornerRadius: 12
+        )
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
@@ -1323,6 +1424,7 @@ struct BacklogItemRow: View {
 
     let item: BacklogItem
     let assignee: Member?
+    let isHighlighted: Bool
     let appTipRuntimeGeneration: Int
     let canPromote: Bool
     let isPromotionDisabled: Bool
@@ -1395,6 +1497,7 @@ struct BacklogItemRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(colorScheme == .dark ? Color.white.opacity(0.06) : .white)
         }
+        .remoteSyncHighlight(isActive: isHighlighted, cornerRadius: 10)
         .animation(.easeInOut(duration: 0.2), value: canPromote)
     }
 

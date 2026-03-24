@@ -63,6 +63,9 @@ private struct ShoppingListContent: View {
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
+    @State private var remoteHighlightedItemIDs: Set<UUID> = []
+    @State private var isApplyingRemoteSyncAnimation = false
+    @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var shouldRearmBundleQuickAddTipOnNextAppear = false
     @AppStorage(AppTipProgressKey.shoppingTutorialSeen) private var hasSeenShoppingTutorial = false
     @AppStorage(AppTipProgressKey.shoppingFirstAddCompleted)
@@ -146,9 +149,7 @@ private struct ShoppingListContent: View {
                 if isLocalStoreNotification(notification) {
                     store.rehydrateVisibleSnapshotFromCache()
                 } else if selectedTab == .shopping {
-                    _ = _Concurrency.Task {
-                        await loadShoppingData()
-                    }
+                    handleRemoteShoppingListChange(notification)
                 } else {
                     store.replayPendingMutationsIfNeeded()
                 }
@@ -206,6 +207,7 @@ private struct ShoppingListContent: View {
                 isScreenVisible = false
                 cancelPendingShoppingCompletionCelebration()
                 cancelToastDismiss()
+                cancelRemoteSyncAnimationReset()
             }
             .onChange(of: showQuickAddBundleChooser) { _, isPresented in
                 if !isPresented {
@@ -379,6 +381,11 @@ private struct ShoppingListContent: View {
                 }
             }
         }
+        .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
+        .remoteSyncHighlight(
+            isActive: remoteHighlightedItemIDs.contains(item.id),
+            cornerRadius: 10
+        )
         .listRowInsets(shoppingRowInsets)
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
@@ -825,6 +832,62 @@ private struct ShoppingListContent: View {
 
     private func isLocalStoreNotification(_ notification: Notification) -> Bool {
         (notification.object as? String) == "local"
+    }
+
+    private func handleRemoteShoppingListChange(_ notification: Notification) {
+        let beforeVisibleLocations = shoppingVisibleLocations(from: store.toBuyItems)
+        let changedIDs = notification.remoteSyncAnimationPayload?.shoppingChangedItemIDs ?? []
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        withAnimation(WowAnimation.spring) {
+            store.rehydrateVisibleSnapshotFromCache()
+        }
+
+        let afterVisibleLocations = shoppingVisibleLocations(from: store.toBuyItems)
+        let delta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: beforeVisibleLocations,
+            afterLocations: afterVisibleLocations,
+            changedIDs: changedIDs
+        )
+
+        remoteHighlightedItemIDs = delta.highlightedIDs
+
+        _ = _Concurrency.Task {
+            await bundleStore.loadBundlesForDisplay()
+        }
+
+        scheduleRemoteSyncAnimationReset()
+        markShoppingTutorialAsSeenIfNeeded()
+    }
+
+    private func shoppingVisibleLocations(from items: [ShoppingItem]) -> [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: items.map { ($0.id, 0) })
+    }
+
+    private func scheduleRemoteSyncAnimationReset() {
+        remoteSyncResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncStructureResetNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            isApplyingRemoteSyncAnimation = false
+
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncHighlightDurationNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            remoteHighlightedItemIDs.removeAll()
+            remoteSyncResetTask = nil
+        }
+    }
+
+    private func cancelRemoteSyncAnimationReset() {
+        remoteSyncResetTask?.cancel()
+        remoteSyncResetTask = nil
+        isApplyingRemoteSyncAnimation = false
+        remoteHighlightedItemIDs.removeAll()
     }
 
     private func scheduleShoppingCompletionCelebration() {

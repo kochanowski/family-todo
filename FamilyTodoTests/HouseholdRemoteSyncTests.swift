@@ -731,3 +731,82 @@ final class SharedShoppingNotificationAccumulatorTests: XCTestCase {
         XCTAssertEqual(trailingBatch.first?.itemTitles, ["Bread"])
     }
 }
+
+final class RemoteSyncAnimationSupportTests: XCTestCase {
+    func testVisibleDeltaMarksInsertedRemovedAndUpdatedIDs() {
+        let insertedID = UUID()
+        let updatedID = UUID()
+        let removedID = UUID()
+
+        let delta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: [
+                updatedID: 0,
+                removedID: 0,
+            ],
+            afterLocations: [
+                insertedID: 0,
+                updatedID: 0,
+            ],
+            changedIDs: [updatedID]
+        )
+
+        XCTAssertEqual(delta.insertedIDs, [insertedID])
+        XCTAssertEqual(delta.updatedIDs, [updatedID])
+        XCTAssertEqual(delta.removedIDs, [removedID])
+        XCTAssertEqual(delta.highlightedIDs, [insertedID, updatedID])
+    }
+
+    func testVisibleDeltaTreatsLocationChangesAsRemovalAndInsertion() {
+        let movedID = UUID()
+        let oldCategoryID = UUID()
+        let newCategoryID = UUID()
+
+        let delta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: [movedID: oldCategoryID],
+            afterLocations: [movedID: newCategoryID],
+            changedIDs: [movedID]
+        )
+
+        XCTAssertEqual(delta.insertedIDs, [movedID])
+        XCTAssertEqual(delta.updatedIDs, [])
+        XCTAssertEqual(delta.removedIDs, [movedID])
+        XCTAssertEqual(delta.highlightedIDs, [movedID])
+    }
+
+    func testVisibleDeltaDoesNotHighlightUnchangedSharedIDs() {
+        let unchangedID = UUID()
+        let delta = RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: [unchangedID: 0],
+            afterLocations: [unchangedID: 0],
+            changedIDs: []
+        )
+
+        XCTAssertEqual(delta.insertedIDs, [])
+        XCTAssertEqual(delta.updatedIDs, [])
+        XCTAssertEqual(delta.removedIDs, [])
+        XCTAssertEqual(delta.highlightedIDs, [])
+    }
+
+    func testRemoteSyncNotificationPayloadReadsUUIDSetsFromUserInfo() throws {
+        let batchToken = UUID()
+        let shoppingID = UUID()
+        let workItemID = UUID()
+        let categoryID = UUID()
+        let notification = Notification(
+            name: .shoppingListDataDidChange,
+            object: "remotePush",
+            userInfo: [
+                RemoteSyncNotificationPayloadKey.batchToken: batchToken.uuidString,
+                RemoteSyncNotificationPayloadKey.shoppingChangedItemIDs: [shoppingID.uuidString],
+                RemoteSyncNotificationPayloadKey.workItemChangedIDs: [workItemID.uuidString],
+                RemoteSyncNotificationPayloadKey.backlogChangedCategoryIDs: [categoryID.uuidString],
+            ]
+        )
+
+        let payload = try XCTUnwrap(notification.remoteSyncAnimationPayload)
+        XCTAssertEqual(payload.batchToken, batchToken)
+        XCTAssertEqual(payload.shoppingChangedItemIDs, [shoppingID])
+        XCTAssertEqual(payload.workItemChangedIDs, [workItemID])
+        XCTAssertEqual(payload.backlogChangedCategoryIDs, [categoryID])
+    }
+}
