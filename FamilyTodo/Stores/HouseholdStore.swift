@@ -173,6 +173,23 @@ struct RemoteVisibleContentSnapshot: Equatable {
             )
         )
     }
+
+    func taskContentDiff(from previous: RemoteVisibleContentSnapshot) -> RemoteTaskVisibleContentDiff {
+        let previousTasksByID = previous.workItemsByID.filter { $0.value.status != .idea }
+        let currentTasksByID = workItemsByID.filter { $0.value.status != .idea }
+        let previousTaskIDs = Set(previousTasksByID.keys)
+        let currentTaskIDs = Set(currentTasksByID.keys)
+
+        return RemoteTaskVisibleContentDiff(
+            addedTaskCount: currentTaskIDs.subtracting(previousTaskIDs).count,
+            removedTaskCount: previousTaskIDs.subtracting(currentTaskIDs).count,
+            changedTaskIDs: Set(
+                currentTaskIDs.intersection(previousTaskIDs).filter {
+                    currentTasksByID[$0] != previousTasksByID[$0]
+                }
+            )
+        )
+    }
 }
 
 struct RemoteVisibleContentDiff: Equatable {
@@ -206,6 +223,16 @@ struct RemoteVisibleContentDiff: Equatable {
             !changedShoppingBundleIDs.isEmpty ||
             !changedWorkItemIDs.isEmpty ||
             !changedBacklogCategoryIDs.isEmpty
+    }
+}
+
+struct RemoteTaskVisibleContentDiff: Equatable {
+    let addedTaskCount: Int
+    let removedTaskCount: Int
+    let changedTaskIDs: Set<UUID>
+
+    var hasAnyChange: Bool {
+        addedTaskCount > 0 || removedTaskCount > 0 || !changedTaskIDs.isEmpty
     }
 }
 
@@ -2983,6 +3010,7 @@ class HouseholdStore: ObservableObject {
     ) async {
         let afterVisibleContentSnapshot = resolvedChange.snapshot
         let contentDiff = resolvedChange.diff
+        let taskDiff = afterVisibleContentSnapshot.taskContentDiff(from: beforeVisibleContentSnapshot)
 
         if !contentDiff.addedShoppingTitles.isEmpty {
             await NotificationService.shared.deliverSharedShoppingItemsAddedAlert(
@@ -3010,7 +3038,7 @@ class HouseholdStore: ObservableObject {
             CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(shoppingPresentation)
         }
 
-        if let taskPresentation = taskRemoteSyncPresentation(for: contentDiff) {
+        if let taskPresentation = taskRemoteSyncPresentation(for: taskDiff) {
             CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(taskPresentation)
         }
     }
@@ -3044,18 +3072,18 @@ class HouseholdStore: ObservableObject {
     }
 
     private func taskRemoteSyncPresentation(
-        for diff: RemoteVisibleContentDiff
+        for diff: RemoteTaskVisibleContentDiff
     ) -> RemoteSyncPresentation? {
-        if diff.addedWorkItemCount > 0 {
+        if diff.addedTaskCount > 0 {
             return RemoteSyncPresentation(
                 domain: .tasks,
                 kind: .additions,
-                changeCount: diff.addedWorkItemCount,
+                changeCount: diff.addedTaskCount,
                 titles: []
             )
         }
 
-        let taskUpdateCount = diff.changedWorkItemIDs.count + diff.removedWorkItemCount
+        let taskUpdateCount = diff.changedTaskIDs.count + diff.removedTaskCount
         guard taskUpdateCount > 0 else { return nil }
         return RemoteSyncPresentation(
             domain: .tasks,

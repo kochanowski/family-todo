@@ -649,11 +649,15 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testSharedShoppingAlertsAreSuppressedWhenAppIsActive() {
+    func testSharedShoppingAlertsAreSuppressedOnlyWhenShoppingTabIsVisible() {
         let manager = makeManager()
         defer { manager.resetTransientPresentationState() }
 
+        manager.updateActiveTab(.shopping)
         XCTAssertTrue(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
+
+        manager.updateActiveTab(.tasks)
+        XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
         XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .background))
     }
 
@@ -668,6 +672,93 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         manager.updateActiveTab(.shopping)
         XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
         XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .background))
+    }
+
+    @MainActor
+    func testShoppingAdditionOffShoppingTabAccumulatesExistingBannerCount() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.tasks)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: 2,
+                titles: ["Milk", "Bread"]
+            ),
+            applicationState: .active
+        )
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: 3,
+                titles: ["Eggs", "Butter", "Cheese"]
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertTrue(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 5)
+    }
+
+    @MainActor
+    func testTaskPresentationDoesNotClearExistingShoppingBanner() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.more)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: 2,
+                titles: ["Milk", "Bread"]
+            ),
+            applicationState: .active
+        )
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .tasks,
+                kind: .updates,
+                changeCount: 1,
+                titles: []
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertTrue(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 2)
+    }
+
+    @MainActor
+    func testShoppingUpdatesOffShoppingTabDoNotClearExistingBanner() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.tasks)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: 2,
+                titles: ["Milk", "Bread"]
+            ),
+            applicationState: .active
+        )
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .updates,
+                changeCount: 1,
+                titles: []
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertTrue(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 2)
     }
 }
 
@@ -733,6 +824,24 @@ final class SharedShoppingNotificationAccumulatorTests: XCTestCase {
 }
 
 final class RemoteSyncAnimationSupportTests: XCTestCase {
+    private func makeWorkItemState(
+        title: String = "Item",
+        status: WorkItem.Status,
+        updatedAt: Date = Date(timeIntervalSince1970: 1)
+    ) -> RemoteWorkItemState {
+        RemoteWorkItemState(
+            logicalItemID: UUID(),
+            title: title,
+            status: status,
+            assigneeId: nil,
+            assigneeIds: [],
+            completedAt: nil,
+            completedById: nil,
+            order: 0,
+            updatedAt: updatedAt
+        )
+    }
+
     func testVisibleDeltaMarksInsertedRemovedAndUpdatedIDs() {
         let insertedID = UUID()
         let updatedID = UUID()
@@ -861,5 +970,65 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         XCTAssertEqual(delta.insertedIDs, [])
         XCTAssertEqual(delta.updatedIDs, [updatedID])
         XCTAssertEqual(delta.removedIDs, [])
+    }
+
+    func testTaskContentDiffIgnoresIdeaOnlyChanges() {
+        let ideaID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                ideaID: makeWorkItemState(title: "Plan trip", status: .idea),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                ideaID: makeWorkItemState(
+                    title: "Plan summer trip",
+                    status: .idea,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.taskContentDiff(from: before)
+        XCTAssertEqual(diff.addedTaskCount, 0)
+        XCTAssertEqual(diff.removedTaskCount, 0)
+        XCTAssertEqual(diff.changedTaskIDs, [])
+        XCTAssertFalse(diff.hasAnyChange)
+    }
+
+    func testTaskContentDiffTreatsIdeaPromotionAsTaskAddition() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Plan trip", status: .idea),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights",
+                    status: .next,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.taskContentDiff(from: before)
+        XCTAssertEqual(diff.addedTaskCount, 1)
+        XCTAssertEqual(diff.removedTaskCount, 0)
+        XCTAssertEqual(diff.changedTaskIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
     }
 }

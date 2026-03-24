@@ -415,7 +415,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     func shouldSuppressSharedShoppingAlert(
         applicationState: UIApplication.State = UIApplication.shared.applicationState
     ) -> Bool {
-        applicationState == .active
+        applicationState == .active && activeTab == .shopping
     }
 
     func shouldSuppressHouseholdCelebrationAlert(
@@ -454,16 +454,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
                 )
                 dismissBanner()
             } else {
-                pendingShoppingChanges.removeAll()
-                pendingTaskChanges.removeAll()
-                newItemsCount = presentation.changeCount
-                HapticManager.selection()
-                withAnimation(WowAnimation.spring) {
-                    showNewItemsBanner = true
+                let shouldAnimateBanner = !showNewItemsBanner
+                newItemsCount += presentation.changeCount
+                if shouldAnimateBanner {
+                    HapticManager.selection()
+                    withAnimation(WowAnimation.spring) {
+                        showNewItemsBanner = true
+                    }
                 }
             }
         case .updates:
-            dismissBanner()
             guard activeTab == .shopping else { return }
             publishInlineFeedback(
                 text: shoppingInlineText(for: presentation),
@@ -473,7 +473,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     private func publishTasksPresentation(_ presentation: RemoteSyncPresentation) {
-        dismissBanner()
         guard activeTab == .tasks else { return }
         publishInlineFeedback(
             text: tasksInlineText(for: presentation),
