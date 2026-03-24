@@ -80,6 +80,39 @@ struct RemoteSyncAnimationPayload: Equatable {
     let backlogChangedCategoryIDs: Set<UUID>
 }
 
+@MainActor
+struct RemoteVisibleRefreshTask<Location: Equatable> {
+    let changedIDs: Set<UUID>
+    let captureVisibleLocations: () -> [UUID: Location]
+    let rehydratePrimaryStore: () -> Void
+    let refreshDependentStores: () async -> Void
+
+    init(
+        changedIDs: Set<UUID>,
+        captureVisibleLocations: @escaping () -> [UUID: Location],
+        rehydratePrimaryStore: @escaping () -> Void,
+        refreshDependentStores: @escaping () async -> Void = {}
+    ) {
+        self.changedIDs = changedIDs
+        self.captureVisibleLocations = captureVisibleLocations
+        self.rehydratePrimaryStore = rehydratePrimaryStore
+        self.refreshDependentStores = refreshDependentStores
+    }
+
+    func run() async -> RemoteSyncVisibleDelta {
+        let beforeLocations = captureVisibleLocations()
+        rehydratePrimaryStore()
+        await refreshDependentStores()
+        let afterLocations = captureVisibleLocations()
+
+        return RemoteSyncVisibleDeltaResolver.resolve(
+            beforeLocations: beforeLocations,
+            afterLocations: afterLocations,
+            changedIDs: changedIDs
+        )
+    }
+}
+
 extension Notification {
     var remoteSyncAnimationPayload: RemoteSyncAnimationPayload? {
         guard (object as? String) == "remotePush",

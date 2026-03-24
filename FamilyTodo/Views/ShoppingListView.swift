@@ -835,31 +835,30 @@ private struct ShoppingListContent: View {
     }
 
     private func handleRemoteShoppingListChange(_ notification: Notification) {
-        let beforeVisibleLocations = shoppingVisibleLocations(from: store.toBuyItems)
         let changedIDs = notification.remoteSyncAnimationPayload?.shoppingChangedItemIDs ?? []
 
         cancelRemoteSyncAnimationReset()
         isApplyingRemoteSyncAnimation = true
 
-        withAnimation(WowAnimation.spring) {
-            store.rehydrateVisibleSnapshotFromCache()
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: { shoppingVisibleLocations(from: store.toBuyItems) },
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    await bundleStore.loadBundlesForDisplay()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedItemIDs = delta.highlightedIDs
+            scheduleRemoteSyncAnimationReset()
+            markShoppingTutorialAsSeenIfNeeded()
         }
-
-        let afterVisibleLocations = shoppingVisibleLocations(from: store.toBuyItems)
-        let delta = RemoteSyncVisibleDeltaResolver.resolve(
-            beforeLocations: beforeVisibleLocations,
-            afterLocations: afterVisibleLocations,
-            changedIDs: changedIDs
-        )
-
-        remoteHighlightedItemIDs = delta.highlightedIDs
-
-        _ = _Concurrency.Task {
-            await bundleStore.loadBundlesForDisplay()
-        }
-
-        scheduleRemoteSyncAnimationReset()
-        markShoppingTutorialAsSeenIfNeeded()
     }
 
     private func shoppingVisibleLocations(from items: [ShoppingItem]) -> [UUID: Int] {

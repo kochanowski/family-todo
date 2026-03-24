@@ -1134,26 +1134,34 @@ private struct TasksContent: View {
     }
 
     private func handleRemoteTaskBoardChange(_ notification: Notification) {
-        let beforeVisibleLocations = visibleTaskLocations()
         let changedIDs = notification.remoteSyncAnimationPayload?.workItemChangedIDs ?? []
 
         cancelRemoteSyncAnimationReset()
         isApplyingRemoteSyncAnimation = true
 
-        withAnimation(WowAnimation.spring) {
-            store.rehydrateVisibleSnapshotFromCache()
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: visibleTaskLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                    backlogStore.markLocalSnapshotStale()
+                    backlogStore.rehydrateVisibleSnapshotFromCache()
+                    normalizeAssigneeFilterSelection()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedTaskIDs = delta.highlightedIDs
+            scheduleRemoteSyncAnimationReset()
+            markTasksTutorialAsSeenIfNeeded()
         }
-
-        let afterVisibleLocations = visibleTaskLocations()
-        let delta = RemoteSyncVisibleDeltaResolver.resolve(
-            beforeLocations: beforeVisibleLocations,
-            afterLocations: afterVisibleLocations,
-            changedIDs: changedIDs
-        )
-
-        remoteHighlightedTaskIDs = delta.highlightedIDs
-        scheduleRemoteSyncAnimationReset()
-        markTasksTutorialAsSeenIfNeeded()
     }
 
     private func visibleTaskLocations() -> [UUID: Int] {

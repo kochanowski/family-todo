@@ -809,4 +809,57 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         XCTAssertEqual(payload.workItemChangedIDs, [workItemID])
         XCTAssertEqual(payload.backlogChangedCategoryIDs, [categoryID])
     }
+
+    @MainActor
+    func testRemoteVisibleRefreshTaskRunsPrimaryAndDependentRefreshBeforeResolvingDelta() async {
+        let insertedID = UUID()
+        let updatedID = UUID()
+        var callOrder: [String] = []
+        var visibleLocations: [UUID: Int] = [updatedID: 0]
+
+        let refreshTask = RemoteVisibleRefreshTask(
+            changedIDs: [updatedID, insertedID],
+            captureVisibleLocations: {
+                callOrder.append("capture")
+                return visibleLocations
+            },
+            rehydratePrimaryStore: {
+                callOrder.append("primary")
+            },
+            refreshDependentStores: {
+                callOrder.append("dependents")
+                visibleLocations[insertedID] = 0
+            }
+        )
+
+        let delta = await refreshTask.run()
+
+        XCTAssertEqual(callOrder, ["capture", "primary", "dependents", "capture"])
+        XCTAssertEqual(delta.insertedIDs, [insertedID])
+        XCTAssertEqual(delta.updatedIDs, [updatedID])
+        XCTAssertEqual(delta.removedIDs, [])
+    }
+
+    @MainActor
+    func testRemoteVisibleRefreshTaskAllowsNoopDependentRefresh() async {
+        let updatedID = UUID()
+        var callOrder: [String] = []
+        let refreshTask = RemoteVisibleRefreshTask(
+            changedIDs: [updatedID],
+            captureVisibleLocations: {
+                callOrder.append("capture")
+                return [updatedID: 0]
+            },
+            rehydratePrimaryStore: {
+                callOrder.append("primary")
+            }
+        )
+
+        let delta = await refreshTask.run()
+
+        XCTAssertEqual(callOrder, ["capture", "primary", "capture"])
+        XCTAssertEqual(delta.insertedIDs, [])
+        XCTAssertEqual(delta.updatedIDs, [updatedID])
+        XCTAssertEqual(delta.removedIDs, [])
+    }
 }

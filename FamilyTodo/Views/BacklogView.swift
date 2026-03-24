@@ -745,42 +745,45 @@ private struct BacklogContent: View {
             return
         }
 
-        let beforeCategoryLocations = backlogCategoryLocations()
         let beforeIdeaLocations = backlogIdeaLocations()
-
         cancelRemoteSyncAnimationReset()
         isApplyingRemoteSyncAnimation = true
 
-        withAnimation(WowAnimation.spring) {
-            store.rehydrateVisibleSnapshotFromCache()
+        _ = _Concurrency.Task { @MainActor in
+            let categoryRefreshTask = RemoteVisibleRefreshTask(
+                changedIDs: payload?.backlogChangedCategoryIDs ?? [],
+                captureVisibleLocations: backlogCategoryLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                }
+            )
+            let categoryDelta = await categoryRefreshTask.run()
+
+            let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
+                beforeLocations: beforeIdeaLocations,
+                afterLocations: backlogIdeaLocations(),
+                changedIDs: payload?.workItemChangedIDs ?? []
+            )
+
+            remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
+            remoteHighlightedItemIDs = itemDelta.highlightedIDs
+
+            if let batchToken = payload?.batchToken {
+                lastProcessedRemoteAnimationBatchToken = batchToken
+            }
+
+            let activeItemIds = Set(store.items.map(\.id))
+            hiddenPendingPromotionIds.subtract(activeItemIds)
+            syncPromotionTipAnchorWithVisibleItems()
+            scheduleRemoteSyncAnimationReset()
+            markIdeasTutorialAsSeenIfNeeded()
         }
-
-        let afterCategoryLocations = backlogCategoryLocations()
-        let afterIdeaLocations = backlogIdeaLocations()
-
-        let categoryDelta = RemoteSyncVisibleDeltaResolver.resolve(
-            beforeLocations: beforeCategoryLocations,
-            afterLocations: afterCategoryLocations,
-            changedIDs: payload?.backlogChangedCategoryIDs ?? []
-        )
-        let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
-            beforeLocations: beforeIdeaLocations,
-            afterLocations: afterIdeaLocations,
-            changedIDs: payload?.workItemChangedIDs ?? []
-        )
-
-        remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
-        remoteHighlightedItemIDs = itemDelta.highlightedIDs
-
-        if let batchToken = payload?.batchToken {
-            lastProcessedRemoteAnimationBatchToken = batchToken
-        }
-
-        let activeItemIds = Set(store.items.map(\.id))
-        hiddenPendingPromotionIds.subtract(activeItemIds)
-        syncPromotionTipAnchorWithVisibleItems()
-        scheduleRemoteSyncAnimationReset()
-        markIdeasTutorialAsSeenIfNeeded()
     }
 
     private func backlogCategoryLocations() -> [UUID: Int] {
