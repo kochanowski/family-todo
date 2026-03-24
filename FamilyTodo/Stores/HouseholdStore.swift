@@ -236,6 +236,19 @@ struct RemoteTaskVisibleContentDiff: Equatable {
     }
 }
 
+private enum RemoteSyncDirection: String {
+    case ownerToParticipant = "owner_to_participant"
+    case participantToOwner = "participant_to_owner"
+    case unknown
+}
+
+private struct RemoteVisibleContentResolution {
+    let snapshot: RemoteVisibleContentSnapshot
+    let diff: RemoteVisibleContentDiff
+    let followUpPassCount: Int
+    let cacheUpdatedAt: Date
+}
+
 protocol HouseholdCloudSyncing: Actor {
     func ensureReady() async
     func checkAvailability() async throws
@@ -454,6 +467,25 @@ class HouseholdStore: ObservableObject {
         let initialRetryDelaysNanoseconds: [UInt64]
         let backgroundRetryDelaysNanoseconds: [UInt64]
         let pendingJoinGraceDuration: TimeInterval
+        let ownerSharedFollowUpRetryDelaysNanoseconds: [UInt64]
+
+        init(
+            initialHydrationBudgetNanoseconds: UInt64,
+            initialRetryDelaysNanoseconds: [UInt64],
+            backgroundRetryDelaysNanoseconds: [UInt64],
+            pendingJoinGraceDuration: TimeInterval,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [UInt64] = [
+                350_000_000,
+                1_000_000_000,
+                2_500_000_000,
+            ]
+        ) {
+            self.initialHydrationBudgetNanoseconds = initialHydrationBudgetNanoseconds
+            self.initialRetryDelaysNanoseconds = initialRetryDelaysNanoseconds
+            self.backgroundRetryDelaysNanoseconds = backgroundRetryDelaysNanoseconds
+            self.pendingJoinGraceDuration = pendingJoinGraceDuration
+            self.ownerSharedFollowUpRetryDelaysNanoseconds = ownerSharedFollowUpRetryDelaysNanoseconds
+        }
 
         static let `default` = JoinHydrationConfiguration(
             initialHydrationBudgetNanoseconds: 5_000_000_000,
@@ -470,7 +502,12 @@ class HouseholdStore: ObservableObject {
                 8_000_000_000,
                 15_000_000_000,
             ],
-            pendingJoinGraceDuration: 30
+            pendingJoinGraceDuration: 30,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [
+                350_000_000,
+                1_000_000_000,
+                2_500_000_000,
+            ]
         )
     }
 
@@ -2300,11 +2337,17 @@ class HouseholdStore: ObservableObject {
 
     private func publishRemoteCloudRefreshNotifications(
         source: String,
-        remoteVisibleContentDiff: RemoteVisibleContentDiff? = nil
+        remoteVisibleContentDiff: RemoteVisibleContentDiff? = nil,
+        direction: RemoteSyncDirection = .unknown,
+        pushReceivedAt: Date? = nil,
+        cacheUpdatedAt: Date? = nil
     ) {
         let userInfo = remoteSyncNotificationUserInfo(
             source: source,
-            diff: remoteVisibleContentDiff
+            diff: remoteVisibleContentDiff,
+            direction: direction,
+            pushReceivedAt: pushReceivedAt,
+            cacheUpdatedAt: cacheUpdatedAt
         )
         NotificationCenter.default.post(
             name: .householdDataDidChange,
@@ -2330,11 +2373,14 @@ class HouseholdStore: ObservableObject {
 
     private func remoteSyncNotificationUserInfo(
         source: String,
-        diff: RemoteVisibleContentDiff?
+        diff: RemoteVisibleContentDiff?,
+        direction: RemoteSyncDirection,
+        pushReceivedAt: Date?,
+        cacheUpdatedAt: Date?
     ) -> [AnyHashable: Any]? {
         guard source == "remotePush" else { return nil }
 
-        return [
+        var userInfo: [AnyHashable: Any] = [
             RemoteSyncNotificationPayloadKey.batchToken: UUID().uuidString,
             RemoteSyncNotificationPayloadKey.shoppingChangedItemIDs: Array(
                 diff?.changedShoppingItemIDs.map(\.uuidString) ?? []
@@ -2345,7 +2391,17 @@ class HouseholdStore: ObservableObject {
             RemoteSyncNotificationPayloadKey.backlogChangedCategoryIDs: Array(
                 diff?.changedBacklogCategoryIDs.map(\.uuidString) ?? []
             ),
+            RemoteSyncNotificationPayloadKey.direction: direction.rawValue,
         ]
+
+        if let pushReceivedAt {
+            userInfo[RemoteSyncNotificationPayloadKey.pushReceivedAt] = pushReceivedAt.timeIntervalSince1970
+        }
+        if let cacheUpdatedAt {
+            userInfo[RemoteSyncNotificationPayloadKey.cacheUpdatedAt] = cacheUpdatedAt.timeIntervalSince1970
+        }
+
+        return userInfo
     }
 
     private func shoppingItemTitleSnapshot(householdId: UUID) -> [UUID: String] {
@@ -2846,6 +2902,12 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         )
+        let direction = remoteSyncDirection(
+            household: currentHousehold,
+            userId: userId,
+            context: context
+        )
+        let refreshStartedAt = Date()
         let beforeVisibleContentSnapshot = beforeSnapshot.observedHouseholdId.map(remoteVisibleContentSnapshot)
         print(
             "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(beforeSnapshot))"
@@ -2863,7 +2925,7 @@ class HouseholdStore: ObservableObject {
             return .failed
         }
 
-        let visibleContentDiff = await processRemoteVisibleContentChangeIfNeeded(
+        let visibleContentResolution = await processRemoteVisibleContentChangeIfNeeded(
             beforeSnapshot: beforeSnapshot,
             beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
             userId: userId,
@@ -2881,7 +2943,7 @@ class HouseholdStore: ObservableObject {
             householdIconSymbol: afterSnapshot.householdIconSymbol,
             hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
         )
-        let didVisibleContentChange = visibleContentDiff?.hasAnyChange == true
+        let didVisibleContentChange = visibleContentResolution?.diff.hasAnyChange == true
         let didMetadataOrHydrationChange = lastRemoteCloudRefreshSnapshot != refreshedSnapshot
         let didChange = didVisibleContentChange || didMetadataOrHydrationChange
         lastRemoteCloudRefreshSnapshot = refreshedSnapshot
@@ -2889,9 +2951,21 @@ class HouseholdStore: ObservableObject {
         if didChange {
             publishRemoteCloudRefreshNotifications(
                 source: "remotePush",
-                remoteVisibleContentDiff: visibleContentDiff
+                remoteVisibleContentDiff: visibleContentResolution?.diff,
+                direction: direction,
+                pushReceivedAt: context.receivedAt == .distantPast ? nil : context.receivedAt,
+                cacheUpdatedAt: visibleContentResolution?.cacheUpdatedAt ?? Date()
             )
         }
+
+        logRemoteSyncTelemetry(
+            direction: direction,
+            context: context,
+            refreshStartedAt: refreshStartedAt,
+            cacheUpdatedAt: visibleContentResolution?.cacheUpdatedAt ?? Date(),
+            followUpPassCount: visibleContentResolution?.followUpPassCount ?? 0,
+            didChange: didChange
+        )
 
         let fetchResult: UIBackgroundFetchResult = didChange ? .newData : .noData
         print(
@@ -2934,7 +3008,7 @@ class HouseholdStore: ObservableObject {
         beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?,
         userId: String,
         context: RemoteCloudChangeContext
-    ) async -> RemoteVisibleContentDiff? {
+    ) async -> RemoteVisibleContentResolution? {
         guard let household = currentHousehold,
               beforeSnapshot.observedHouseholdId == household.id,
               let beforeVisibleContentSnapshot
@@ -2954,7 +3028,7 @@ class HouseholdStore: ObservableObject {
             resolvedChange: resolvedChange,
             currentUserId: userId
         )
-        return resolvedChange.diff
+        return resolvedChange
     }
 
     private func resolveRemoteVisibleContentChange(
@@ -2962,21 +3036,28 @@ class HouseholdStore: ObservableObject {
         beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot,
         userId: String,
         context: RemoteCloudChangeContext
-    ) async -> (snapshot: RemoteVisibleContentSnapshot, diff: RemoteVisibleContentDiff) {
+    ) async -> RemoteVisibleContentResolution {
         var afterVisibleContentSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
         var contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
+        var followUpPassCount = 0
 
-        guard !contentDiff.hasAnyChange,
-              context.databaseScope == .shared,
-              household.ownerId == userId
-        else {
-            return (afterVisibleContentSnapshot, contentDiff)
+        guard shouldRunOwnerSharedFollowUpRefresh(
+            household: household,
+            userId: userId,
+            context: context
+        ) else {
+            return RemoteVisibleContentResolution(
+                snapshot: afterVisibleContentSnapshot,
+                diff: contentDiff,
+                followUpPassCount: followUpPassCount,
+                cacheUpdatedAt: Date()
+            )
         }
 
-        for delay in [2.0, 5.0, 10.0] {
-            try? await _Concurrency.Task.sleep(
-                nanoseconds: UInt64(delay * 1_000_000_000)
-            )
+        for delay in joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds {
+            if delay > 0 {
+                try? await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
             if let retryHydrationSnapshot = try? await runJoinedHouseholdHydrationPass(
                 household: household,
                 userId: userId
@@ -2989,23 +3070,35 @@ class HouseholdStore: ObservableObject {
                 )
             }
 
-            afterVisibleContentSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
-            contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
-            if contentDiff.hasAnyChange {
+            let candidateSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
+            let previousSnapshot = afterVisibleContentSnapshot
+            afterVisibleContentSnapshot = candidateSnapshot
+            contentDiff = candidateSnapshot.diff(from: beforeVisibleContentSnapshot)
+            followUpPassCount += 1
+
+            if candidateSnapshot != previousSnapshot {
                 print(
-                    "[RemoteSync] Owner follow-up refresh surfaced shared changes after \(delay)s for household \(household.id)."
+                    "[RemoteSync] Owner follow-up pass \(followUpPassCount) captured additional shared changes for household \(household.id)."
                 )
-                break
+            } else {
+                print(
+                    "[RemoteSync] Owner follow-up pass \(followUpPassCount) found no new shared changes for household \(household.id)."
+                )
             }
         }
 
-        return (afterVisibleContentSnapshot, contentDiff)
+        return RemoteVisibleContentResolution(
+            snapshot: afterVisibleContentSnapshot,
+            diff: contentDiff,
+            followUpPassCount: followUpPassCount,
+            cacheUpdatedAt: Date()
+        )
     }
 
     private func deliverRemoteVisibleContentAlerts(
         household: Household,
         beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot,
-        resolvedChange: (snapshot: RemoteVisibleContentSnapshot, diff: RemoteVisibleContentDiff),
+        resolvedChange: RemoteVisibleContentResolution,
         currentUserId: String
     ) async {
         let afterVisibleContentSnapshot = resolvedChange.snapshot
@@ -3041,6 +3134,49 @@ class HouseholdStore: ObservableObject {
         if let taskPresentation = taskRemoteSyncPresentation(for: taskDiff) {
             CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(taskPresentation)
         }
+    }
+
+    private func shouldRunOwnerSharedFollowUpRefresh(
+        household: Household,
+        userId: String,
+        context: RemoteCloudChangeContext
+    ) -> Bool {
+        context.databaseScope == .shared &&
+            household.ownerId == userId &&
+            !joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds.isEmpty
+    }
+
+    private func remoteSyncDirection(
+        household: Household?,
+        userId: String,
+        context: RemoteCloudChangeContext
+    ) -> RemoteSyncDirection {
+        guard context.databaseScope == .shared, let household else {
+            return .unknown
+        }
+
+        return household.ownerId == userId ? .participantToOwner : .ownerToParticipant
+    }
+
+    private func logRemoteSyncTelemetry(
+        direction: RemoteSyncDirection,
+        context: RemoteCloudChangeContext,
+        refreshStartedAt: Date,
+        cacheUpdatedAt: Date,
+        followUpPassCount: Int,
+        didChange: Bool
+    ) {
+        let pushToCacheMilliseconds: Int? = if context.receivedAt == .distantPast {
+            nil
+        } else {
+            Int(cacheUpdatedAt.timeIntervalSince(context.receivedAt) * 1000)
+        }
+        let refreshMilliseconds = Int(cacheUpdatedAt.timeIntervalSince(refreshStartedAt) * 1000)
+        let pushToCacheLabel = pushToCacheMilliseconds.map(String.init) ?? "n/a"
+
+        print(
+            "[RemoteSync] Telemetry direction=\(direction.rawValue) pushToCacheMs=\(pushToCacheLabel) refreshMs=\(refreshMilliseconds) followUpPasses=\(followUpPassCount) didChange=\(didChange)"
+        )
     }
 
     private func shoppingRemoteSyncPresentation(

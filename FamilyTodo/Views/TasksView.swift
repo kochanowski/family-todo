@@ -1134,7 +1134,8 @@ private struct TasksContent: View {
     }
 
     private func handleRemoteTaskBoardChange(_ notification: Notification) {
-        let changedIDs = notification.remoteSyncAnimationPayload?.workItemChangedIDs ?? []
+        let payload = notification.remoteSyncAnimationPayload
+        let changedIDs = payload?.workItemChangedIDs ?? []
 
         cancelRemoteSyncAnimationReset()
         isApplyingRemoteSyncAnimation = true
@@ -1159,6 +1160,7 @@ private struct TasksContent: View {
 
             let delta = await refreshTask.run()
             remoteHighlightedTaskIDs = delta.highlightedIDs
+            logRemoteSyncVisibleRefreshLatency(screen: "Tasks", payload: payload)
             scheduleRemoteSyncAnimationReset()
             markTasksTutorialAsSeenIfNeeded()
         }

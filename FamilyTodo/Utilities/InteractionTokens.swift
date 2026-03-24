@@ -71,6 +71,9 @@ enum RemoteSyncNotificationPayloadKey {
     static let shoppingChangedItemIDs = "remoteSync.shopping.changedItemIDs"
     static let workItemChangedIDs = "remoteSync.workItem.changedIDs"
     static let backlogChangedCategoryIDs = "remoteSync.backlog.changedCategoryIDs"
+    static let direction = "remoteSync.direction"
+    static let pushReceivedAt = "remoteSync.pushReceivedAt"
+    static let cacheUpdatedAt = "remoteSync.cacheUpdatedAt"
 }
 
 struct RemoteSyncAnimationPayload: Equatable {
@@ -78,6 +81,9 @@ struct RemoteSyncAnimationPayload: Equatable {
     let shoppingChangedItemIDs: Set<UUID>
     let workItemChangedIDs: Set<UUID>
     let backlogChangedCategoryIDs: Set<UUID>
+    let direction: String?
+    let pushReceivedAt: Date?
+    let cacheUpdatedAt: Date?
 }
 
 @MainActor
@@ -129,7 +135,10 @@ extension Notification {
             workItemChangedIDs: remoteSyncUUIDSet(for: RemoteSyncNotificationPayloadKey.workItemChangedIDs),
             backlogChangedCategoryIDs: remoteSyncUUIDSet(
                 for: RemoteSyncNotificationPayloadKey.backlogChangedCategoryIDs
-            )
+            ),
+            direction: userInfo[RemoteSyncNotificationPayloadKey.direction] as? String,
+            pushReceivedAt: remoteSyncDate(for: RemoteSyncNotificationPayloadKey.pushReceivedAt),
+            cacheUpdatedAt: remoteSyncDate(for: RemoteSyncNotificationPayloadKey.cacheUpdatedAt)
         )
     }
 
@@ -137,6 +146,30 @@ extension Notification {
         guard let rawValues = userInfo?[key] as? [String] else { return [] }
         return Set(rawValues.compactMap(UUID.init(uuidString:)))
     }
+
+    private func remoteSyncDate(for key: String) -> Date? {
+        guard let rawValue = userInfo?[key] as? TimeInterval else { return nil }
+        return Date(timeIntervalSince1970: rawValue)
+    }
+}
+
+func logRemoteSyncVisibleRefreshLatency(
+    screen: String,
+    payload: RemoteSyncAnimationPayload?
+) {
+    guard let payload, let cacheUpdatedAt = payload.cacheUpdatedAt else { return }
+
+    let now = Date()
+    let cacheToVisibleMilliseconds = Int(now.timeIntervalSince(cacheUpdatedAt) * 1000)
+    let totalMilliseconds = payload.pushReceivedAt.map {
+        Int(now.timeIntervalSince($0) * 1000)
+    }
+    let totalLabel = totalMilliseconds.map(String.init) ?? "n/a"
+    let direction = payload.direction ?? "unknown"
+
+    print(
+        "[RemoteSync] ViewApplied screen=\(screen) direction=\(direction) cacheToVisibleMs=\(cacheToVisibleMilliseconds) totalMs=\(totalLabel)"
+    )
 }
 
 extension View {

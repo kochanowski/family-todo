@@ -781,6 +781,7 @@ private struct BacklogContent: View {
             let activeItemIds = Set(store.items.map(\.id))
             hiddenPendingPromotionIds.subtract(activeItemIds)
             syncPromotionTipAnchorWithVisibleItems()
+            logRemoteSyncVisibleRefreshLatency(screen: "Ideas", payload: payload)
             scheduleRemoteSyncAnimationReset()
             markIdeasTutorialAsSeenIfNeeded()
         }

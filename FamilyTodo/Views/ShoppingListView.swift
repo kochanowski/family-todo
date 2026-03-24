@@ -835,7 +835,8 @@ private struct ShoppingListContent: View {
     }
 
     private func handleRemoteShoppingListChange(_ notification: Notification) {
-        let changedIDs = notification.remoteSyncAnimationPayload?.shoppingChangedItemIDs ?? []
+        let payload = notification.remoteSyncAnimationPayload
+        let changedIDs = payload?.shoppingChangedItemIDs ?? []
 
         cancelRemoteSyncAnimationReset()
         isApplyingRemoteSyncAnimation = true
@@ -856,6 +857,7 @@ private struct ShoppingListContent: View {
 
             let delta = await refreshTask.run()
             remoteHighlightedItemIDs = delta.highlightedIDs
+            logRemoteSyncVisibleRefreshLatency(screen: "Shopping", payload: payload)
             scheduleRemoteSyncAnimationReset()
             markShoppingTutorialAsSeenIfNeeded()
         }

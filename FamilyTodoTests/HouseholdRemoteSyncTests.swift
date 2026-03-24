@@ -28,13 +28,31 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeStore(cloud: FakeHouseholdCloud) -> HouseholdStore {
+    private func makeStore(
+        cloud: FakeHouseholdCloud,
+        joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration = .default
+    ) -> HouseholdStore {
         HouseholdStore(
             modelContext: modelContainer.mainContext,
             cloudKit: cloud,
             userDefaults: defaults,
             recoverySuppressionDuration: 300,
-            joinHydrationConfiguration: .default
+            joinHydrationConfiguration: joinHydrationConfiguration
+        )
+    }
+
+    private func makeStore(
+        cloud: FakeHouseholdCloud,
+        joinedHouseholdPrewarmOverride: @escaping (Household, String, ModelContext?) async throws -> Void,
+        joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration = .default
+    ) -> HouseholdStore {
+        HouseholdStore(
+            modelContext: modelContainer.mainContext,
+            cloudKit: cloud,
+            joinedHouseholdPrewarmOverride: joinedHouseholdPrewarmOverride,
+            userDefaults: defaults,
+            recoverySuppressionDuration: 300,
+            joinHydrationConfiguration: joinHydrationConfiguration
         )
     }
 
@@ -501,6 +519,83 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(cachedItems.first?.statusRaw, WorkItem.Status.done.rawValue)
         XCTAssertEqual(cachedItems.first?.completedById, "user-1")
     }
+
+    func testOwnerSharedRemoteChangeKeepsHydratingUntilDelayedTaskArrives() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
+
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let delayedTask = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash"
+        )
+        let immediateShoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let hydrationPassCount = Counter()
+        let joinHydrationConfiguration = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 5_000_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [0]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+
+                if pass == 1 {
+                    context.insert(CachedShoppingItem(from: immediateShoppingItem))
+                } else {
+                    context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(task: delayedTask)))
+                }
+                try context.save()
+            },
+            joinHydrationConfiguration: joinHydrationConfiguration
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        let result = await store.handleRemoteCloudChange(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result, .newData)
+        XCTAssertGreaterThanOrEqual(hydrationPassCount.value, 2)
+        XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
+        XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
+    }
 }
 
 final class CloudKitSubscriptionManagerTests: XCTestCase {
@@ -901,6 +996,8 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         let shoppingID = UUID()
         let workItemID = UUID()
         let categoryID = UUID()
+        let pushReceivedAt = Date(timeIntervalSince1970: 1_736_990_000)
+        let cacheUpdatedAt = Date(timeIntervalSince1970: 1_736_990_001)
         let notification = Notification(
             name: .shoppingListDataDidChange,
             object: "remotePush",
@@ -909,6 +1006,9 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
                 RemoteSyncNotificationPayloadKey.shoppingChangedItemIDs: [shoppingID.uuidString],
                 RemoteSyncNotificationPayloadKey.workItemChangedIDs: [workItemID.uuidString],
                 RemoteSyncNotificationPayloadKey.backlogChangedCategoryIDs: [categoryID.uuidString],
+                RemoteSyncNotificationPayloadKey.direction: "participant_to_owner",
+                RemoteSyncNotificationPayloadKey.pushReceivedAt: pushReceivedAt.timeIntervalSince1970,
+                RemoteSyncNotificationPayloadKey.cacheUpdatedAt: cacheUpdatedAt.timeIntervalSince1970,
             ]
         )
 
@@ -917,6 +1017,9 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         XCTAssertEqual(payload.shoppingChangedItemIDs, [shoppingID])
         XCTAssertEqual(payload.workItemChangedIDs, [workItemID])
         XCTAssertEqual(payload.backlogChangedCategoryIDs, [categoryID])
+        XCTAssertEqual(payload.direction, "participant_to_owner")
+        XCTAssertEqual(payload.pushReceivedAt, pushReceivedAt)
+        XCTAssertEqual(payload.cacheUpdatedAt, cacheUpdatedAt)
     }
 
     @MainActor
