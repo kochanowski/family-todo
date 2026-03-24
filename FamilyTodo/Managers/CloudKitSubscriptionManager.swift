@@ -3,7 +3,28 @@ import Combine
 import Foundation
 import SwiftUI
 import UIKit
-import UserNotifications
+
+enum RemoteSyncPresentationDomain: Equatable {
+    case shopping
+    case tasks
+}
+
+enum RemoteSyncPresentationKind: Equatable {
+    case additions
+    case updates
+}
+
+struct RemoteSyncPresentation: Equatable {
+    let domain: RemoteSyncPresentationDomain
+    let kind: RemoteSyncPresentationKind
+    let changeCount: Int
+    let titles: [String]
+}
+
+struct InlineRemoteSyncFeedback: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+}
 
 /// Manages CloudKit subscriptions for real-time change notifications
 @MainActor
@@ -16,6 +37,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
     @Published var pendingTaskChanges: [String] = []
     @Published var showNewItemsBanner = false
     @Published var newItemsCount = 0
+    @Published private(set) var activeTab: AppTab = .shopping
+    @Published private(set) var shoppingInlineFeedback: InlineRemoteSyncFeedback?
+    @Published private(set) var tasksInlineFeedback: InlineRemoteSyncFeedback?
 
     // MARK: - Private State
 
@@ -26,12 +50,13 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private var configuredUserId: String?
     private var configuredHouseholdId: UUID?
     private var configuredScope: CloudKitManager.HouseholdDatabaseScope?
-    private var aggregationTimer: Timer?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
     private var lastLocalMutationAt: Date?
+    private var shoppingInlineDismissTask: _Concurrency.Task<Void, Never>?
+    private var tasksInlineDismissTask: _Concurrency.Task<Void, Never>?
 
-    private let aggregationWindow: TimeInterval = 60 // 60 seconds
     private let selfNoiseWindow: TimeInterval = 8
+    private let inlineFeedbackDurationNanoseconds: UInt64 = 2_500_000_000
 
     // MARK: - Initialization
 
@@ -59,6 +84,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         configuredUserId = userId
         configuredHouseholdId = householdId
         configuredScope = scope
+        resetTransientPresentationState()
 
         _Concurrency.Task {
             await setupSubscriptions(householdId: householdId, scope: scope)
@@ -363,34 +389,39 @@ final class CloudKitSubscriptionManager: ObservableObject {
         )
     }
 
-    // MARK: - In-App Banner
+    // MARK: - Presentation State
 
-    func publishHydratedRemoteChanges(
-        count: Int,
-        shouldDeliverBackgroundNotification: Bool = false
-    ) {
-        guard count > 0 else { return }
-
-        pendingShoppingChanges.removeAll()
-        pendingTaskChanges.removeAll()
-        newItemsCount = count
-
-        if UIApplication.shared.applicationState == .active {
-            HapticManager.selection()
-            withAnimation(WowAnimation.spring) {
-                showNewItemsBanner = true
-            }
-            return
+    func updateActiveTab(_ tab: AppTab) {
+        activeTab = tab
+        if tab == .shopping {
+            dismissBanner()
         }
-
-        guard shouldDeliverBackgroundNotification else { return }
-        let body = count == 1 ? "1 new shared change." : "\(count) new shared changes."
-        sendLocalNotification(title: "Household updated", body: body)
     }
 
-    private func reportSubscriptionFailure(_ error: Error, context: String) {
-        print("[CloudKitSubscription] \(context) failed: \(error.localizedDescription)")
-        CloudKitDiagnosticsState.shared.record(error: error, operation: context)
+    func publishRemoteSyncPresentation(
+        _ presentation: RemoteSyncPresentation,
+        applicationState: UIApplication.State = UIApplication.shared.applicationState
+    ) {
+        guard applicationState == .active else { return }
+
+        switch presentation.domain {
+        case .shopping:
+            publishShoppingPresentation(presentation)
+        case .tasks:
+            publishTasksPresentation(presentation)
+        }
+    }
+
+    func shouldSuppressSharedShoppingAlert(
+        applicationState: UIApplication.State = UIApplication.shared.applicationState
+    ) -> Bool {
+        applicationState == .active
+    }
+
+    func shouldSuppressHouseholdCelebrationAlert(
+        applicationState: UIApplication.State = UIApplication.shared.applicationState
+    ) -> Bool {
+        applicationState == .active && activeTab == .tasks
     }
 
     func dismissBanner() {
@@ -402,19 +433,126 @@ final class CloudKitSubscriptionManager: ObservableObject {
         newItemsCount = 0
     }
 
-    private func sendLocalNotification(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
+    func resetTransientPresentationState() {
+        dismissBanner()
+        shoppingInlineDismissTask?.cancel()
+        shoppingInlineDismissTask = nil
+        shoppingInlineFeedback = nil
+        tasksInlineDismissTask?.cancel()
+        tasksInlineDismissTask = nil
+        tasksInlineFeedback = nil
+    }
 
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil // Deliver immediately
+    private func publishShoppingPresentation(_ presentation: RemoteSyncPresentation) {
+        switch presentation.kind {
+        case .additions:
+            guard presentation.changeCount > 0 else { return }
+            if activeTab == .shopping {
+                publishInlineFeedback(
+                    text: shoppingInlineText(for: presentation),
+                    domain: .shopping
+                )
+                dismissBanner()
+            } else {
+                pendingShoppingChanges.removeAll()
+                pendingTaskChanges.removeAll()
+                newItemsCount = presentation.changeCount
+                HapticManager.selection()
+                withAnimation(WowAnimation.spring) {
+                    showNewItemsBanner = true
+                }
+            }
+        case .updates:
+            dismissBanner()
+            guard activeTab == .shopping else { return }
+            publishInlineFeedback(
+                text: shoppingInlineText(for: presentation),
+                domain: .shopping
+            )
+        }
+    }
+
+    private func publishTasksPresentation(_ presentation: RemoteSyncPresentation) {
+        dismissBanner()
+        guard activeTab == .tasks else { return }
+        publishInlineFeedback(
+            text: tasksInlineText(for: presentation),
+            domain: .tasks
         )
+    }
 
-        UNUserNotificationCenter.current().add(request)
+    private func publishInlineFeedback(
+        text: String,
+        domain: RemoteSyncPresentationDomain
+    ) {
+        let feedback = InlineRemoteSyncFeedback(text: text)
+
+        switch domain {
+        case .shopping:
+            shoppingInlineDismissTask?.cancel()
+            withAnimation(WowAnimation.spring) {
+                shoppingInlineFeedback = feedback
+            }
+            shoppingInlineDismissTask = scheduleInlineDismiss(for: domain, feedbackId: feedback.id)
+        case .tasks:
+            tasksInlineDismissTask?.cancel()
+            withAnimation(WowAnimation.spring) {
+                tasksInlineFeedback = feedback
+            }
+            tasksInlineDismissTask = scheduleInlineDismiss(for: domain, feedbackId: feedback.id)
+        }
+    }
+
+    private func scheduleInlineDismiss(
+        for domain: RemoteSyncPresentationDomain,
+        feedbackId: UUID
+    ) -> _Concurrency.Task<Void, Never> {
+        _Concurrency.Task { @MainActor [weak self] in
+            try? await _Concurrency.Task.sleep(nanoseconds: inlineFeedbackDurationNanoseconds)
+            guard !_Concurrency.Task.isCancelled, let self else { return }
+
+            switch domain {
+            case .shopping:
+                guard shoppingInlineFeedback?.id == feedbackId else { return }
+                withAnimation(WowAnimation.easeOut) {
+                    shoppingInlineFeedback = nil
+                }
+                shoppingInlineDismissTask = nil
+            case .tasks:
+                guard tasksInlineFeedback?.id == feedbackId else { return }
+                withAnimation(WowAnimation.easeOut) {
+                    tasksInlineFeedback = nil
+                }
+                tasksInlineDismissTask = nil
+            }
+        }
+    }
+
+    private func shoppingInlineText(for presentation: RemoteSyncPresentation) -> String {
+        switch presentation.kind {
+        case .additions:
+            presentation.changeCount == 1
+                ? "1 item added"
+                : "\(presentation.changeCount) items added"
+        case .updates:
+            "Shopping updated"
+        }
+    }
+
+    private func tasksInlineText(for presentation: RemoteSyncPresentation) -> String {
+        switch presentation.kind {
+        case .additions:
+            presentation.changeCount == 1
+                ? "1 task added"
+                : "\(presentation.changeCount) tasks added"
+        case .updates:
+            "Tasks updated"
+        }
+    }
+
+    private func reportSubscriptionFailure(_ error: Error, context: String) {
+        print("[CloudKitSubscription] \(context) failed: \(error.localizedDescription)")
+        CloudKitDiagnosticsState.shared.record(error: error, operation: context)
     }
 
     // MARK: - Cleanup
@@ -434,5 +572,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
         configuredUserId = nil
         configuredHouseholdId = nil
         configuredScope = nil
+        resetTransientPresentationState()
     }
 }

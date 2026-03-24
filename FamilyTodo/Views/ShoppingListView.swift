@@ -7,11 +7,20 @@ import UIKit
 struct ShoppingListView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
+    @Binding private var selectedTab: AppTab
+
+    init(selectedTab: Binding<AppTab> = .constant(.shopping)) {
+        _selectedTab = selectedTab
+    }
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
-                ShoppingListContent(householdId: householdId, modelContext: modelContext)
+                ShoppingListContent(
+                    householdId: householdId,
+                    modelContext: modelContext,
+                    selectedTab: $selectedTab
+                )
             } else {
                 GuidedEmptyStateView()
             }
@@ -24,6 +33,7 @@ private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
     @StateObject private var bundleStore: ShoppingBundleStore
     @StateObject private var restockPulse = RestockPulseState()
+    @Binding private var selectedTab: AppTab
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
@@ -66,13 +76,14 @@ private struct ShoppingListContent: View {
     @AppStorage(AppTips.runtimeGenerationDefaultsKey)
     private var appTipRuntimeGeneration = 0
 
-    init(householdId: UUID, modelContext: ModelContext) {
+    init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         _store = StateObject(
             wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
         )
         _bundleStore = StateObject(
             wrappedValue: ShoppingBundleStore(householdId: householdId, modelContext: modelContext)
         )
+        _selectedTab = selectedTab
     }
 
     var body: some View {
@@ -96,6 +107,12 @@ private struct ShoppingListContent: View {
             .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
                 updateStoreCloudContext()
             }
+            .onChange(of: selectedTab) { _, newTab in
+                guard newTab == .shopping else { return }
+                _ = _Concurrency.Task {
+                    await loadShoppingData()
+                }
+            }
             .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
                 if !isEmpty {
                     markShoppingTutorialAsSeenIfNeeded()
@@ -109,7 +126,6 @@ private struct ShoppingListContent: View {
                     shouldRearmBundleQuickAddTipOnNextAppear = true
                 }
             }
-            .newItemsBanner(manager: subscriptionManager)
             .onChange(of: isKeyboardVisible) { _, visible in
                 guard !visible else { return }
                 if let editingItem = currentEditingItem {
@@ -125,9 +141,16 @@ private struct ShoppingListContent: View {
             }
             .onReceive(
                 NotificationCenter.default.publisher(for: .shoppingListDataDidChange)
-            ) { _ in
-                _ = _Concurrency.Task {
-                    await loadShoppingData()
+            ) { notification in
+                store.markLocalSnapshotStale()
+                if isLocalStoreNotification(notification) {
+                    store.rehydrateVisibleSnapshotFromCache()
+                } else if selectedTab == .shopping {
+                    _ = _Concurrency.Task {
+                        await loadShoppingData()
+                    }
+                } else {
+                    store.replayPendingMutationsIfNeeded()
                 }
             }
             .onReceive(
@@ -397,8 +420,17 @@ private struct ShoppingListContent: View {
 
     private var header: some View {
         AppScreenHeader(title: "Shopping") {
-            if !store.toBuyItems.isEmpty {
-                ShoppingCountBadge(count: store.toBuyItems.count)
+            HStack(spacing: 8) {
+                if !store.toBuyItems.isEmpty {
+                    ShoppingCountBadge(count: store.toBuyItems.count)
+                }
+
+                if let feedback = subscriptionManager.shoppingInlineFeedback,
+                   selectedTab == .shopping
+                {
+                    SyncStatusPill(text: feedback.text)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         } trailing: {
             HStack(alignment: .center, spacing: 8) {
@@ -789,6 +821,10 @@ private struct ShoppingListContent: View {
         let ownerId = householdStore.currentHousehold?.ownerId
         store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
         bundleStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+    }
+
+    private func isLocalStoreNotification(_ notification: Notification) -> Bool {
+        (notification.object as? String) == "local"
     }
 
     private func scheduleShoppingCompletionCelebration() {
@@ -1458,7 +1494,7 @@ private struct RestockItemRow: View {
 }
 
 #Preview {
-    ShoppingListView()
+    ShoppingListView(selectedTab: .constant(.shopping))
         .environmentObject(UserSession.shared)
         .environmentObject(ThemeStore())
 }

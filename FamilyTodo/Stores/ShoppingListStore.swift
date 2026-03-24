@@ -22,6 +22,7 @@ final class ShoppingListStore: ObservableObject {
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
     private var shouldReloadAfterCurrentLoad = false
     private var hasHydratedVisibleSnapshot = false
+    private var needsLocalRehydrate = false
 
     struct PendingSyncSnapshot {
         var pendingUploadByID: [UUID: ShoppingItem]
@@ -192,7 +193,9 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private func hydrateVisibleSnapshotFromCacheIfNeeded(force: Bool = false) {
-        _ = fetchCachedItems(updateVisibleState: force || !hasHydratedVisibleSnapshot || items.isEmpty)
+        _ = fetchCachedItems(
+            updateVisibleState: force || needsLocalRehydrate || !hasHydratedVisibleSnapshot || items.isEmpty
+        )
     }
 
     private func fetchCachedItems(updateVisibleState: Bool) -> [CachedShoppingItem] {
@@ -216,8 +219,22 @@ final class ShoppingListStore: ObservableObject {
                 .map { $0.toShoppingItem() }
             hasHydratedVisibleSnapshot = true
             hasHydratedLocalSnapshot = true
+            needsLocalRehydrate = false
         }
         return cachedItems
+    }
+
+    func markLocalSnapshotStale() {
+        needsLocalRehydrate = true
+    }
+
+    func rehydrateVisibleSnapshotFromCache() {
+        hydrateVisibleSnapshotFromCacheIfNeeded(force: true)
+    }
+
+    func replayPendingMutationsIfNeeded() {
+        guard isCloudSyncEnabled else { return }
+        replayPendingMutationsInBackground()
     }
 
     func syncToCache(_ items: [ShoppingItem]) {

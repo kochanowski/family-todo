@@ -108,6 +108,7 @@ private struct TasksContent: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
@@ -575,14 +576,23 @@ private struct TasksContent: View {
 
     private var header: some View {
         AppScreenHeader(title: "Tasks") {
-            if activeFilter == .active {
-                Button {
-                    showRecommendedLimitInfo = true
-                } label: {
-                    TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+            HStack(spacing: 8) {
+                if activeFilter == .active {
+                    Button {
+                        showRecommendedLimitInfo = true
+                    } label: {
+                        TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Shows information about the recommended task limit")
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Shows information about the recommended task limit")
+
+                if let feedback = subscriptionManager.tasksInlineFeedback,
+                   selectedTab == .tasks
+                {
+                    SyncStatusPill(text: feedback.text)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         } trailing: {
             if activeFilter == .active {

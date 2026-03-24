@@ -15,6 +15,7 @@ struct MainAppView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @Query(sort: \CachedMember.joinedAt) private var cachedMembers: [CachedMember]
 
     @State private var activeTab: AppTab = .shopping
@@ -37,17 +38,35 @@ struct MainAppView: View {
             )
             .background(AppBackgroundView())
             .overlay(alignment: .top) {
-                if let activeJoinToastMessage {
-                    ToastView(message: activeJoinToastMessage)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 12)
+                VStack(spacing: 10) {
+                    if let activeJoinToastMessage {
+                        ToastView(message: activeJoinToastMessage)
+                            .padding(.horizontal, 20)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .zIndex(2)
+                    }
+
+                    if subscriptionManager.showNewItemsBanner {
+                        NewItemsBanner(
+                            count: subscriptionManager.newItemsCount,
+                            onTap: {
+                                activeTab = .shopping
+                                subscriptionManager.dismissBanner()
+                            },
+                            onDismiss: {
+                                subscriptionManager.dismissBanner()
+                            }
+                        )
                         .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(2)
+                        .zIndex(1)
+                    }
                 }
+                .padding(.top, 12)
             }
             .onAppear {
                 reconcileTabBarAppearance()
                 primeActiveMemberBaseline()
+                subscriptionManager.updateActiveTab(activeTab)
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
                 reconcileTabBarAppearance()
@@ -60,6 +79,7 @@ struct MainAppView: View {
             }
             .onChange(of: activeTab) { _, _ in
                 reconcileTabBarAppearance()
+                subscriptionManager.updateActiveTab(activeTab)
             }
             .onChange(of: userSession.currentHouseholdID) { _, _ in
                 primeActiveMemberBaseline()
@@ -82,7 +102,7 @@ struct MainAppView: View {
     private var legacyTabView: some View {
         TabView(selection: $activeTab) {
             NavigationStack {
-                ShoppingListView()
+                ShoppingListView(selectedTab: $activeTab)
             }
             .tabItem {
                 Label(AppTab.shopping.title, systemImage: AppTab.shopping.icon)

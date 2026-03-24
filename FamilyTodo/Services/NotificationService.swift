@@ -527,6 +527,9 @@ enum NotificationSchedulePlanner {
             await checkAuthorizationStatus()
             guard isAuthorized else { return }
             guard notificationsEnabled() else { return }
+            guard !CloudKitSubscriptionManager.shared.shouldSuppressSharedShoppingAlert() else {
+                return
+            }
 
             if let readyBatch = sharedShoppingNotificationAccumulator.record(
                 householdId: householdId,
@@ -547,6 +550,9 @@ enum NotificationSchedulePlanner {
             await checkAuthorizationStatus()
             guard isAuthorized else { return }
             guard notificationsEnabled() else { return }
+            guard !CloudKitSubscriptionManager.shared.shouldSuppressHouseholdCelebrationAlert() else {
+                return
+            }
 
             await deliverImmediateAlert(
                 title: title,

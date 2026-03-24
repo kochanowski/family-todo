@@ -2959,10 +2959,62 @@ class HouseholdStore: ObservableObject {
             )
         }
 
-        CloudKitSubscriptionManager.shared.publishHydratedRemoteChanges(
-            count: contentDiff.totalAddedCount,
-            shouldDeliverBackgroundNotification: contentDiff.totalAddedCount > 0 &&
-                contentDiff.addedShoppingTitles.isEmpty
+        if let shoppingPresentation = shoppingRemoteSyncPresentation(for: contentDiff) {
+            CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(shoppingPresentation)
+        }
+
+        if let taskPresentation = taskRemoteSyncPresentation(for: contentDiff) {
+            CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(taskPresentation)
+        }
+    }
+
+    private func shoppingRemoteSyncPresentation(
+        for diff: RemoteVisibleContentDiff
+    ) -> RemoteSyncPresentation? {
+        if !diff.addedShoppingTitles.isEmpty {
+            return RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: diff.addedShoppingTitles.count,
+                titles: diff.addedShoppingTitles
+            )
+        }
+
+        let shoppingUpdateCount =
+            diff.changedShoppingItemIDs.count +
+            diff.changedShoppingBundleIDs.count +
+            diff.removedShoppingItemCount +
+            diff.removedShoppingBundleCount +
+            diff.addedShoppingBundleCount
+
+        guard shoppingUpdateCount > 0 else { return nil }
+        return RemoteSyncPresentation(
+            domain: .shopping,
+            kind: .updates,
+            changeCount: shoppingUpdateCount,
+            titles: []
+        )
+    }
+
+    private func taskRemoteSyncPresentation(
+        for diff: RemoteVisibleContentDiff
+    ) -> RemoteSyncPresentation? {
+        if diff.addedWorkItemCount > 0 {
+            return RemoteSyncPresentation(
+                domain: .tasks,
+                kind: .additions,
+                changeCount: diff.addedWorkItemCount,
+                titles: []
+            )
+        }
+
+        let taskUpdateCount = diff.changedWorkItemIDs.count + diff.removedWorkItemCount
+        guard taskUpdateCount > 0 else { return nil }
+        return RemoteSyncPresentation(
+            domain: .tasks,
+            kind: .updates,
+            changeCount: taskUpdateCount,
+            titles: []
         )
     }
 

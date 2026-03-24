@@ -505,6 +505,13 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
 final class CloudKitSubscriptionManagerTests: XCTestCase {
     @MainActor
+    private func makeManager() -> CloudKitSubscriptionManager {
+        let manager = CloudKitSubscriptionManager()
+        manager.resetTransientPresentationState()
+        return manager
+    }
+
+    @MainActor
     func testParticipantSharedSkipsZoneSubscriptions() {
         XCTAssertFalse(
             CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
@@ -554,6 +561,113 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(inviteRolePermissions.contains("_icloud:read"))
         XCTAssertTrue(inviteRolePermissions.contains("_creator:read"))
         XCTAssertTrue(inviteRolePermissions.contains("_creator:write"))
+    }
+
+    @MainActor
+    func testShoppingAdditionOnShoppingTabPublishesInlineFeedbackWithoutBanner() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.shopping)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: 3,
+                titles: ["Milk", "Bread", "Eggs"]
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertEqual(manager.shoppingInlineFeedback?.text, "3 items added")
+        XCTAssertFalse(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 0)
+    }
+
+    @MainActor
+    func testShoppingAdditionOffShoppingTabShowsBannerWithoutInlineFeedback() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.tasks)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: 2,
+                titles: ["Milk", "Bread"]
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertTrue(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 2)
+        XCTAssertNil(manager.shoppingInlineFeedback)
+        XCTAssertNil(manager.tasksInlineFeedback)
+    }
+
+    @MainActor
+    func testTaskUpdateOnTasksTabPublishesInlineFeedbackWithoutBanner() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.tasks)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .tasks,
+                kind: .updates,
+                changeCount: 1,
+                titles: []
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertEqual(manager.tasksInlineFeedback?.text, "Tasks updated")
+        XCTAssertFalse(manager.showNewItemsBanner)
+        XCTAssertNil(manager.shoppingInlineFeedback)
+    }
+
+    @MainActor
+    func testTaskAdditionOffTasksTabDoesNotShowGlobalBannerOrInlineFeedback() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.shopping)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .tasks,
+                kind: .additions,
+                changeCount: 1,
+                titles: ["Take out trash"]
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertFalse(manager.showNewItemsBanner)
+        XCTAssertNil(manager.tasksInlineFeedback)
+        XCTAssertNil(manager.shoppingInlineFeedback)
+    }
+
+    @MainActor
+    func testSharedShoppingAlertsAreSuppressedWhenAppIsActive() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+
+        XCTAssertTrue(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
+        XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .background))
+    }
+
+    @MainActor
+    func testCelebrationAlertsAreSuppressedOnlyWhenTasksTabIsVisible() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+
+        manager.updateActiveTab(.tasks)
+        XCTAssertTrue(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
+
+        manager.updateActiveTab(.shopping)
+        XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
+        XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .background))
     }
 }
 
