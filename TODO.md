@@ -6,14 +6,61 @@
 3. Verify & Commit: after each task, run regression checks, commit, then mark `[x]`.
 4. CloudKit Safety First: if sync behavior is uncertain, stop and validate before continuing.
 
-## Current Repo Snapshot (2026-03-11)
+## Current Repo Snapshot (2026-03-25)
 
 - Implemented through `P2.8`: Phase 1 integrity/cloud fixes, Shopping Bundles, and contextual onboarding are live in the codebase.
 - Production households now start empty; sample/demo seeding is restricted to explicit UI-test launch arguments.
 - Household leave/delete flows are local-first with pending remote cleanup replay and stale CloudKit recovery guards.
 - Retro Dark, Retro Light, and Paper theme support has been rolled out broadly; new UI is expected to wire theme fonts from day one.
 - Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
-- Next planned feature before MVP is `M1.0 Live Shopping Mode / Last-Minute Alert`; after that, the remaining near-term roadmap items are `P2.9` and `P2.10`, while recurring rotation (`P2.6`) is still parked.
+- Multi-user sync is partially hardened, but still not considered fully closed until real-device owner/participant behavior is consistent and predictable.
+- Remote-update UI has partially shipped (`Tasks`/`Shopping` inline feedback + shopping banner), but it still needs a dedicated polish pass after sync reliability is acceptable.
+- Immediate roadmap focus has changed: sync reliability, update UX cleanup, notification-permission timing, onboarding refresh, and invite flow polish now take precedence over previously planned polish-only work.
+
+## Immediate 2026-03-25 Priorities (Highest Priority)
+
+- [ ] **I1.0 Multi-Device Sync Stabilization** ([Details](TODO_DETAILS.md#i10))
+Description: Finish hardening owner/participant sync so `Tasks`, `Shopping`, and `Ideas` update reliably in both directions on physical devices without pull-to-refresh rescue behavior.
+Acceptance Criteria: Real two-device testing confirms `owner -> participant` and `participant -> owner` are both reliable for create/edit/assign/complete/bought/unbought flows; visible screens refresh dependent data correctly; owner-side latency is no longer dramatically worse than participant-side behavior.
+Regression Risk: Partial hydrations, delayed owner-private propagation, stale member/category context, and duplicate push-driven UI updates.
+
+- [ ] **I1.1 Remote Update UX Cleanup** ([Details](TODO_DETAILS.md#i11))
+Description: Rework how remote sync feedback is shown in the app so it stays informative without breaking headers or bottom-tab labels.
+Acceptance Criteria: `Tasks`, `Shopping`, and `Ideas` use one consistent lightweight on-screen sync affordance; shopping off-screen additions can still surface a top banner; bottom-tab labels remain visually stable on narrow iPhones and never split awkwardly.
+Regression Risk: Sync looks invisible after changes, headers become too subtle, or navigation labels still wrap/truncate under theme typography.
+
+- [ ] **I1.2 Notification Permission Gating by Household Size** ([Details](TODO_DETAILS.md#i12))
+Description: Stop prompting for notification permission too early; request it only when notifications can provide real shared-household value.
+Acceptance Criteria: Solo households are never asked during early `Add Item` flows; notification permission is requested only after the household becomes multi-member or at another clear shared-value moment; prompt timing feels intentional instead of premature.
+Regression Risk: Missing the best permission moment, delaying useful reminders too long, or showing the prompt multiple times around membership changes.
+
+- [ ] **I1.3 Welcome Carousel Refresh** ([Details](TODO_DETAILS.md#i13))
+Description: Refresh the opening carousel using the recommendations already captured in `onboarding-flow-claude-analysis.md`.
+Acceptance Criteria: Carousel content, visual hierarchy, and adaptive layout follow the new analysis; onboarding better explains real app value before auth; no legacy layout problems such as fixed screen-height assumptions remain.
+Regression Risk: Carousel churn delays launch work, introduces theme/layout regressions, or weakens the polished first impression we already have.
+
+- [ ] **I1.4 Invite Screen Remodel** ([Details](TODO_DETAILS.md#i14))
+Description: Redesign the invite flow screen so creating and sharing a household invite feels clear, modern, and trustworthy.
+Acceptance Criteria: Invite screen hierarchy, actions, and copy are easier to scan; invite-code / QR / sharing actions are obvious; the flow matches the actual code-based invite model already used by the app.
+Regression Risk: Share flow confusion, mismatched copy vs implementation, or accidental regressions in the current invite/token mechanics.
+
+- [ ] **I1.5 Invite Guidance / "How to Invite" UX** ([Details](TODO_DETAILS.md#i15))
+Description: Add clear in-app explanation so a household owner understands how to invite another person and what the other person needs to do.
+Acceptance Criteria: Users can discover how to invite someone without guessing; the app explains code/QR sharing at the right moment; invite guidance does not feel like dense documentation.
+Regression Risk: Over-explaining with too much text, or placing help too deep so users still miss it.
+
+- [ ] **I1.6 Payments Rollout Readiness** ([Details](TODO_DETAILS.md#i16))
+Description: Once sync, invite, and onboarding flows are stable, finish the minimum architecture and product readiness needed to turn on paid access.
+Acceptance Criteria: Household-level premium model, entitlement resolution, and payment integration plan are all ready enough that app monetization can be introduced without reopening core sync/design decisions.
+Regression Risk: Introducing monetization before collaboration flows are trustworthy, or leaking user-level payment assumptions into a household-first product model.
+
+## Pulled-Forward Watchlist From Phase 3
+
+- [ ] **P3.3 Evaluate Zone-Scoped Subscriptions** ([Details](TODO_DETAILS.md#p33))
+Why it may matter earlier: if phase-2 sync hardening still leaves owner/participant notification blind spots, this becomes a sync-relevant investigation instead of a distant polish item.
+
+- [ ] **P3.1 Versioned SwiftData Schema Framework** ([Details](TODO_DETAILS.md#p31))
+Why it may matter earlier: if we continue changing local persistence or add payments/premium state soon, explicit schema versioning becomes more useful before launch, not after.
 
 ## MVP 1.0 Readiness Track (Highest Priority)
 

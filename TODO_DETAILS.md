@@ -14,6 +14,179 @@ Use it together with the one-task-at-a-time workflow.
 
 ## MVP 1.0 Readiness
 
+## Immediate 2026-03-25 Priorities
+
+## <a id="i10"></a>I1.0 Multi-Device Sync Stabilization
+- Objective: finish hardening owner/participant sync so shared household collaboration is trustworthy on physical devices before further polish work.
+- Background:
+  - current sync model is intentionally asymmetric:
+    - owner uses `ownerPrivate`
+    - participant uses `participantShared`
+  - the near-term goal is not to migrate owner to shared DB, but to make app behavior feel close to symmetric
+  - see `docs/current/owner-participant-sync-plan.md`
+- In scope:
+  - continue phase-2 hardening of the current model
+  - verify remote push intake, dedupe, and follow-up refresh behavior for:
+    - `Shopping`
+    - `Tasks`
+    - `Ideas`
+  - keep owner-side follow-up refresh for participant-originated changes and tighten it using measured device feedback
+  - ensure visible screens always refresh the full dependency set required for rendering:
+    - `Tasks`: tasks + members + categories
+    - `Ideas`: items + categories + members
+    - `Shopping`: items + bundles
+  - keep device-first validation as the source of truth for success, not only unit tests
+- Likely files:
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - `FamilyTodo/Services/AppDelegateBridge.swift`
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `FamilyTodo/Views/TasksView.swift`
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Views/BacklogView.swift`
+- Out of scope:
+  - migrating owner to `sharedCloudDatabase` as the default model
+  - a full sync-engine rewrite before phase-2 hardening is exhausted
+- Validation:
+  - two physical devices remain in sync in both directions without pull-to-refresh
+  - `participant -> owner` is no longer dramatically slower than `owner -> participant`
+  - remote changes do not require “kick” actions such as unrelated shopping edits to appear
+  - no duplicate or misleading notification copy is produced during sync storms
+
+## <a id="i11"></a>I1.1 Remote Update UX Cleanup
+- Objective: make remote-sync feedback consistent and low-noise across `Tasks`, `Shopping`, and `Ideas`.
+- Background:
+  - current state:
+    - `Tasks`: inline header pill such as `Tasks updated`
+    - `Shopping`: inline header pill while visible, top banner for off-screen additions
+    - `Ideas`: no dedicated sync indicator, only refreshed content/animation
+  - current analysis is saved in `docs/current/2026-03-25-sync-and-update-ux-analysis.md`
+- In scope:
+  - unify on-screen remote update UX across the three core tabs
+  - strongly prefer an icon-led, short-lived header indicator over text-heavy pills
+  - keep top-banner treatment only for off-screen shopping additions where count/navigation matters
+  - protect bottom navigation labels from wrapping/truncation on narrow devices
+  - consider shortening bottom tab copy from `Shopping` to `Shop` while keeping full header title `Shopping`
+- Likely files:
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `FamilyTodo/Views/ShoppingListView.swift`
+  - `FamilyTodo/Views/TasksView.swift`
+  - `FamilyTodo/Views/BacklogView.swift`
+  - `FamilyTodo/Views/Components/SyncStatusPill.swift`
+  - `FamilyTodo/Views/Components/NewItemsBanner.swift`
+  - `FamilyTodo/ContentView.swift`
+  - `FamilyTodo/Views/Components/FloatingTabBar.swift`
+  - `FamilyTodo/Utilities/TabBarTypographyManager.swift`
+- Out of scope:
+  - inventing a new global notification system unrelated to remote sync
+  - putting live sync counts into the bottom tab bar
+- Validation:
+  - on-screen sync feedback is consistent across all three tabs
+  - `Shopping` tab label never breaks into awkward wrapped text
+  - remote updates remain visible enough to reassure users without filling headers with copy
+
+## <a id="i12"></a>I1.2 Notification Permission Gating by Household Size
+- Objective: request notification permission only when notifications can provide real shared-household value.
+- Current problem:
+  - permission prompt appears too early
+  - prompt can be surfaced around `Add Item` even when the user is alone in the household
+- In scope:
+  - gate notification permission behind multi-member relevance
+  - do not request notification permission for solo households during early item-creation flows
+  - choose a better trigger such as:
+    - after the second active household member joins
+    - or the first moment a shared notification could realistically help
+  - keep the prompt logic aligned with the real notification strategy in the product
+- Likely files:
+  - `FamilyTodo/Services/NotificationService.swift`
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - invite/join flow views where member-count transitions are already handled
+- Out of scope:
+  - redesigning all notification copy in the same task
+- Validation:
+  - solo users are not prompted prematurely
+  - shared households still receive the permission prompt at a meaningful moment
+  - prompt is shown once, not repeatedly around member-count changes
+
+## <a id="i13"></a>I1.3 Welcome Carousel Refresh
+- Objective: refresh the first-launch carousel using the already-prepared product and HIG analysis.
+- Source:
+  - `onboarding-flow-claude-analysis.md`
+- In scope:
+  - update carousel slides to map more directly to actual app value:
+    - household organization
+    - shopping
+    - tasks
+    - ideas
+    - sync/together
+  - fix the layout issues called out in the analysis
+  - refresh palette mapping and supporting visual hierarchy where needed
+  - keep theme and typography support intact
+- Likely files:
+  - `FamilyTodo/Views/Onboarding/OnboardingCarouselView.swift`
+  - `FamilyTodo/Views/Onboarding/AuroraBackground.swift`
+- Out of scope:
+  - full redesign of auth or household-setup screens inside this task
+- Validation:
+  - carousel copy reflects actual MVP value
+  - layout remains stable on narrow screens and wider contexts
+  - no hardcoded or deprecated screen-size assumptions remain
+
+## <a id="i14"></a>I1.4 Invite Screen Remodel
+- Objective: redesign the invite screen so household sharing feels clear, lightweight, and confidence-inspiring.
+- In scope:
+  - simplify invite screen hierarchy
+  - make the main call-to-action obvious
+  - present invite code / QR / share behavior in a way that matches the real underlying flow
+  - preserve the existing code-based invite mechanism rather than inventing a new transport
+- Likely files:
+  - invite/share related views in onboarding or household settings flow
+  - any supporting components that present code and QR affordances
+- Out of scope:
+  - backend invite-token redesign in the same task
+- Validation:
+  - owners immediately understand how to send an invite
+  - the screen does not imply unsupported share-link behavior
+  - visual hierarchy feels modern and consistent with the rest of the app
+
+## <a id="i15"></a>I1.5 Invite Guidance / "How to Invite" UX
+- Objective: make it obvious to a user how to invite someone else to a household and what the other person must do.
+- In scope:
+  - add clear just-in-time explanatory copy around invite creation
+  - explain that the invite is code/QR-based
+  - clarify the expected next step for the invited person
+  - place this help where users need it, not buried in settings-only text
+- Likely files:
+  - invite flow screens
+  - onboarding household-setup screens
+  - possibly `More` / household settings helper text
+- Out of scope:
+  - long-form FAQ or help center infrastructure
+- Validation:
+  - first-time users can invite another person without guessing
+  - guidance is concise enough to scan quickly
+  - invite completion rate should improve during manual testing
+
+## <a id="i16"></a>I1.6 Payments Rollout Readiness
+- Objective: prepare the app for monetization only after collaboration fundamentals are stable.
+- Preconditions:
+  - multi-device sync is reliable
+  - invite/join flow is understandable
+  - onboarding no longer misleads about product value
+- In scope:
+  - finish the household-level premium foundation already identified in MVP tasks
+  - confirm entitlement resolution is household-first, not user-first
+  - prepare the implementation seam for payment integration and release gating
+  - define the minimal post-stability rollout plan for enabling payments
+- Useful existing roadmap dependencies:
+  - `M1.5 Household-Level Premium Schema Foundation`
+  - `M1.6 Premium Inheritance Rules (Household Scope)`
+  - `M1.7 RevenueCat Preparation Layer`
+- Out of scope:
+  - shipping billing before sync and invite reliability are acceptable
+- Validation:
+  - premium state can be introduced without reworking sync architecture
+  - collaboration UX is stable enough that monetization does not sit on top of broken core flows
+
 ## <a id="m10"></a>M1.0 Live Shopping Mode / Last-Minute Alert
 - Objective: solve the “I’m at the store, add anything last minute now” household coordination problem with a lightweight shared-presence mode in Shopping.
 - Current architecture fit:
