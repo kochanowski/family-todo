@@ -74,12 +74,18 @@ private struct BacklogContent: View {
     @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
+    @State private var remoteHighlightedItemIDs: Set<UUID> = []
+    @State private var remoteHighlightedCategoryIDs: Set<UUID> = []
+    @State private var lastProcessedRemoteAnimationBatchToken: UUID?
+    @State private var isApplyingRemoteSyncAnimation = false
+    @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenPendingPromotionIds: Set<UUID> = []
+    @State private var armedPromotionTipItemID: UUID?
     @State private var suppressPromotionTipUntil = Date.distantPast
     @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
-    @AppStorage("hasSeenIdeasTutorial") private var hasSeenIdeasTutorial = false
+    @AppStorage(AppTipProgressKey.ideasTutorialSeen) private var hasSeenIdeasTutorial = false
     @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
     private var hasCompletedIdeasCreateCategoryTip = false
     @AppStorage(AppTipProgressKey.ideasAddIdeaCompleted)
@@ -138,6 +144,11 @@ private struct BacklogContent: View {
                                 CategoryCard(
                                     category: category,
                                     items: categoryItems,
+                                    highlightedItemIDs: remoteHighlightedItemIDs,
+                                    isCategoryHighlighted: remoteHighlightedCategoryIDs.contains(
+                                        category.id
+                                    ),
+                                    isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
                                     appTipRuntimeGeneration: appTipRuntimeGeneration,
                                     addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
                                     ideaAssignTipItemID: ideaAssignTipAnchorItemID,
@@ -236,23 +247,27 @@ private struct BacklogContent: View {
             if selectedNotificationIsLocal(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else if selectedTab == .backlog {
+                handleRemoteBacklogRefresh(notification)
             } else {
-                _ = _Concurrency.Task {
-                    await loadBacklogData()
-                    markIdeasTutorialAsSeenIfNeeded()
-                }
+                store.replayPendingMutationsIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { notification in
             store.markLocalSnapshotStale()
             if selectedNotificationIsLocal(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
+                // Un-suppress items that have returned to Ideas via demotion.
+                // subtract(_:) removes IDs that ARE in the store — keeping promoted-item
+                // suppressions intact for IDs no longer present locally.
+                let activeItemIds = Set(store.items.map(\.id))
+                hiddenPendingPromotionIds.subtract(activeItemIds)
+                syncPromotionTipAnchorWithVisibleItems()
                 markIdeasTutorialAsSeenIfNeeded()
+            } else if selectedTab == .backlog {
+                handleRemoteBacklogRefresh(notification)
             } else {
-                _ = _Concurrency.Task {
-                    await loadBacklogData()
-                    markIdeasTutorialAsSeenIfNeeded()
-                }
+                store.replayPendingMutationsIfNeeded()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
@@ -264,6 +279,9 @@ private struct BacklogContent: View {
                     await memberStore.loadMembersForDisplay()
                 }
             }
+        }
+        .onDisappear {
+            cancelRemoteSyncAnimationReset()
         }
         .sheet(isPresented: $isAddingCategory) {
             CategoryEditorSheet(
@@ -383,12 +401,12 @@ private struct BacklogContent: View {
                             notes: item.notes,
                             assigneeId: selectedAssignee
                         )
-                        suppressPromotionTip(for: 1.25)
                         guard !hadAssignee else { return }
                         if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
                            updatedItem.assigneeId != nil
                         {
                             AppTips.donateIdeasOwnerAssigned()
+                            armPromotionTip(for: updatedItem.id)
                         }
                     }
                 )
@@ -417,12 +435,20 @@ private struct BacklogContent: View {
                     item: item,
                     members: activeMembers,
                     onSave: { title, notes, assigneeId in
+                        let hadAssignee = item.assigneeId != nil
                         store.updateItem(
                             item,
                             title: title,
                             notes: notes,
                             assigneeId: assigneeId
                         )
+                        if !hadAssignee,
+                           let updatedItem = latestItem(withID: item.id),
+                           updatedItem.assigneeId != nil
+                        {
+                            AppTips.donateIdeasOwnerAssigned()
+                            armPromotionTip(for: updatedItem.id)
+                        }
                     },
                     onDelete: {
                         performImmediateDeleteItem(withID: item.id)
@@ -492,6 +518,7 @@ private struct BacklogContent: View {
         memberStore.setSyncMode(userSession.syncMode)
         await store.loadDataForDisplay()
         await memberStore.loadMembersForDisplay()
+        syncPromotionTipAnchorWithVisibleItems()
     }
 
     private var backlogLoadingState: some View {
@@ -564,6 +591,7 @@ private struct BacklogContent: View {
             .accessibilityIdentifier("backlogAddCategoryButton")
             .contextualPopoverTip(
                 activeIdeasTip == .createCategory,
+                tipID: "ideas.createCategory",
                 IdeasCreateCategoryTip(),
                 arrowEdge: .top,
                 generation: appTipRuntimeGeneration
@@ -645,6 +673,7 @@ private struct BacklogContent: View {
 
     private func completePromotion(of itemID: UUID, assigneeId: UUID) {
         guard let item = latestItem(withID: itemID) else {
+            clearPromotionTipAnchor(matching: itemID)
             hiddenPendingPromotionIds.remove(itemID)
             return
         }
@@ -658,7 +687,7 @@ private struct BacklogContent: View {
         case .success:
             // Keep the item hidden for the rest of the session so a delayed
             // cloud echo cannot briefly show the promoted idea again.
-            break
+            clearPromotionTipAnchor(matching: item.id)
         case .assigneeRequired, .wipLimitReached, .failed:
             withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
                 hiddenPendingPromotionIds.remove(item.id)
@@ -706,6 +735,91 @@ private struct BacklogContent: View {
 
     private func selectedNotificationIsLocal(_ notification: Notification) -> Bool {
         (notification.object as? String) == "local"
+    }
+
+    private func handleRemoteBacklogRefresh(_ notification: Notification) {
+        let payload = notification.remoteSyncAnimationPayload
+        if let batchToken = payload?.batchToken,
+           lastProcessedRemoteAnimationBatchToken == batchToken
+        {
+            return
+        }
+
+        let beforeIdeaLocations = backlogIdeaLocations()
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let categoryRefreshTask = RemoteVisibleRefreshTask(
+                changedIDs: payload?.backlogChangedCategoryIDs ?? [],
+                captureVisibleLocations: backlogCategoryLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                }
+            )
+            let categoryDelta = await categoryRefreshTask.run()
+
+            let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
+                beforeLocations: beforeIdeaLocations,
+                afterLocations: backlogIdeaLocations(),
+                changedIDs: payload?.workItemChangedIDs ?? []
+            )
+
+            remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
+            remoteHighlightedItemIDs = itemDelta.highlightedIDs
+
+            if let batchToken = payload?.batchToken {
+                lastProcessedRemoteAnimationBatchToken = batchToken
+            }
+
+            let activeItemIds = Set(store.items.map(\.id))
+            hiddenPendingPromotionIds.subtract(activeItemIds)
+            syncPromotionTipAnchorWithVisibleItems()
+            logRemoteSyncVisibleRefreshLatency(screen: "Ideas", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markIdeasTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func backlogCategoryLocations() -> [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: store.categories.map { ($0.id, 0) })
+    }
+
+    private func backlogIdeaLocations() -> [UUID: UUID] {
+        let visibleIdeas = store.categories.flatMap { visibleItems(for: $0.id) }
+        return Dictionary(uniqueKeysWithValues: visibleIdeas.map { ($0.id, $0.categoryId) })
+    }
+
+    private func scheduleRemoteSyncAnimationReset() {
+        remoteSyncResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncStructureResetNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            isApplyingRemoteSyncAnimation = false
+
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncHighlightDurationNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            remoteHighlightedItemIDs.removeAll()
+            remoteHighlightedCategoryIDs.removeAll()
+            remoteSyncResetTask = nil
+        }
+    }
+
+    private func cancelRemoteSyncAnimationReset() {
+        remoteSyncResetTask?.cancel()
+        remoteSyncResetTask = nil
+        isApplyingRemoteSyncAnimation = false
+        remoteHighlightedItemIDs.removeAll()
+        remoteHighlightedCategoryIDs.removeAll()
     }
 
     private func activateComposer(for categoryId: UUID, scrollProxy: ScrollViewProxy) {
@@ -824,15 +938,16 @@ private struct BacklogContent: View {
     }
 
     private var promoteTipItemID: UUID? {
-        guard Date() >= suppressPromotionTipUntil else { return nil }
-
-        for category in store.categories {
-            if let promotableItem = visibleItems(for: category.id).first(where: { $0.assigneeId != nil }) {
-                return promotableItem.id
-            }
+        guard Date() >= suppressPromotionTipUntil,
+              let armedPromotionTipItemID,
+              let item = latestItem(withID: armedPromotionTipItemID),
+              item.assigneeId != nil,
+              isVisibleIdeaItem(item)
+        else {
+            return nil
         }
 
-        return nil
+        return item.id
     }
 
     private var hasPresentedIdeasSheet: Bool {
@@ -856,6 +971,32 @@ private struct BacklogContent: View {
     private var ideaPromotionTipItemID: UUID? {
         guard activeIdeasTip == .promote else { return nil }
         return promoteTipItemID
+    }
+
+    private func armPromotionTip(for itemID: UUID) {
+        armedPromotionTipItemID = itemID
+        suppressPromotionTipUntil = .distantPast
+        appTipRuntimeGeneration += 1
+    }
+
+    private func clearPromotionTipAnchor(matching itemID: UUID? = nil) {
+        guard itemID == nil || armedPromotionTipItemID == itemID else { return }
+        armedPromotionTipItemID = nil
+    }
+
+    private func syncPromotionTipAnchorWithVisibleItems() {
+        guard let armedPromotionTipItemID,
+              let item = latestItem(withID: armedPromotionTipItemID),
+              item.assigneeId != nil,
+              isVisibleIdeaItem(item)
+        else {
+            armedPromotionTipItemID = nil
+            return
+        }
+    }
+
+    private func isVisibleIdeaItem(_ item: BacklogItem) -> Bool {
+        visibleItems(for: item.categoryId).contains(where: { $0.id == item.id })
     }
 
     private var deleteConfirmationTitle: String {
@@ -935,6 +1076,7 @@ private struct BacklogContent: View {
     }
 
     private func queueDeleteItem(_ item: BacklogItem) {
+        clearPromotionTipAnchor(matching: item.id)
         if let previous = pendingDeletionItem {
             deletionTask?.cancel()
             deletionTask = nil
@@ -1012,6 +1154,9 @@ private struct BacklogStatusBanner: View {
 struct CategoryCard: View {
     let category: BacklogCategory
     let items: [BacklogItem]
+    let highlightedItemIDs: Set<UUID>
+    let isCategoryHighlighted: Bool
+    let isApplyingRemoteSyncAnimation: Bool
     let appTipRuntimeGeneration: Int
     let addIdeaTipCategoryID: UUID?
     let ideaAssignTipItemID: UUID?
@@ -1091,6 +1236,7 @@ struct CategoryCard: View {
                     BacklogItemRow(
                         item: item,
                         assignee: assigneeFor(item.assigneeId),
+                        isHighlighted: highlightedItemIDs.contains(item.id),
                         appTipRuntimeGeneration: appTipRuntimeGeneration,
                         canPromote: canPromote,
                         isPromotionDisabled: isPromoting,
@@ -1119,6 +1265,7 @@ struct CategoryCard: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
+                    .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
                 }
             }
             .padding(.horizontal, 8)
@@ -1166,23 +1313,31 @@ struct CategoryCard: View {
                         Text("Add idea")
                             .font(themeStore.font(for: .buttonLabel))
                             .foregroundStyle(themeStore.accentTabColor)
-
-                        Spacer()
                     }
+                    .overlay(alignment: .topLeading) {
+                        BacklogTipAnchor(width: 112, height: 18)
+                            .offset(x: 4, y: -8)
+                            .contextualPopoverTip(
+                                addIdeaTipCategoryID == category.id,
+                                tipID: "ideas.addIdea",
+                                IdeasAddIdeaTip(),
+                                arrowEdge: .top,
+                                generation: appTipRuntimeGeneration
+                            )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogAddIdeaButton_\(category.id.uuidString)")
                 .accessibilityHint("Tap to add an idea to this category.")
-                .contextualPopoverTip(
-                    addIdeaTipCategoryID == category.id,
-                    IdeasAddIdeaTip(),
-                    arrowEdge: .top,
-                    generation: appTipRuntimeGeneration
-                )
             }
         }
+        .remoteSyncHighlight(
+            isActive: isCategoryHighlighted,
+            cornerRadius: 12
+        )
         .background {
             RoundedRectangle(cornerRadius: 12)
                 .fill(cardBackground)
@@ -1273,6 +1428,7 @@ struct BacklogItemRow: View {
 
     let item: BacklogItem
     let assignee: Member?
+    let isHighlighted: Bool
     let appTipRuntimeGeneration: Int
     let canPromote: Bool
     let isPromotionDisabled: Bool
@@ -1324,12 +1480,20 @@ struct BacklogItemRow: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogDeleteButton_\(item.title)")
             }
-            .contextualPopoverTip(
-                showsIdeaPromotionTip,
-                IdeaPromotionTip(),
-                arrowEdge: .trailing,
-                generation: appTipRuntimeGeneration
-            )
+            .overlay(alignment: .topTrailing) {
+                if canPromote {
+                    BacklogTipAnchor(width: 18, height: 18)
+                        .padding(.trailing, 48)
+                        .offset(y: -8)
+                        .contextualPopoverTip(
+                            showsIdeaPromotionTip,
+                            tipID: "ideas.promote",
+                            IdeaPromotionTip(),
+                            arrowEdge: .trailing,
+                            generation: appTipRuntimeGeneration
+                        )
+                }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -1337,6 +1501,7 @@ struct BacklogItemRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(colorScheme == .dark ? Color.white.opacity(0.06) : .white)
         }
+        .remoteSyncHighlight(isActive: isHighlighted, cornerRadius: 10)
         .animation(.easeInOut(duration: 0.2), value: canPromote)
     }
 
@@ -1368,10 +1533,23 @@ struct BacklogItemRow: View {
         .accessibilityIdentifier("backlogAssignButton_\(item.title)")
         .contextualPopoverTip(
             showsAssignOwnerTip,
+            tipID: "ideas.assignOwner",
             IdeasAssignOwnerTip(),
             arrowEdge: .trailing,
             generation: appTipRuntimeGeneration
         )
+    }
+}
+
+private struct BacklogTipAnchor: View {
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        Color.clear
+            .frame(width: width, height: height)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

@@ -18,6 +18,9 @@ enum IdeasOnboardingTip: Equatable {
 }
 
 enum AppTipProgressKey {
+    static let shoppingTutorialSeen = "hasSeenShoppingTutorial"
+    static let ideasTutorialSeen = "hasSeenIdeasTutorial"
+    static let tasksTutorialSeen = "hasSeenTasksTutorial"
     static let shoppingFirstAddCompleted = "appTips.shopping.firstAddCompleted"
     static let shoppingRecentPurchasesCompleted = "appTips.shopping.recentPurchasesCompleted"
     static let shoppingBundlesLocationCompleted = "appTips.shopping.bundlesLocationCompleted"
@@ -29,6 +32,9 @@ enum AppTipProgressKey {
     static let tasksSwipeActionsCompleted = "appTips.tasks.swipeActionsCompleted"
 
     static let all = [
+        shoppingTutorialSeen,
+        ideasTutorialSeen,
+        tasksTutorialSeen,
         shoppingFirstAddCompleted,
         shoppingRecentPurchasesCompleted,
         shoppingBundlesLocationCompleted,
@@ -258,6 +264,20 @@ enum AppTipStorageKey {
 
         @available(iOS 17, *)
         private static func testingTipTypes(for launchArguments: [String]) -> [any Tip.Type]? {
+            if launchArguments.contains("-showAllTipsForTesting") {
+                return [
+                    ShoppingFirstAddTip.self,
+                    ShoppingRecentlyPurchasedTip.self,
+                    ShoppingBundlesLocationTip.self,
+                    ShoppingBundleQuickAddTip.self,
+                    IdeasCreateCategoryTip.self,
+                    IdeasAddIdeaTip.self,
+                    IdeasAssignOwnerTip.self,
+                    IdeaPromotionTip.self,
+                    TaskSwipeActionsTip.self,
+                ]
+            }
+
             guard let argumentIndex = launchArguments.firstIndex(of: "-showTipForTesting"),
                   argumentIndex + 1 < launchArguments.count
             else {
@@ -617,12 +637,13 @@ enum AppTipStorageKey {
         @ViewBuilder
         func contextualPopoverTip(
             _ isEnabled: Bool,
+            tipID: String,
             _ tip: some Tip,
             arrowEdge: Edge = .top,
             generation: Int = 0
         ) -> some View {
             if #available(iOS 17, *), isEnabled {
-                id("app-tip-\(generation)")
+                id("app-tip-\(tipID)-\(generation)")
                     .popoverTip(tip, arrowEdge: arrowEdge)
             } else {
                 self

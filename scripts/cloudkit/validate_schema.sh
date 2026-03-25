@@ -74,10 +74,11 @@ if [[ -n "$duplicate_fields" ]]; then
 fi
 
 required_map='{
-  "Household": ["id", "name", "colorHex", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
-  "Member": ["id", "householdId", "userId", "displayName", "colorHex", "role", "joinedAt", "isActive"],
+  "Household": ["___recordID", "id", "name", "colorHex", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
+  "Member": ["___recordID", "id", "householdId", "userId", "displayName", "colorHex", "role", "joinedAt", "isActive"],
   "Area": ["id", "householdId", "name", "icon", "sortOrder", "createdAt"],
   "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
+  "WorkItem": ["id", "logicalItemId", "householdId", "title", "status", "assigneeId", "assigneeIds", "categoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
   "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
   "ShoppingItem": ["id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
   "ShoppingBundle": ["id", "householdId", "name", "icon", "itemsJSON", "sortOrder", "createdAt", "updatedAt"],
@@ -87,10 +88,11 @@ required_map='{
 }'
 
 required_indexes='{
-  "Household": { "query": ["id"], "sort": [] },
-  "Member": { "query": ["householdId", "userId"], "sort": ["joinedAt"] },
+  "Household": { "query": ["___recordID", "id"], "sort": [] },
+  "Member": { "query": ["___recordID", "householdId", "userId"], "sort": ["joinedAt"] },
   "Area": { "query": ["householdId"], "sort": ["sortOrder"] },
   "Task": { "query": ["householdId", "status", "assigneeId"], "sort": ["updatedAt"] },
+  "WorkItem": { "query": ["householdId"], "sort": ["updatedAt"] },
   "RecurringChore": { "query": ["householdId"], "sort": ["title"] },
   "ShoppingItem": { "query": ["householdId"], "sort": ["sortOrder"] },
   "ShoppingBundle": { "query": ["householdId"], "sort": ["sortOrder"] },
@@ -106,7 +108,7 @@ required_role_permissions='{
     "InviteToken": ["read"]
   },
   "_icloud": {
-    "cloudkit.share": ["read"],
+    "cloudkit.share": ["create"],
     "InviteToken": ["create", "read"]
   },
   "_creator": {

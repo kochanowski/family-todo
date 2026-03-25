@@ -7,11 +7,20 @@ import UIKit
 struct ShoppingListView: View {
     @EnvironmentObject private var userSession: UserSession
     @Environment(\.modelContext) private var modelContext
+    @Binding private var selectedTab: AppTab
+
+    init(selectedTab: Binding<AppTab> = .constant(.shopping)) {
+        _selectedTab = selectedTab
+    }
 
     var body: some View {
         Group {
             if let householdId = userSession.currentHouseholdID {
-                ShoppingListContent(householdId: householdId, modelContext: modelContext)
+                ShoppingListContent(
+                    householdId: householdId,
+                    modelContext: modelContext,
+                    selectedTab: $selectedTab
+                )
             } else {
                 GuidedEmptyStateView()
             }
@@ -24,6 +33,7 @@ private struct ShoppingListContent: View {
     @StateObject private var store: ShoppingListStore
     @StateObject private var bundleStore: ShoppingBundleStore
     @StateObject private var restockPulse = RestockPulseState()
+    @Binding private var selectedTab: AppTab
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @EnvironmentObject private var userSession: UserSession
@@ -53,7 +63,11 @@ private struct ShoppingListContent: View {
     @State private var pendingShoppingCompletionCelebrationTask: _Concurrency.Task<Void, Never>?
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
-    @AppStorage("hasSeenShoppingTutorial") private var hasSeenShoppingTutorial = false
+    @State private var remoteHighlightedItemIDs: Set<UUID> = []
+    @State private var isApplyingRemoteSyncAnimation = false
+    @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
+    @State private var shouldRearmBundleQuickAddTipOnNextAppear = false
+    @AppStorage(AppTipProgressKey.shoppingTutorialSeen) private var hasSeenShoppingTutorial = false
     @AppStorage(AppTipProgressKey.shoppingFirstAddCompleted)
     private var hasCompletedShoppingFirstAddTip = false
     @AppStorage(AppTipProgressKey.shoppingRecentPurchasesCompleted)
@@ -65,13 +79,14 @@ private struct ShoppingListContent: View {
     @AppStorage(AppTips.runtimeGenerationDefaultsKey)
     private var appTipRuntimeGeneration = 0
 
-    init(householdId: UUID, modelContext: ModelContext) {
+    init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
         _store = StateObject(
             wrappedValue: ShoppingListStore(householdId: householdId, modelContext: modelContext)
         )
         _bundleStore = StateObject(
             wrappedValue: ShoppingBundleStore(householdId: householdId, modelContext: modelContext)
         )
+        _selectedTab = selectedTab
     }
 
     var body: some View {
@@ -95,12 +110,25 @@ private struct ShoppingListContent: View {
             .onChange(of: householdStore.currentHousehold?.ownerId) { _, _ in
                 updateStoreCloudContext()
             }
+            .onChange(of: selectedTab) { _, newTab in
+                guard newTab == .shopping else { return }
+                _ = _Concurrency.Task {
+                    await loadShoppingData()
+                }
+            }
             .onChange(of: store.toBuyItems.isEmpty) { _, isEmpty in
                 if !isEmpty {
                     markShoppingTutorialAsSeenIfNeeded()
                 }
             }
-            .newItemsBanner(manager: subscriptionManager)
+            .onChange(of: quickAddBundles.isEmpty) { oldIsEmpty, newIsEmpty in
+                guard oldIsEmpty, !newIsEmpty else { return }
+                if isScreenVisible {
+                    rearmBundleQuickAddTipIfNeeded()
+                } else {
+                    shouldRearmBundleQuickAddTipOnNextAppear = true
+                }
+            }
             .onChange(of: isKeyboardVisible) { _, visible in
                 guard !visible else { return }
                 if let editingItem = currentEditingItem {
@@ -116,9 +144,14 @@ private struct ShoppingListContent: View {
             }
             .onReceive(
                 NotificationCenter.default.publisher(for: .shoppingListDataDidChange)
-            ) { _ in
-                _ = _Concurrency.Task {
-                    await loadShoppingData()
+            ) { notification in
+                store.markLocalSnapshotStale()
+                if isLocalStoreNotification(notification) {
+                    store.rehydrateVisibleSnapshotFromCache()
+                } else if selectedTab == .shopping {
+                    handleRemoteShoppingListChange(notification)
+                } else {
+                    store.replayPendingMutationsIfNeeded()
                 }
             }
             .onReceive(
@@ -158,11 +191,23 @@ private struct ShoppingListContent: View {
             .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
             .onAppear {
                 isScreenVisible = true
+                if didPerformInitialLoad {
+                    _ = _Concurrency.Task {
+                        await bundleStore.loadBundlesForDisplay()
+                        await MainActor.run {
+                            if shouldRearmBundleQuickAddTipOnNextAppear {
+                                rearmBundleQuickAddTipIfNeeded()
+                                shouldRearmBundleQuickAddTipOnNextAppear = false
+                            }
+                        }
+                    }
+                }
             }
             .onDisappear {
                 isScreenVisible = false
                 cancelPendingShoppingCompletionCelebration()
                 cancelToastDismiss()
+                cancelRemoteSyncAnimationReset()
             }
             .onChange(of: showQuickAddBundleChooser) { _, isPresented in
                 if !isPresented {
@@ -336,6 +381,11 @@ private struct ShoppingListContent: View {
                 }
             }
         }
+        .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
+        .remoteSyncHighlight(
+            isActive: remoteHighlightedItemIDs.contains(item.id),
+            cornerRadius: 10
+        )
         .listRowInsets(shoppingRowInsets)
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
@@ -377,8 +427,17 @@ private struct ShoppingListContent: View {
 
     private var header: some View {
         AppScreenHeader(title: "Shopping") {
-            if !store.toBuyItems.isEmpty {
-                ShoppingCountBadge(count: store.toBuyItems.count)
+            HStack(spacing: 8) {
+                if !store.toBuyItems.isEmpty {
+                    ShoppingCountBadge(count: store.toBuyItems.count)
+                }
+
+                if let feedback = subscriptionManager.shoppingInlineFeedback,
+                   selectedTab == .shopping
+                {
+                    SyncStatusPill(text: feedback.text)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         } trailing: {
             HStack(alignment: .center, spacing: 8) {
@@ -413,6 +472,7 @@ private struct ShoppingListContent: View {
                 })
                 .contextualPopoverTip(
                     activeShoppingTip == .bundlesLocation,
+                    tipID: "shopping.bundlesLocation",
                     ShoppingBundlesLocationTip(),
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
@@ -434,6 +494,7 @@ private struct ShoppingListContent: View {
                 .pulseAnimation(trigger: restockPulse.pulseToken)
                 .contextualPopoverTip(
                     activeShoppingTip == .recentPurchases,
+                    tipID: "shopping.recentPurchases",
                     ShoppingRecentlyPurchasedTip(),
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
@@ -499,12 +560,14 @@ private struct ShoppingListContent: View {
         )
         .contextualPopoverTip(
             activeShoppingTip == .firstAdd,
+            tipID: "shopping.firstAdd",
             ShoppingFirstAddTip(),
             arrowEdge: .bottom,
             generation: appTipRuntimeGeneration
         )
         .contextualPopoverTip(
             activeShoppingTip == .bundleQuickAdd,
+            tipID: "shopping.bundleQuickAdd",
             ShoppingBundleQuickAddTip(),
             arrowEdge: .bottom,
             generation: appTipRuntimeGeneration
@@ -767,6 +830,67 @@ private struct ShoppingListContent: View {
         bundleStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
     }
 
+    private func isLocalStoreNotification(_ notification: Notification) -> Bool {
+        (notification.object as? String) == "local"
+    }
+
+    private func handleRemoteShoppingListChange(_ notification: Notification) {
+        let payload = notification.remoteSyncAnimationPayload
+        let changedIDs = payload?.shoppingChangedItemIDs ?? []
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: { shoppingVisibleLocations(from: store.toBuyItems) },
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    await bundleStore.loadBundlesForDisplay()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedItemIDs = delta.highlightedIDs
+            logRemoteSyncVisibleRefreshLatency(screen: "Shopping", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markShoppingTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func shoppingVisibleLocations(from items: [ShoppingItem]) -> [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: items.map { ($0.id, 0) })
+    }
+
+    private func scheduleRemoteSyncAnimationReset() {
+        remoteSyncResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncStructureResetNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            isApplyingRemoteSyncAnimation = false
+
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncHighlightDurationNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            remoteHighlightedItemIDs.removeAll()
+            remoteSyncResetTask = nil
+        }
+    }
+
+    private func cancelRemoteSyncAnimationReset() {
+        remoteSyncResetTask?.cancel()
+        remoteSyncResetTask = nil
+        isApplyingRemoteSyncAnimation = false
+        remoteHighlightedItemIDs.removeAll()
+    }
+
     private func scheduleShoppingCompletionCelebration() {
         pendingShoppingCompletionCelebrationTask = _Concurrency.Task { @MainActor in
             try? await _Concurrency.Task.sleep(nanoseconds: 320_000_000)
@@ -848,6 +972,12 @@ private struct ShoppingListContent: View {
     private func markShoppingTutorialAsSeenIfNeeded() {
         guard !store.toBuyItems.isEmpty, !hasSeenShoppingTutorial else { return }
         hasSeenShoppingTutorial = true
+    }
+
+    private func rearmBundleQuickAddTipIfNeeded() {
+        guard !hasCompletedShoppingBundleQuickAddTip else { return }
+        guard !quickAddBundles.isEmpty else { return }
+        appTipRuntimeGeneration += 1
     }
 
     private var activeShoppingTip: ShoppingOnboardingTip? {
@@ -1428,7 +1558,7 @@ private struct RestockItemRow: View {
 }
 
 #Preview {
-    ShoppingListView()
+    ShoppingListView(selectedTab: .constant(.shopping))
         .environmentObject(UserSession.shared)
         .environmentObject(ThemeStore())
 }

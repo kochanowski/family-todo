@@ -177,13 +177,14 @@ struct GuidedEmptyStateView: View {
 
         joinInviteCode = ""
         showJoinSheet = false
+        if userSession.syncMode == .cloud {
+            await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
+        }
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
     private func preferredJoinCode() -> String? {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode),
-              normalizedCode.count == 8
-        else {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode) else {
             return nil
         }
         return normalizedCode

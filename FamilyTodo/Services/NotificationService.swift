@@ -2,6 +2,83 @@ import Combine
 import Foundation
 import SwiftData
 
+struct SharedShoppingNotificationBatch: Equatable {
+    let householdId: UUID
+    let householdName: String?
+    let itemTitles: [String]
+
+    var count: Int {
+        itemTitles.count
+    }
+}
+
+struct SharedShoppingNotificationAccumulator {
+    private struct PendingBatch {
+        var householdName: String?
+        var itemTitles: Set<String>
+        var flushAt: Date
+    }
+
+    let window: TimeInterval
+    private var pendingByHouseholdId: [UUID: PendingBatch] = [:]
+
+    init(window: TimeInterval = 3) {
+        self.window = window
+    }
+
+    var nextFlushAt: Date? {
+        pendingByHouseholdId.values.map(\.flushAt).min()
+    }
+
+    mutating func record(
+        householdId: UUID,
+        householdName: String?,
+        itemTitles: [String],
+        at: Date
+    ) -> SharedShoppingNotificationBatch? {
+        let readyBatch = flushReady(at: at).first
+        let deduplicatedTitles = Set(itemTitles.filter { !$0.isEmpty })
+        guard !deduplicatedTitles.isEmpty else { return readyBatch }
+
+        if var existing = pendingByHouseholdId[householdId], at < existing.flushAt {
+            existing.itemTitles.formUnion(deduplicatedTitles)
+            existing.householdName = householdName ?? existing.householdName
+            pendingByHouseholdId[householdId] = existing
+        } else {
+            pendingByHouseholdId[householdId] = PendingBatch(
+                householdName: householdName,
+                itemTitles: deduplicatedTitles,
+                flushAt: at.addingTimeInterval(window)
+            )
+        }
+
+        return readyBatch
+    }
+
+    mutating func flushReady(at: Date) -> [SharedShoppingNotificationBatch] {
+        let readyHouseholdIDs = pendingByHouseholdId.compactMap { householdId, pending in
+            pending.flushAt <= at ? householdId : nil
+        }
+
+        let readyBatches = readyHouseholdIDs.compactMap { householdId -> SharedShoppingNotificationBatch? in
+            guard let pending = pendingByHouseholdId.removeValue(forKey: householdId) else {
+                return nil
+            }
+            return SharedShoppingNotificationBatch(
+                householdId: householdId,
+                householdName: pending.householdName,
+                itemTitles: pending.itemTitles.sorted {
+                    $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+                }
+            )
+        }
+
+        return readyBatches.sorted { lhs, rhs in
+            lhs.householdId.uuidString < rhs.householdId.uuidString
+        }
+    }
+}
+
 struct DailyDigestPlan: Equatable {
     let fireDate: Date
     let dueCount: Int
@@ -101,6 +178,8 @@ enum NotificationSchedulePlanner {
 
         private let center = UNUserNotificationCenter.current()
         private var settingsStore: NotificationSettingsStore?
+        private var sharedShoppingNotificationAccumulator = SharedShoppingNotificationAccumulator(window: 3)
+        private var sharedShoppingFlushTask: _Concurrency.Task<Void, Never>?
 
         private init() {}
 
@@ -119,9 +198,25 @@ enum NotificationSchedulePlanner {
             }
         }
 
+        func requestCollaborationAuthorizationIfNeeded() async {
+            let settings = await center.notificationSettings()
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                await requestAuthorization()
+            case .authorized, .provisional, .ephemeral:
+                isAuthorized = true
+            case .denied:
+                isAuthorized = false
+            @unknown default:
+                isAuthorized = false
+            }
+        }
+
         func checkAuthorizationStatus() async {
             let settings = await center.notificationSettings()
-            isAuthorized = settings.authorizationStatus == .authorized
+            isAuthorized = settings.authorizationStatus == .authorized ||
+                settings.authorizationStatus == .provisional ||
+                settings.authorizationStatus == .ephemeral
         }
 
         // MARK: - Task Notifications
@@ -327,6 +422,146 @@ enum NotificationSchedulePlanner {
                 .map(\.identifier)
                 .filter { $0.hasPrefix("task-") }
         }
+
+        private func scheduleSharedShoppingNotificationFlushIfNeeded() {
+            sharedShoppingFlushTask?.cancel()
+
+            guard let nextFlushAt = sharedShoppingNotificationAccumulator.nextFlushAt else {
+                sharedShoppingFlushTask = nil
+                return
+            }
+
+            let delay = max(0, nextFlushAt.timeIntervalSinceNow)
+            sharedShoppingFlushTask = _Concurrency.Task { @MainActor [weak self] in
+                guard delay > 0 else {
+                    await self?.flushSharedShoppingNotificationBatches(at: Date())
+                    return
+                }
+
+                try? await _Concurrency.Task.sleep(
+                    nanoseconds: UInt64(delay * 1_000_000_000)
+                )
+                guard !_Concurrency.Task.isCancelled else { return }
+                await self?.flushSharedShoppingNotificationBatches(at: Date())
+            }
+        }
+
+        private func flushSharedShoppingNotificationBatches(at now: Date) async {
+            let readyBatches = sharedShoppingNotificationAccumulator.flushReady(at: now)
+            for batch in readyBatches {
+                await deliverSharedShoppingBatch(batch)
+            }
+            scheduleSharedShoppingNotificationFlushIfNeeded()
+        }
+
+        private func deliverSharedShoppingBatch(_ batch: SharedShoppingNotificationBatch) async {
+            let content = UNMutableNotificationContent()
+            let resolvedTitle: String = if let householdName = batch.householdName, !householdName.isEmpty {
+                householdName
+            } else {
+                "Shopping List"
+            }
+            content.title = resolvedTitle
+            if batch.count == 1, let title = batch.itemTitles.first {
+                content.body = "\(title) was added to the shopping list."
+            } else {
+                content.body = "\(batch.count) new items were added to the shopping list."
+            }
+            content.sound = (settingsStore?.soundEnabled ?? true) ? .default : nil
+            content.threadIdentifier = "shared-shopping-\(batch.householdId.uuidString)"
+            content.categoryIdentifier = "SHARED_SHOPPING_UPDATE"
+
+            let request = UNNotificationRequest(
+                identifier: "shared-shopping-\(batch.householdId.uuidString)-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+
+            do {
+                try await center.add(request)
+            } catch {
+                // Visible shared shopping alerts are optional and should not break sync.
+            }
+        }
+
+        private func notificationsEnabled() -> Bool {
+            (settingsStore?.isEnabled ?? true)
+        }
+
+        private func soundEnabled() -> Bool {
+            settingsStore?.soundEnabled ?? true
+        }
+
+        private func deliverImmediateAlert(
+            title: String,
+            body: String,
+            identifier: String,
+            threadIdentifier: String,
+            categoryIdentifier: String
+        ) async {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = soundEnabled() ? .default : nil
+            content.threadIdentifier = threadIdentifier
+            content.categoryIdentifier = categoryIdentifier
+
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: nil
+            )
+
+            do {
+                try await center.add(request)
+            } catch {
+                // Collaboration alerts are optional.
+            }
+        }
+
+        func deliverSharedShoppingItemsAddedAlert(
+            itemTitles: [String],
+            householdId: UUID,
+            householdName: String?
+        ) async {
+            await checkAuthorizationStatus()
+            guard isAuthorized else { return }
+            guard notificationsEnabled() else { return }
+            guard !CloudKitSubscriptionManager.shared.shouldSuppressSharedShoppingAlert() else {
+                return
+            }
+
+            if let readyBatch = sharedShoppingNotificationAccumulator.record(
+                householdId: householdId,
+                householdName: householdName,
+                itemTitles: itemTitles,
+                at: Date()
+            ) {
+                await deliverSharedShoppingBatch(readyBatch)
+            }
+            scheduleSharedShoppingNotificationFlushIfNeeded()
+        }
+
+        func deliverHouseholdCelebrationAlert(
+            title: String,
+            body: String,
+            householdId: UUID
+        ) async {
+            await checkAuthorizationStatus()
+            guard isAuthorized else { return }
+            guard notificationsEnabled() else { return }
+            guard !CloudKitSubscriptionManager.shared.shouldSuppressHouseholdCelebrationAlert() else {
+                return
+            }
+
+            await deliverImmediateAlert(
+                title: title,
+                body: body,
+                identifier: "celebration-\(householdId.uuidString)-\(UUID().uuidString)",
+                threadIdentifier: "celebration-\(householdId.uuidString)",
+                categoryIdentifier: "CELEBRATION"
+            )
+        }
     }
 #else
     @MainActor
@@ -340,6 +575,10 @@ enum NotificationSchedulePlanner {
         func setSettingsStore(_: NotificationSettingsStore) {}
 
         func requestAuthorization() async {
+            isAuthorized = false
+        }
+
+        func requestCollaborationAuthorizationIfNeeded() async {
             isAuthorized = false
         }
 
@@ -367,6 +606,18 @@ enum NotificationSchedulePlanner {
         func refreshDailyDigest(
             householdId _: UUID?,
             modelContext _: ModelContext
+        ) async {}
+
+        func deliverSharedShoppingItemsAddedAlert(
+            itemTitles _: [String],
+            householdId _: UUID,
+            householdName _: String?
+        ) async {}
+
+        func deliverHouseholdCelebrationAlert(
+            title _: String,
+            body _: String,
+            householdId _: UUID
         ) async {}
     }
 #endif

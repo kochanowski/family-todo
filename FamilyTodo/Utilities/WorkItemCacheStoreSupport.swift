@@ -194,9 +194,13 @@ enum WorkItemCacheStoreSupport {
     }
 
     static func visibleTasks(from cachedItems: [CachedWorkItem]) -> [Task] {
+        // Only tasks going pendingDelete tombstone the tasks list.
+        // An idea going pendingDelete (during promotion) must not suppress the promoted Task.
         let tombstonedLogicalItemIDs = Set(
-            cachedItems.compactMap { cached in
-                cached.syncStatusRaw == pendingDelete ? resolvedLogicalItemID(for: cached) : nil
+            cachedItems.compactMap { cached -> UUID? in
+                guard cached.syncStatusRaw == pendingDelete else { return nil }
+                guard cached.toWorkItem().asTask() != nil else { return nil }
+                return resolvedLogicalItemID(for: cached)
             }
         )
 
@@ -209,9 +213,13 @@ enum WorkItemCacheStoreSupport {
     }
 
     static func visibleIdeas(from cachedItems: [CachedWorkItem]) -> [BacklogItem] {
+        // Only ideas going pendingDelete tombstone the ideas list.
+        // A task going pendingDelete (during demotion) must not suppress the new BacklogItem.
         let tombstonedLogicalItemIDs = Set(
-            cachedItems.compactMap { cached in
-                cached.syncStatusRaw == pendingDelete ? resolvedLogicalItemID(for: cached) : nil
+            cachedItems.compactMap { cached -> UUID? in
+                guard cached.syncStatusRaw == pendingDelete else { return nil }
+                guard cached.toWorkItem().asBacklogItem() != nil else { return nil }
+                return resolvedLogicalItemID(for: cached)
             }
         )
 

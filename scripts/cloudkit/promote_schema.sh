@@ -24,19 +24,35 @@ render_ckdb() {
       else error("Unsupported type: \(.)")
       end;
 
+    def grant_lines($record_name):
+      [
+        (.securityRoles // [])[] as $role
+        | ($role.recordTypePermissions // [])[] as $permission
+        | select($permission.recordType == $record_name)
+        | (
+            (if ($permission.write // false) then ["GRANT WRITE TO \"\($role.name)\""] else [] end)
+            + (if ($permission.create // false) then ["GRANT CREATE TO \"\($role.name)\""] else [] end)
+            + (if ($permission.read // false) then ["GRANT READ TO \"\($role.name)\""] else [] end)
+          )[]
+      ];
+
     "DEFINE SCHEMA\n"
     + (
       .recordTypes
-      | map(
-          "RECORD TYPE \(.name) (\n"
+      | map(. as $record |
+          "RECORD TYPE \($record.name) (\n"
           + (
-              .fields
-              | map(
-                  "  \"\(.name)\" "
-                  + (.type | to_type)
-                  + (if .queryable then " QUERYABLE" else "" end)
-                  + (if .sortable then " SORTABLE" else "" end)
-                )
+              (
+                $record.fields
+                | map(
+                    "\"\(.name)\" "
+                    + (.type | to_type)
+                    + (if .queryable then " QUERYABLE" else "" end)
+                    + (if .sortable then " SORTABLE" else "" end)
+                  )
+              )
+              + grant_lines($record.name)
+              | map("  " + .)
               | join(",\n")
             )
           + "\n);"
@@ -257,10 +273,40 @@ list_security_role_permissions_from_ckdb() {
     }
 
     /^[[:space:]]*SECURITY ROLE[[:space:]]+/ {
+      in_record = 0
+      record_type = ""
       role_name = $3
       gsub(/"/, "", role_name)
       gsub(/\r/, "", role_name)
       in_role = 1
+      next
+    }
+
+    /^[[:space:]]*RECORD TYPE[[:space:]]+/ {
+      if (in_role) {
+        line = $0
+        sub(/^[[:space:]]*RECORD TYPE[[:space:]]+"/, "", line)
+        split(line, segments, "\"")
+        record_type = trim(segments[1])
+        permissions_blob = segments[2]
+        gsub(/\r/, "", permissions_blob)
+        gsub(/[);]/, "", permissions_blob)
+        split_count = split(permissions_blob, permissions, ",")
+        for (idx = 1; idx <= split_count; idx++) {
+          permission = toupper(trim(permissions[idx]))
+          if (permission != "") {
+            print role_name "|" record_type "|" permission
+          }
+        }
+        next
+      }
+
+      role_name = ""
+      in_role = 0
+      record_type = $3
+      gsub(/"/, "", record_type)
+      gsub(/\r/, "", record_type)
+      in_record = 1
       next
     }
 
@@ -270,20 +316,23 @@ list_security_role_permissions_from_ckdb() {
       next
     }
 
-    in_role && /^[[:space:]]*RECORD TYPE[[:space:]]+/ {
+    in_record && /^[[:space:]]*\);[[:space:]]*$/ {
+      in_record = 0
+      record_type = ""
+      next
+    }
+
+    in_record && /^[[:space:]]*GRANT[[:space:]]+/ {
       line = $0
-      sub(/^[[:space:]]*RECORD TYPE[[:space:]]+"/, "", line)
-      split(line, segments, "\"")
-      record_type = trim(segments[1])
-      permissions_blob = segments[2]
-      gsub(/\r/, "", permissions_blob)
-      gsub(/[);]/, "", permissions_blob)
-      split_count = split(permissions_blob, permissions, ",")
-      for (idx = 1; idx <= split_count; idx++) {
-        permission = toupper(trim(permissions[idx]))
-        if (permission != "") {
-          print role_name "|" record_type "|" permission
-        }
+      gsub(/\r/, "", line)
+      sub(/^[[:space:]]*GRANT[[:space:]]+/, "", line)
+      split(line, segments, /[[:space:]]+TO[[:space:]]+"/)
+      permission = toupper(trim(segments[1]))
+      role = trim(segments[2])
+      sub(/".*$/, "", role)
+      gsub(/[,)]/, "", role)
+      if (permission != "" && role != "") {
+        print role "|" record_type "|" permission
       }
     }
   ' "$ckdb_file" | sort -u
@@ -311,9 +360,9 @@ verify_required_security_role_permissions_in_production() {
   list_security_role_permissions_from_ckdb "$production_ckdb" > "$production_permissions_file"
 
   if [[ ! -s "$production_permissions_file" ]]; then
-    echo "CloudKitSchema: warning: production export does not include SECURITY ROLE blocks; role verification was skipped." >&2
-    echo "CloudKitSchema: manual check required in CloudKit Console -> Security Roles (ensure InviteToken permissions remain for _world, _icloud, _creator)." >&2
-    return 0
+    echo "CloudKitSchema: production export does not include expected security permissions output." >&2
+    echo "CloudKitSchema: expected InviteToken permissions (_world=READ, _icloud=CREATE+READ, _creator=READ+WRITE) were not verifiable." >&2
+    return 1
   fi
 
   local missing_permissions
@@ -374,7 +423,7 @@ pre_export_status=$?
 set -e
 
 if [[ $pre_export_status -eq 0 ]]; then
-  echo "CloudKitSchema: Production export succeeded. SECURITY ROLE blocks are not merged because cktool import-schema rejects SECURITY ROLE definitions." | tee -a "$apply_log_file"
+  echo "CloudKitSchema: Production export succeeded. Security grants will be preserved and verified from exported schema." | tee -a "$apply_log_file"
 else
   echo "CloudKitSchema: warning: failed to export Production schema before import; proceeding without SECURITY ROLE preservation merge." | tee -a "$apply_log_file"
 fi

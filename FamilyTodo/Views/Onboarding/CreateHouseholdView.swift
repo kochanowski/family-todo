@@ -237,6 +237,9 @@ struct CreateHouseholdView: View {
                     userSession.applyProfileUpdate(displayName: displayName)
                 }
                 userSession.setCurrentHousehold(newHousehold.id)
+                if userSession.syncMode == .cloud {
+                    await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
+                }
                 onboardingState.completeHouseholdSetup(withHousehold: true)
                 if showsCloseButton {
                     dismiss()
@@ -302,13 +305,14 @@ struct CreateHouseholdView: View {
 
         joinInviteCode = ""
         showJoinSheet = false
+        if userSession.syncMode == .cloud {
+            await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
+        }
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 
     private func preferredJoinCode() -> String? {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode),
-              normalizedCode.count == 8
-        else {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(joinInviteCode) else {
             return nil
         }
         return normalizedCode
@@ -353,83 +357,79 @@ struct HouseholdJoinSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    Text("Enter Invite Code")
-                        .font(themeStore.font(for: .screenHeader))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-                        .multilineTextAlignment(.center)
+            ZStack {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        Text("Enter Invite Code")
+                            .font(themeStore.font(for: .screenHeader))
+                            .foregroundStyle(themeStore.contentPrimaryColor)
+                            .multilineTextAlignment(.center)
 
-                    TextField("A7B9XQ2M", text: $inviteCodeToken, axis: .vertical)
-                        .font(.system(size: 24, weight: .semibold, design: .monospaced))
-                        .multilineTextAlignment(.center)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled(true)
-                        .disabled(isJoining)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.secondary.opacity(0.1))
-                        )
-                        .onChange(of: inviteCodeToken) { _, newValue in
-                            inviteCodeToken = normalizedInviteCodeInput(newValue)
-                        }
-
-                    Text("Use the 8-character invite code (A-Z, 0-9). QR codes fill this field automatically.")
-                        .font(themeStore.font(for: .bodySmall))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                        .multilineTextAlignment(.center)
-
-                    Button {
-                        onJoin()
-                    } label: {
-                        HStack(spacing: 10) {
-                            if isJoining {
-                                ProgressView()
-                                    .tint(.white)
+                        TextField("A7B9XQ", text: $inviteCodeToken, axis: .vertical)
+                            .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                            .multilineTextAlignment(.center)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled(true)
+                            .disabled(isJoining)
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.secondary.opacity(0.1))
+                            )
+                            .onChange(of: inviteCodeToken) { _, newValue in
+                                inviteCodeToken = normalizedInviteCodeInput(newValue)
                             }
-                            Text(isJoining ? "Joining..." : "Join with code")
-                                .font(themeStore.font(for: .buttonLabel))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            Capsule()
-                                .fill(canJoinWithCode && !isJoining ? themeStore.accentTabColor : Color.secondary)
-                        )
-                    }
-                    .disabled(!canJoinWithCode || isJoining)
 
-                    if isJoining {
-                        ProgressView("Joining household...")
+                        Text("Use the 6-character invite code (A-Z, 0-9). Older 8-character codes still work. QR codes fill this field automatically.")
                             .font(themeStore.font(for: .bodySmall))
-                            .tint(themeStore.accentTabColor)
-                    }
-
-                    HStack(spacing: 12) {
-                        Button {
-                            onPasteFromClipboard()
-                        } label: {
-                            Label("Paste", systemImage: "doc.on.clipboard")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isJoining)
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .multilineTextAlignment(.center)
 
                         Button {
-                            showScanner = true
+                            onJoin()
                         } label: {
-                            Label("Scan QR", systemImage: "qrcode.viewfinder")
+                            Text("Join with code")
                                 .font(themeStore.font(for: .buttonLabel))
+                                .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    Capsule()
+                                        .fill(canJoinWithCode && !isJoining ? themeStore.accentTabColor : Color.secondary)
+                                )
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isJoining)
+                        .disabled(!canJoinWithCode || isJoining)
+
+                        HStack(spacing: 12) {
+                            Button {
+                                onPasteFromClipboard()
+                            } label: {
+                                Label("Paste", systemImage: "doc.on.clipboard")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isJoining)
+
+                            Button {
+                                showScanner = true
+                            } label: {
+                                Label("Scan QR", systemImage: "qrcode.viewfinder")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isJoining)
+                        }
                     }
+                    .padding(24)
                 }
-                .padding(24)
+
+                if isJoining {
+                    JoiningHouseholdLoadingView(isActive: isJoining)
+                        .environmentObject(themeStore)
+                        .transition(.opacity)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -477,21 +477,19 @@ struct HouseholdJoinSheet: View {
             } message: {
                 Text(scannerErrorMessage ?? "Unknown camera error")
             }
+            .interactiveDismissDisabled(isJoining)
         }
     }
 
     private var canJoinWithCode: Bool {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteCodeToken) else {
-            return false
-        }
-        return normalizedCode.count == 8
+        InviteInputNormalizer.normalizeInviteCodeToken(inviteCodeToken) != nil
     }
 
     private func normalizedInviteCodeInput(_ raw: String) -> String {
         let uppercased = raw.uppercased()
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         let filtered = String(uppercased.unicodeScalars.filter { allowed.contains($0) })
-        return String(filtered.prefix(8))
+        return String(filtered.prefix(InviteInputNormalizer.maximumInviteCodeLength))
     }
 }
 

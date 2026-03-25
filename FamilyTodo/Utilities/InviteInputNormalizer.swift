@@ -30,6 +30,10 @@ struct NormalizedInviteInput: Equatable {
 }
 
 enum InviteInputNormalizer {
+    static let preferredInviteCodeLength = 6
+    static let legacyInviteCodeLength = 8
+    static let maximumInviteCodeLength = max(preferredInviteCodeLength, legacyInviteCodeLength)
+
     static func normalize(_ raw: String) throws -> String {
         try normalizeInput(raw).inviteCode
     }
@@ -70,7 +74,8 @@ enum InviteInputNormalizer {
 
     static func normalizeInviteCodeToken(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard trimmed.count >= 6, trimmed.count <= 8 else { return nil }
+        let supportedLengths = [preferredInviteCodeLength, legacyInviteCodeLength]
+        guard supportedLengths.contains(trimmed.count) else { return nil }
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
         return trimmed

@@ -3,101 +3,49 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 import UIKit
 
-struct InviteQRCodeView: View {
-    @EnvironmentObject private var householdStore: HouseholdStore
+struct InviteQRCodeCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var inviteCode: String?
-    @State private var isLoading = true
-    @State private var errorMessage: String?
+    let inviteCode: String
 
     private let context = CIContext()
     private let filter = CIFilter.qrCodeGenerator()
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView("Preparing invite...")
-                        .font(themeStore.font(for: .bodyStrong))
-                } else if let errorMessage {
-                    ThemedEmptyStateView(
-                        title: "Invite unavailable",
-                        systemImage: "exclamationmark.triangle",
-                        description: errorMessage
+        VStack(spacing: 16) {
+            if let qrImage = qrImage(from: inviteCode) {
+                Image(uiImage: qrImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 260, maxHeight: 260)
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(.secondarySystemBackground))
                     )
-                } else if let inviteCode, let qrImage = qrImage(from: inviteCode) {
-                    VStack(spacing: 20) {
-                        Image(uiImage: qrImage)
-                            .interpolation(.none)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: 280, maxHeight: 280)
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color(.secondarySystemBackground))
-                            )
-
-                        Text("Scan this QR code to join with the 8-character invite code")
-                            .font(themeStore.font(for: .inlineTitle))
-                            .foregroundStyle(themeStore.contentPrimaryColor)
-
-                        VStack(spacing: 8) {
-                            Text("Invite code")
-                                .font(themeStore.font(for: .bodySmall))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                            Text(inviteCode)
-                                .font(.system(size: 30, weight: .bold, design: .monospaced))
-                                .textSelection(.enabled)
-                        }
-
-                        VStack(spacing: 10) {
-                            Button {
-                                UIPasteboard.general.string = inviteCode
-                            } label: {
-                                Label("Copy invite code", systemImage: "number")
-                                    .font(themeStore.font(for: .buttonLabel))
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                        .padding(.horizontal)
-                    }
-                    .padding(.vertical)
-                }
+            } else {
+                Image(systemName: "qrcode")
+                    .font(.system(size: 48, weight: .semibold))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(themeStore.surfaceElevatedColor)
+                    )
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                }
-                ToolbarItem(placement: .principal) {
-                    Text("Invite QR")
-                        .font(themeStore.font(for: .inlineTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-                }
-            }
-        }
-        .task {
-            await loadInviteCode()
-        }
-    }
 
-    private func loadInviteCode() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            inviteCode = try await householdStore.fetchOrCreateInviteCode()
-            errorMessage = nil
-        } catch {
-            errorMessage = "Could not prepare invite. Check CloudKit diagnostics in Profile."
+            Text("Scan this QR code to join in HousePulse.")
+                .font(themeStore.font(for: .inlineTitle))
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(themeStore.surfaceElevatedColor)
+        )
     }
 
     private func qrImage(from string: String) -> UIImage? {

@@ -88,6 +88,9 @@ private struct TasksContent: View {
     @State private var pendingCleanupAction: CompletedCleanupAction?
     @State private var pendingDeletedTask: Task?
     @State private var pendingDeleteWork: _Concurrency.Task<Void, Never>?
+    @State private var remoteHighlightedTaskIDs: Set<UUID> = []
+    @State private var isApplyingRemoteSyncAnimation = false
+    @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var hiddenPendingDeleteIds: Set<UUID> = []
     @State private var hiddenMovedToIdeasIds: Set<UUID> = []
     @State private var processingMovedToIdeasIds: Set<UUID> = []
@@ -96,7 +99,7 @@ private struct TasksContent: View {
     @State private var showRecommendedLimitInfo = false
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore
         .defaultRecommendedWipLimit
-    @AppStorage("hasSeenTasksTutorial") private var hasSeenTasksTutorial = false
+    @AppStorage(AppTipProgressKey.tasksTutorialSeen) private var hasSeenTasksTutorial = false
     @AppStorage(AppTipProgressKey.tasksSwipeActionsCompleted)
     private var hasCompletedTaskSwipeActionsTip = false
     @AppStorage(AppTips.runtimeGenerationDefaultsKey)
@@ -108,6 +111,7 @@ private struct TasksContent: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
@@ -245,13 +249,13 @@ private struct TasksContent: View {
                 store.rehydrateVisibleSnapshotFromCache()
                 markTasksTutorialAsSeenIfNeeded()
             } else if selectedTab == .tasks {
-                _ = _Concurrency.Task {
-                    await refreshData()
-                    markTasksTutorialAsSeenIfNeeded()
-                }
+                handleRemoteTaskBoardChange(notification)
             } else {
                 store.replayPendingMutationsIfNeeded()
             }
+        }
+        .onDisappear {
+            cancelRemoteSyncAnimationReset()
         }
         .sheet(item: $pendingCleanupAction) { action in
             AppConfirmationSheet(
@@ -408,6 +412,11 @@ private struct TasksContent: View {
                     }
                 }
                 .accessibilityIdentifier("taskRow_\(task.title)")
+                .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
+                .remoteSyncHighlight(
+                    isActive: remoteHighlightedTaskIDs.contains(task.id),
+                    cornerRadius: 8
+                )
                 .tasksListRowStyle(taskListRowInsets)
             }
         }
@@ -447,6 +456,11 @@ private struct TasksContent: View {
                 .tint(.orange)
             }
             .accessibilityIdentifier("taskRowCompletedAll_\(task.title)")
+            .remoteSyncStructuralTransition(enabled: isApplyingRemoteSyncAnimation)
+            .remoteSyncHighlight(
+                isActive: remoteHighlightedTaskIDs.contains(task.id),
+                cornerRadius: 8
+            )
             .tasksListRowStyle(taskListRowInsets)
         }
         .animation(.default, value: completedTaskAnimationIDs)
@@ -575,14 +589,23 @@ private struct TasksContent: View {
 
     private var header: some View {
         AppScreenHeader(title: "Tasks") {
-            if activeFilter == .active {
-                Button {
-                    showRecommendedLimitInfo = true
-                } label: {
-                    TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+            HStack(spacing: 8) {
+                if activeFilter == .active {
+                    Button {
+                        showRecommendedLimitInfo = true
+                    } label: {
+                        TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Shows information about the recommended task limit")
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Shows information about the recommended task limit")
+
+                if let feedback = subscriptionManager.tasksInlineFeedback,
+                   selectedTab == .tasks
+                {
+                    SyncStatusPill(text: feedback.text)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         } trailing: {
             if activeFilter == .active {
@@ -780,12 +803,6 @@ private struct TasksContent: View {
                         HapticManager.success()
                         if themeStore.celebrationsEnabled {
                             celebrationManager.celebrateAllTasksComplete()
-                            if activeMembers.count > 1, let name = currentMember?.displayName {
-                                celebrationManager.notifyPartner(
-                                    completedBy: name,
-                                    action: "Cleared all tasks! 🏡"
-                                )
-                            }
                         }
                     } else {
                         HapticManager.mediumTap()
@@ -795,12 +812,6 @@ private struct TasksContent: View {
                                 taskTitle: task.title,
                                 weeklyCompletedCount: weeklyCompletedCount
                             )
-                            if activeMembers.count > 1, let name = currentMember?.displayName {
-                                celebrationManager.notifyPartner(
-                                    completedBy: name,
-                                    action: "\(task.title) — done!"
-                                )
-                            }
                         }
                     }
                 }
@@ -1122,6 +1133,68 @@ private struct TasksContent: View {
         (notification.object as? String) == "local"
     }
 
+    private func handleRemoteTaskBoardChange(_ notification: Notification) {
+        let payload = notification.remoteSyncAnimationPayload
+        let changedIDs = payload?.workItemChangedIDs ?? []
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: visibleTaskLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                    backlogStore.markLocalSnapshotStale()
+                    backlogStore.rehydrateVisibleSnapshotFromCache()
+                    normalizeAssigneeFilterSelection()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedTaskIDs = delta.highlightedIDs
+            logRemoteSyncVisibleRefreshLatency(screen: "Tasks", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markTasksTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func visibleTaskLocations() -> [UUID: Int] {
+        let visibleTasks = activeFilter == .active ? filteredActiveTasks : filteredCompletedTasks
+        return Dictionary(uniqueKeysWithValues: visibleTasks.map { ($0.id, 0) })
+    }
+
+    private func scheduleRemoteSyncAnimationReset() {
+        remoteSyncResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncStructureResetNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            isApplyingRemoteSyncAnimation = false
+
+            try? await _Concurrency.Task.sleep(
+                nanoseconds: WowAnimation.remoteSyncHighlightDurationNanoseconds
+            )
+            guard !_Concurrency.Task.isCancelled else { return }
+            remoteHighlightedTaskIDs.removeAll()
+            remoteSyncResetTask = nil
+        }
+    }
+
+    private func cancelRemoteSyncAnimationReset() {
+        remoteSyncResetTask?.cancel()
+        remoteSyncResetTask = nil
+        isApplyingRemoteSyncAnimation = false
+        remoteHighlightedTaskIDs.removeAll()
+    }
+
     private func queueDeleteTask(_ task: Task) {
         AppTips.donateTaskSwipeActionUsed()
         if let previous = pendingDeletedTask {
@@ -1330,6 +1403,7 @@ struct TaskRow: View {
             .opacity(isDimmedOverLimit ? 0.72 : 1.0)
             .contextualPopoverTip(
                 showsSwipeActionsTip,
+                tipID: "tasks.swipeActions",
                 TaskSwipeActionsTip(),
                 arrowEdge: .top,
                 generation: appTipRuntimeGeneration

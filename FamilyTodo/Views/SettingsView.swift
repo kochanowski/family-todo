@@ -16,6 +16,11 @@ struct SettingsView: View {
     @State private var showCloudDeleteConfirmation = false
     @State private var isPerformingHardReset = false
     @State private var isDeletingCloudHousehold = false
+    @State private var didJustResetTipKit = false
+    @State private var tipKitResetFeedbackTask: _Concurrency.Task<Void, Never>?
+    @State private var isForcingCloudSync = false
+    @State private var didJustForceCloudSync = false
+    @State private var forceCloudSyncFeedbackTask: _Concurrency.Task<Void, Never>?
 
     var body: some View {
         List {
@@ -237,6 +242,59 @@ struct SettingsView: View {
                         .font(themeStore.font(for: .bodySmall))
                 }
             }
+
+            if userSession.syncMode == .cloud, householdStore.currentHousehold != nil {
+                Section {
+                    Button {
+                        forceCloudSyncNow()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isForcingCloudSync {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Syncing iCloud data...")
+                            } else {
+                                Image(systemName: didJustForceCloudSync ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                                Text(didJustForceCloudSync ? "Cloud Sync Complete" : "Force Cloud Sync")
+                            }
+                            Spacer()
+                        }
+                        .font(themeStore.font(for: .buttonLabel))
+                        .foregroundStyle(didJustForceCloudSync ? themeStore.accentTabColor : themeStore.contentPrimaryColor)
+                    }
+                    .disabled(isForcingCloudSync || isDeletingCloudHousehold || isPerformingHardReset)
+                } footer: {
+                    Text(
+                        didJustForceCloudSync
+                            ? "Debug pull finished. Household, members, tasks, ideas, and shopping caches were refreshed."
+                            : "Debug only. Saves the local cache and re-runs household plus shared-data hydration."
+                    )
+                    .font(themeStore.font(for: .bodySmall))
+                }
+            }
+
+            Section {
+                Button {
+                    resetTipKitOnly()
+                } label: {
+                    HStack {
+                        Spacer()
+                        Image(systemName: didJustResetTipKit ? "checkmark.circle.fill" : "arrow.counterclockwise.circle")
+                        Text(didJustResetTipKit ? "TipKit Reset" : "Reset TipKit")
+                        Spacer()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .foregroundStyle(didJustResetTipKit ? themeStore.accentTabColor : themeStore.contentPrimaryColor)
+                }
+            } footer: {
+                Text(
+                    didJustResetTipKit
+                        ? "TipKit/tutorial progress reset. Reopen Shopping, Ideas, or Tasks to retest tips."
+                        : "Temporary debug action. Resets TipKit/tutorial progress without clearing app data."
+                )
+                .font(themeStore.font(for: .bodySmall))
+            }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Settings")
@@ -322,6 +380,44 @@ struct SettingsView: View {
                 celebrationManager: celebrationManager
             )
             isPerformingHardReset = false
+        }
+    }
+
+    private func resetTipKitOnly() {
+        tipKitResetFeedbackTask?.cancel()
+        AppTips.resetForDevelopment()
+        HapticManager.success()
+        didJustResetTipKit = true
+
+        tipKitResetFeedbackTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            didJustResetTipKit = false
+            tipKitResetFeedbackTask = nil
+        }
+    }
+
+    private func forceCloudSyncNow() {
+        guard !isForcingCloudSync else { return }
+        guard let userId = userSession.userId else { return }
+
+        forceCloudSyncFeedbackTask?.cancel()
+        didJustForceCloudSync = false
+        isForcingCloudSync = true
+
+        _Concurrency.Task { @MainActor in
+            try? modelContext.save()
+            await householdStore.forceCloudSyncDebug(userId: userId)
+            HapticManager.success()
+            isForcingCloudSync = false
+            didJustForceCloudSync = true
+
+            forceCloudSyncFeedbackTask = _Concurrency.Task { @MainActor in
+                try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
+                guard !_Concurrency.Task.isCancelled else { return }
+                didJustForceCloudSync = false
+                forceCloudSyncFeedbackTask = nil
+            }
         }
     }
 

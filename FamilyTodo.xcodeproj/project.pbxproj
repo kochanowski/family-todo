@@ -8,6 +8,7 @@
 /* Begin PBXBuildFile section */
 		D8A148526B034E92ADDBC14A /* NewItemsBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */; };
 		D8A148526B034E92ADDBC14B /* ThemedEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848E1F71D41541C8AFF5824F /* ThemedEmptyStateView.swift */; };
+		D8A148526B034E92ADDBC14C /* SyncStatusPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848E1F71D41541C8AFF58250 /* SyncStatusPill.swift */; };
 		1640C04D97C34B6D908BC1E1 /* CloudKitSubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A64C673C65F9499681214CF6 /* CloudKitSubscriptionManager.swift */; };
 		599F980C2C18433EA5926134 /* InteractionTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26545708FFCD49269BCBA414 /* InteractionTokens.swift */; };
 		AC435B3B5E184CB7ADCE00FE /* GuidedEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */; };
@@ -44,6 +45,8 @@
 		9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC3E5BB230C4430890CE54E /* TaskTests.swift */; };
 		138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29641B06528147179F25068D /* TaskStoreTests.swift */; };
 		58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */; };
+		HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */; };
+		HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */; };
 		B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */; };
 			F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000001 /* InviteInputNormalizerTests.swift */; };
 			F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000002 /* OnboardingStateTests.swift */; };
@@ -86,6 +89,7 @@
 		SETTVIEW000000000000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SETTVIEW000000000000002 /* SettingsView.swift */; };
 		NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000015 /* FloatingTabBar.swift */; };
 		NEWFILE0000000000000006 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWFILE0000000000000016 /* ToastView.swift */; };
+		JOINLOADB00000000000001 /* JoiningHouseholdLoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = JOINLOADF00000000000001 /* JoiningHouseholdLoadingView.swift */; };
 		CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = CELEB4000000000000000001 /* CelebrationOverlay.swift */; };
 		F0B100000000000000000004 /* InviteQRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000004 /* InviteQRCodeView.swift */; };
 		F0B100000000000000000005 /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000005 /* QRCodeScannerView.swift */; };
@@ -99,6 +103,7 @@
 		TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */; };
 		TSTBUILD000000000000001 /* TestModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000001 /* TestModelContainerFactory.swift */; };
 		TSTBUILD000000000000002 /* TestCacheFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000002 /* TestCacheFixtures.swift */; };
+		TSTBUILD000000000000005 /* FakeHouseholdCloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000005 /* FakeHouseholdCloud.swift */; };
 		TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */; };
 		TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000004 /* BacklogStoreTests.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
@@ -131,6 +136,7 @@
 /* Begin PBXFileReference section */
 		848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewItemsBanner.swift; sourceTree = "<group>"; };
 		848E1F71D41541C8AFF5824F /* ThemedEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedEmptyStateView.swift; sourceTree = "<group>"; };
+		848E1F71D41541C8AFF58250 /* SyncStatusPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStatusPill.swift; sourceTree = "<group>"; };
 		A64C673C65F9499681214CF6 /* CloudKitSubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSubscriptionManager.swift; sourceTree = "<group>"; };
 		26545708FFCD49269BCBA414 /* InteractionTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionTokens.swift; sourceTree = "<group>"; };
 		2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedEmptyStateView.swift; sourceTree = "<group>"; };
@@ -165,6 +171,8 @@
 		7EC3E5BB230C4430890CE54E /* TaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTests.swift; sourceTree = "<group>"; };
 		29641B06528147179F25068D /* TaskStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStoreTests.swift; sourceTree = "<group>"; };
 		3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdTests.swift; sourceTree = "<group>"; };
+		HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdJoinFlowTests.swift; sourceTree = "<group>"; };
+		HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdRemoteSyncTests.swift; sourceTree = "<group>"; };
 		B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStoreTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000001 /* InviteInputNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizerTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000002 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
@@ -212,6 +220,7 @@
 		SETTVIEW000000000000002 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000015 /* FloatingTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingTabBar.swift; sourceTree = "<group>"; };
 		NEWFILE0000000000000016 /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
+		JOINLOADF00000000000001 /* JoiningHouseholdLoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoiningHouseholdLoadingView.swift; sourceTree = "<group>"; };
 		CELEB4000000000000000001 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CelebrationOverlay.swift; sourceTree = "<group>"; };
 		F0A100000000000000000004 /* InviteQRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteQRCodeView.swift; sourceTree = "<group>"; };
 		F0A100000000000000000005 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
@@ -225,6 +234,7 @@
 		TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTipVisibilityTests.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000001 /* TestModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestModelContainerFactory.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000002 /* TestCacheFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCacheFixtures.swift; sourceTree = "<group>"; };
+		TSTFILE0000000000000005 /* FakeHouseholdCloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeHouseholdCloud.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkItemTransitionTests.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000004 /* BacklogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStoreTests.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
@@ -362,6 +372,8 @@
 				TSTFILE0000000000000004 /* BacklogStoreTests.swift */,
 				TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */,
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
+				HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */,
+				HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
 				TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */,
@@ -378,6 +390,7 @@
 			children = (
 				TSTFILE0000000000000001 /* TestModelContainerFactory.swift */,
 				TSTFILE0000000000000002 /* TestCacheFixtures.swift */,
+				TSTFILE0000000000000005 /* FakeHouseholdCloud.swift */,
 			);
 			path = TestSupport;
 			sourceTree = "<group>";
@@ -470,8 +483,10 @@
 				children = (
 					848E1F71D41541C8AFF5824E /* NewItemsBanner.swift */,
 					848E1F71D41541C8AFF5824F /* ThemedEmptyStateView.swift */,
+					848E1F71D41541C8AFF58250 /* SyncStatusPill.swift */,
 					NEWFILE0000000000000015 /* FloatingTabBar.swift */,
 					NEWFILE0000000000000016 /* ToastView.swift */,
+					JOINLOADF00000000000001 /* JoiningHouseholdLoadingView.swift */,
 					B1C2D3E4F5A60718293B4C52 /* AppModalActionRow.swift */,
 					B1C2D3E4F5A60718293B4C54 /* AppConfirmationSheet.swift */,
 					B1C2D3E4F5A60718293B4C56 /* AppPromptSheet.swift */,
@@ -626,6 +641,7 @@
 			files = (
 				D8A148526B034E92ADDBC14A /* NewItemsBanner.swift in Sources */,
 				D8A148526B034E92ADDBC14B /* ThemedEmptyStateView.swift in Sources */,
+				D8A148526B034E92ADDBC14C /* SyncStatusPill.swift in Sources */,
 				1640C04D97C34B6D908BC1E1 /* CloudKitSubscriptionManager.swift in Sources */,
 				599F980C2C18433EA5926134 /* InteractionTokens.swift in Sources */,
 				AC435B3B5E184CB7ADCE00FE /* GuidedEmptyStateView.swift in Sources */,
@@ -690,8 +706,9 @@
 					SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */,
 					D1C0D1A1A1A1A1A1A1A1A1A3 /* CloudKitDiagnosticsBanner.swift in Sources */,
 					C9E8A1B2C3D4E5F607182930 /* MemberBadgeView.swift in Sources */,
-					NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
+				NEWFILE0000000000000005 /* FloatingTabBar.swift in Sources */,
 				NEWFILE0000000000000006 /* ToastView.swift in Sources */,
+				JOINLOADB00000000000001 /* JoiningHouseholdLoadingView.swift in Sources */,
 				CELEB2000000000000000001 /* CelebrationOverlay.swift in Sources */,
 				F0B100000000000000000004 /* InviteQRCodeView.swift in Sources */,
 				F0B100000000000000000005 /* QRCodeScannerView.swift in Sources */,
@@ -712,12 +729,15 @@
 			files = (
 				TSTBUILD000000000000001 /* TestModelContainerFactory.swift in Sources */,
 				TSTBUILD000000000000002 /* TestCacheFixtures.swift in Sources */,
+				TSTBUILD000000000000005 /* FakeHouseholdCloud.swift in Sources */,
 				A1B2C3D4E5F60718293A4B7F /* FamilyTodoTests.swift in Sources */,
 				9AD2462A5669453EB9F955B9 /* TaskTests.swift in Sources */,
 				138C369E69FA4BD6BE083A14 /* TaskStoreTests.swift in Sources */,
 				TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */,
 				TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */,
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
+				HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */,
+				HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
 				TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */,
@@ -790,7 +810,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = FamilyTodo/HousePulse.entitlements;
+				CODE_SIGN_ENTITLEMENTS = FamilyTodo/HousePulse.Debug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;

@@ -82,14 +82,16 @@ struct OnboardingView: View {
                 CreateHouseholdSheet(
                     householdStore: householdStore,
                     userId: userId,
-                    displayName: displayName
+                    displayName: displayName,
+                    isCloudSyncEnabled: isCloudSyncEnabled
                 )
             }
             .sheet(isPresented: $showJoinSheet) {
                 JoinHouseholdSheet(
                     householdStore: householdStore,
                     userId: userId,
-                    displayName: displayName
+                    displayName: displayName,
+                    isCloudSyncEnabled: isCloudSyncEnabled
                 )
             }
         }
@@ -103,6 +105,7 @@ struct CreateHouseholdSheet: View {
     @ObservedObject var householdStore: HouseholdStore
     let userId: String
     let displayName: String
+    let isCloudSyncEnabled: Bool
 
     @State private var householdName = ""
     @State private var isCreating = false
@@ -165,6 +168,9 @@ struct CreateHouseholdSheet: View {
                     userId: userId,
                     displayName: resolvedDisplayName
                 )
+                if isCloudSyncEnabled {
+                    await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
+                }
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -189,9 +195,11 @@ struct CreateHouseholdSheet: View {
 
 struct JoinHouseholdSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var themeStore: ThemeStore
     @ObservedObject var householdStore: HouseholdStore
     let userId: String
     let displayName: String
+    let isCloudSyncEnabled: Bool
 
     @State private var inviteInput = ""
     @State private var isJoining = false
@@ -199,33 +207,26 @@ struct JoinHouseholdSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("8-character invite code", text: $inviteInput)
-                        .textContentType(.oneTimeCode)
-                        .textInputAutocapitalization(.characters)
-                        .disableAutocorrection(true)
-                        .onChange(of: inviteInput) { _, newValue in
-                            inviteInput = normalizedInviteCodeInput(newValue)
-                        }
-                } footer: {
-                    Text("Ask the household owner for the 8-character invite code.")
+            ZStack {
+                Form {
+                    Section {
+                        TextField("6-character invite code", text: $inviteInput)
+                            .textContentType(.oneTimeCode)
+                            .textInputAutocapitalization(.characters)
+                            .disableAutocorrection(true)
+                            .onChange(of: inviteInput) { _, newValue in
+                                inviteInput = normalizedInviteCodeInput(newValue)
+                            }
+                    } footer: {
+                        Text("Ask the household owner for the 6-character invite code. Older 8-character codes still work.")
+                    }
                 }
+                .disabled(isJoining)
 
                 if isJoining {
-                    Section {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Joining household...")
-                        }
-                    }
-                }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                    }
+                    JoiningHouseholdLoadingView(isActive: isJoining)
+                        .environmentObject(themeStore)
+                        .transition(.opacity)
                 }
             }
             .navigationTitle("Join Household")
@@ -233,6 +234,7 @@ struct JoinHouseholdSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isJoining)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Join") {
@@ -242,6 +244,17 @@ struct JoinHouseholdSheet: View {
                 }
             }
             .interactiveDismissDisabled(isJoining)
+            .alert(
+                "Join failed",
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Unknown error")
+            }
         }
     }
 
@@ -262,6 +275,9 @@ struct JoinHouseholdSheet: View {
                     userId: userId,
                     displayName: resolvedDisplayName
                 )
+                if isCloudSyncEnabled {
+                    await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
+                }
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -278,13 +294,11 @@ struct JoinHouseholdSheet: View {
         let uppercased = raw.uppercased()
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         let filtered = String(uppercased.unicodeScalars.filter { allowed.contains($0) })
-        return String(filtered.prefix(8))
+        return String(filtered.prefix(InviteInputNormalizer.maximumInviteCodeLength))
     }
 
     private func preferredInviteCode() -> String? {
-        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput),
-              normalizedCode.count == 8
-        else {
+        guard let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(inviteInput) else {
             return nil
         }
         return normalizedCode

@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main,]
+    branches: [main, fix/tasks-ideas-sync]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -53,10 +53,89 @@ jobs:
             }
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Build and Test
+  # Tests
   # ─────────────────────────────────────────────────────────────────────────
-  build-and-test:
-    name: Build and Test
+  test:
+    name: Test
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode version
+        run: |
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR"
+          xcodebuild -version
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Clean DerivedData
+        run: |
+          echo "Cleaning DerivedData to ensure fresh build..."
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          echo "DerivedData cleaned successfully"
+
+      - name: Run tests
+        env:
+          CLOUD_SYNC_PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cloud_sync_profile || 'preview-local' }}
+        run: |
+          set -o pipefail
+
+          HP_CLOUDKIT_ENABLED="NO"
+          if [ "$CLOUD_SYNC_PROFILE" = "sync-enabled" ]; then
+            HP_CLOUDKIT_ENABLED="YES"
+          fi
+          echo "Cloud sync profile: $CLOUD_SYNC_PROFILE (HPCloudKitEnabled=$HP_CLOUDKIT_ENABLED)"
+
+          # Find first available iOS simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | \
+            jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+
+          xcodebuild test \
+            -project FamilyTodo.xcodeproj \
+            -scheme HousePulse \
+            -only-testing:FamilyTodoTests \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            INFOPLIST_KEY_HPCloudKitEnabled="$HP_CLOUDKIT_ENABLED" \
+            OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
+            2>&1 | tee xcodebuild-test.log | bundle exec xcpretty || { \
+              status=$?; \
+              echo "::group::xcodebuild-test.log (tail)"; \
+              tail -n 200 xcodebuild-test.log || true; \
+              echo "::endgroup::"; \
+              exit $status; \
+            }
+
+      - name: Upload Test Results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HousePulse-TestResults
+          path: TestResults.xcresult
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Build
+  # ─────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    needs: [test]
+    if: >
+      always() &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
@@ -87,8 +166,6 @@ jobs:
           CLOUD_SYNC_PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cloud_sync_profile || 'preview-local' }}
         run: |
           set -o pipefail
-          # `xcpretty` sometimes omits the underlying compiler error output.
-          # Keep a raw log and print its tail on failure for easier debugging in CI.
 
           HP_CLOUDKIT_ENABLED="NO"
           if [ "$CLOUD_SYNC_PROFILE" = "sync-enabled" ]; then
@@ -96,7 +173,6 @@ jobs:
           fi
           echo "Cloud sync profile: $CLOUD_SYNC_PROFILE (HPCloudKitEnabled=$HP_CLOUDKIT_ENABLED)"
 
-          # Find first available iOS simulator
           SIMULATOR_ID=$(xcrun simctl list devices available --json | \
             jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
 
@@ -117,67 +193,6 @@ jobs:
               echo "::endgroup::"; \
               exit $status; \
             }
-
-      # Tests disabled: build-only pipeline
-      # - name: Run tests
-      #   run: |
-      #     set -o pipefail
-      #
-      #     # Find first available iOS simulator
-      #     SIMULATOR_ID=$(xcrun simctl list devices available --json | \
-      #       jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
-      #
-      #     xcodebuild test \
-      #       -project FamilyTodo.xcodeproj \
-      #       -scheme HousePulse \
-      #       -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
-      #       -only-testing:FamilyTodoTests \
-      #       CODE_SIGN_IDENTITY="" \
-      #       CODE_SIGNING_REQUIRED=NO \
-      #       ARCHS=arm64 \
-      #       ONLY_ACTIVE_ARCH=YES \
-      #       OTHER_SWIFT_FLAGS='$(inherited) -D CI' \
-      #       2>&1 | tee xcodebuild-test.log | bundle exec xcpretty || { \
-      #         status=$?; \
-      #         echo "::group::xcodebuild-test.log (tail)"; \
-      #         tail -n 200 xcodebuild-test.log || true; \
-      #         echo "::endgroup::"; \
-      #         exit $status; \
-      #       }
-      #
-      # - name: Run UI tests (app launch verification)
-      #   run: |
-      #     set -o pipefail
-      #
-      #     # Find first available iOS simulator
-      #     SIMULATOR_ID=$(xcrun simctl list devices available --json | \
-      #       jq -r '.devices | to_entries | map(select(.key | contains("iOS"))) | .[0].value | .[0].udid')
-      #
-      #     xcodebuild test \
-      #       -project FamilyTodo.xcodeproj \
-      #       -scheme HousePulse \
-      #       -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
-      #       -only-testing:FamilyTodoUITests \
-      #       -skip-testing:FamilyTodoUITests/FamilyTodoPerformanceTests \
-      #       -resultBundlePath TestResults.xcresult \
-      #       CODE_SIGN_IDENTITY="" \
-      #       CODE_SIGNING_REQUIRED=NO \
-      #       ARCHS=arm64 \
-      #       ONLY_ACTIVE_ARCH=YES \
-      #       2>&1 | tee xcodebuild-uitest.log | bundle exec xcpretty || { \
-      #         status=$?; \
-      #         echo "::group::xcodebuild-uitest.log (tail)"; \
-      #         tail -n 200 xcodebuild-uitest.log || true; \
-      #         echo "::endgroup::"; \
-      #         exit $status; \
-      #       }
-      #
-      # - name: Upload Test Results
-      #   if: always()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: HousePulse-TestResults
-      #     path: TestResults.xcresult
 
   # ─────────────────────────────────────────────────────────────
   # SwiftLint
@@ -201,13 +216,24 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   cloudkit-schema:
     name: CloudKit Schema Gate
-    needs: [build-and-test, swiftlint]
-    # Run only on release/testing lanes that should promote schema toward Production.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && (github.ref == 'refs/heads/main'))
+    needs: [swiftlint]
+    # On the sync-fix branch, keep schema validation in push CI but avoid re-applying dev schema,
+    # because InviteToken security roles are still manually managed in CloudKit Console.
+    # Use workflow_dispatch when you intentionally want to run a development apply on this branch.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (
+        github.event_name == 'push' &&
+        (
+          github.ref == 'refs/heads/main' ||
+          github.ref == 'refs/heads/fix/tasks-ideas-sync'
+        )
+      )
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
-      promote_to_production: true
-      dry_run: false
+      promote_to_production: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      dry_run: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/tasks-ideas-sync' }}
       schema_source: cloudkit/schema/housepulse-schema.json
     secrets: inherit
 
@@ -219,17 +245,22 @@ jobs:
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
-    needs: [build-and-test, swiftlint, cloudkit-schema]
-    # Run on release/testing lanes and selected feature lanes, allowing those branches to bypass the production schema gate.
+    needs: [test, build, swiftlint, cloudkit-schema]
+    # Run on release/testing lanes and selected feature lanes after the full validation stack passes.
     if: >
       always() &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.build.result == 'success' &&
+      needs.swiftlint.result == 'success' &&
+      (needs['cloudkit-schema'].result == 'success' || needs['cloudkit-schema'].result == 'skipped') &&
       (
         github.event_name == 'workflow_dispatch' ||
         startsWith(github.ref, 'refs/tags/v') ||
         (
           github.event_name == 'push' &&
           (
-            github.ref == 'refs/heads/main'
+            github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/fix/tasks-ideas-sync'
           )
         )
       )
@@ -345,7 +376,7 @@ jobs:
   notify-summary:
     name: Notify Summary (Telegram)
     runs-on: ubuntu-latest
-    needs: [build-and-test, swiftlint, cloudkit-schema, deploy-testflight]
+    needs: [test, build, swiftlint, cloudkit-schema, deploy-testflight]
     if: always()
 
     steps:
@@ -370,18 +401,20 @@ jobs:
             esac
           }
 
-          BUILD_RESULT="${{ needs.build-and-test.result }}"
+          TEST_RESULT="${{ needs.test.result }}"
+          BUILD_RESULT="${{ needs.build.result }}"
           LINT_RESULT="${{ needs.swiftlint.result }}"
-          CLOUDKIT_RESULT="${{ needs.cloudkit-schema.result }}"
-          DEPLOY_RESULT="${{ needs.deploy-testflight.result }}"
+          CLOUDKIT_RESULT="${{ needs['cloudkit-schema'].result }}"
+          DEPLOY_RESULT="${{ needs['deploy-testflight'].result }}"
 
           FINAL_TITLE="✅ CI succeeded"
-          if [ "$BUILD_RESULT" = "failure" ] || [ "$LINT_RESULT" = "failure" ] || [ "$CLOUDKIT_RESULT" = "failure" ] || [ "$DEPLOY_RESULT" = "failure" ] || \
-             [ "$BUILD_RESULT" = "cancelled" ] || [ "$LINT_RESULT" = "cancelled" ] || [ "$CLOUDKIT_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "cancelled" ]; then
+          if [ "$TEST_RESULT" = "failure" ] || [ "$BUILD_RESULT" = "failure" ] || [ "$LINT_RESULT" = "failure" ] || [ "$CLOUDKIT_RESULT" = "failure" ] || [ "$DEPLOY_RESULT" = "failure" ] || \
+             [ "$TEST_RESULT" = "cancelled" ] || [ "$BUILD_RESULT" = "cancelled" ] || [ "$LINT_RESULT" = "cancelled" ] || [ "$CLOUDKIT_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "cancelled" ]; then
             FINAL_TITLE="❌ CI failed"
           fi
 
           FAILED_STAGES=""
+          [ "$TEST_RESULT" = "failure" ] || [ "$TEST_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• Tests (${TEST_RESULT})\n"
           [ "$BUILD_RESULT" = "failure" ] || [ "$BUILD_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• Build and Test (${BUILD_RESULT})\n"
           [ "$LINT_RESULT" = "failure" ] || [ "$LINT_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• SwiftLint (${LINT_RESULT})\n"
           [ "$CLOUDKIT_RESULT" = "failure" ] || [ "$CLOUDKIT_RESULT" = "cancelled" ] && FAILED_STAGES="${FAILED_STAGES}• CloudKit Schema Gate (${CLOUDKIT_RESULT})\n"

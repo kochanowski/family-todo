@@ -25,6 +25,11 @@ actor CloudKitManager {
         case finalize
     }
 
+    private enum SharedGraphRepairMode: String {
+        case interactivePrimaryZones
+        case backgroundExhaustive
+    }
+
     private struct DatabaseZoneContext {
         var zoneByHouseholdId: [UUID: CKRecordZone.ID] = [:]
         var zoneByRecordName: [String: CKRecordZone.ID] = [:]
@@ -59,16 +64,19 @@ actor CloudKitManager {
     private var householdScope: HouseholdDatabaseScope = .participantShared
     private var sharedZoneContext = SharedZoneContext()
     private var migratedMemberColorHouseholds: Set<UUID>
+    private var backgroundSharedGraphRepairsInFlight: Set<UUID> = []
     private var recentInviteRedeemAttempts: [Date] = []
 
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
     private static let memberColorMigrationDefaultsKey = "CloudKit.memberColorMigrationCompletedHouseholds"
     private static let sharedGraphRepairDefaultsKey = "CloudKit.sharedGraphRepairCompletedHouseholds.v3"
+    private static let exhaustiveSharedGraphRepairDefaultsKey =
+        "CloudKit.sharedGraphRepairCompletedHouseholds.exhaustive.v1"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
-    private static let inviteCodeLength = 8
+    private static let inviteCodeLength = InviteInputNormalizer.preferredInviteCodeLength
     private static let inviteCodeMaxAttempts = 24
     private static let inviteCodeMaxUses = 100
     private static let inviteCodeMaxFailedAttempts = 8
@@ -341,21 +349,47 @@ actor CloudKitManager {
         return Set(raw.compactMap(UUID.init(uuidString:)))
     }
 
-    private func markSharedGraphRepairCompleted(householdId: UUID) {
-        var repaired = Self.loadRepairedSharedGraphHouseholds()
+    private static func sharedGraphRepairDefaultsKey(for mode: SharedGraphRepairMode) -> String {
+        switch mode {
+        case .interactivePrimaryZones:
+            sharedGraphRepairDefaultsKey
+        case .backgroundExhaustive:
+            exhaustiveSharedGraphRepairDefaultsKey
+        }
+    }
+
+    private func markSharedGraphRepairCompleted(
+        householdId: UUID,
+        mode: SharedGraphRepairMode
+    ) {
+        var repaired = Self.loadRepairedSharedGraphHouseholds(mode: mode)
         repaired.insert(householdId)
         UserDefaults.standard.set(
             repaired.map(\.uuidString),
-            forKey: Self.sharedGraphRepairDefaultsKey
+            forKey: Self.sharedGraphRepairDefaultsKey(for: mode)
         )
+
+        if mode == .backgroundExhaustive {
+            var primary = Self.loadRepairedSharedGraphHouseholds(mode: .interactivePrimaryZones)
+            primary.insert(householdId)
+            UserDefaults.standard.set(
+                primary.map(\.uuidString),
+                forKey: Self.sharedGraphRepairDefaultsKey(for: .interactivePrimaryZones)
+            )
+        }
     }
 
-    private func hasCompletedSharedGraphRepair(householdId: UUID) -> Bool {
-        Self.loadRepairedSharedGraphHouseholds().contains(householdId)
+    private func hasCompletedSharedGraphRepair(
+        householdId: UUID,
+        mode: SharedGraphRepairMode
+    ) -> Bool {
+        Self.loadRepairedSharedGraphHouseholds(mode: mode).contains(householdId)
     }
 
-    private static func loadRepairedSharedGraphHouseholds() -> Set<UUID> {
-        guard let raw = UserDefaults.standard.array(forKey: sharedGraphRepairDefaultsKey) as? [String] else {
+    private static func loadRepairedSharedGraphHouseholds(mode: SharedGraphRepairMode) -> Set<UUID> {
+        guard let raw = UserDefaults.standard.array(
+            forKey: sharedGraphRepairDefaultsKey(for: mode)
+        ) as? [String] else {
             return []
         }
         return Set(raw.compactMap(UUID.init(uuidString:)))
@@ -487,6 +521,12 @@ actor CloudKitManager {
         }
     }
 
+    private nonisolated func recordCloudKitProgress(_ operation: String) {
+        _Concurrency.Task { @MainActor in
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+        }
+    }
+
     private nonisolated func clearCloudKitFailure() {
         _Concurrency.Task { @MainActor in
             CloudKitDiagnosticsState.shared.clear()
@@ -530,8 +570,7 @@ actor CloudKitManager {
     }
 
     // swiftlint:disable cyclomatic_complexity function_body_length
-    func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
-        guard householdScope == .ownerPrivate else { return }
+    private func migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
         do {
             let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
             let db = await privateDatabase
@@ -612,6 +651,11 @@ actor CloudKitManager {
         }
     }
 
+    func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws {
+        guard householdScope == .ownerPrivate else { return }
+        try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: householdId)
+    }
+
     // swiftlint:enable cyclomatic_complexity function_body_length
 
     // swiftlint:disable function_body_length
@@ -620,108 +664,241 @@ actor CloudKitManager {
         force: Bool = false
     ) async throws {
         guard householdScope == .ownerPrivate else { return }
-        guard force || !hasCompletedSharedGraphRepair(householdId: householdId) else { return }
+        try await repairSharedOwnerHouseholdGraphIfNeeded(
+            householdId: householdId,
+            force: force,
+            mode: .interactivePrimaryZones
+        )
+    }
 
-        try await migrateHouseholdToCustomZoneIfNeeded(householdId: householdId)
+    private func sharedGraphRepairZoneIDs(
+        householdId: UUID,
+        targetZoneID: CKRecordZone.ID,
+        mode: SharedGraphRepairMode
+    ) async throws -> [CKRecordZone.ID] {
+        var seen = Set<String>()
+        var zoneIDs: [CKRecordZone.ID] = []
+
+        func append(_ zoneID: CKRecordZone.ID?) {
+            guard let zoneID else { return }
+            let key = Self.encodedZoneID(zoneID)
+            guard seen.insert(key).inserted else { return }
+            zoneIDs.append(zoneID)
+        }
+
+        append(targetZoneID)
+        append(CKRecordZone.default().zoneID)
+        append(resolveCachedZone(for: householdId, scope: .ownerPrivate))
+
+        if mode == .backgroundExhaustive {
+            for zoneID in try await allPrivateZoneIDs() {
+                append(zoneID)
+            }
+        }
+
+        return zoneIDs
+    }
+
+    private func queryOwnerPrivateRecordsAcrossZones(
+        _ queryFactory: ZoneScopedQueryFactory,
+        householdId: UUID,
+        targetZoneID: CKRecordZone.ID,
+        zoneIDs: [CKRecordZone.ID]
+    ) async throws -> OwnerPrivateScanResult {
+        let db = await privateDatabase
+        let recordType = queryFactory(targetZoneID).recordType
+        let baselineSortDescriptors = queryFactory(targetZoneID).sortDescriptors ?? []
+
+        var scannedRecords: [CKRecord] = []
+        for zoneID in zoneIDs {
+            let query = queryFactory(zoneID)
+            do {
+                let zoneRecords = try await queryRecordsPaginated(
+                    query,
+                    database: db,
+                    zoneID: zoneID
+                )
+                scannedRecords.append(contentsOf: zoneRecords)
+            } catch {
+                if Self.isMissingRecordTypeError(error) {
+                    print(
+                        "CloudKitScope: skipping ownerPrivate scan for missing record type " +
+                            "\(recordType) while scanning household \(householdId)"
+                    )
+                    return OwnerPrivateScanResult(
+                        authoritativeRecords: [],
+                        legacyDuplicateRecordIDs: []
+                    )
+                }
+                throw error
+            }
+        }
+
+        return Self.mergeOwnerPrivateRecords(
+            scannedRecords,
+            targetZoneID: targetZoneID,
+            sortDescriptors: baselineSortDescriptors
+        )
+    }
+
+    private func repairProgressPrefix(for mode: SharedGraphRepairMode) -> String {
+        switch mode {
+        case .interactivePrimaryZones:
+            "repairSharedHouseholdGraphIfNeeded.primary"
+        case .backgroundExhaustive:
+            "repairSharedHouseholdGraphIfNeeded.background"
+        }
+    }
+
+    private func shouldRecordRepairDiagnostics(for mode: SharedGraphRepairMode) -> Bool {
+        mode == .interactivePrimaryZones
+    }
+
+    private func repairSharedOwnerHouseholdGraphIfNeeded(
+        householdId: UUID,
+        force: Bool = false,
+        mode: SharedGraphRepairMode
+    ) async throws {
+        guard force || !hasCompletedSharedGraphRepair(householdId: householdId, mode: mode) else { return }
+
+        if shouldRecordRepairDiagnostics(for: mode) {
+            recordCloudKitProgress("\(repairProgressPrefix(for: mode)).migrate")
+        }
+        try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: householdId)
+        let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+        let zoneIDs = try await sharedGraphRepairZoneIDs(
+            householdId: householdId,
+            targetZoneID: targetZoneID,
+            mode: mode
+        )
 
         let querySpecs: [(String, ZoneScopedQueryFactory)] = [
             (
                 "Member",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "Member",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: true)]
-                    return query
+                }
+            ),
+            (
+                "Area",
+                { zoneID in
+                    CKQuery(
+                        recordType: "Area",
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
+                            zoneID: zoneID
+                        )
+                    )
                 }
             ),
             (
                 "Task",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "Task",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
-                    return query
+                }
+            ),
+            (
+                "WorkItem",
+                { zoneID in
+                    CKQuery(
+                        recordType: "WorkItem",
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
+                            zoneID: zoneID
+                        )
+                    )
+                }
+            ),
+            (
+                "RecurringChore",
+                { zoneID in
+                    CKQuery(
+                        recordType: "RecurringChore",
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
+                            zoneID: zoneID
+                        )
+                    )
                 }
             ),
             (
                 "ShoppingItem",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "ShoppingItem",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "ShoppingBundle",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "ShoppingBundle",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "BacklogCategory",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "BacklogCategory",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "sortOrder", ascending: true)]
-                    return query
                 }
             ),
             (
                 "BacklogItem",
                 { zoneID in
-                    let query = CKQuery(
+                    CKQuery(
                         recordType: "BacklogItem",
-                        predicate: self.referenceMatchPredicate(
-                            field: "householdId",
-                            id: householdId,
+                        predicate: self.householdReferenceMatchPredicate(
+                            householdId: householdId,
                             zoneID: zoneID
                         )
                     )
-                    query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-                    return query
                 }
             ),
         ]
 
         do {
             for (recordType, query) in querySpecs {
-                let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(query, householdId: householdId)
+                if shouldRecordRepairDiagnostics(for: mode) {
+                    recordCloudKitProgress("\(repairProgressPrefix(for: mode)).scan.\(recordType)")
+                }
+                let scanResult = try await queryOwnerPrivateRecordsAcrossZones(
+                    query,
+                    householdId: householdId,
+                    targetZoneID: targetZoneID,
+                    zoneIDs: zoneIDs
+                )
                 guard !scanResult.authoritativeRecords.isEmpty else { continue }
                 print("CloudKitScope: repairing \(recordType) records into owner zone for household \(householdId)")
+                if shouldRecordRepairDiagnostics(for: mode) {
+                    recordCloudKitProgress("\(repairProgressPrefix(for: mode)).save.\(recordType)")
+                }
                 _ = try await saveRecordsBatchWithZoneRecovery(
                     scanResult.authoritativeRecords,
                     householdId: householdId,
@@ -732,11 +909,53 @@ actor CloudKitManager {
                 )
             }
 
-            markSharedGraphRepairCompleted(householdId: householdId)
-            clearCloudKitFailure()
+            markSharedGraphRepairCompleted(householdId: householdId, mode: mode)
+            if shouldRecordRepairDiagnostics(for: mode) {
+                clearCloudKitFailure()
+            }
         } catch {
-            recordCloudKitFailure(error, operation: "repairSharedHouseholdGraphIfNeeded")
+            if shouldRecordRepairDiagnostics(for: mode) {
+                recordCloudKitFailure(error, operation: repairProgressPrefix(for: mode))
+            } else {
+                print(
+                    "CloudKitScope: background shared-graph repair failed for household \(householdId): " +
+                        debugErrorDescription(error)
+                )
+            }
             throw error
+        }
+    }
+
+    private func scheduleBackgroundSharedGraphRepairIfNeeded(householdId: UUID) {
+        guard !hasCompletedSharedGraphRepair(
+            householdId: householdId,
+            mode: .backgroundExhaustive
+        ) else {
+            return
+        }
+        guard backgroundSharedGraphRepairsInFlight.insert(householdId).inserted else { return }
+
+        _ = _Concurrency.Task { [householdId] in
+            await self.runBackgroundSharedGraphRepair(householdId: householdId)
+        }
+    }
+
+    private func runBackgroundSharedGraphRepair(householdId: UUID) async {
+        defer {
+            backgroundSharedGraphRepairsInFlight.remove(householdId)
+        }
+
+        do {
+            try await repairSharedOwnerHouseholdGraphIfNeeded(
+                householdId: householdId,
+                force: false,
+                mode: .backgroundExhaustive
+            )
+        } catch {
+            print(
+                "CloudKitScope: background shared-graph repair finished with error for household \(householdId): " +
+                    debugErrorDescription(error)
+            )
         }
     }
 
@@ -926,25 +1145,82 @@ actor CloudKitManager {
         )
     }
 
+    func householdReferenceMatchPredicate(
+        householdId: UUID,
+        zoneID: CKRecordZone.ID?
+    ) -> NSPredicate {
+        var candidateZoneKeys = Set<String>()
+        var candidateZoneIDs: [CKRecordZone.ID] = []
+
+        func appendZone(_ candidateZoneID: CKRecordZone.ID?) {
+            guard let candidateZoneID else { return }
+            let key = Self.encodedZoneID(candidateZoneID)
+            guard candidateZoneKeys.insert(key).inserted else { return }
+            candidateZoneIDs.append(candidateZoneID)
+        }
+
+        appendZone(zoneID)
+        appendZone(ownerZoneID(for: householdId))
+        appendZone(resolveCachedZone(for: householdId, scope: .ownerPrivate))
+        appendZone(resolveCachedZone(for: householdId, scope: .participantShared))
+
+        for resolvedZoneID in zoneContext(for: .ownerPrivate).lastResolvedZones {
+            appendZone(resolvedZoneID)
+        }
+        for resolvedZoneID in zoneContext(for: .participantShared).lastResolvedZones {
+            appendZone(resolvedZoneID)
+        }
+
+        var references = [reference(for: householdId)]
+        references.append(contentsOf: candidateZoneIDs.map { reference(for: householdId, in: $0) })
+        return Self.referenceMatchPredicate(field: "householdId", references: references)
+    }
+
+    private static let householdGraphRecordTypes: Set<String> = [
+        "Household",
+        "Member",
+        "Area",
+        "Task",
+        "WorkItem",
+        "RecurringChore",
+        "ShoppingItem",
+        "ShoppingBundle",
+        "BacklogCategory",
+        "BacklogItem",
+    ]
+
+    private static let sharedChildRecordTypes: Set<String> = [
+        "Member",
+        "Area",
+        "Task",
+        "WorkItem",
+        "RecurringChore",
+        "ShoppingItem",
+        "ShoppingBundle",
+        "BacklogCategory",
+        "BacklogItem",
+    ]
+
+    private static let singleGraphReferenceKeys = [
+        "householdId",
+        "assigneeId",
+        "backlogCategoryId",
+        "areaId",
+        "recurringChoreId",
+        "defaultAssigneeId",
+        "categoryId",
+    ]
+
+    private static let arrayGraphReferenceKeys = [
+        "assigneeIds",
+        "defaultAssigneeIds",
+    ]
+
     private func rewriteGraphReferenceFields(
         in record: CKRecord,
         targetZoneID: CKRecordZone.ID
     ) {
-        let singleReferenceKeys = [
-            "householdId",
-            "assigneeId",
-            "backlogCategoryId",
-            "areaId",
-            "recurringChoreId",
-            "defaultAssigneeId",
-            "categoryId",
-        ]
-        let arrayReferenceKeys = [
-            "assigneeIds",
-            "defaultAssigneeIds",
-        ]
-
-        for key in singleReferenceKeys {
+        for key in Self.singleGraphReferenceKeys {
             guard let reference = record[key] as? CKRecord.Reference,
                   UUID(uuidString: reference.recordID.recordName) != nil
             else {
@@ -959,7 +1235,7 @@ actor CloudKitManager {
             )
         }
 
-        for key in arrayReferenceKeys {
+        for key in Self.arrayGraphReferenceKeys {
             guard let references = record[key] as? [CKRecord.Reference] else { continue }
             record[key] = references.map { reference in
                 CKRecord.Reference(
@@ -970,6 +1246,43 @@ actor CloudKitManager {
                     action: reference.action
                 )
             } as CKRecordValue
+        }
+    }
+
+    func validateGraphReferenceFields(
+        in record: CKRecord,
+        targetZoneID: CKRecordZone.ID,
+        scope: HouseholdDatabaseScope
+    ) throws {
+        guard Self.householdGraphRecordTypes.contains(record.recordType) else {
+            return
+        }
+
+        func validate(reference: CKRecord.Reference, key: String) throws {
+            let actualZoneID = reference.recordID.zoneID
+            guard actualZoneID == targetZoneID else {
+                let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+                throw CloudKitManagerError.crossZoneReferenceViolation(
+                    "Cross-zone reference violation for \(record.recordType).\(key) in \(scopeName): " +
+                        "expected \(targetZoneID.zoneName), got \(actualZoneID.zoneName)."
+                )
+            }
+        }
+
+        for key in Self.singleGraphReferenceKeys {
+            guard let reference = record[key] as? CKRecord.Reference,
+                  UUID(uuidString: reference.recordID.recordName) != nil
+            else {
+                continue
+            }
+            try validate(reference: reference, key: key)
+        }
+
+        for key in Self.arrayGraphReferenceKeys {
+            guard let references = record[key] as? [CKRecord.Reference] else { continue }
+            for reference in references where UUID(uuidString: reference.recordID.recordName) != nil {
+                try validate(reference: reference, key: key)
+            }
         }
     }
 
@@ -1018,30 +1331,17 @@ actor CloudKitManager {
         _ queryFactory: ZoneScopedQueryFactory,
         householdId: UUID
     ) async throws -> OwnerPrivateScanResult {
-        let db = await privateDatabase
         let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
-        let defaultZoneID = CKRecordZone.default().zoneID
-
-        var zoneIDs: [CKRecordZone.ID] = [targetZoneID, defaultZoneID]
-        for zoneID in try await allPrivateZoneIDs() where !zoneIDs.contains(zoneID) {
-            zoneIDs.append(zoneID)
-        }
-
-        var scannedRecords: [CKRecord] = []
-        for zoneID in zoneIDs {
-            let query = queryFactory(zoneID)
-            let zoneRecords = try await queryRecordsPaginated(
-                query,
-                database: db,
-                zoneID: zoneID
-            )
-            scannedRecords.append(contentsOf: zoneRecords)
-        }
-
-        return Self.mergeOwnerPrivateRecords(
-            scannedRecords,
+        let zoneIDs = try await sharedGraphRepairZoneIDs(
+            householdId: householdId,
             targetZoneID: targetZoneID,
-            sortDescriptors: queryFactory(targetZoneID).sortDescriptors ?? []
+            mode: .backgroundExhaustive
+        )
+        return try await queryOwnerPrivateRecordsAcrossZones(
+            queryFactory,
+            householdId: householdId,
+            targetZoneID: targetZoneID,
+            zoneIDs: zoneIDs
         )
     }
 
@@ -1099,6 +1399,22 @@ actor CloudKitManager {
         }
     }
 
+    private static func isMissingRecordTypeError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+
+        switch ckError.code {
+        case .unknownItem:
+            return true
+        case .partialFailure:
+            guard let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] else {
+                return false
+            }
+            return partialErrors.values.contains { isMissingRecordTypeError($0) }
+        default:
+            return false
+        }
+    }
+
     private func resolveHouseholdZone(
         for householdId: UUID,
         scope: HouseholdDatabaseScope
@@ -1115,6 +1431,23 @@ actor CloudKitManager {
 
     private func resolveHouseholdZone(for householdId: UUID) async throws -> CKRecordZone.ID? {
         try await resolveHouseholdZone(for: householdId, scope: householdScope)
+    }
+
+    private func resolveParticipantSharedSaveZone(
+        householdId: UUID?
+    ) async throws -> CKRecordZone.ID? {
+        guard let householdId else { return nil }
+        if let cachedZone = resolveCachedZone(for: householdId, scope: .participantShared) {
+            return cachedZone
+        }
+        return try await resolveHouseholdZone(for: householdId, scope: .participantShared)
+    }
+
+    func resolveSubscriptionZone(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> CKRecordZone.ID? {
+        try await resolveHouseholdZone(for: householdId, scope: scope)
     }
 
     private func candidateZoneIDs(
@@ -1452,18 +1785,44 @@ actor CloudKitManager {
         householdId: UUID?,
         scope: HouseholdDatabaseScope
     ) async throws -> CKRecord {
-        var zoneID = resolveCachedZone(for: householdId, scope: scope)
-        if zoneID == nil {
-            zoneID = resolveZoneForRecordName(record.recordID.recordName, scope: scope)
-        }
-        if zoneID == nil, let householdId {
-            zoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
+        let zoneID: CKRecordZone.ID?
+        if scope == .participantShared {
+            zoneID = try await resolveParticipantSharedSaveZone(householdId: householdId)
+        } else {
+            var resolvedZoneID = resolveCachedZone(for: householdId, scope: scope)
+            if resolvedZoneID == nil {
+                resolvedZoneID = resolveZoneForRecordName(record.recordID.recordName, scope: scope)
+            }
+            if resolvedZoneID == nil, let householdId {
+                resolvedZoneID = try await resolveHouseholdZone(for: householdId, scope: scope)
+            }
+            zoneID = resolvedZoneID
         }
 
-        guard let zoneID else { return record }
+        guard let zoneID else {
+            if Self.householdGraphRecordTypes.contains(record.recordType) {
+                let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+                throw CloudKitManagerError.missingTargetZone(
+                    "Could not resolve a target zone for \(record.recordType) in \(scopeName)." +
+                        (householdId.map { " householdId=\($0.uuidString)" } ?? "")
+                )
+            }
+            return record
+        }
         let currentID = record.recordID
         if currentID.zoneID == zoneID {
             rewriteGraphReferenceFields(in: record, targetZoneID: zoneID)
+            try validateGraphReferenceFields(
+                in: record,
+                targetZoneID: zoneID,
+                scope: scope
+            )
+            attachSharedRootParentIfNeeded(
+                to: record,
+                householdId: householdId,
+                scope: scope,
+                zoneID: zoneID
+            )
             return record
         }
 
@@ -1473,7 +1832,55 @@ actor CloudKitManager {
             rewritten[key] = record[key]
         }
         rewriteGraphReferenceFields(in: rewritten, targetZoneID: zoneID)
+        try validateGraphReferenceFields(
+            in: rewritten,
+            targetZoneID: zoneID,
+            scope: scope
+        )
+        attachSharedRootParentIfNeeded(
+            to: rewritten,
+            householdId: householdId,
+            scope: scope,
+            zoneID: zoneID
+        )
         return rewritten
+    }
+
+    func attachParticipantSharedRootParentIfNeeded(
+        to record: CKRecord,
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope,
+        zoneID: CKRecordZone.ID
+    ) {
+        attachSharedRootParentIfNeeded(
+            to: record,
+            householdId: householdId,
+            scope: scope,
+            zoneID: zoneID
+        )
+    }
+
+    func attachSharedRootParentIfNeeded(
+        to record: CKRecord,
+        householdId: UUID?,
+        scope: HouseholdDatabaseScope,
+        zoneID: CKRecordZone.ID
+    ) {
+        guard scope == .ownerPrivate || scope == .participantShared,
+              Self.sharedChildRecordTypes.contains(record.recordType),
+              let householdId
+        else {
+            return
+        }
+
+        let householdRecordID = CKRecord.ID(
+            recordName: householdId.uuidString,
+            zoneID: zoneID
+        )
+        record.parent = CKRecord.Reference(
+            recordID: householdRecordID,
+            action: .none
+        )
     }
 
     private func recordForSave(
@@ -1492,8 +1899,16 @@ actor CloudKitManager {
         let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
         let scopedRecord = try await recordForSave(record, householdId: householdId, scope: scope)
         do {
+            let parentZoneSummary = scopedRecord.parent.map {
+                "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)"
+            } ?? "none"
+            let householdReferenceSummary = (scopedRecord["householdId"] as? CKRecord.Reference).map {
+                "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)"
+            } ?? "none"
             print(
-                "CloudKitScope: save \(record.recordType) in \(scopeName) zone \(scopedRecord.recordID.zoneID.zoneName)"
+                "CloudKitScope: save \(record.recordType) in \(scopeName) zone " +
+                    "\(scopedRecord.recordID.zoneID.zoneName)|\(scopedRecord.recordID.zoneID.ownerName) " +
+                    "parentZone=\(parentZoneSummary) householdRefZone=\(householdReferenceSummary)"
             )
             let saved = try await saveRecordWithChangedKeys(scopedRecord, database: db)
             rememberRecordZone(saved, explicitHouseholdId: householdId, scope: scope)
@@ -1854,9 +2269,8 @@ actor CloudKitManager {
             let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
                 let query = CKQuery(
                     recordType: "Member",
-                    predicate: self.referenceMatchPredicate(
-                        field: "householdId",
-                        id: householdId,
+                    predicate: self.householdReferenceMatchPredicate(
+                        householdId: householdId,
                         zoneID: zoneID
                     )
                 )
@@ -1894,8 +2308,16 @@ actor CloudKitManager {
     enum CloudKitManagerError: LocalizedError {
         case invalidRecord
         case shareNotCreated
+        case sharePermissionValidationFailed(String)
+        case missingTargetZone(String)
+        case crossZoneReferenceViolation(String)
         case inviteCodeInvalid
         case inviteCodeNotFound
+        case inviteCodeCreateFailed(String)
+        case inviteTokenFetchFailed(String)
+        case shareMetadataFetchFailed(String)
+        case acceptShareFailed(String)
+        case sharedHouseholdFetchFailed(String)
         case inviteCodeExpired
         case inviteCodeRevoked
         case inviteCodeLocked
@@ -1914,6 +2336,15 @@ actor CloudKitManager {
                 "Invalid record data"
             case .shareNotCreated:
                 "Failed to create share"
+            case let .sharePermissionValidationFailed(message),
+                 let .missingTargetZone(message),
+                 let .crossZoneReferenceViolation(message),
+                 let .inviteCodeCreateFailed(message),
+                 let .inviteTokenFetchFailed(message),
+                 let .shareMetadataFetchFailed(message),
+                 let .acceptShareFailed(message),
+                 let .sharedHouseholdFetchFailed(message):
+                message
             case .inviteCodeInvalid:
                 "The invite code is invalid."
             case .inviteCodeNotFound:
@@ -1951,9 +2382,8 @@ actor CloudKitManager {
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> CKRecord {
         let scope = resolvedScope(explicitScope)
-        if scope == .ownerPrivate {
-            _ = try await ensureHouseholdOwnerZone(householdId: household.id)
-        }
+        // Zone is expected to be ensured by the caller (createHousehold, createShare, etc.).
+        // saveRecordWithZoneRecovery handles missing-zone fallback if needed.
         let record = householdRecord(from: household)
         let saved = try await saveRecordWithZoneRecovery(
             record,
@@ -2084,6 +2514,50 @@ actor CloudKitManager {
             householdId: member.householdId,
             scope: scope
         )
+    }
+
+    /// Batched household creation: ensures zone in one round-trip, then saves
+    /// household + member records together in a single CKModifyRecordsOperation.
+    func createHouseholdWithMember(
+        _ household: Household,
+        member: Member
+    ) async throws -> (householdRecord: CKRecord, memberRecord: CKRecord) {
+        let zoneID = try await ensureHouseholdOwnerZone(householdId: household.id)
+
+        let householdRec = householdRecord(from: household)
+        let memberRec = memberRecord(from: member)
+
+        let scopedHousehold = try await recordForSave(
+            householdRec,
+            householdId: household.id,
+            scope: .ownerPrivate
+        )
+        let scopedMember = try await recordForSave(
+            memberRec,
+            householdId: member.householdId,
+            scope: .ownerPrivate
+        )
+
+        let db = await privateDatabase
+        let result = try await modifyRecordsBatch(
+            recordsToSave: [scopedHousehold, scopedMember],
+            recordIDsToDelete: [],
+            database: db
+        )
+
+        for saved in result.saved {
+            rememberRecordZone(
+                saved,
+                explicitHouseholdId: household.id,
+                scope: .ownerPrivate
+            )
+        }
+        clearCloudKitFailure()
+
+        let savedHousehold = result.saved.first { $0.recordType == "Household" } ?? scopedHousehold
+        let savedMember = result.saved.first { $0.recordType == "Member" } ?? scopedMember
+        print("CloudKitScope: batched createHouseholdWithMember in zone \(zoneID.zoneName)")
+        return (savedHousehold, savedMember)
     }
 
     private func updateMemberRecord(
@@ -2250,9 +2724,8 @@ actor CloudKitManager {
             records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
                 let predicates = [
                     NSPredicate(format: "userId == %@", userId),
-                    self.referenceMatchPredicate(
-                        field: "householdId",
-                        id: householdId,
+                    self.householdReferenceMatchPredicate(
+                        householdId: householdId,
                         zoneID: zoneID
                     ),
                 ]
@@ -2276,6 +2749,41 @@ actor CloudKitManager {
         return members.first(where: { $0.isActive })
     }
 
+    func fetchActiveMembersByUserId(
+        _ userId: String,
+        householdId: UUID? = nil,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Member] {
+        let scope = resolvedScope(explicitScope)
+        let records: [CKRecord]
+        if let householdId {
+            records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+                let predicates = [
+                    NSPredicate(format: "userId == %@", userId),
+                    self.householdReferenceMatchPredicate(
+                        householdId: householdId,
+                        zoneID: zoneID
+                    ),
+                ]
+                let query = CKQuery(
+                    recordType: "Member",
+                    predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+                )
+                query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
+                return query
+            }
+        } else {
+            let query = CKQuery(
+                recordType: "Member",
+                predicate: NSPredicate(format: "userId == %@", userId)
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "joinedAt", ascending: false)]
+            records = try await queryRecords(query, householdId: householdId, scope: scope)
+        }
+
+        return try records.map(member(from:)).filter(\.isActive)
+    }
+
     /// Fetch all members for a household
     func fetchMembers(
         householdId: UUID,
@@ -2285,9 +2793,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Member",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2299,32 +2806,56 @@ actor CloudKitManager {
 
     // MARK: - Area
 
-    func saveArea(_ area: Area) async throws -> CKRecord {
+    func saveArea(
+        _ area: Area,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = areaRecord(from: area)
-        return try await saveRecordWithZoneRecovery(record, householdId: area.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: area.householdId,
+            scope: scope
+        )
     }
 
-    func fetchArea(id: UUID) async throws -> Area {
-        let record = try await fetchRecord(id: id)
+    func fetchArea(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> Area {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try area(from: record)
     }
 
-    func deleteArea(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteArea(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteArea(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteArea(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all areas for a household
-    func fetchAreas(householdId: UUID) async throws -> [Area] {
-        let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+    func fetchAreas(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [Area] {
+        let scope = resolvedScope(explicitScope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Area",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2384,9 +2915,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "Task",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2405,9 +2935,8 @@ actor CloudKitManager {
         let scope = resolvedScope(explicitScope)
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let predicates = [
-                self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 ),
                 NSPredicate(format: "status == %@", status.rawValue),
@@ -2424,27 +2953,41 @@ actor CloudKitManager {
 
     /// Fetch tasks assigned to a specific member in "next" status (for WIP limit check)
     func fetchNextTasks(
+        householdId: UUID,
         assigneeId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [Task] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "assigneeId == %@ AND status == %@",
-            CKRecord.Reference(recordID: recordID(for: assigneeId), action: .none),
-            Task.TaskStatus.next.rawValue
-        )
-        let query = CKQuery(recordType: "Task", predicate: predicate)
-
-        let records = try await queryRecords(query, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let predicates = [
+                self.referenceMatchPredicate(
+                    field: "assigneeId",
+                    id: assigneeId,
+                    zoneID: zoneID
+                ),
+                NSPredicate(format: "status == %@", Task.TaskStatus.next.rawValue),
+            ]
+            let query = CKQuery(
+                recordType: "Task",
+                predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "updatedAt", ascending: false)]
+            return query
+        }
         return try records.map(task(from:))
     }
 
     /// Count tasks in "next" for a member (WIP limit = 3)
     func countNextTasks(
+        householdId: UUID,
         assigneeId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> Int {
-        try await fetchNextTasks(assigneeId: assigneeId, scope: explicitScope).count
+        try await fetchNextTasks(
+            householdId: householdId,
+            assigneeId: assigneeId,
+            scope: explicitScope
+        ).count
     }
 
     // MARK: - WorkItem
@@ -2496,9 +3039,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "WorkItem",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2512,12 +3054,58 @@ actor CloudKitManager {
         householdId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [WorkItem] {
-        async let fetchedWorkItems = fetchWorkItems(householdId: householdId, scope: explicitScope)
-        async let fetchedTasks = fetchTasks(householdId: householdId, scope: explicitScope)
-        async let fetchedIdeas = fetchBacklogItems(householdId: householdId, scope: explicitScope)
+        let scope = resolvedScope(explicitScope)
+        async let fetchedWorkItems = fetchWorkItemsIfAvailable(
+            householdId: householdId,
+            scope: scope
+        )
+        async let fetchedTasks = fetchTasksIfAvailable(
+            householdId: householdId,
+            scope: scope
+        )
+        async let fetchedIdeas = fetchBacklogItemsIfAvailable(
+            householdId: householdId,
+            scope: scope
+        )
 
         let (workItems, tasks, ideas) = try await (fetchedWorkItems, fetchedTasks, fetchedIdeas)
         return mergeUnifiedWorkItems(workItems: workItems, tasks: tasks, ideas: ideas)
+    }
+
+    private func fetchWorkItemsIfAvailable(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [WorkItem] {
+        do {
+            return try await fetchWorkItems(householdId: householdId, scope: scope)
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return []
+        }
+    }
+
+    private func fetchTasksIfAvailable(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [Task] {
+        do {
+            return try await fetchTasks(householdId: householdId, scope: scope)
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return []
+        }
+    }
+
+    private func fetchBacklogItemsIfAvailable(
+        householdId: UUID,
+        scope: HouseholdDatabaseScope
+    ) async throws -> [BacklogItem] {
+        do {
+            return try await fetchBacklogItems(householdId: householdId, scope: scope)
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return []
+        }
     }
 
     private func mergeUnifiedWorkItems(
@@ -2577,32 +3165,56 @@ actor CloudKitManager {
 
     // MARK: - Recurring Chore
 
-    func saveRecurringChore(_ chore: RecurringChore) async throws -> CKRecord {
+    func saveRecurringChore(
+        _ chore: RecurringChore,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> CKRecord {
+        let scope = resolvedScope(explicitScope)
         let record = recurringChoreRecord(from: chore)
-        return try await saveRecordWithZoneRecovery(record, householdId: chore.householdId)
+        return try await saveRecordWithZoneRecovery(
+            record,
+            householdId: chore.householdId,
+            scope: scope
+        )
     }
 
-    func fetchRecurringChore(id: UUID) async throws -> RecurringChore {
-        let record = try await fetchRecord(id: id)
+    func fetchRecurringChore(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> RecurringChore {
+        let scope = resolvedScope(explicitScope)
+        let record = try await fetchRecord(id: id, scope: scope)
         return try recurringChore(from: record)
     }
 
-    func deleteRecurringChore(id: UUID) async throws {
-        try await deleteRecord(id: id)
+    func deleteRecurringChore(
+        id: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, scope: scope)
     }
 
-    func deleteRecurringChore(id: UUID, householdId: UUID) async throws {
-        try await deleteRecord(id: id, householdId: householdId)
+    func deleteRecurringChore(
+        id: UUID,
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws {
+        let scope = resolvedScope(explicitScope)
+        try await deleteRecord(id: id, householdId: householdId, scope: scope)
     }
 
     /// Fetch all recurring chores for a household
-    func fetchRecurringChores(householdId: UUID) async throws -> [RecurringChore] {
-        let records = try await queryRecords(householdId: householdId, scope: householdScope) { zoneID in
+    func fetchRecurringChores(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> [RecurringChore] {
+        let scope = resolvedScope(explicitScope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "RecurringChore",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2662,9 +3274,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "ShoppingItem",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2723,9 +3334,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "ShoppingBundle",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2835,9 +3445,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "BacklogCategory",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2891,17 +3500,22 @@ actor CloudKitManager {
     /// Fetch all backlog items for a category
     func fetchBacklogItems(
         categoryId: UUID,
+        householdId: UUID,
         scope explicitScope: HouseholdDatabaseScope? = nil
     ) async throws -> [BacklogItem] {
         let scope = resolvedScope(explicitScope)
-        let predicate = NSPredicate(
-            format: "categoryId == %@",
-            CKRecord.Reference(recordID: recordID(for: categoryId), action: .none)
-        )
-        let query = CKQuery(recordType: "BacklogItem", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-
-        let records = try await queryRecords(query, scope: scope)
+        let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
+            let query = CKQuery(
+                recordType: "BacklogItem",
+                predicate: self.referenceMatchPredicate(
+                    field: "categoryId",
+                    id: categoryId,
+                    zoneID: zoneID
+                )
+            )
+            query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            return query
+        }
         return try records.map(backlogItem(from:))
     }
 
@@ -2914,9 +3528,8 @@ actor CloudKitManager {
         let records = try await queryRecords(householdId: householdId, scope: scope) { zoneID in
             let query = CKQuery(
                 recordType: "BacklogItem",
-                predicate: self.referenceMatchPredicate(
-                    field: "householdId",
-                    id: householdId,
+                predicate: self.householdReferenceMatchPredicate(
+                    householdId: householdId,
                     zoneID: zoneID
                 )
             )
@@ -2975,6 +3588,46 @@ actor CloudKitManager {
         return try await fetchShareRecord(withID: shareReference.recordID, database: database)
     }
 
+    private func debugErrorDescription(_ error: Error) -> String {
+        let localized = error.localizedDescription
+        let reflected = String(describing: error)
+        var components: [String] = []
+
+        if !localized.isEmpty {
+            components.append(localized)
+        }
+        if reflected != localized {
+            components.append(reflected)
+        }
+
+        if let ckError = error as? CKError {
+            components.append("CKError.\(ckError.code)")
+
+            if let retryAfter = ckError.userInfo[CKErrorRetryAfterKey] {
+                components.append("retryAfter=\(retryAfter)")
+            }
+            if let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error],
+               !partialErrors.isEmpty
+            {
+                let partialDescriptions = partialErrors
+                    .map { key, value in "\(key): \(debugErrorDescription(value))" }
+                    .sorted()
+                    .joined(separator: "; ")
+                components.append("partialErrors=\(partialDescriptions)")
+            }
+        }
+
+        if let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? Error {
+            let underlyingDescription = debugErrorDescription(underlying)
+            if !underlyingDescription.isEmpty {
+                components.append("underlying=\(underlyingDescription)")
+            }
+        }
+
+        let filtered = components.filter { !$0.isEmpty }
+        return filtered.joined(separator: " | ")
+    }
+
     private func ensureShareMetadata(
         _ share: CKShare,
         householdName: String,
@@ -2999,6 +3652,11 @@ actor CloudKitManager {
         let saved = try await saveRecordWithChangedKeys(share, database: database)
         guard let savedShare = saved as? CKShare else {
             throw CloudKitManagerError.invalidRecord
+        }
+        guard savedShare.publicPermission == .readWrite else {
+            throw CloudKitManagerError.sharePermissionValidationFailed(
+                "Share permission failed: expected readWrite, got \(savedShare.publicPermission)."
+            )
         }
         return savedShare
     }
@@ -3066,6 +3724,14 @@ actor CloudKitManager {
                         continuation.resume(throwing: firstFailure)
                         return
                     }
+                    if let savedShare, savedShare.publicPermission != .readWrite {
+                        continuation.resume(
+                            throwing: CloudKitManagerError.sharePermissionValidationFailed(
+                                "Share permission failed: expected readWrite, got \(savedShare.publicPermission)."
+                            )
+                        )
+                        return
+                    }
                     continuation.resume(returning: savedShare)
                 case let .failure(error):
                     continuation.resume(throwing: error)
@@ -3089,33 +3755,43 @@ actor CloudKitManager {
     // swiftlint:disable function_body_length
     func createShare(for household: Household) async throws -> CKShare {
         var stage: ShareCreationStage = .ensureZone
+        func markStage(_ newStage: ShareCreationStage) {
+            stage = newStage
+            recordCloudKitProgress("createShare.\(newStage.rawValue)")
+        }
         do {
             setHouseholdScope(.ownerPrivate)
 
-            stage = .ensureZone
+            markStage(.ensureZone)
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
 
-            stage = .migrate
-            try await migrateHouseholdToCustomZoneIfNeeded(householdId: household.id)
+            markStage(.migrate)
+            try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: household.id)
+            try await repairSharedOwnerHouseholdGraphIfNeeded(
+                householdId: household.id,
+                force: false,
+                mode: .interactivePrimaryZones
+            )
 
-            stage = .fetchRoot
+            markStage(.fetchRoot)
             let db = await privateDatabase
             var householdRecord = try await fetchOwnerHouseholdRecordStrict(householdId: household.id)
 
             if let shareReference = householdRecord.share,
                let existingShare = try await fetchShareRecord(withID: shareReference.recordID, database: db)
             {
-                stage = .modifyRecords
+                markStage(.modifyRecords)
                 let normalizedShare = try await ensureShareMetadata(
                     existingShare,
                     householdName: household.name,
                     database: db
                 )
+                scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                 clearCloudKitFailure()
                 return normalizedShare
             }
 
-            stage = .modifyRecords
+            markStage(.modifyRecords)
             var createdShare: CKShare?
             do {
                 createdShare = try await saveShareRecords(
@@ -3145,11 +3821,12 @@ actor CloudKitManager {
                     householdName: household.name,
                     database: db
                 )
+                scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                 clearCloudKitFailure()
                 return normalizedShare
             }
 
-            stage = .fallbackPoll
+            markStage(.fallbackPoll)
             if let fallbackShare = try await pollForExistingShare(
                 rootRecordID: householdRecord.recordID,
                 database: db
@@ -3159,11 +3836,12 @@ actor CloudKitManager {
                     householdName: household.name,
                     database: db
                 )
+                scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                 clearCloudKitFailure()
                 return normalizedShare
             }
 
-            stage = .final
+            markStage(.final)
             let shareError = CloudKitManagerError.shareNotCreated
             recordCloudKitFailure(shareError, operation: "createShare.\(stage.rawValue)")
             throw shareError
@@ -3233,6 +3911,66 @@ actor CloudKitManager {
 
     private func clearInviteRedeemAttemptBudget() {
         recentInviteRedeemAttempts.removeAll()
+    }
+
+    static func canReuseInviteToken(
+        _ token: InviteToken,
+        shareURL: String?,
+        at now: Date
+    ) -> Bool {
+        guard token.isActive(at: now),
+              token.usesCount < inviteCodeMaxUses,
+              let shareURL,
+              !shareURL.isEmpty
+        else {
+            return false
+        }
+
+        return token.shareURL == shareURL
+    }
+
+    static func prioritizedActiveInviteTokens(
+        _ tokens: [InviteToken],
+        at now: Date
+    ) -> [InviteToken] {
+        tokens
+            .filter { $0.isActive(at: now) && $0.usesCount < inviteCodeMaxUses }
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.code < rhs.code
+            }
+    }
+
+    private func wrapInviteCodeCreateError(_ error: Error, stage: String) -> CloudKitManagerError {
+        if let managerError = error as? CloudKitManagerError {
+            switch managerError {
+            case .inviteCodeUnavailable, .inviteCodeCreateFailed:
+                return managerError
+            default:
+                break
+            }
+        }
+
+        let prefix = switch stage {
+        case "inviteCode.create.lookupExisting":
+            "Invite lookup failed"
+        case "inviteCode.create.verifyShare":
+            "Invite share verification failed"
+        case "inviteCode.create.repairShare":
+            "Share repair failed"
+        case "inviteCode.create.ensureShare":
+            "Share creation failed"
+        case "inviteCode.create.revokeStale":
+            "Invite cleanup failed"
+        case "inviteCode.create.save":
+            "Invite save failed"
+        default:
+            "Invite creation failed"
+        }
+
+        return .inviteCodeCreateFailed("\(prefix): \(debugErrorDescription(error))")
     }
 
     private func isInviteTokenLocked(_ token: InviteToken, at now: Date) -> Bool {
@@ -3316,16 +4054,15 @@ actor CloudKitManager {
         try await checkAvailability()
         setHouseholdScope(.ownerPrivate)
 
-        var stage = "inviteCode.create.ensureShare"
+        var stage = "inviteCode.create.lookupExisting"
+        func markStage(_ newStage: String) {
+            stage = newStage
+            recordCloudKitProgress(newStage)
+        }
         do {
-            let share = try await createShare(for: household)
-            guard let shareURL = share.url else {
-                let error = CloudKitManagerError.shareNotCreated
-                recordCloudKitFailure(error, operation: stage)
-                throw error
-            }
-
-            stage = "inviteCode.create.lookupExisting"
+            // Fast path: check public DB for existing active tokens BEFORE
+            // running the full createShare pipeline (~4 round-trips).
+            markStage("inviteCode.create.lookupExisting")
             let db = await publicDatabase
             let now = Date()
             let existingPredicate = NSPredicate(
@@ -3334,17 +4071,52 @@ actor CloudKitManager {
                 NSNumber(value: Int64(0))
             )
             let existingQuery = CKQuery(recordType: "InviteToken", predicate: existingPredicate)
-            existingQuery.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
             let existingRecords = try await queryRecordsPaginated(existingQuery, database: db)
-            for record in existingRecords {
-                let token = try inviteToken(from: record)
-                if token.isActive(at: now), token.usesCount < Self.inviteCodeMaxUses {
+            let existingTokens = try existingRecords.map { record in
+                try inviteToken(from: record)
+            }
+            let activeExistingTokens = try Self.prioritizedActiveInviteTokens(
+                existingTokens,
+                at: now
+            )
+
+            if !activeExistingTokens.isEmpty {
+                markStage("inviteCode.create.verifyShare")
+                let existingShareURL = try await fetchShare(for: household.id)?.url?.absoluteString
+                if let matchingToken = activeExistingTokens.first(where: {
+                    Self.canReuseInviteToken($0, shareURL: existingShareURL, at: now)
+                }) {
+                    scheduleBackgroundSharedGraphRepairIfNeeded(householdId: household.id)
                     clearCloudKitFailure()
-                    return token
+                    return matchingToken
                 }
             }
 
-            stage = "inviteCode.create.save"
+            // Slow path: no reusable token exists, need to ensure share first.
+            markStage("inviteCode.create.ensureShare")
+            let share = try await createShare(for: household)
+            guard let shareURL = share.url else {
+                throw CloudKitManagerError.shareNotCreated
+            }
+            let shareURLString = shareURL.absoluteString
+
+            if let matchingToken = activeExistingTokens.first(where: {
+                Self.canReuseInviteToken($0, shareURL: shareURLString, at: now)
+            }) {
+                clearCloudKitFailure()
+                return matchingToken
+            }
+
+            if !activeExistingTokens.isEmpty {
+                markStage("inviteCode.create.revokeStale")
+                for token in activeExistingTokens {
+                    _ = try await mutateInviteTokenRecord(code: token.code, database: db) { record in
+                        record["isRevoked"] = Int64(1) as CKRecordValue
+                    }
+                }
+            }
+
+            markStage("inviteCode.create.save")
             for _ in 0 ..< Self.inviteCodeMaxAttempts {
                 let code = Self.generateInviteCode(length: Self.inviteCodeLength)
                 if try await fetchInviteTokenRecordIfExists(code: code, database: db) != nil {
@@ -3355,7 +4127,7 @@ actor CloudKitManager {
                     id: code,
                     code: code,
                     householdId: household.id,
-                    shareURL: shareURL.absoluteString,
+                    shareURL: shareURLString,
                     createdAt: now,
                     expiresAt: now.addingTimeInterval(InviteToken.ttl),
                     isRevoked: false,
@@ -3374,9 +4146,6 @@ actor CloudKitManager {
                     return token
                 } catch let ckError as CKError where ckError.code == .serverRecordChanged {
                     continue
-                } catch {
-                    recordCloudKitFailure(error, operation: stage)
-                    throw error
                 }
             }
 
@@ -3384,13 +4153,9 @@ actor CloudKitManager {
             recordCloudKitFailure(error, operation: "inviteCode.create.exhausted")
             throw error
         } catch {
-            if let managerError = error as? CloudKitManagerError,
-               case .inviteCodeUnavailable = managerError
-            {
-                throw error
-            }
-            recordCloudKitFailure(error, operation: stage)
-            throw error
+            let wrappedError = wrapInviteCodeCreateError(error, stage: stage)
+            recordCloudKitFailure(wrappedError, operation: stage)
+            throw wrappedError
         }
     }
 
@@ -3428,11 +4193,141 @@ actor CloudKitManager {
     }
 
     func redeemInviteCode(_ rawCode: String) async throws -> Household {
+        let context = try await resolveAcceptedShareContext(fromInviteCode: rawCode)
+        return context.household
+    }
+
+    private func fetchShareMetadata(for shareURL: URL) async throws -> CKShare.Metadata {
+        let ckContainer = await container
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let operation = CKFetchShareMetadataOperation(shareURLs: [shareURL])
+            operation.qualityOfService = .userInitiated
+
+            var fetchedMetadata: CKShare.Metadata?
+            var firstFailure: Error?
+
+            operation.perShareMetadataResultBlock = { _, result in
+                switch result {
+                case let .success(metadata):
+                    fetchedMetadata = metadata
+                case let .failure(error):
+                    if firstFailure == nil {
+                        firstFailure = error
+                    }
+                }
+            }
+
+            operation.fetchShareMetadataResultBlock = { result in
+                switch result {
+                case .success:
+                    if let firstFailure {
+                        continuation.resume(throwing: firstFailure)
+                        return
+                    }
+                    if let fetchedMetadata {
+                        continuation.resume(returning: fetchedMetadata)
+                        return
+                    }
+                    continuation.resume(
+                        throwing: CloudKitManagerError.shareMetadataFetchFailed(
+                            "Metadata fetch failed: CKFetchShareMetadataOperation returned no metadata."
+                        )
+                    )
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            ckContainer.add(operation)
+        }
+    }
+
+    private func resolveJoinShareMetadata(
+        for shareURL: URL,
+        expectedHouseholdId: UUID? = nil
+    ) async throws -> CKShare.Metadata {
+        let metadata: CKShare.Metadata
+        do {
+            metadata = try await fetchShareMetadata(for: shareURL)
+        } catch let error as CloudKitManagerError {
+            throw error
+        } catch {
+            throw CloudKitManagerError.shareMetadataFetchFailed(
+                "Metadata fetch failed: \(debugErrorDescription(error))"
+            )
+        }
+
+        if let expectedHouseholdId {
+            let metadataHouseholdId = UUID(uuidString: metadata.rootRecordID.recordName)
+            guard metadataHouseholdId == expectedHouseholdId else {
+                throw CloudKitManagerError.shareMetadataFetchFailed(
+                    "Metadata fetch failed: Share metadata household mismatch."
+                )
+            }
+        }
+
+        return metadata
+    }
+
+    private func fetchRedeemableInviteToken(
+        code: String,
+        at now: Date,
+        database: CKDatabase
+    ) async throws -> InviteToken {
+        let record: CKRecord
+        do {
+            guard let fetchedRecord = try await fetchInviteTokenRecordIfExists(code: code, database: database) else {
+                throw CloudKitManagerError.inviteTokenFetchFailed(
+                    "Token fetch failed: Invite code was not found."
+                )
+            }
+            record = fetchedRecord
+        } catch let error as CloudKitManagerError {
+            throw error
+        } catch {
+            throw CloudKitManagerError.inviteTokenFetchFailed(
+                "Token fetch failed: \(debugErrorDescription(error))"
+            )
+        }
+
+        let token = try inviteToken(from: record)
+        if token.isRevoked {
+            throw CloudKitManagerError.inviteCodeRevoked
+        }
+        if token.isExpired(at: now) {
+            throw CloudKitManagerError.inviteCodeExpired
+        }
+        if token.usesCount >= Self.inviteCodeMaxUses {
+            throw CloudKitManagerError.inviteCodeUsageLimitReached
+        }
+        if isInviteTokenLocked(token, at: now) {
+            throw CloudKitManagerError.inviteCodeLocked
+        }
+        return token
+    }
+
+    func resolveAcceptedShareContext(fromInviteCode rawCode: String) async throws -> AcceptedShareContext {
+        try await checkAvailability()
         let normalizedCode = InviteInputNormalizer.normalizeInviteCodeToken(rawCode)
+        if normalizedCode == nil {
+            let shareURL: URL
+            do {
+                shareURL = try InviteInputNormalizer.normalizedURL(from: rawCode)
+            } catch {
+                throw HouseholdError.invalidInviteCode
+            }
+
+            let metadata = try await resolveJoinShareMetadata(for: shareURL)
+            return try await acceptShareContext(
+                metadata: metadata,
+                shareURL: shareURL
+            )
+        }
+
         let now = Date()
         var stage = "inviteCode.redeem.attemptBudget"
         do {
-            try await checkAvailability()
             try enforceInviteRedeemAttemptBudget(at: now)
 
             guard let code = normalizedCode else {
@@ -3441,41 +4336,34 @@ actor CloudKitManager {
 
             stage = "inviteCode.redeem.fetchToken"
             let db = await publicDatabase
-            guard let record = try await fetchInviteTokenRecordIfExists(code: code, database: db) else {
-                throw CloudKitManagerError.inviteCodeNotFound
-            }
-            let token = try inviteToken(from: record)
-
-            if token.isRevoked {
-                throw CloudKitManagerError.inviteCodeRevoked
-            }
-            if token.isExpired(at: now) {
-                throw CloudKitManagerError.inviteCodeExpired
-            }
-            if token.usesCount >= Self.inviteCodeMaxUses {
-                throw CloudKitManagerError.inviteCodeUsageLimitReached
-            }
-            if isInviteTokenLocked(token, at: now) {
-                throw CloudKitManagerError.inviteCodeLocked
-            }
+            logJoinStage("join.resolveInviteToken")
+            let token = try await fetchRedeemableInviteToken(code: code, at: now, database: db)
 
             stage = "inviteCode.redeem.metadata"
             guard let shareURL = URL(string: token.shareURL) else {
-                throw CloudKitManagerError.inviteCodeInvalid
+                throw CloudKitManagerError.shareMetadataFetchFailed(
+                    "Metadata fetch failed: Invite token contains an invalid share URL."
+                )
             }
+            print("CloudKitJoin: stage=join.resolveShareMetadata householdId=\(token.householdId)")
 
-            let ckContainer = await container
-            let metadata = try await ckContainer.shareMetadata(for: shareURL)
+            let metadata = try await resolveJoinShareMetadata(
+                for: shareURL,
+                expectedHouseholdId: token.householdId
+            )
 
             stage = "inviteCode.redeem.acceptShare"
-            let household = try await acceptShare(metadata: metadata)
+            let context = try await acceptShareContext(
+                metadata: metadata,
+                shareURL: shareURL
+            )
 
             stage = "inviteCode.redeem.usageUpdate"
             try await registerInviteRedeemSuccess(code: token.code, at: now, database: db)
 
             clearInviteRedeemAttemptBudget()
             clearCloudKitFailure()
-            return household
+            return context
         } catch {
             if let normalizedCode,
                shouldRegisterInviteFailureCounter(for: error)
@@ -3486,6 +4374,10 @@ actor CloudKitManager {
             recordCloudKitFailure(error, operation: stage)
             throw error
         }
+    }
+
+    func resolveAcceptedShareContext(metadata: CKShare.Metadata) async throws -> AcceptedShareContext {
+        try await acceptShareContext(metadata: metadata, shareURL: nil)
     }
 
     func revokeInviteCode(_ rawCode: String) async throws {
@@ -3506,8 +4398,50 @@ actor CloudKitManager {
 
     /// Accept a CloudKit share invitation and return shared household.
     func acceptShare(metadata: CKShare.Metadata) async throws -> Household {
+        let context = try await acceptShareContext(metadata: metadata, shareURL: nil)
+        return context.household
+    }
+
+    private func logJoinStage(
+        _ stage: String,
+        householdId: UUID? = nil,
+        zoneID: CKRecordZone.ID? = nil,
+        scope: HouseholdDatabaseScope? = nil,
+        error: Error? = nil
+    ) {
+        let householdComponent = householdId?.uuidString ?? "unknown"
+        let zoneComponent = zoneID?.zoneName ?? "unknown"
+        let scopeComponent: String = if let scope {
+            scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+        } else {
+            "unspecified"
+        }
+
+        if let error {
+            print(
+                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent) error=\(debugErrorDescription(error))"
+            )
+        } else {
+            print(
+                "CloudKitJoin: stage=\(stage) householdId=\(householdComponent) zone=\(zoneComponent) scope=\(scopeComponent)"
+            )
+        }
+    }
+
+    private func acceptShareContext(
+        metadata: CKShare.Metadata,
+        shareURL: URL?
+    ) async throws -> AcceptedShareContext {
         var stage: AcceptShareStage = .acceptOperation
+        let householdId = UUID(uuidString: metadata.rootRecordID.recordName)
+        let zoneID = metadata.rootRecordID.zoneID
         do {
+            logJoinStage(
+                "join.acceptShare",
+                householdId: householdId,
+                zoneID: zoneID,
+                scope: .participantShared
+            )
             let ckContainer = await container
             let acceptOperation = CKAcceptSharesOperation(shareMetadatas: [metadata])
             acceptOperation.qualityOfService = .userInitiated
@@ -3525,26 +4459,72 @@ actor CloudKitManager {
             }
 
             setHouseholdScope(.participantShared)
-            if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
-                setSharedZoneContext(householdId: householdId, zoneID: metadata.rootRecordID.zoneID)
+            if let householdId {
+                setSharedZoneContext(householdId: householdId, zoneID: zoneID)
             }
 
             stage = .fetchRoot
             let db = await sharedDatabase
-            let record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+            logJoinStage(
+                "join.acceptShare.fetchRoot",
+                householdId: householdId,
+                zoneID: zoneID,
+                scope: .participantShared
+            )
+            let record: CKRecord
+            do {
+                record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+            } catch {
+                throw CloudKitManagerError.sharedHouseholdFetchFailed(
+                    "Shared household fetch failed: \(debugErrorDescription(error))"
+                )
+            }
 
             stage = .finalize
-            if let householdId = UUID(uuidString: metadata.rootRecordID.recordName) {
+            if let householdId {
                 rememberRecordZone(record, explicitHouseholdId: householdId)
             } else {
                 rememberRecordZone(record, explicitHouseholdId: nil)
             }
 
             clearCloudKitFailure()
-            return try household(from: record)
+            let household = try household(from: record)
+            return AcceptedShareContext(
+                household: household,
+                householdId: household.id,
+                zoneID: zoneID,
+                shareURL: shareURL
+            )
         } catch {
-            recordCloudKitFailure(error, operation: "acceptShare.\(stage.rawValue)")
-            throw error
+            let wrappedError: Error = switch stage {
+            case .acceptOperation:
+                if error is CloudKitManagerError {
+                    error
+                } else {
+                    CloudKitManagerError.acceptShareFailed(
+                        "Accept share failed: \(debugErrorDescription(error))"
+                    )
+                }
+            case .fetchRoot:
+                if error is CloudKitManagerError {
+                    error
+                } else {
+                    CloudKitManagerError.sharedHouseholdFetchFailed(
+                        "Shared household fetch failed: \(debugErrorDescription(error))"
+                    )
+                }
+            case .finalize:
+                error
+            }
+            logJoinStage(
+                "join.acceptShare.\(stage.rawValue)",
+                householdId: householdId,
+                zoneID: zoneID,
+                scope: .participantShared,
+                error: wrappedError
+            )
+            recordCloudKitFailure(wrappedError, operation: "acceptShare.\(stage.rawValue)")
+            throw wrappedError
         }
     }
 
@@ -3553,11 +4533,9 @@ actor CloudKitManager {
         database: CKDatabase
     ) async throws -> CKRecord {
         let backoffDelays: [UInt64] = [
-            500_000_000,
-            1_000_000_000,
-            2_000_000_000,
-            3_000_000_000,
-            4_000_000_000,
+            300_000_000,
+            800_000_000,
+            1_500_000_000,
         ]
 
         var lastError: Error?
@@ -3581,19 +4559,8 @@ actor CloudKitManager {
     /// Accept a share using an invite code (share URL string)
     /// Returns the shared household after accepting
     func acceptShare(inviteCode: String) async throws -> Household {
-        let shareURL: URL
-        do {
-            shareURL = try InviteInputNormalizer.normalizedURL(from: inviteCode)
-        } catch {
-            throw HouseholdError.invalidInviteCode
-        }
-
-        // Fetch share metadata from the URL
-        let ckContainer = await container
-        let metadata = try await ckContainer.shareMetadata(for: shareURL)
-
-        // Accept the share
-        return try await acceptShare(metadata: metadata)
+        let context = try await resolveAcceptedShareContext(fromInviteCode: inviteCode)
+        return context.household
     }
 
     // MARK: - Error Handling

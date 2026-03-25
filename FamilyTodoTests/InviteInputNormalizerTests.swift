@@ -66,7 +66,8 @@ final class InviteInputNormalizerTests: XCTestCase {
         XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("AB12-3"))
         XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("AB12C34D9"))
         XCTAssertEqual(InviteInputNormalizer.normalizeInviteCodeToken("ab12c4"), "AB12C4")
-        XCTAssertEqual(InviteInputNormalizer.normalizeInviteCodeToken("AB12C34"), "AB12C34")
+        XCTAssertEqual(InviteInputNormalizer.normalizeInviteCodeToken("AB12C34D"), "AB12C34D")
+        XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("AB12C34"))
         XCTAssertNil(InviteInputNormalizer.normalizeInviteCodeToken("ab12c"))
     }
 

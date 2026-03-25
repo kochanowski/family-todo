@@ -71,6 +71,70 @@ final class HouseholdTests: XCTestCase {
         XCTAssertEqual(original.name, decoded.name)
         XCTAssertEqual(original.ownerId, decoded.ownerId)
     }
+
+    func testCloudKitSchemaIncludesWorkItemRecordTypeContract() throws {
+        let schema = try loadCloudKitSchemaJSON()
+        let recordTypes = try XCTUnwrap(schema["recordTypes"] as? [[String: Any]])
+        let workItem = try XCTUnwrap(
+            recordTypes.first(where: { $0["name"] as? String == "WorkItem" }),
+            "Expected WorkItem to be present in CloudKit schema contract."
+        )
+
+        let fields = try XCTUnwrap(workItem["fields"] as? [[String: Any]])
+        let fieldNames = Set(fields.compactMap { $0["name"] as? String })
+        let expectedFields: Set = [
+            "id",
+            "logicalItemId",
+            "householdId",
+            "title",
+            "status",
+            "assigneeId",
+            "assigneeIds",
+            "categoryId",
+            "areaId",
+            "dueDate",
+            "lastPokedAt",
+            "completedAt",
+            "completedById",
+            "taskType",
+            "recurringChoreId",
+            "notes",
+            "order",
+            "createdAt",
+            "updatedAt",
+        ]
+
+        XCTAssertEqual(fieldNames, expectedFields)
+
+        let indexes = try XCTUnwrap(workItem["indexes"] as? [String: Any])
+        let queryIndexes = Set((indexes["query"] as? [String]) ?? [])
+        let sortIndexes = Set((indexes["sort"] as? [String]) ?? [])
+
+        XCTAssertEqual(queryIndexes, Set(["householdId"]))
+        XCTAssertEqual(sortIndexes, Set(["updatedAt"]))
+    }
+
+    private func loadCloudKitSchemaJSON(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> [String: Any] {
+        let testFileURL = URL(fileURLWithPath: String(describing: file))
+        let repoRootURL = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let schemaURL = repoRootURL
+            .appendingPathComponent("cloudkit")
+            .appendingPathComponent("schema")
+            .appendingPathComponent("housepulse-schema.json")
+        let data = try Data(contentsOf: schemaURL)
+        let object = try JSONSerialization.jsonObject(with: data)
+        return try XCTUnwrap(
+            object as? [String: Any],
+            "Expected CloudKit schema JSON dictionary.",
+            file: file,
+            line: line
+        )
+    }
 }
 
 // MARK: - Member Tests
@@ -744,6 +808,193 @@ final class CloudKitManagerScopeTests: XCTestCase {
                 for: .participantShared
             )
         )
+    }
+
+    func testAttachParticipantSharedRootParentIfNeededSetsNoneParentActionForAllSharedChildTypes() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let zoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let sharedChildTypes = [
+            "Member",
+            "Area",
+            "Task",
+            "WorkItem",
+            "RecurringChore",
+            "ShoppingItem",
+            "ShoppingBundle",
+            "BacklogCategory",
+            "BacklogItem",
+        ]
+
+        for recordType in sharedChildTypes {
+            let record = CKRecord(
+                recordType: recordType,
+                recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zoneID)
+            )
+
+            await manager.attachParticipantSharedRootParentIfNeeded(
+                to: record,
+                householdId: householdId,
+                scope: .participantShared,
+                zoneID: zoneID
+            )
+
+            let parent = try XCTUnwrap(
+                record.parent,
+                "Expected shared root parent for \(recordType)"
+            )
+
+            XCTAssertEqual(
+                parent.recordID,
+                CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID),
+                "Expected shared root parent for \(recordType)"
+            )
+            XCTAssertEqual(parent.action.rawValue, CKRecord.ReferenceAction.none.rawValue)
+        }
+    }
+
+    func testAttachParticipantSharedRootParentIfNeededDoesNothingOutsideSharedChildSaves() async {
+        let manager = CloudKitManager()
+        let record = CKRecord(
+            recordType: "Household",
+            recordID: CKRecord.ID(recordName: UUID().uuidString)
+        )
+
+        await manager.attachParticipantSharedRootParentIfNeeded(
+            to: record,
+            householdId: UUID(),
+            scope: .ownerPrivate,
+            zoneID: ownerZoneID
+        )
+
+        XCTAssertNil(record.parent)
+    }
+
+    func testAttachParticipantSharedRootParentIfNeededAlsoSetsParentForOwnerPrivateSharedChildren() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: ownerZoneID)
+        )
+
+        await manager.attachParticipantSharedRootParentIfNeeded(
+            to: record,
+            householdId: householdId,
+            scope: .ownerPrivate,
+            zoneID: ownerZoneID
+        )
+
+        let parent = try XCTUnwrap(record.parent)
+        XCTAssertEqual(
+            parent.recordID,
+            CKRecord.ID(recordName: householdId.uuidString, zoneID: ownerZoneID)
+        )
+        XCTAssertEqual(parent.action.rawValue, CKRecord.ReferenceAction.none.rawValue)
+    }
+
+    func testValidateGraphReferenceFieldsAllowsTargetZoneReferences() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let assigneeId = UUID()
+        let zoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zoneID)
+        )
+        record["householdId"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: householdId.uuidString, zoneID: zoneID),
+            action: .none
+        )
+        record["assigneeId"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: assigneeId.uuidString, zoneID: zoneID),
+            action: .none
+        )
+
+        try await manager.validateGraphReferenceFields(
+            in: record,
+            targetZoneID: zoneID,
+            scope: .participantShared
+        )
+    }
+
+    func testValidateGraphReferenceFieldsRejectsCrossZoneReferences() async throws {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let targetZoneID = CKRecordZone.ID(
+            zoneName: "SharedZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let wrongZoneID = CKRecordZone.ID(
+            zoneName: "WrongZone-\(UUID().uuidString)",
+            ownerName: "_otherOwner"
+        )
+        let record = CKRecord(
+            recordType: "Task",
+            recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: targetZoneID)
+        )
+        record["householdId"] = CKRecord.Reference(
+            recordID: CKRecord.ID(recordName: householdId.uuidString, zoneID: wrongZoneID),
+            action: .none
+        )
+
+        do {
+            try await manager.validateGraphReferenceFields(
+                in: record,
+                targetZoneID: targetZoneID,
+                scope: .participantShared
+            )
+            XCTFail("Expected crossZoneReferenceViolation")
+        } catch let error as CloudKitManager.CloudKitManagerError {
+            guard case let .crossZoneReferenceViolation(message) = error else {
+                return XCTFail("Expected crossZoneReferenceViolation, got \(error)")
+            }
+            XCTAssertTrue(message.contains("Task.householdId"))
+        }
+    }
+
+    func testHouseholdReferenceMatchPredicateIncludesOwnerParticipantAndLegacyVariants() async {
+        let manager = CloudKitManager()
+        let householdId = UUID()
+        let participantSharedZoneID = CKRecordZone.ID(
+            zoneName: ownerZoneID.zoneName,
+            ownerName: "_otherOwner"
+        )
+
+        await manager.setSharedZoneContext(
+            householdId: householdId,
+            zoneID: ownerZoneID,
+            scope: .ownerPrivate
+        )
+        await manager.setSharedZoneContext(
+            householdId: householdId,
+            zoneID: participantSharedZoneID,
+            scope: .participantShared
+        )
+
+        let predicate = await manager.householdReferenceMatchPredicate(
+            householdId: householdId,
+            zoneID: ownerZoneID
+        )
+
+        let comparisonPredicate = try? XCTUnwrap(predicate as? NSComparisonPredicate)
+        let references = ((comparisonPredicate?.rightExpression.constantValue as? NSArray)?
+            .compactMap { $0 as? CKRecord.Reference }) ?? []
+
+        XCTAssertEqual(references.count, 4)
+        XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == defaultZoneID }))
+        XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == ownerZoneID }))
+        XCTAssertTrue(references.contains(where: { $0.recordID.zoneID == participantSharedZoneID }))
+        XCTAssertTrue(references.contains(where: {
+            $0.recordID.zoneID.ownerName == CKCurrentUserDefaultName &&
+                $0.recordID.zoneID.zoneName == "HouseholdZone-\(householdId.uuidString)"
+        }))
     }
 
     func testReferenceMatchPredicateUsesInOperatorForMultipleReferences() {

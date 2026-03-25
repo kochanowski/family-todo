@@ -177,6 +177,8 @@ enum HouseholdError: Error, Equatable {
     case householdNotFound
     case cloudSyncRequired
     case invalidInviteCode
+    case sharedAccessNotEstablished
+    case debugJoinFailure(String)
     case alreadyInHousehold
     case displayNameRequired
     case displayNameAlreadyTaken
@@ -196,6 +198,10 @@ extension HouseholdError: LocalizedError {
             "This action requires cloud sync."
         case .invalidInviteCode:
             "The invite code is invalid."
+        case .sharedAccessNotEstablished:
+            "Could not complete household access. Please try joining again in a moment."
+        case let .debugJoinFailure(message):
+            message
         case .alreadyInHousehold:
             "Leave your current household before creating or joining another one."
         case .displayNameRequired:
@@ -253,7 +259,11 @@ class AreaStore: ObservableObject {
 
         do {
             await cloudKit.ensureReady()
-            let fetched = try await cloudKit.fetchAreas(householdId: resolvedHouseholdId)
+            let scope = await cloudKit.getHouseholdScope()
+            let fetched = try await cloudKit.fetchAreas(
+                householdId: resolvedHouseholdId,
+                scope: scope
+            )
             areas = fetched
             syncToCache(fetched)
         } catch {
@@ -278,7 +288,8 @@ class AreaStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveArea(area)
+            let scope = await cloudKit.getHouseholdScope()
+            _ = try await cloudKit.saveArea(area, scope: scope)
         } catch {
             self.error = error
         }
@@ -290,7 +301,8 @@ class AreaStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            try await cloudKit.deleteArea(id: area.id)
+            let scope = await cloudKit.getHouseholdScope()
+            try await cloudKit.deleteArea(id: area.id, scope: scope)
         } catch {
             self.error = error
         }
@@ -402,7 +414,11 @@ final class RecurringChoreStore: ObservableObject {
 
         do {
             await cloudKit.ensureReady()
-            let fetched = try await cloudKit.fetchRecurringChores(householdId: householdId)
+            let scope = await cloudKit.getHouseholdScope()
+            let fetched = try await cloudKit.fetchRecurringChores(
+                householdId: householdId,
+                scope: scope
+            )
             chores = fetched
             syncToCache(fetched)
         } catch {
@@ -439,7 +455,8 @@ final class RecurringChoreStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveRecurringChore(chore)
+            let scope = await cloudKit.getHouseholdScope()
+            _ = try await cloudKit.saveRecurringChore(chore, scope: scope)
         } catch {
             self.error = error
         }
@@ -452,7 +469,8 @@ final class RecurringChoreStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            _ = try await cloudKit.saveRecurringChore(chore)
+            let scope = await cloudKit.getHouseholdScope()
+            _ = try await cloudKit.saveRecurringChore(chore, scope: scope)
         } catch {
             self.error = error
         }
@@ -464,7 +482,8 @@ final class RecurringChoreStore: ObservableObject {
 
         guard isCloudSyncEnabled else { return }
         do {
-            try await cloudKit.deleteRecurringChore(id: chore.id)
+            let scope = await cloudKit.getHouseholdScope()
+            try await cloudKit.deleteRecurringChore(id: chore.id, scope: scope)
         } catch {
             self.error = error
         }

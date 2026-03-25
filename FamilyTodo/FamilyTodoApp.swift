@@ -74,7 +74,16 @@ struct FamilyTodoApp: App {
                    let userId = userSession.userId,
                    let householdId = userSession.currentHouseholdID
                 {
-                    subscriptionManager.configure(userId: userId, householdId: householdId)
+                    let subscriptionScope = await MainActor.run {
+                        activeHouseholdSubscriptionScope(userId: userId)
+                    }
+                    await MainActor.run {
+                        subscriptionManager.configure(
+                            userId: userId,
+                            householdId: householdId,
+                            scope: subscriptionScope
+                        )
+                    }
                 }
             #endif
 
@@ -94,6 +103,15 @@ struct FamilyTodoApp: App {
                 )
             #endif
         }
+    }
+
+    private func activeHouseholdSubscriptionScope(
+        userId: String
+    ) -> CloudKitManager.HouseholdDatabaseScope? {
+        guard let ownerId = householdStore.currentHousehold?.ownerId else {
+            return nil
+        }
+        return ownerId == userId ? .ownerPrivate : .participantShared
     }
 
     var body: some Scene {
@@ -144,6 +162,20 @@ struct FamilyTodoApp: App {
                             }
                             .task {
                                 appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                                #if !CI
+                                    appDelegate.installNotificationCenterDelegate()
+                                #endif
+                                appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] context in
+                                    guard let householdStore, let userSession else {
+                                        return .noData
+                                    }
+
+                                    return await householdStore.handleRemoteCloudChange(
+                                        userId: userSession.userId,
+                                        preferredHouseholdId: userSession.currentHouseholdID,
+                                        context: context
+                                    )
+                                }
                                 appDelegate.flushPendingInviteIfNeeded()
                                 WorkItemCacheMigrator.migrateIfNeeded(
                                     context: sharedModelContainer.mainContext
@@ -159,7 +191,13 @@ struct FamilyTodoApp: App {
                                        let userId = userSession.userId,
                                        let householdId = userSession.currentHouseholdID
                                     {
-                                        subscriptionManager.configure(userId: userId, householdId: householdId)
+                                        subscriptionManager.configure(
+                                            userId: userId,
+                                            householdId: householdId,
+                                            scope: activeHouseholdSubscriptionScope(
+                                                userId: userId
+                                            )
+                                        )
                                     }
                                 #endif
                                 scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
@@ -238,7 +276,7 @@ struct RootView: View {
                         SignInView()
                             .transition(.opacity)
                     } else if shouldShowHouseholdSetupLoader {
-                        HouseholdSetupLoadingView()
+                        HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
                             .transition(.opacity)
                     } else {
                         CreateHouseholdView()
@@ -292,6 +330,7 @@ struct RootView: View {
         }
         .task(id: tipContextKey) {
             guard onboardingState.currentState == .mainApp else { return }
+            AppTips.configureIfNeeded()
             AppTips.syncContextIfNeeded(
                 sessionMode: userSession.sessionMode,
                 userId: userSession.userId,
@@ -341,6 +380,7 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.id.uuidString ?? "none",
+            householdStore.currentHousehold?.ownerId ?? "unknownOwner",
             householdStore.isModelContextReady ? "contextReady" : "contextMissing",
             shareAcceptanceCoordinator.pendingInviteCode ?? "noPendingInvite",
             shareAcceptanceCoordinator.pendingMetadata?.rootRecordID.recordName ?? "noPendingMetadata",
@@ -363,6 +403,7 @@ struct RootView: View {
             userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
+            householdStore.currentHousehold?.ownerId ?? "unknownOwner",
         ].joined(separator: "|")
     }
 
@@ -483,7 +524,20 @@ struct RootView: View {
             return
         }
 
-        subscriptionManager.configure(userId: userId, householdId: householdId)
+        subscriptionManager.configure(
+            userId: userId,
+            householdId: householdId,
+            scope: activeHouseholdSubscriptionScope(userId: userId)
+        )
+    }
+
+    private func activeHouseholdSubscriptionScope(
+        userId: String
+    ) -> CloudKitManager.HouseholdDatabaseScope? {
+        guard let ownerId = householdStore.currentHousehold?.ownerId else {
+            return nil
+        }
+        return ownerId == userId ? .ownerPrivate : .participantShared
     }
 
     private var shouldShowCreateHouseholdView: Bool {
@@ -522,14 +576,16 @@ struct RootView: View {
         var didClear = false
 
         if let householdId = userSession.currentHouseholdID,
-           householdStore.isRecoverySuppressed(for: householdId)
+           householdStore.isRecoverySuppressed(for: householdId),
+           !householdStore.hasPendingJoinProtection(for: householdId, userId: userSession.userId)
         {
             userSession.clearCurrentHousehold()
             didClear = true
         }
 
         if let household = householdStore.currentHousehold,
-           householdStore.isRecoverySuppressed(for: household.id)
+           householdStore.isRecoverySuppressed(for: household.id),
+           !householdStore.hasPendingJoinProtection(for: household.id, userId: userSession.userId)
         {
             householdStore.clearCurrentHousehold()
             didClear = true
@@ -545,16 +601,25 @@ struct RootView: View {
 }
 
 private struct HouseholdSetupLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-                .progressViewStyle(.circular)
+    var isJoiningHousehold = false
 
-            Text("Loading household...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    var body: some View {
+        if isJoiningHousehold {
+            JoiningHouseholdLoadingView(
+                isActive: true,
+                title: "Joining household..."
+            )
+        } else {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+
+                Text("Loading household...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -602,6 +667,9 @@ enum LocalAppReset {
         // destructive debug action so startup/onboarding is never blocked by network work.
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
+        if userSession.syncMode == .cloud, let userId = userSession.userId {
+            await householdStore.hardResetCloudHousehold(userId: userId)
+        }
         NotificationService.shared.cancelDailyDigest()
         NotificationService.shared.removeAllDeliveredNotifications()
         NotificationService.shared.removeAllTaskReminders()

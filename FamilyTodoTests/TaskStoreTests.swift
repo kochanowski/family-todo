@@ -473,6 +473,76 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(cachedTask.statusRaw, WorkItem.Status.done.rawValue)
     }
 
+    func testToggleTaskCompletionSetsCompletedByIdForCurrentUser() async throws {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Complete me",
+            status: .next,
+            assigneeId: assigneeId,
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(cachedTaskRow(task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        store.setCloudContext(currentUserId: "user-1", householdOwnerId: "user-1")
+        await store.loadTasks()
+
+        let result = await store.toggleTaskCompletion(task)
+        XCTAssertEqual(result, .ok)
+
+        guard let completedTask = store.tasks.first(where: { $0.id == task.id }) else {
+            XCTFail("Expected completed task in memory")
+            return
+        }
+        XCTAssertEqual(completedTask.status, .done)
+        XCTAssertEqual(completedTask.completedById, "user-1")
+
+        guard let cachedTask = try fetchCachedWorkItem(id: task.id) else {
+            XCTFail("Expected cached task after completion")
+            return
+        }
+        XCTAssertEqual(cachedTask.completedById, "user-1")
+    }
+
+    func testToggleTaskCompletionClearsCompletedByIdWhenReopened() async throws {
+        let task = Task(
+            id: UUID(),
+            householdId: householdId,
+            title: "Reopen me",
+            status: .done,
+            assigneeId: assigneeId,
+            completedAt: Date(timeIntervalSince1970: 1_736_900_000),
+            completedById: "user-1",
+            taskType: .oneOff
+        )
+
+        modelContainer.mainContext.insert(cachedTaskRow(task))
+        try modelContainer.mainContext.save()
+
+        store.setSyncMode(.localOnly)
+        store.setCloudContext(currentUserId: "user-1", householdOwnerId: "user-1")
+        await store.loadTasks()
+
+        let result = await store.toggleTaskCompletion(task)
+        XCTAssertEqual(result, .ok)
+
+        guard let reopenedTask = store.tasks.first(where: { $0.id == task.id }) else {
+            XCTFail("Expected reopened task in memory")
+            return
+        }
+        XCTAssertEqual(reopenedTask.status, .next)
+        XCTAssertNil(reopenedTask.completedById)
+
+        guard let cachedTask = try fetchCachedWorkItem(id: task.id) else {
+            XCTFail("Expected cached task after reopening")
+            return
+        }
+        XCTAssertNil(cachedTask.completedById)
+    }
+
     func testCanPokeReturnsTrueWhenTaskNeverPoked() {
         let task = Task(
             householdId: householdId,
