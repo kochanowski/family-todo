@@ -54,6 +54,21 @@ Description: Once sync, invite, and onboarding flows are stable, finish the mini
 Acceptance Criteria: Household-level premium model, entitlement resolution, and payment integration plan are all ready enough that app monetization can be introduced without reopening core sync/design decisions.
 Regression Risk: Introducing monetization before collaboration flows are trustworthy, or leaking user-level payment assumptions into a household-first product model.
 
+- [ ] **I1.7 Member-Driven Invites** ([Details](TODO_DETAILS.md#i17))
+Description: Allow every active household member, not only the owner, to invite additional people into the household.
+Acceptance Criteria: Any active member can open the invite flow, generate or access a valid invite, and onboard another person without owner intervention; ownership-sensitive actions remain protected where still required.
+Regression Risk: Accidentally widening permissions too far, confusing owner/member responsibilities, or breaking current invite-token validity assumptions.
+
+- [ ] **I1.8 Per-User Recommended Task Limit** ([Details](TODO_DETAILS.md#i18))
+Description: Ensure the recommended/WIP task limit is enforced per assignee, not against all household tasks combined.
+Acceptance Criteria: Recommendation and guard logic counts only tasks assigned to the relevant user when deciding whether another task can move into the active lane; one member hitting the limit never blocks unrelated members.
+Regression Risk: Regressions in existing WIP validation, incorrect counting for unassigned tasks, or inconsistent UI guidance vs store enforcement.
+
+- [ ] **I1.9 Shared Household Metadata Editing** ([Details](TODO_DETAILS.md#i19))
+Description: Allow every active household member to change the household name and icon, not only the owner.
+Acceptance Criteria: Any active member can rename the household and change its icon; updates sync correctly to all devices; owner-only restrictions remain only where product truly needs them.
+Regression Risk: Reusing owner-only update paths incorrectly, creating metadata write conflicts, or exposing stale household info after remote updates.
+
 ## Pulled-Forward Watchlist From Phase 3
 
 - [ ] **P3.3 Evaluate Zone-Scoped Subscriptions** ([Details](TODO_DETAILS.md#p33))

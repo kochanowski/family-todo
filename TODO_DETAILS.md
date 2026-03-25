@@ -24,17 +24,24 @@ Use it together with the one-task-at-a-time workflow.
     - participant uses `participantShared`
   - the near-term goal is not to migrate owner to shared DB, but to make app behavior feel close to symmetric
   - see `docs/current/owner-participant-sync-plan.md`
+  - detailed next-step refactor plan: `docs/current/2026-03-25-big-sync-refactor-plan.md`
 - In scope:
   - continue phase-2 hardening of the current model
   - verify remote push intake, dedupe, and follow-up refresh behavior for:
     - `Shopping`
     - `Tasks`
     - `Ideas`
+    - `Household` metadata
+    - `Member` metadata
   - keep owner-side follow-up refresh for participant-originated changes and tighten it using measured device feedback
   - ensure visible screens always refresh the full dependency set required for rendering:
     - `Tasks`: tasks + members + categories
     - `Ideas`: items + categories + members
     - `Shopping`: items + bundles
+  - ensure non-list shared metadata also flows through the same durable path:
+    - household name
+    - household icon
+    - member display names
   - keep device-first validation as the source of truth for success, not only unit tests
 - Likely files:
   - `FamilyTodo/Stores/HouseholdStore.swift`
@@ -50,6 +57,7 @@ Use it together with the one-task-at-a-time workflow.
   - two physical devices remain in sync in both directions without pull-to-refresh
   - `participant -> owner` is no longer dramatically slower than `owner -> participant`
   - remote changes do not require “kick” actions such as unrelated shopping edits to appear
+  - household name/icon and member names sync with the same reliability as tasks and shopping
   - no duplicate or misleading notification copy is produced during sync storms
 
 ## <a id="i11"></a>I1.1 Remote Update UX Cleanup
@@ -186,6 +194,76 @@ Use it together with the one-task-at-a-time workflow.
 - Validation:
   - premium state can be introduced without reworking sync architecture
   - collaboration UX is stable enough that monetization does not sit on top of broken core flows
+
+## <a id="i17"></a>I1.7 Member-Driven Invites
+- Objective: allow every active household member to invite additional people, not only the owner.
+- Background:
+  - this fits the shared-first product direction better than routing all growth through one owner-only action
+  - invite creation still needs to respect the existing code/QR invite model
+- In scope:
+  - make invite-entry UI available to all active members
+  - ensure any active member can generate or access a valid invite token/code
+  - preserve household safety rules where still required:
+    - membership validation
+    - active-member checks
+    - invite revocation/expiration rules
+- Likely files:
+  - invite-related views in onboarding / household settings
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - invite-token handling code and tests
+- Out of scope:
+  - redesigning the underlying invite transport away from code/QR
+  - broad role-management redesign in the same task
+- Validation:
+  - owner can still invite
+  - non-owner active member can also invite
+  - redeemed invite joins the same household correctly
+  - household safety and token lifecycle behavior do not regress
+
+## <a id="i18"></a>I1.8 Per-User Recommended Task Limit
+- Objective: enforce the recommended/WIP task limit per assignee rather than across all tasks globally.
+- Background:
+  - the product rule is household coordination, not shared blocking between unrelated members
+  - one user's active-task load must not prevent another user from taking work
+- In scope:
+  - audit current recommended-task / WIP counting logic
+  - count only tasks assigned to the relevant user when evaluating the limit
+  - keep unassigned-task behavior explicit and documented
+  - align any UI explanation with store-side enforcement
+- Likely files:
+  - `FamilyTodo/Stores/TaskStore.swift`
+  - `FamilyTodo/Views/TasksView.swift`
+  - task-related tests
+- Out of scope:
+  - redesigning the overall WIP philosophy
+- Validation:
+  - one member reaching the limit does not block another member
+  - per-user counting is correct for `.next` / active-task logic
+  - tests cover mixed-assignee households
+
+## <a id="i19"></a>I1.9 Shared Household Metadata Editing
+- Objective: allow every active household member to rename the household and change its icon.
+- Background:
+  - the household is shared space, so basic non-destructive metadata edits should not require owner-only bottlenecks
+  - this must sync cleanly through the same pipeline as other household data
+- In scope:
+  - remove owner-only restrictions from household name/icon updates where appropriate
+  - ensure these updates work from any active member account
+  - keep local-first UI update and cloud sync behavior
+  - confirm remote devices refresh household metadata without stale cache
+- Likely files:
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Managers/CloudKitManager+Mapping.swift`
+  - household settings / edit views
+- Out of scope:
+  - broader role/permission redesign
+  - destructive household actions such as delete/transfer ownership
+- Validation:
+  - owner can still edit household metadata
+  - non-owner active member can edit household metadata
+  - household name and icon sync correctly to all devices
 
 ## <a id="m10"></a>M1.0 Live Shopping Mode / Last-Minute Alert
 - Objective: solve the “I’m at the store, add anything last minute now” household coordination problem with a lightweight shared-presence mode in Shopping.

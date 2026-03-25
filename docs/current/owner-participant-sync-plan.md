@@ -72,6 +72,10 @@ Only start this if phases 1 and 2 still leave too much complexity or asymmetry.
 
 Goal: replace per-screen mini sync flows with one household sync engine.
 
+Detailed execution plan:
+
+- `docs/current/2026-03-25-big-sync-refactor-plan.md`
+
 Tasks:
 
 - create one canonical sync engine for:
