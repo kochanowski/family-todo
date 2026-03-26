@@ -29,7 +29,7 @@ enum HouseholdSyncReason: Equatable {
     case debugRepair
 
     func merged(with newer: HouseholdSyncReason) -> HouseholdSyncReason {
-        max(self, newer)
+        Self.max(self, newer)
     }
 
     private var priority: Int {
