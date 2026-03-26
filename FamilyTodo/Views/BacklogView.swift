@@ -396,7 +396,7 @@ private struct BacklogContent: View {
     private var layoutContent: some View {
         let listBottomInset: CGFloat = 16
 
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             header
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
