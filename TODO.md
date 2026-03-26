@@ -148,6 +148,14 @@ Acceptance Criteria: Change the text string from `(+) New category` to just `New
 Description: Every time we deploy to the dev environment, the Invite Token gets deleted/wiped. This was supposed to be fixed but is still breaking.
 Acceptance Criteria: Investigate the token storage/generation or deployment scripts and ensure the Invite Token persists across deployments.
 
+- [ ] **Bundle keyboard matches shopping input**
+Description: The keyboard flickers when adding items to a bundle; mimic the more stable shopping list composer so the keyboard stays pinned during entry.
+Acceptance Criteria: Bundle composer uses the same padding/focus management as shopping additions so the keyboard never jumps when a new item is being typed.
+
+- [ ] **Add action affordance to each bundle**
+Description: Provide an immediate CTA next to every bundle (e.g., `Add`, `Send to Shopping List`, or a `+` icon) to make it obvious how to add items without navigating away.
+Acceptance Criteria: Each bundle row includes a clear affordance that matches the chosen label and icon guidance; the action feels consistent with shopping list copy.
+
 ## Phase 1: Data Integrity & CloudKit (High Priority)
 
 - [x] **P1.1 Replace Silent SwiftData Saves** ([Details](TODO_DETAILS.md#p11))
