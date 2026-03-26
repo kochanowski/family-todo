@@ -137,73 +137,33 @@ private struct BacklogContent: View {
                         .padding(.top, 40)
                 }
             } else {
-                ScrollViewReader { scrollProxy in
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            ForEach(store.categories) { category in
-                                let categoryItems = visibleItems(for: category.id)
-                                CategoryCard(
-                                    category: category,
-                                    items: categoryItems,
-                                    highlightedItemIDs: remoteHighlightedItemIDs,
-                                    isCategoryHighlighted: remoteHighlightedCategoryIDs.contains(
-                                        category.id
-                                    ),
-                                    isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
-                                    appTipRuntimeGeneration: appTipRuntimeGeneration,
-                                    addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
-                                    ideaAssignTipItemID: ideaAssignTipAnchorItemID,
-                                    ideaPromotionTipItemID: ideaPromotionTipItemID,
-                                    isPromotingItem: { hiddenPendingPromotionIds.contains($0) || pendingPromotionItemID == $0 },
-                                    assigneeFor: { assigneeId in
-                                        assignee(for: assigneeId)
-                                    },
-                                    isAddingItem: activeComposerCategoryId == category.id,
-                                    newItemText: Binding(
-                                        get: {
-                                            activeComposerCategoryId == category.id
-                                                ? composerText : ""
-                                        },
-                                        set: { composerText = $0 }
-                                    ),
-                                    focusedComposerCategoryId: $focusedComposerCategoryId,
-                                    onActivateComposer: {
-                                        activateComposer(for: category.id, scrollProxy: scrollProxy)
-                                    },
-                                    onSubmitItem: {
-                                        submitComposer(for: category.id)
-                                    },
-                                    onCancelItem: {
-                                        cancelComposer(for: category.id)
-                                    },
-                                    onDeleteItem: { item in
-                                        requestDeleteItem(withID: item)
-                                    },
-                                    onEditItem: { item in
-                                        editItem(withID: item)
-                                    },
-                                    onAssignItem: { item in
-                                        beginAssigningItem(withID: item)
-                                    },
-                                    onPromoteItem: { item in
-                                        promoteItem(withID: item)
-                                    },
-                                    onEditCategory: {
-                                        editingCategory = category
-                                    },
-                                    onDeleteCategory: {
-                                        requestDeleteCategory(withID: category.id)
-                                    }
-                                )
-                                .id(category.id)
-                                .rowInsertAnimation()
-                            }
-                        }
-                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                        .padding(.bottom, listBottomInset)
-                    }
-                    .scrollDismissesKeyboard(.never)
-                }
+                BacklogCategoryListSection(
+                    categories: store.categories,
+                    listBottomInset: listBottomInset,
+                    visibleItems: visibleItems(for:),
+                    highlightedItemIDs: remoteHighlightedItemIDs,
+                    highlightedCategoryIDs: remoteHighlightedCategoryIDs,
+                    isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
+                    appTipRuntimeGeneration: appTipRuntimeGeneration,
+                    addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
+                    ideaAssignTipItemID: ideaAssignTipAnchorItemID,
+                    ideaPromotionTipItemID: ideaPromotionTipItemID,
+                    hiddenPendingPromotionIds: hiddenPendingPromotionIds,
+                    pendingPromotionItemID: pendingPromotionItemID,
+                    assigneeFor: assignee(for:),
+                    activeComposerCategoryId: activeComposerCategoryId,
+                    composerText: $composerText,
+                    focusedComposerCategoryId: $focusedComposerCategoryId,
+                    onActivateComposer: activateComposer(for:scrollProxy:),
+                    onSubmitItem: submitComposer(for:),
+                    onCancelItem: cancelComposer(for:),
+                    onDeleteItem: requestDeleteItem(withID:),
+                    onEditItem: editItem(withID:),
+                    onAssignItem: beginAssigningItem(withID:),
+                    onPromoteItem: promoteItem(withID:),
+                    onEditCategory: { editingCategory = $0 },
+                    onDeleteCategory: requestDeleteCategory(withID:)
+                )
                 .refreshable {
                     await loadBacklogData()
                     markIdeasTutorialAsSeenIfNeeded()
@@ -1175,6 +1135,141 @@ private struct BacklogContent: View {
             self.pendingDeletionItem = nil
         }
         HapticManager.lightTap()
+    }
+}
+
+private struct BacklogCategoryListSection: View {
+    let categories: [BacklogCategory]
+    let listBottomInset: CGFloat
+    let visibleItems: (UUID) -> [BacklogItem]
+    let highlightedItemIDs: Set<UUID>
+    let highlightedCategoryIDs: Set<UUID>
+    let isApplyingRemoteSyncAnimation: Bool
+    let appTipRuntimeGeneration: Int
+    let addIdeaTipCategoryID: UUID?
+    let ideaAssignTipItemID: UUID?
+    let ideaPromotionTipItemID: UUID?
+    let hiddenPendingPromotionIds: Set<UUID>
+    let pendingPromotionItemID: UUID?
+    let assigneeFor: (UUID?) -> Member?
+    let activeComposerCategoryId: UUID?
+    @Binding var composerText: String
+    let focusedComposerCategoryId: FocusState<UUID?>.Binding
+    let onActivateComposer: (UUID, ScrollViewProxy) -> Void
+    let onSubmitItem: (UUID) -> Void
+    let onCancelItem: (UUID) -> Void
+    let onDeleteItem: (UUID) -> Void
+    let onEditItem: (UUID) -> Void
+    let onAssignItem: (UUID) -> Void
+    let onPromoteItem: (UUID) -> Void
+    let onEditCategory: (BacklogCategory) -> Void
+    let onDeleteCategory: (UUID) -> Void
+
+    var body: some View {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(categories) { category in
+                        BacklogCategoryCardContainer(
+                            category: category,
+                            items: visibleItems(category.id),
+                            highlightedItemIDs: highlightedItemIDs,
+                            isCategoryHighlighted: highlightedCategoryIDs.contains(category.id),
+                            isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
+                            appTipRuntimeGeneration: appTipRuntimeGeneration,
+                            addIdeaTipCategoryID: addIdeaTipCategoryID,
+                            ideaAssignTipItemID: ideaAssignTipItemID,
+                            ideaPromotionTipItemID: ideaPromotionTipItemID,
+                            isPromotingItem: {
+                                hiddenPendingPromotionIds.contains($0) || pendingPromotionItemID == $0
+                            },
+                            assigneeFor: assigneeFor,
+                            isAddingItem: activeComposerCategoryId == category.id,
+                            composerText: $composerText,
+                            focusedComposerCategoryId: focusedComposerCategoryId,
+                            onActivateComposer: {
+                                onActivateComposer(category.id, scrollProxy)
+                            },
+                            onSubmitItem: {
+                                onSubmitItem(category.id)
+                            },
+                            onCancelItem: {
+                                onCancelItem(category.id)
+                            },
+                            onDeleteItem: onDeleteItem,
+                            onEditItem: onEditItem,
+                            onAssignItem: onAssignItem,
+                            onPromoteItem: onPromoteItem,
+                            onEditCategory: {
+                                onEditCategory(category)
+                            },
+                            onDeleteCategory: {
+                                onDeleteCategory(category.id)
+                            }
+                        )
+                        .id(category.id)
+                        .rowInsertAnimation()
+                    }
+                }
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, listBottomInset)
+            }
+            .scrollDismissesKeyboard(.never)
+        }
+    }
+}
+
+private struct BacklogCategoryCardContainer: View {
+    let category: BacklogCategory
+    let items: [BacklogItem]
+    let highlightedItemIDs: Set<UUID>
+    let isCategoryHighlighted: Bool
+    let isApplyingRemoteSyncAnimation: Bool
+    let appTipRuntimeGeneration: Int
+    let addIdeaTipCategoryID: UUID?
+    let ideaAssignTipItemID: UUID?
+    let ideaPromotionTipItemID: UUID?
+    let isPromotingItem: (UUID) -> Bool
+    let assigneeFor: (UUID?) -> Member?
+    let isAddingItem: Bool
+    @Binding var composerText: String
+    let focusedComposerCategoryId: FocusState<UUID?>.Binding
+    let onActivateComposer: () -> Void
+    let onSubmitItem: () -> Void
+    let onCancelItem: () -> Void
+    let onDeleteItem: (UUID) -> Void
+    let onEditItem: (UUID) -> Void
+    let onAssignItem: (UUID) -> Void
+    let onPromoteItem: (UUID) -> Void
+    let onEditCategory: () -> Void
+    let onDeleteCategory: () -> Void
+
+    var body: some View {
+        CategoryCard(
+            category: category,
+            items: items,
+            highlightedItemIDs: highlightedItemIDs,
+            isCategoryHighlighted: isCategoryHighlighted,
+            isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
+            appTipRuntimeGeneration: appTipRuntimeGeneration,
+            addIdeaTipCategoryID: addIdeaTipCategoryID,
+            ideaAssignTipItemID: ideaAssignTipItemID,
+            ideaPromotionTipItemID: ideaPromotionTipItemID,
+            isPromotingItem: isPromotingItem,
+            assigneeFor: assigneeFor,
+            isAddingItem: isAddingItem,
+            newItemText: $composerText,
+            focusedComposerCategoryId: focusedComposerCategoryId,
+            onActivateComposer: onActivateComposer,
+            onSubmitItem: onSubmitItem,
+            onCancelItem: onCancelItem,
+            onDeleteItem: onDeleteItem,
+            onEditItem: onEditItem,
+            onAssignItem: onAssignItem,
+            onPromoteItem: onPromoteItem,
+            onEditCategory: onEditCategory,
+            onDeleteCategory: onDeleteCategory
+        )
     }
 }
 
