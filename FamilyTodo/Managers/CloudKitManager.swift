@@ -3554,9 +3554,37 @@ actor CloudKitManager {
             zoneID: ownerZoneID(for: householdId)
         )
         let db = await privateDatabase
-        let record = try await db.record(for: rootRecordID)
-        rememberRecordZone(record, explicitHouseholdId: householdId)
-        return record
+        let backoffDelays: [UInt64] = [
+            250_000_000,
+            700_000_000,
+        ]
+
+        var lastError: Error?
+        for attempt in 0 ..< backoffDelays.count {
+            do {
+                let record = try await db.record(for: rootRecordID)
+                rememberRecordZone(record, explicitHouseholdId: householdId)
+                return record
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                lastError = ckError
+                if attempt < backoffDelays.count - 1 {
+                    try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
+                }
+            } catch {
+                lastError = error
+                break
+            }
+        }
+
+        do {
+            return try await fetchRecord(
+                id: householdId,
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
+        } catch {
+            throw lastError ?? error
+        }
     }
 
     private func fetchShareRecord(
@@ -4473,7 +4501,11 @@ actor CloudKitManager {
             )
             let record: CKRecord
             do {
-                record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+                record = try await fetchAcceptedRootRecord(
+                    metadata: metadata,
+                    householdId: householdId,
+                    database: db
+                )
             } catch {
                 throw CloudKitManagerError.sharedHouseholdFetchFailed(
                     "Shared household fetch failed: \(debugErrorDescription(error))"
@@ -4530,6 +4562,7 @@ actor CloudKitManager {
 
     private func fetchAcceptedRootRecord(
         metadata: CKShare.Metadata,
+        householdId: UUID?,
         database: CKDatabase
     ) async throws -> CKRecord {
         let backoffDelays: [UInt64] = [
@@ -4541,6 +4574,13 @@ actor CloudKitManager {
         var lastError: Error?
         for attempt in 0 ..< backoffDelays.count {
             do {
+                if let householdId {
+                    return try await fetchRecord(
+                        id: householdId,
+                        householdId: householdId,
+                        scope: .participantShared
+                    )
+                }
                 return try await database.record(for: metadata.rootRecordID)
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 lastError = ckError
@@ -4549,6 +4589,14 @@ actor CloudKitManager {
                 }
                 try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
             } catch {
+                if isRetryableZoneResolutionError(error) {
+                    lastError = error
+                    guard attempt < backoffDelays.count - 1 else {
+                        break
+                    }
+                    try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
+                    continue
+                }
                 throw error
             }
         }
