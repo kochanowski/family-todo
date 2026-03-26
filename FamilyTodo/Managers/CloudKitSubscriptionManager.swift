@@ -580,20 +580,21 @@ final class CloudKitSubscriptionManager: ObservableObject {
         feedbackId: UUID
     ) -> _Concurrency.Task<Void, Never> {
         _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
             try? await _Concurrency.Task.sleep(nanoseconds: inlineFeedbackDurationNanoseconds)
-            guard !_Concurrency.Task.isCancelled, let self else { return }
+            guard !_Concurrency.Task.isCancelled else { return }
 
             switch domain {
             case .shopping:
                 guard shoppingInlineFeedback?.id == feedbackId else { return }
                 withAnimation(WowAnimation.easeOut) {
-                    shoppingInlineFeedback = nil
+                    self.shoppingInlineFeedback = nil
                 }
                 shoppingInlineDismissTask = nil
             case .tasks:
                 guard tasksInlineFeedback?.id == feedbackId else { return }
                 withAnimation(WowAnimation.easeOut) {
-                    tasksInlineFeedback = nil
+                    self.tasksInlineFeedback = nil
                 }
                 tasksInlineDismissTask = nil
             }

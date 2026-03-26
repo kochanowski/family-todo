@@ -62,20 +62,20 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         let engine = BlockingHouseholdSyncEngine()
         let coordinator = HouseholdSyncCoordinator(engine: engine)
 
-        let firstTask = Task {
+        let firstTask = _Concurrency.Task<UIBackgroundFetchResult, Never> {
             await coordinator.performSync(reason: .remotePush(context: .privateDatabase))
         }
 
         await engine.waitForInvocationCount(1)
 
-        let secondTask = Task {
+        let secondTask = _Concurrency.Task<UIBackgroundFetchResult, Never> {
             await coordinator.performSync(reason: .appBecameActive)
         }
-        let thirdTask = Task {
+        let thirdTask = _Concurrency.Task<UIBackgroundFetchResult, Never> {
             await coordinator.performSync(reason: .manualRefresh)
         }
 
-        await Task.yield()
+        await _Concurrency.Task.yield()
         XCTAssertEqual(engine.recordedReasons, [.remotePush(context: .privateDatabase)])
 
         engine.finishNextInvocation(
@@ -122,9 +122,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
             )
         )
 
-        let firstResult = await firstTask.value
-        let secondResult = await secondTask.value
-        let thirdResult = await thirdTask.value
+        let firstResult: UIBackgroundFetchResult = await firstTask.value
+        let secondResult: UIBackgroundFetchResult = await secondTask.value
+        let thirdResult: UIBackgroundFetchResult = await thirdTask.value
 
         XCTAssertEqual(firstResult, .newData)
         XCTAssertEqual(secondResult, .newData)
