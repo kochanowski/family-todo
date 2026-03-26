@@ -669,7 +669,7 @@ class HouseholdStore: ObservableObject {
         var hasPublishedVisibleContentNotifications = false
     }
 
-    private struct JoinedHouseholdHydrationSnapshot: Equatable {
+    fileprivate struct JoinedHouseholdHydrationSnapshot: Equatable {
         let activeMemberCount: Int
         let currentUserHasCachedMembership: Bool
         let remoteMembershipConfirmed: Bool
@@ -688,7 +688,7 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    private struct RemoteCloudRefreshSnapshot: Equatable {
+    fileprivate struct RemoteCloudRefreshSnapshot: Equatable {
         let currentHouseholdId: UUID?
         let observedHouseholdId: UUID?
         let householdName: String?
