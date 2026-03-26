@@ -112,6 +112,7 @@ private struct TasksContent: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
@@ -248,8 +249,20 @@ private struct TasksContent: View {
             if isLocalStoreNotification(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
                 markTasksTutorialAsSeenIfNeeded()
-            } else if selectedTab == .tasks {
-                handleRemoteTaskBoardChange(notification)
+            } else {
+                store.replayPendingMutationsIfNeeded()
+            }
+        }
+        .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
+            guard let batch = syncCoordinator.latestBatch,
+                  !batch.domains.isDisjoint(with: [.tasks, .members, .backlog])
+            else {
+                return
+            }
+
+            store.markLocalSnapshotStale()
+            if selectedTab == .tasks {
+                handleRemoteTaskSyncBatch(batch)
             } else {
                 store.replayPendingMutationsIfNeeded()
             }
@@ -1161,6 +1174,37 @@ private struct TasksContent: View {
             let delta = await refreshTask.run()
             remoteHighlightedTaskIDs = delta.highlightedIDs
             logRemoteSyncVisibleRefreshLatency(screen: "Tasks", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markTasksTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func handleRemoteTaskSyncBatch(_ batch: HouseholdSyncBatch) {
+        let changedIDs = batch.taskChangedIDs
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: visibleTaskLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                    backlogStore.markLocalSnapshotStale()
+                    backlogStore.rehydrateVisibleSnapshotFromCache()
+                    normalizeAssigneeFilterSelection()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedTaskIDs = delta.highlightedIDs
             scheduleRemoteSyncAnimationReset()
             markTasksTutorialAsSeenIfNeeded()
         }

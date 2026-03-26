@@ -57,6 +57,7 @@ private struct BacklogContent: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -247,8 +248,6 @@ private struct BacklogContent: View {
             if selectedNotificationIsLocal(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
-            } else if selectedTab == .backlog {
-                handleRemoteBacklogRefresh(notification)
             } else {
                 store.replayPendingMutationsIfNeeded()
             }
@@ -264,8 +263,20 @@ private struct BacklogContent: View {
                 hiddenPendingPromotionIds.subtract(activeItemIds)
                 syncPromotionTipAnchorWithVisibleItems()
                 markIdeasTutorialAsSeenIfNeeded()
-            } else if selectedTab == .backlog {
-                handleRemoteBacklogRefresh(notification)
+            } else {
+                store.replayPendingMutationsIfNeeded()
+            }
+        }
+        .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
+            guard let batch = syncCoordinator.latestBatch,
+                  !batch.domains.isDisjoint(with: [.ideas, .backlog, .members, .tasks])
+            else {
+                return
+            }
+
+            store.markLocalSnapshotStale()
+            if selectedTab == .backlog {
+                handleRemoteBacklogSyncBatch(batch)
             } else {
                 store.replayPendingMutationsIfNeeded()
             }
@@ -782,6 +793,49 @@ private struct BacklogContent: View {
             hiddenPendingPromotionIds.subtract(activeItemIds)
             syncPromotionTipAnchorWithVisibleItems()
             logRemoteSyncVisibleRefreshLatency(screen: "Ideas", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markIdeasTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func handleRemoteBacklogSyncBatch(_ batch: HouseholdSyncBatch) {
+        if lastProcessedRemoteAnimationBatchToken == batch.id {
+            return
+        }
+
+        let beforeIdeaLocations = backlogIdeaLocations()
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let categoryRefreshTask = RemoteVisibleRefreshTask(
+                changedIDs: batch.backlogChangedCategoryIDs,
+                captureVisibleLocations: backlogCategoryLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                }
+            )
+            let categoryDelta = await categoryRefreshTask.run()
+
+            let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
+                beforeLocations: beforeIdeaLocations,
+                afterLocations: backlogIdeaLocations(),
+                changedIDs: batch.ideaChangedIDs
+            )
+
+            remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
+            remoteHighlightedItemIDs = itemDelta.highlightedIDs
+            lastProcessedRemoteAnimationBatchToken = batch.id
+
+            let activeItemIds = Set(store.items.map(\.id))
+            hiddenPendingPromotionIds.subtract(activeItemIds)
+            syncPromotionTipAnchorWithVisibleItems()
             scheduleRemoteSyncAnimationReset()
             markIdeasTutorialAsSeenIfNeeded()
         }

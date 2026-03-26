@@ -35,6 +35,7 @@ private struct ShoppingListContent: View {
     @StateObject private var restockPulse = RestockPulseState()
     @Binding private var selectedTab: AppTab
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
@@ -148,8 +149,20 @@ private struct ShoppingListContent: View {
                 store.markLocalSnapshotStale()
                 if isLocalStoreNotification(notification) {
                     store.rehydrateVisibleSnapshotFromCache()
-                } else if selectedTab == .shopping {
-                    handleRemoteShoppingListChange(notification)
+                } else {
+                    store.replayPendingMutationsIfNeeded()
+                }
+            }
+            .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
+                guard let batch = syncCoordinator.latestBatch,
+                      batch.domains.contains(.shopping)
+                else {
+                    return
+                }
+
+                store.markLocalSnapshotStale()
+                if selectedTab == .shopping {
+                    handleRemoteShoppingSyncBatch(batch)
                 } else {
                     store.replayPendingMutationsIfNeeded()
                 }
@@ -858,6 +871,33 @@ private struct ShoppingListContent: View {
             let delta = await refreshTask.run()
             remoteHighlightedItemIDs = delta.highlightedIDs
             logRemoteSyncVisibleRefreshLatency(screen: "Shopping", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markShoppingTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func handleRemoteShoppingSyncBatch(_ batch: HouseholdSyncBatch) {
+        let changedIDs = batch.shoppingChangedItemIDs
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: { shoppingVisibleLocations(from: store.toBuyItems) },
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    await bundleStore.loadBundlesForDisplay()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedItemIDs = delta.highlightedIDs
             scheduleRemoteSyncAnimationReset()
             markShoppingTutorialAsSeenIfNeeded()
         }

@@ -412,6 +412,75 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
+    func consumeSyncBatch(
+        _ batch: HouseholdSyncBatch,
+        applicationState: UIApplication.State = UIApplication.shared.applicationState
+    ) {
+        for event in batch.events {
+            switch event.kind {
+            case let .shoppingAdded(ids, titles):
+                publishRemoteSyncPresentation(
+                    RemoteSyncPresentation(
+                        domain: .shopping,
+                        kind: .additions,
+                        changeCount: ids.count,
+                        titles: titles
+                    ),
+                    applicationState: applicationState
+                )
+            case let .shoppingUpdated(itemIDs, bundleIDs):
+                let changeCount = itemIDs.count + bundleIDs.count
+                guard changeCount > 0 else { continue }
+                publishRemoteSyncPresentation(
+                    RemoteSyncPresentation(
+                        domain: .shopping,
+                        kind: .updates,
+                        changeCount: changeCount,
+                        titles: []
+                    ),
+                    applicationState: applicationState
+                )
+            case let .shoppingRemoved(itemIDs, bundleIDs):
+                let changeCount = itemIDs.count + bundleIDs.count
+                guard changeCount > 0 else { continue }
+                publishRemoteSyncPresentation(
+                    RemoteSyncPresentation(
+                        domain: .shopping,
+                        kind: .updates,
+                        changeCount: changeCount,
+                        titles: []
+                    ),
+                    applicationState: applicationState
+                )
+            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+                let updateCount = changedIDs.count + removedIDs.count
+                if !addedIDs.isEmpty {
+                    publishRemoteSyncPresentation(
+                        RemoteSyncPresentation(
+                            domain: .tasks,
+                            kind: .additions,
+                            changeCount: addedIDs.count,
+                            titles: []
+                        ),
+                        applicationState: applicationState
+                    )
+                } else if updateCount > 0 {
+                    publishRemoteSyncPresentation(
+                        RemoteSyncPresentation(
+                            domain: .tasks,
+                            kind: .updates,
+                            changeCount: updateCount,
+                            titles: []
+                        ),
+                        applicationState: applicationState
+                    )
+                }
+            default:
+                continue
+            }
+        }
+    }
+
     func shouldSuppressSharedShoppingAlert(
         applicationState: UIApplication.State = UIApplication.shared.applicationState
     ) -> Bool {

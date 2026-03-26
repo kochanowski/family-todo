@@ -13,6 +13,7 @@ struct FamilyTodoApp: App {
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
+    @StateObject private var syncCoordinator: HouseholdSyncCoordinator
     @State private var startupRecoveryMessage: String?
     @State private var startupBootstrapState: StartupBootstrapState
     @State private var startupDiagnostics: BootstrapDiagnostics?
@@ -54,8 +55,16 @@ struct FamilyTodoApp: App {
         #endif
 
         sharedModelContainer = bootstrapResult.container
-        _householdStore = StateObject(
-            wrappedValue: HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
+        let householdStore = HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
+        _householdStore = StateObject(wrappedValue: householdStore)
+        _syncCoordinator = StateObject(
+            wrappedValue: HouseholdSyncCoordinator(
+                engine: HouseholdStoreSyncEngine(
+                    store: householdStore,
+                    userIdProvider: { UserSession.shared.userId },
+                    preferredHouseholdIdProvider: { UserSession.shared.currentHouseholdID }
+                )
+            )
         )
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
         _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
@@ -137,6 +146,7 @@ struct FamilyTodoApp: App {
                             .environmentObject(celebrationManager)
                             .environmentObject(shareAcceptanceCoordinator)
                             .environmentObject(cloudKitDiagnostics)
+                            .environmentObject(syncCoordinator)
                             .modelContainer(sharedModelContainer)
                             .overlay {
                                 if onboardingState.currentState == .mainApp {
@@ -165,15 +175,15 @@ struct FamilyTodoApp: App {
                                 #if !CI
                                     appDelegate.installNotificationCenterDelegate()
                                 #endif
-                                appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] context in
-                                    guard let householdStore, let userSession else {
+                                appDelegate.remoteCloudChangeHandler = { [weak syncCoordinator] context in
+                                    guard let syncCoordinator else {
                                         return .noData
                                     }
 
-                                    return await householdStore.handleRemoteCloudChange(
-                                        userId: userSession.userId,
-                                        preferredHouseholdId: userSession.currentHouseholdID,
-                                        context: context
+                                    return await syncCoordinator.performSync(
+                                        reason: .remotePush(
+                                            context: HouseholdSyncRemoteContext(from: context)
+                                        )
                                     )
                                 }
                                 appDelegate.flushPendingInviteIfNeeded()
@@ -258,6 +268,8 @@ struct RootView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -319,6 +331,19 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
             _ = _Concurrency.Task {
                 await handleHouseholdDataDidChange()
+            }
+        }
+        .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
+            guard batchID != nil else { return }
+            _ = _Concurrency.Task {
+                await handleHouseholdDataDidChange()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
+            _ = _Concurrency.Task {
+                _ = await syncCoordinator.performSync(reason: .appBecameActive)
             }
         }
         .task(id: pendingProcessingKey) {

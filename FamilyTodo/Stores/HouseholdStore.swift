@@ -25,6 +25,13 @@ struct RemoteShoppingBundleState: Equatable {
     let updatedAt: Date
 }
 
+struct RemoteMemberState: Equatable {
+    let userId: String
+    let displayName: String
+    let role: MemberRole
+    let isActive: Bool
+}
+
 struct RemoteWorkItemState: Equatable {
     let logicalItemID: UUID
     let title: String
@@ -44,17 +51,20 @@ struct RemoteBacklogCategoryState: Equatable {
 }
 
 struct RemoteVisibleContentSnapshot: Equatable {
+    let membersByID: [UUID: RemoteMemberState]
     let shoppingItemsByID: [UUID: RemoteShoppingItemState]
     let shoppingBundlesByID: [UUID: RemoteShoppingBundleState]
     let workItemsByID: [UUID: RemoteWorkItemState]
     let backlogCategoriesByID: [UUID: RemoteBacklogCategoryState]
 
     init(
+        membersByID: [UUID: RemoteMemberState] = [:],
         shoppingItemsByID: [UUID: RemoteShoppingItemState],
         shoppingBundlesByID: [UUID: RemoteShoppingBundleState],
         workItemsByID: [UUID: RemoteWorkItemState],
         backlogCategoriesByID: [UUID: RemoteBacklogCategoryState]
     ) {
+        self.membersByID = membersByID
         self.shoppingItemsByID = shoppingItemsByID
         self.shoppingBundlesByID = shoppingBundlesByID
         self.workItemsByID = workItemsByID
@@ -141,16 +151,47 @@ struct RemoteVisibleContentSnapshot: Equatable {
             .sorted {
                 $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
             }
+        let addedMemberIDs = Set(membersByID.keys).subtracting(previous.membersByID.keys)
+        let removedMemberIDs = Set(previous.membersByID.keys).subtracting(membersByID.keys)
+        let changedMemberIDs = Set(
+            Set(membersByID.keys).intersection(previous.membersByID.keys).filter {
+                membersByID[$0] != previous.membersByID[$0]
+            }
+        )
+        let addedTaskIDs = taskIDs.subtracting(previous.taskIDs)
+        let removedTaskIDs = previous.taskIDs.subtracting(taskIDs)
+        let changedTaskIDs = Set(
+            taskIDs.intersection(previous.taskIDs).filter { taskID in
+                currentTasksByID[taskID] != previous.currentTasksByID[taskID]
+            }
+        )
+        let addedIdeaIDs = ideaIDs.subtracting(previous.ideaIDs)
+        let removedIdeaIDs = previous.ideaIDs.subtracting(ideaIDs)
+        let changedIdeaIDs = Set(
+            ideaIDs.intersection(previous.ideaIDs).filter { ideaID in
+                currentIdeasByID[ideaID] != previous.currentIdeasByID[ideaID]
+            }
+        )
+        let addedShoppingBundleIDs = shoppingBundleIDs.subtracting(previous.shoppingBundleIDs)
+        let removedShoppingBundleIDs = previous.shoppingBundleIDs.subtracting(shoppingBundleIDs)
+        let addedBacklogCategoryIDs = backlogCategoryIDs.subtracting(previous.backlogCategoryIDs)
+        let removedBacklogCategoryIDs = previous.backlogCategoryIDs.subtracting(backlogCategoryIDs)
 
         return RemoteVisibleContentDiff(
+            addedMemberIDs: addedMemberIDs,
+            removedMemberIDs: removedMemberIDs,
+            changedMemberIDs: changedMemberIDs,
+            addedShoppingItemIDs: addedShoppingIDs,
             addedShoppingTitles: addedShoppingTitles,
-            addedShoppingBundleCount: shoppingBundleIDs.subtracting(previous.shoppingBundleIDs).count,
-            addedWorkItemCount: workItemIDs.subtracting(previous.workItemIDs).count,
-            addedBacklogCategoryCount: backlogCategoryIDs.subtracting(previous.backlogCategoryIDs).count,
-            removedShoppingItemCount: Set(previous.shoppingItemsByID.keys).subtracting(shoppingItemsByID.keys).count,
-            removedShoppingBundleCount: previous.shoppingBundleIDs.subtracting(shoppingBundleIDs).count,
-            removedWorkItemCount: previous.workItemIDs.subtracting(workItemIDs).count,
-            removedBacklogCategoryCount: previous.backlogCategoryIDs.subtracting(backlogCategoryIDs).count,
+            addedShoppingBundleIDs: addedShoppingBundleIDs,
+            addedTaskIDs: addedTaskIDs,
+            addedIdeaIDs: addedIdeaIDs,
+            addedBacklogCategoryIDs: addedBacklogCategoryIDs,
+            removedShoppingItemIDs: Set(previous.shoppingItemsByID.keys).subtracting(shoppingItemsByID.keys),
+            removedShoppingBundleIDs: removedShoppingBundleIDs,
+            removedTaskIDs: removedTaskIDs,
+            removedIdeaIDs: removedIdeaIDs,
+            removedBacklogCategoryIDs: removedBacklogCategoryIDs,
             changedShoppingItemIDs: Set(
                 Set(shoppingItemsByID.keys).intersection(previous.shoppingItemsByID.keys).filter {
                     shoppingItemsByID[$0] != previous.shoppingItemsByID[$0]
@@ -166,6 +207,8 @@ struct RemoteVisibleContentSnapshot: Equatable {
                     workItemsByID[$0] != previous.workItemsByID[$0]
                 }
             ),
+            changedTaskIDs: changedTaskIDs,
+            changedIdeaIDs: changedIdeaIDs,
             changedBacklogCategoryIDs: Set(
                 Set(backlogCategoriesByID.keys).intersection(previous.backlogCategoriesByID.keys).filter {
                     backlogCategoriesByID[$0] != previous.backlogCategoriesByID[$0]
@@ -175,71 +218,147 @@ struct RemoteVisibleContentSnapshot: Equatable {
     }
 
     func taskContentDiff(from previous: RemoteVisibleContentSnapshot) -> RemoteTaskVisibleContentDiff {
-        let previousTasksByID = previous.workItemsByID.filter { $0.value.status != .idea }
-        let currentTasksByID = workItemsByID.filter { $0.value.status != .idea }
-        let previousTaskIDs = Set(previousTasksByID.keys)
-        let currentTaskIDs = Set(currentTasksByID.keys)
-
-        return RemoteTaskVisibleContentDiff(
-            addedTaskCount: currentTaskIDs.subtracting(previousTaskIDs).count,
-            removedTaskCount: previousTaskIDs.subtracting(currentTaskIDs).count,
+        RemoteTaskVisibleContentDiff(
+            addedTaskIDs: taskIDs.subtracting(previous.taskIDs),
+            removedTaskIDs: previous.taskIDs.subtracting(taskIDs),
             changedTaskIDs: Set(
-                currentTaskIDs.intersection(previousTaskIDs).filter {
-                    currentTasksByID[$0] != previousTasksByID[$0]
+                taskIDs.intersection(previous.taskIDs).filter {
+                    currentTasksByID[$0] != previous.currentTasksByID[$0]
                 }
             )
         )
     }
+
+    func ideaContentDiff(from previous: RemoteVisibleContentSnapshot) -> RemoteIdeaVisibleContentDiff {
+        RemoteIdeaVisibleContentDiff(
+            addedIdeaIDs: ideaIDs.subtracting(previous.ideaIDs),
+            removedIdeaIDs: previous.ideaIDs.subtracting(ideaIDs),
+            changedIdeaIDs: Set(
+                ideaIDs.intersection(previous.ideaIDs).filter {
+                    currentIdeasByID[$0] != previous.currentIdeasByID[$0]
+                }
+            )
+        )
+    }
+
+    private var currentTasksByID: [UUID: RemoteWorkItemState] {
+        workItemsByID.filter { $0.value.status != .idea }
+    }
+
+    private var currentIdeasByID: [UUID: RemoteWorkItemState] {
+        workItemsByID.filter { $0.value.status == .idea }
+    }
+
+    private var taskIDs: Set<UUID> {
+        Set(currentTasksByID.keys)
+    }
+
+    private var ideaIDs: Set<UUID> {
+        Set(currentIdeasByID.keys)
+    }
 }
 
 struct RemoteVisibleContentDiff: Equatable {
+    let addedMemberIDs: Set<UUID>
+    let removedMemberIDs: Set<UUID>
+    let changedMemberIDs: Set<UUID>
+    let addedShoppingItemIDs: Set<UUID>
     let addedShoppingTitles: [String]
-    let addedShoppingBundleCount: Int
-    let addedWorkItemCount: Int
-    let addedBacklogCategoryCount: Int
-    let removedShoppingItemCount: Int
-    let removedShoppingBundleCount: Int
-    let removedWorkItemCount: Int
-    let removedBacklogCategoryCount: Int
+    let addedShoppingBundleIDs: Set<UUID>
+    let addedTaskIDs: Set<UUID>
+    let addedIdeaIDs: Set<UUID>
+    let addedBacklogCategoryIDs: Set<UUID>
+    let removedShoppingItemIDs: Set<UUID>
+    let removedShoppingBundleIDs: Set<UUID>
+    let removedTaskIDs: Set<UUID>
+    let removedIdeaIDs: Set<UUID>
+    let removedBacklogCategoryIDs: Set<UUID>
     let changedShoppingItemIDs: Set<UUID>
     let changedShoppingBundleIDs: Set<UUID>
     let changedWorkItemIDs: Set<UUID>
+    let changedTaskIDs: Set<UUID>
+    let changedIdeaIDs: Set<UUID>
     let changedBacklogCategoryIDs: Set<UUID>
 
+    var addedShoppingBundleCount: Int {
+        addedShoppingBundleIDs.count
+    }
+
+    var addedWorkItemCount: Int {
+        addedTaskIDs.count + addedIdeaIDs.count
+    }
+
+    var addedBacklogCategoryCount: Int {
+        addedBacklogCategoryIDs.count
+    }
+
+    var removedShoppingItemCount: Int {
+        removedShoppingItemIDs.count
+    }
+
+    var removedShoppingBundleCount: Int {
+        removedShoppingBundleIDs.count
+    }
+
+    var removedWorkItemCount: Int {
+        removedTaskIDs.count + removedIdeaIDs.count
+    }
+
+    var removedBacklogCategoryCount: Int {
+        removedBacklogCategoryIDs.count
+    }
+
     var totalAddedCount: Int {
-        addedShoppingTitles.count +
+        addedMemberIDs.count +
+            addedShoppingTitles.count +
             addedShoppingBundleCount +
             addedWorkItemCount +
             addedBacklogCategoryCount
     }
 
     var hasAnyChange: Bool {
-        totalAddedCount > 0 ||
+        !addedMemberIDs.isEmpty ||
+            !removedMemberIDs.isEmpty ||
+            !changedMemberIDs.isEmpty ||
+            totalAddedCount > 0 ||
             removedShoppingItemCount > 0 ||
             removedShoppingBundleCount > 0 ||
             removedWorkItemCount > 0 ||
             removedBacklogCategoryCount > 0 ||
             !changedShoppingItemIDs.isEmpty ||
             !changedShoppingBundleIDs.isEmpty ||
-            !changedWorkItemIDs.isEmpty ||
+            !changedTaskIDs.isEmpty ||
+            !changedIdeaIDs.isEmpty ||
             !changedBacklogCategoryIDs.isEmpty
     }
 }
 
 struct RemoteTaskVisibleContentDiff: Equatable {
-    let addedTaskCount: Int
-    let removedTaskCount: Int
+    let addedTaskIDs: Set<UUID>
+    let removedTaskIDs: Set<UUID>
     let changedTaskIDs: Set<UUID>
+
+    var addedTaskCount: Int {
+        addedTaskIDs.count
+    }
+
+    var removedTaskCount: Int {
+        removedTaskIDs.count
+    }
 
     var hasAnyChange: Bool {
         addedTaskCount > 0 || removedTaskCount > 0 || !changedTaskIDs.isEmpty
     }
 }
 
-private enum RemoteSyncDirection: String {
-    case ownerToParticipant = "owner_to_participant"
-    case participantToOwner = "participant_to_owner"
-    case unknown
+struct RemoteIdeaVisibleContentDiff: Equatable {
+    let addedIdeaIDs: Set<UUID>
+    let removedIdeaIDs: Set<UUID>
+    let changedIdeaIDs: Set<UUID>
+
+    var hasAnyChange: Bool {
+        !addedIdeaIDs.isEmpty || !removedIdeaIDs.isEmpty || !changedIdeaIDs.isEmpty
+    }
 }
 
 private struct RemoteVisibleContentResolution {
@@ -247,6 +366,22 @@ private struct RemoteVisibleContentResolution {
     let diff: RemoteVisibleContentDiff
     let followUpPassCount: Int
     let cacheUpdatedAt: Date
+}
+
+private struct RemoteSyncBaseline {
+    let beforeSnapshot: RemoteCloudRefreshSnapshot
+    let beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?
+    let direction: HouseholdSyncDirection
+}
+
+private struct RemoteSyncPassBuildContext {
+    let reason: HouseholdSyncReason
+    let cloudContext: RemoteCloudChangeContext
+    let triggerReceivedAt: Date
+    let refreshStartedAt: Date
+    let baseline: RemoteSyncBaseline
+    let refreshedHydrationSnapshot: JoinedHouseholdHydrationSnapshot?
+    let visibleContentResolution: RemoteVisibleContentResolution?
 }
 
 protocol HouseholdCloudSyncing: Actor {
@@ -468,6 +603,7 @@ class HouseholdStore: ObservableObject {
         let backgroundRetryDelaysNanoseconds: [UInt64]
         let pendingJoinGraceDuration: TimeInterval
         let ownerSharedFollowUpRetryDelaysNanoseconds: [UInt64]
+        let participantSharedFollowUpRetryDelaysNanoseconds: [UInt64]
 
         init(
             initialHydrationBudgetNanoseconds: UInt64,
@@ -478,6 +614,11 @@ class HouseholdStore: ObservableObject {
                 350_000_000,
                 1_000_000_000,
                 2_500_000_000,
+            ],
+            participantSharedFollowUpRetryDelaysNanoseconds: [UInt64] = [
+                350_000_000,
+                1_000_000_000,
+                2_500_000_000,
             ]
         ) {
             self.initialHydrationBudgetNanoseconds = initialHydrationBudgetNanoseconds
@@ -485,6 +626,8 @@ class HouseholdStore: ObservableObject {
             self.backgroundRetryDelaysNanoseconds = backgroundRetryDelaysNanoseconds
             self.pendingJoinGraceDuration = pendingJoinGraceDuration
             self.ownerSharedFollowUpRetryDelaysNanoseconds = ownerSharedFollowUpRetryDelaysNanoseconds
+            self.participantSharedFollowUpRetryDelaysNanoseconds =
+                participantSharedFollowUpRetryDelaysNanoseconds
         }
 
         static let `default` = JoinHydrationConfiguration(
@@ -504,6 +647,11 @@ class HouseholdStore: ObservableObject {
             ],
             pendingJoinGraceDuration: 30,
             ownerSharedFollowUpRetryDelaysNanoseconds: [
+                350_000_000,
+                1_000_000_000,
+                2_500_000_000,
+            ],
+            participantSharedFollowUpRetryDelaysNanoseconds: [
                 350_000_000,
                 1_000_000_000,
                 2_500_000_000,
@@ -2338,7 +2486,7 @@ class HouseholdStore: ObservableObject {
     private func publishRemoteCloudRefreshNotifications(
         source: String,
         remoteVisibleContentDiff: RemoteVisibleContentDiff? = nil,
-        direction: RemoteSyncDirection = .unknown,
+        direction: HouseholdSyncDirection = .unknown,
         pushReceivedAt: Date? = nil,
         cacheUpdatedAt: Date? = nil
     ) {
@@ -2374,7 +2522,7 @@ class HouseholdStore: ObservableObject {
     private func remoteSyncNotificationUserInfo(
         source: String,
         diff: RemoteVisibleContentDiff?,
-        direction: RemoteSyncDirection,
+        direction: HouseholdSyncDirection,
         pushReceivedAt: Date?,
         cacheUpdatedAt: Date?
     ) -> [AnyHashable: Any]? {
@@ -2413,6 +2561,20 @@ class HouseholdStore: ObservableObject {
     }
 
     private func remoteVisibleContentSnapshot(householdId: UUID) -> RemoteVisibleContentSnapshot {
+        let membersByID = Dictionary(
+            uniqueKeysWithValues: fetchCachedMembers(householdId: householdId)
+                .map {
+                    (
+                        $0.id,
+                        RemoteMemberState(
+                            userId: $0.userId,
+                            displayName: $0.displayName,
+                            role: $0.role,
+                            isActive: $0.isActive
+                        )
+                    )
+                }
+        )
         let shoppingItemsByID = Dictionary(
             uniqueKeysWithValues: fetchCachedShoppingItems(householdId: householdId)
                 .filter { $0.syncStatusRaw != "pendingDelete" }
@@ -2481,6 +2643,7 @@ class HouseholdStore: ObservableObject {
         )
 
         return RemoteVisibleContentSnapshot(
+            membersByID: membersByID,
             shoppingItemsByID: shoppingItemsByID,
             shoppingBundlesByID: shoppingBundlesByID,
             workItemsByID: workItemsByID,
@@ -2883,34 +3046,49 @@ class HouseholdStore: ObservableObject {
         publishRemoteCloudRefreshNotifications(source: "forceCloudSync")
     }
 
-    func handleRemoteCloudChange(
+    func runRemoteSyncPass(
         userId: String?,
         preferredHouseholdId: UUID?,
+        reason: HouseholdSyncReason,
         context: RemoteCloudChangeContext = .unknown
-    ) async -> UIBackgroundFetchResult {
+    ) async -> HouseholdSyncPassResult {
+        let refreshStartedAt = Date()
+        let triggerReceivedAt = remoteSyncTriggerReceivedAt(
+            from: context,
+            refreshStartedAt: refreshStartedAt
+        )
+
         guard syncMode == .cloud else {
             print("[RemoteSync] Ignoring remote push because sync mode is local-only.")
-            return .noData
+            return emptyHouseholdSyncPassResult(
+                reason: reason,
+                direction: .unknown,
+                triggerReceivedAt: triggerReceivedAt,
+                syncStartedAt: refreshStartedAt,
+                syncFinishedAt: Date(),
+                fetchResult: .noData
+            )
         }
 
         guard let userId else {
             print("[RemoteSync] Ignoring remote push because there is no active cloud user.")
-            return .noData
+            return emptyHouseholdSyncPassResult(
+                reason: reason,
+                direction: .unknown,
+                triggerReceivedAt: triggerReceivedAt,
+                syncStartedAt: refreshStartedAt,
+                syncFinishedAt: Date(),
+                fetchResult: .noData
+            )
         }
 
-        let beforeSnapshot = remoteCloudRefreshSnapshot(
+        let syncBaseline = remoteSyncBaseline(
             userId: userId,
-            preferredHouseholdId: preferredHouseholdId
-        )
-        let direction = remoteSyncDirection(
-            household: currentHousehold,
-            userId: userId,
+            preferredHouseholdId: preferredHouseholdId,
             context: context
         )
-        let refreshStartedAt = Date()
-        let beforeVisibleContentSnapshot = beforeSnapshot.observedHouseholdId.map(remoteVisibleContentSnapshot)
         print(
-            "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(beforeSnapshot))"
+            "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(syncBaseline.beforeSnapshot))"
         )
 
         let refreshedHydrationSnapshot: JoinedHouseholdHydrationSnapshot?
@@ -2918,60 +3096,69 @@ class HouseholdStore: ObservableObject {
             refreshedHydrationSnapshot = try await refreshCurrentHouseholdForRemoteCloudChange(
                 userId: userId,
                 preferredHouseholdId: preferredHouseholdId
-            ) ?? beforeSnapshot.hydrationSnapshot
+            ) ?? syncBaseline.beforeSnapshot.hydrationSnapshot
         } catch {
             self.error = error
             print("[RemoteSync] Hydration pass failed: \(error)")
-            return .failed
+            return emptyHouseholdSyncPassResult(
+                reason: reason,
+                direction: syncBaseline.direction,
+                triggerReceivedAt: triggerReceivedAt,
+                syncStartedAt: refreshStartedAt,
+                syncFinishedAt: Date(),
+                fetchResult: .failed
+            )
         }
 
         let visibleContentResolution = await processRemoteVisibleContentChangeIfNeeded(
-            beforeSnapshot: beforeSnapshot,
-            beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
+            beforeSnapshot: syncBaseline.beforeSnapshot,
+            beforeVisibleContentSnapshot: syncBaseline.beforeVisibleContentSnapshot,
             userId: userId,
             context: context
         )
 
-        let afterSnapshot = remoteCloudRefreshSnapshot(
-            userId: userId,
-            preferredHouseholdId: preferredHouseholdId
+        let buildContext = RemoteSyncPassBuildContext(
+            reason: reason,
+            cloudContext: context,
+            triggerReceivedAt: triggerReceivedAt,
+            refreshStartedAt: refreshStartedAt,
+            baseline: syncBaseline,
+            refreshedHydrationSnapshot: refreshedHydrationSnapshot,
+            visibleContentResolution: visibleContentResolution
         )
-        let refreshedSnapshot = RemoteCloudRefreshSnapshot(
-            currentHouseholdId: afterSnapshot.currentHouseholdId,
-            observedHouseholdId: afterSnapshot.observedHouseholdId,
-            householdName: afterSnapshot.householdName,
-            householdIconSymbol: afterSnapshot.householdIconSymbol,
-            hydrationSnapshot: refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
-        )
-        let didVisibleContentChange = visibleContentResolution?.diff.hasAnyChange == true
-        let didMetadataOrHydrationChange = lastRemoteCloudRefreshSnapshot != refreshedSnapshot
-        let didChange = didVisibleContentChange || didMetadataOrHydrationChange
-        lastRemoteCloudRefreshSnapshot = refreshedSnapshot
 
-        if didChange {
+        return buildRemoteSyncPassResult(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId,
+            context: buildContext
+        )
+    }
+
+    func handleRemoteCloudChange(
+        userId: String?,
+        preferredHouseholdId: UUID?,
+        context: RemoteCloudChangeContext = .unknown
+    ) async -> UIBackgroundFetchResult {
+        let result = await runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId,
+            reason: .remotePush(context: HouseholdSyncRemoteContext(from: context)),
+            context: context
+        )
+
+        if result.fetchResult == .newData {
+            let contentDiff = remoteVisibleContentDiff(from: result.events)
             publishRemoteCloudRefreshNotifications(
                 source: "remotePush",
-                remoteVisibleContentDiff: visibleContentResolution?.diff,
-                direction: direction,
+                remoteVisibleContentDiff: contentDiff,
+                direction: result.diagnostics.direction,
                 pushReceivedAt: context.receivedAt == .distantPast ? nil : context.receivedAt,
-                cacheUpdatedAt: visibleContentResolution?.cacheUpdatedAt ?? Date()
+                cacheUpdatedAt: result.diagnostics.syncFinishedAt
             )
+            deliverLegacySyncPresentation(for: result.events)
         }
 
-        logRemoteSyncTelemetry(
-            direction: direction,
-            context: context,
-            refreshStartedAt: refreshStartedAt,
-            cacheUpdatedAt: visibleContentResolution?.cacheUpdatedAt ?? Date(),
-            followUpPassCount: visibleContentResolution?.followUpPassCount ?? 0,
-            didChange: didChange
-        )
-
-        let fetchResult: UIBackgroundFetchResult = didChange ? .newData : .noData
-        print(
-            "[RemoteSync] Background household refresh completed with result=\(describeBackgroundFetchResult(fetchResult)). after=\(describeRemoteCloudRefreshSnapshot(afterSnapshot))"
-        )
-        return fetchResult
+        return result.fetchResult
     }
 
     private func refreshCurrentHouseholdForRemoteCloudChange(
@@ -3016,19 +3203,12 @@ class HouseholdStore: ObservableObject {
             return nil
         }
 
-        let resolvedChange = await resolveRemoteVisibleContentChange(
+        return await resolveRemoteVisibleContentChange(
             household: household,
             beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
             userId: userId,
             context: context
         )
-        await deliverRemoteVisibleContentAlerts(
-            household: household,
-            beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
-            resolvedChange: resolvedChange,
-            currentUserId: userId
-        )
-        return resolvedChange
     }
 
     private func resolveRemoteVisibleContentChange(
@@ -3041,11 +3221,13 @@ class HouseholdStore: ObservableObject {
         var contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
         var followUpPassCount = 0
 
-        guard shouldRunOwnerSharedFollowUpRefresh(
+        let followUpRetryDelays = sharedFollowUpRetryDelays(
             household: household,
             userId: userId,
             context: context
-        ) else {
+        )
+
+        guard !followUpRetryDelays.isEmpty else {
             return RemoteVisibleContentResolution(
                 snapshot: afterVisibleContentSnapshot,
                 diff: contentDiff,
@@ -3054,7 +3236,7 @@ class HouseholdStore: ObservableObject {
             )
         }
 
-        for delay in joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds {
+        for delay in followUpRetryDelays {
             if delay > 0 {
                 try? await _Concurrency.Task.sleep(nanoseconds: delay)
             }
@@ -3078,11 +3260,11 @@ class HouseholdStore: ObservableObject {
 
             if candidateSnapshot != previousSnapshot {
                 print(
-                    "[RemoteSync] Owner follow-up pass \(followUpPassCount) captured additional shared changes for household \(household.id)."
+                    "[RemoteSync] Shared follow-up pass \(followUpPassCount) captured additional changes for household \(household.id)."
                 )
             } else {
                 print(
-                    "[RemoteSync] Owner follow-up pass \(followUpPassCount) found no new shared changes for household \(household.id)."
+                    "[RemoteSync] Shared follow-up pass \(followUpPassCount) found no new changes for household \(household.id)."
                 )
             }
         }
@@ -3093,6 +3275,573 @@ class HouseholdStore: ObservableObject {
             followUpPassCount: followUpPassCount,
             cacheUpdatedAt: Date()
         )
+    }
+
+    private func emptyHouseholdSyncPassResult(
+        reason: HouseholdSyncReason,
+        direction: HouseholdSyncDirection,
+        triggerReceivedAt: Date,
+        syncStartedAt: Date,
+        syncFinishedAt: Date,
+        fetchResult: UIBackgroundFetchResult
+    ) -> HouseholdSyncPassResult {
+        let diagnostics = HouseholdSyncDiagnostics(
+            batchID: UUID(),
+            reason: reason,
+            direction: direction,
+            triggerReceivedAt: triggerReceivedAt,
+            syncStartedAt: syncStartedAt,
+            syncFinishedAt: syncFinishedAt,
+            changedDomains: [],
+            changedIDsByDomain: [:]
+        )
+
+        return HouseholdSyncPassResult(
+            fetchResult: fetchResult,
+            events: [],
+            diagnostics: diagnostics
+        )
+    }
+
+    private func remoteSyncTriggerReceivedAt(
+        from context: RemoteCloudChangeContext,
+        refreshStartedAt: Date
+    ) -> Date {
+        context.receivedAt == .distantPast ? refreshStartedAt : context.receivedAt
+    }
+
+    private func remoteSyncBaseline(
+        userId: String,
+        preferredHouseholdId: UUID?,
+        context: RemoteCloudChangeContext
+    ) -> RemoteSyncBaseline {
+        let beforeSnapshot = remoteCloudRefreshSnapshot(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+        return RemoteSyncBaseline(
+            beforeSnapshot: beforeSnapshot,
+            beforeVisibleContentSnapshot: beforeSnapshot.observedHouseholdId.map(remoteVisibleContentSnapshot),
+            direction: remoteSyncDirection(
+                household: currentHousehold,
+                userId: userId,
+                context: context
+            )
+        )
+    }
+
+    private func buildRemoteSyncPassResult(
+        userId: String,
+        preferredHouseholdId: UUID?,
+        context: RemoteSyncPassBuildContext
+    ) -> HouseholdSyncPassResult {
+        let afterSnapshot = remoteCloudRefreshSnapshot(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        )
+        let refreshedSnapshot = RemoteCloudRefreshSnapshot(
+            currentHouseholdId: afterSnapshot.currentHouseholdId,
+            observedHouseholdId: afterSnapshot.observedHouseholdId,
+            householdName: afterSnapshot.householdName,
+            householdIconSymbol: afterSnapshot.householdIconSymbol,
+            hydrationSnapshot: context.refreshedHydrationSnapshot ?? afterSnapshot.hydrationSnapshot
+        )
+        let didVisibleContentChange = context.visibleContentResolution?.diff.hasAnyChange == true
+        let didMetadataOrHydrationChange = lastRemoteCloudRefreshSnapshot != refreshedSnapshot
+        let didChange = didVisibleContentChange || didMetadataOrHydrationChange
+        lastRemoteCloudRefreshSnapshot = refreshedSnapshot
+
+        let beforeVisibleSnapshot =
+            context.baseline.beforeVisibleContentSnapshot ?? emptyRemoteVisibleContentSnapshot
+        let taskDiff = context.visibleContentResolution?.snapshot.taskContentDiff(from: beforeVisibleSnapshot)
+        let ideaDiff = context.visibleContentResolution?.snapshot.ideaContentDiff(from: beforeVisibleSnapshot)
+        let batchID = UUID()
+        let syncFinishedAt = context.visibleContentResolution?.cacheUpdatedAt ?? Date()
+        let events = makeHouseholdSyncEvents(
+            batchID: batchID,
+            reason: context.reason,
+            direction: context.baseline.direction,
+            beforeSnapshot: context.baseline.beforeSnapshot,
+            afterSnapshot: refreshedSnapshot,
+            contentDiff: context.visibleContentResolution?.diff,
+            taskDiff: taskDiff,
+            ideaDiff: ideaDiff
+        )
+        let diagnostics = HouseholdSyncDiagnostics(
+            batchID: batchID,
+            reason: context.reason,
+            direction: context.baseline.direction,
+            triggerReceivedAt: context.triggerReceivedAt,
+            syncStartedAt: context.refreshStartedAt,
+            syncFinishedAt: syncFinishedAt,
+            changedDomains: Set(events.flatMap(\.domains)),
+            changedIDsByDomain: changedIDsByDomain(for: events)
+        )
+
+        logRemoteSyncTelemetry(
+            direction: context.baseline.direction,
+            context: context.cloudContext,
+            refreshStartedAt: context.refreshStartedAt,
+            cacheUpdatedAt: syncFinishedAt,
+            followUpPassCount: context.visibleContentResolution?.followUpPassCount ?? 0,
+            didChange: didChange
+        )
+
+        let fetchResult: UIBackgroundFetchResult = didChange ? .newData : .noData
+        print(
+            "[RemoteSync] Background household refresh completed with result=\(describeBackgroundFetchResult(fetchResult)). after=\(describeRemoteCloudRefreshSnapshot(afterSnapshot))"
+        )
+
+        return HouseholdSyncPassResult(
+            fetchResult: fetchResult,
+            events: events,
+            diagnostics: diagnostics
+        )
+    }
+
+    private var emptyRemoteVisibleContentSnapshot: RemoteVisibleContentSnapshot {
+        RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [:],
+            backlogCategoriesByID: [:]
+        )
+    }
+
+    private func makeHouseholdSyncEvents(
+        batchID: UUID,
+        reason: HouseholdSyncReason,
+        direction: HouseholdSyncDirection,
+        beforeSnapshot: RemoteCloudRefreshSnapshot,
+        afterSnapshot: RemoteCloudRefreshSnapshot,
+        contentDiff: RemoteVisibleContentDiff?,
+        taskDiff: RemoteTaskVisibleContentDiff?,
+        ideaDiff: RemoteIdeaVisibleContentDiff?
+    ) -> [HouseholdSyncEvent] {
+        guard let householdId = afterSnapshot.observedHouseholdId ?? beforeSnapshot.observedHouseholdId else {
+            return []
+        }
+
+        let source = HouseholdSyncEventSource(reason: reason)
+        let timestamp = Date()
+        var events: [HouseholdSyncEvent] = []
+
+        if let householdEvent = makeHouseholdMetadataSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            beforeSnapshot: beforeSnapshot,
+            afterSnapshot: afterSnapshot
+        ) {
+            events.append(householdEvent)
+        }
+
+        if let memberEvent = makeMemberSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            contentDiff: contentDiff
+        ) {
+            events.append(memberEvent)
+        }
+
+        events.append(
+            contentsOf: makeShoppingSyncEvents(
+                householdId: householdId,
+                batchID: batchID,
+                source: source,
+                reason: reason,
+                timestamp: timestamp,
+                direction: direction,
+                contentDiff: contentDiff
+            )
+        )
+
+        if let taskEvent = makeTaskSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            taskDiff: taskDiff
+        ) {
+            events.append(taskEvent)
+        }
+
+        if let ideaEvent = makeIdeaSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            ideaDiff: ideaDiff
+        ) {
+            events.append(ideaEvent)
+        }
+
+        if let backlogEvent = makeBacklogCategorySyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            contentDiff: contentDiff
+        ) {
+            events.append(backlogEvent)
+        }
+
+        return events
+    }
+
+    private func makeHouseholdMetadataSyncEvent(
+        householdId: UUID,
+        batchID: UUID,
+        source: HouseholdSyncEventSource,
+        reason: HouseholdSyncReason,
+        timestamp: Date,
+        direction: HouseholdSyncDirection,
+        beforeSnapshot: RemoteCloudRefreshSnapshot,
+        afterSnapshot: RemoteCloudRefreshSnapshot
+    ) -> HouseholdSyncEvent? {
+        guard beforeSnapshot.householdName != afterSnapshot.householdName ||
+            beforeSnapshot.householdIconSymbol != afterSnapshot.householdIconSymbol
+        else {
+            return nil
+        }
+
+        return HouseholdSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            kind: .householdMetadataChanged
+        )
+    }
+
+    private func makeMemberSyncEvent(
+        householdId: UUID,
+        batchID: UUID,
+        source: HouseholdSyncEventSource,
+        reason: HouseholdSyncReason,
+        timestamp: Date,
+        direction: HouseholdSyncDirection,
+        contentDiff: RemoteVisibleContentDiff?
+    ) -> HouseholdSyncEvent? {
+        guard let contentDiff else { return nil }
+        let changedIDs = contentDiff.addedMemberIDs
+            .union(contentDiff.changedMemberIDs)
+            .union(contentDiff.removedMemberIDs)
+        guard !changedIDs.isEmpty else { return nil }
+
+        return HouseholdSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            kind: .membersChanged(ids: changedIDs)
+        )
+    }
+
+    private func makeShoppingSyncEvents(
+        householdId: UUID,
+        batchID: UUID,
+        source: HouseholdSyncEventSource,
+        reason: HouseholdSyncReason,
+        timestamp: Date,
+        direction: HouseholdSyncDirection,
+        contentDiff: RemoteVisibleContentDiff?
+    ) -> [HouseholdSyncEvent] {
+        guard let contentDiff else { return [] }
+        var events: [HouseholdSyncEvent] = []
+
+        if !contentDiff.addedShoppingItemIDs.isEmpty {
+            events.append(
+                HouseholdSyncEvent(
+                    householdId: householdId,
+                    batchID: batchID,
+                    source: source,
+                    reason: reason,
+                    timestamp: timestamp,
+                    direction: direction,
+                    kind: .shoppingAdded(
+                        ids: contentDiff.addedShoppingItemIDs,
+                        titles: contentDiff.addedShoppingTitles
+                    )
+                )
+            )
+        }
+
+        let updatedBundleIDs = contentDiff.changedShoppingBundleIDs.union(contentDiff.addedShoppingBundleIDs)
+        if !contentDiff.changedShoppingItemIDs.isEmpty || !updatedBundleIDs.isEmpty {
+            events.append(
+                HouseholdSyncEvent(
+                    householdId: householdId,
+                    batchID: batchID,
+                    source: source,
+                    reason: reason,
+                    timestamp: timestamp,
+                    direction: direction,
+                    kind: .shoppingUpdated(
+                        itemIDs: contentDiff.changedShoppingItemIDs,
+                        bundleIDs: updatedBundleIDs
+                    )
+                )
+            )
+        }
+
+        if !contentDiff.removedShoppingItemIDs.isEmpty || !contentDiff.removedShoppingBundleIDs.isEmpty {
+            events.append(
+                HouseholdSyncEvent(
+                    householdId: householdId,
+                    batchID: batchID,
+                    source: source,
+                    reason: reason,
+                    timestamp: timestamp,
+                    direction: direction,
+                    kind: .shoppingRemoved(
+                        itemIDs: contentDiff.removedShoppingItemIDs,
+                        bundleIDs: contentDiff.removedShoppingBundleIDs
+                    )
+                )
+            )
+        }
+
+        return events
+    }
+
+    private func makeTaskSyncEvent(
+        householdId: UUID,
+        batchID: UUID,
+        source: HouseholdSyncEventSource,
+        reason: HouseholdSyncReason,
+        timestamp: Date,
+        direction: HouseholdSyncDirection,
+        taskDiff: RemoteTaskVisibleContentDiff?
+    ) -> HouseholdSyncEvent? {
+        guard let taskDiff, taskDiff.hasAnyChange else { return nil }
+        return HouseholdSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            kind: .tasksChanged(
+                addedIDs: taskDiff.addedTaskIDs,
+                changedIDs: taskDiff.changedTaskIDs,
+                removedIDs: taskDiff.removedTaskIDs
+            )
+        )
+    }
+
+    private func makeIdeaSyncEvent(
+        householdId: UUID,
+        batchID: UUID,
+        source: HouseholdSyncEventSource,
+        reason: HouseholdSyncReason,
+        timestamp: Date,
+        direction: HouseholdSyncDirection,
+        ideaDiff: RemoteIdeaVisibleContentDiff?
+    ) -> HouseholdSyncEvent? {
+        guard let ideaDiff, ideaDiff.hasAnyChange else { return nil }
+        return HouseholdSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            kind: .ideasChanged(
+                addedIDs: ideaDiff.addedIdeaIDs,
+                changedIDs: ideaDiff.changedIdeaIDs,
+                removedIDs: ideaDiff.removedIdeaIDs
+            )
+        )
+    }
+
+    private func makeBacklogCategorySyncEvent(
+        householdId: UUID,
+        batchID: UUID,
+        source: HouseholdSyncEventSource,
+        reason: HouseholdSyncReason,
+        timestamp: Date,
+        direction: HouseholdSyncDirection,
+        contentDiff: RemoteVisibleContentDiff?
+    ) -> HouseholdSyncEvent? {
+        guard let contentDiff else { return nil }
+        guard !contentDiff.addedBacklogCategoryIDs.isEmpty ||
+            !contentDiff.changedBacklogCategoryIDs.isEmpty ||
+            !contentDiff.removedBacklogCategoryIDs.isEmpty
+        else {
+            return nil
+        }
+
+        return HouseholdSyncEvent(
+            householdId: householdId,
+            batchID: batchID,
+            source: source,
+            reason: reason,
+            timestamp: timestamp,
+            direction: direction,
+            kind: .backlogCategoriesChanged(
+                addedIDs: contentDiff.addedBacklogCategoryIDs,
+                changedIDs: contentDiff.changedBacklogCategoryIDs,
+                removedIDs: contentDiff.removedBacklogCategoryIDs
+            )
+        )
+    }
+
+    private func changedIDsByDomain(
+        for events: [HouseholdSyncEvent]
+    ) -> [HouseholdSyncChangedDomain: Set<UUID>] {
+        events.reduce(into: [HouseholdSyncChangedDomain: Set<UUID>]()) { partialResult, event in
+            switch event.kind {
+            case .householdMetadataChanged:
+                partialResult[.household, default: []].insert(event.householdId)
+            case let .membersChanged(ids):
+                partialResult[.members, default: []].formUnion(ids)
+            case let .shoppingAdded(ids, _):
+                partialResult[.shopping, default: []].formUnion(ids)
+            case let .shoppingUpdated(itemIDs, bundleIDs):
+                partialResult[.shopping, default: []].formUnion(itemIDs)
+                partialResult[.shopping, default: []].formUnion(bundleIDs)
+            case let .shoppingRemoved(itemIDs, bundleIDs):
+                partialResult[.shopping, default: []].formUnion(itemIDs)
+                partialResult[.shopping, default: []].formUnion(bundleIDs)
+            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+                partialResult[.tasks, default: []].formUnion(addedIDs)
+                partialResult[.tasks, default: []].formUnion(changedIDs)
+                partialResult[.tasks, default: []].formUnion(removedIDs)
+            case let .ideasChanged(addedIDs, changedIDs, removedIDs):
+                partialResult[.ideas, default: []].formUnion(addedIDs)
+                partialResult[.ideas, default: []].formUnion(changedIDs)
+                partialResult[.ideas, default: []].formUnion(removedIDs)
+            case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
+                partialResult[.backlog, default: []].formUnion(addedIDs)
+                partialResult[.backlog, default: []].formUnion(changedIDs)
+                partialResult[.backlog, default: []].formUnion(removedIDs)
+            }
+        }
+    }
+
+    private func remoteVisibleContentDiff(
+        from events: [HouseholdSyncEvent]
+    ) -> RemoteVisibleContentDiff {
+        var addedShoppingTitles: [String] = []
+        var addedShoppingItemIDs: Set<UUID> = []
+        var changedShoppingItemIDs: Set<UUID> = []
+        var changedShoppingBundleIDs: Set<UUID> = []
+        var removedShoppingItemIDs: Set<UUID> = []
+        var removedShoppingBundleIDs: Set<UUID> = []
+        var addedTaskIDs: Set<UUID> = []
+        var removedTaskIDs: Set<UUID> = []
+        var changedTaskIDs: Set<UUID> = []
+        var addedIdeaIDs: Set<UUID> = []
+        var removedIdeaIDs: Set<UUID> = []
+        var changedIdeaIDs: Set<UUID> = []
+        var addedBacklogCategoryIDs: Set<UUID> = []
+        var removedBacklogCategoryIDs: Set<UUID> = []
+        var changedBacklogCategoryIDs: Set<UUID> = []
+        var changedMemberIDs: Set<UUID> = []
+
+        for event in events {
+            switch event.kind {
+            case let .membersChanged(ids):
+                changedMemberIDs.formUnion(ids)
+            case let .shoppingAdded(ids, titles):
+                addedShoppingItemIDs.formUnion(ids)
+                addedShoppingTitles.append(contentsOf: titles)
+            case let .shoppingUpdated(itemIDs, bundleIDs):
+                changedShoppingItemIDs.formUnion(itemIDs)
+                changedShoppingBundleIDs.formUnion(bundleIDs)
+            case let .shoppingRemoved(itemIDs, bundleIDs):
+                removedShoppingItemIDs.formUnion(itemIDs)
+                removedShoppingBundleIDs.formUnion(bundleIDs)
+            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+                addedTaskIDs.formUnion(addedIDs)
+                changedTaskIDs.formUnion(changedIDs)
+                removedTaskIDs.formUnion(removedIDs)
+            case let .ideasChanged(addedIDs, changedIDs, removedIDs):
+                addedIdeaIDs.formUnion(addedIDs)
+                changedIdeaIDs.formUnion(changedIDs)
+                removedIdeaIDs.formUnion(removedIDs)
+            case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
+                addedBacklogCategoryIDs.formUnion(addedIDs)
+                changedBacklogCategoryIDs.formUnion(changedIDs)
+                removedBacklogCategoryIDs.formUnion(removedIDs)
+            case .householdMetadataChanged:
+                break
+            }
+        }
+
+        return RemoteVisibleContentDiff(
+            addedMemberIDs: [],
+            removedMemberIDs: [],
+            changedMemberIDs: changedMemberIDs,
+            addedShoppingItemIDs: addedShoppingItemIDs,
+            addedShoppingTitles: addedShoppingTitles.sorted {
+                $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+            },
+            addedShoppingBundleIDs: [],
+            addedTaskIDs: addedTaskIDs,
+            addedIdeaIDs: addedIdeaIDs,
+            addedBacklogCategoryIDs: addedBacklogCategoryIDs,
+            removedShoppingItemIDs: removedShoppingItemIDs,
+            removedShoppingBundleIDs: removedShoppingBundleIDs,
+            removedTaskIDs: removedTaskIDs,
+            removedIdeaIDs: removedIdeaIDs,
+            removedBacklogCategoryIDs: removedBacklogCategoryIDs,
+            changedShoppingItemIDs: changedShoppingItemIDs,
+            changedShoppingBundleIDs: changedShoppingBundleIDs,
+            changedWorkItemIDs: changedTaskIDs.union(changedIdeaIDs),
+            changedTaskIDs: changedTaskIDs,
+            changedIdeaIDs: changedIdeaIDs,
+            changedBacklogCategoryIDs: changedBacklogCategoryIDs
+        )
+    }
+
+    private func deliverLegacySyncPresentation(
+        for events: [HouseholdSyncEvent]
+    ) {
+        let contentDiff = remoteVisibleContentDiff(from: events)
+        let taskDiff = RemoteTaskVisibleContentDiff(
+            addedTaskIDs: events.reduce(into: Set<UUID>()) { partialResult, event in
+                if case let .tasksChanged(addedIDs, _, _) = event.kind {
+                    partialResult.formUnion(addedIDs)
+                }
+            },
+            removedTaskIDs: events.reduce(into: Set<UUID>()) { partialResult, event in
+                if case let .tasksChanged(_, _, removedIDs) = event.kind {
+                    partialResult.formUnion(removedIDs)
+                }
+            },
+            changedTaskIDs: events.reduce(into: Set<UUID>()) { partialResult, event in
+                if case let .tasksChanged(_, changedIDs, _) = event.kind {
+                    partialResult.formUnion(changedIDs)
+                }
+            }
+        )
+
+        if let shoppingPresentation = shoppingRemoteSyncPresentation(for: contentDiff) {
+            CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(shoppingPresentation)
+        }
+
+        if let taskPresentation = taskRemoteSyncPresentation(for: taskDiff) {
+            CloudKitSubscriptionManager.shared.publishRemoteSyncPresentation(taskPresentation)
+        }
     }
 
     private func deliverRemoteVisibleContentAlerts(
@@ -3136,21 +3885,23 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    private func shouldRunOwnerSharedFollowUpRefresh(
+    private func sharedFollowUpRetryDelays(
         household: Household,
         userId: String,
         context: RemoteCloudChangeContext
-    ) -> Bool {
-        context.databaseScope == .shared &&
-            household.ownerId == userId &&
-            !joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds.isEmpty
+    ) -> [UInt64] {
+        guard context.databaseScope == .shared else { return [] }
+        if household.ownerId == userId {
+            return joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds
+        }
+        return joinHydrationConfiguration.participantSharedFollowUpRetryDelaysNanoseconds
     }
 
     private func remoteSyncDirection(
         household: Household?,
         userId: String,
         context: RemoteCloudChangeContext
-    ) -> RemoteSyncDirection {
+    ) -> HouseholdSyncDirection {
         guard context.databaseScope == .shared, let household else {
             return .unknown
         }
@@ -3159,7 +3910,7 @@ class HouseholdStore: ObservableObject {
     }
 
     private func logRemoteSyncTelemetry(
-        direction: RemoteSyncDirection,
+        direction: HouseholdSyncDirection,
         context: RemoteCloudChangeContext,
         refreshStartedAt: Date,
         cacheUpdatedAt: Date,
