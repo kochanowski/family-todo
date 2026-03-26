@@ -400,9 +400,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func publishRemoteSyncPresentation(
         _ presentation: RemoteSyncPresentation,
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) {
-        guard applicationState == .active else { return }
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        guard resolvedApplicationState == .active else { return }
 
         switch presentation.domain {
         case .shopping:
@@ -414,8 +415,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func consumeSyncBatch(
         _ batch: HouseholdSyncBatch,
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) {
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
         for event in batch.events {
             switch event.kind {
             case let .shoppingAdded(ids, titles):
@@ -426,7 +428,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
                         changeCount: ids.count,
                         titles: titles
                     ),
-                    applicationState: applicationState
+                    applicationState: resolvedApplicationState
                 )
             case let .shoppingUpdated(itemIDs, bundleIDs):
                 let changeCount = itemIDs.count + bundleIDs.count
@@ -438,7 +440,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
                         changeCount: changeCount,
                         titles: []
                     ),
-                    applicationState: applicationState
+                    applicationState: resolvedApplicationState
                 )
             case let .shoppingRemoved(itemIDs, bundleIDs):
                 let changeCount = itemIDs.count + bundleIDs.count
@@ -450,7 +452,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
                         changeCount: changeCount,
                         titles: []
                     ),
-                    applicationState: applicationState
+                    applicationState: resolvedApplicationState
                 )
             case let .tasksChanged(addedIDs, changedIDs, removedIDs):
                 let updateCount = changedIDs.count + removedIDs.count
@@ -462,7 +464,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
                             changeCount: addedIDs.count,
                             titles: []
                         ),
-                        applicationState: applicationState
+                        applicationState: resolvedApplicationState
                     )
                 } else if updateCount > 0 {
                     publishRemoteSyncPresentation(
@@ -472,7 +474,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
                             changeCount: updateCount,
                             titles: []
                         ),
-                        applicationState: applicationState
+                        applicationState: resolvedApplicationState
                     )
                 }
             default:
@@ -482,15 +484,17 @@ final class CloudKitSubscriptionManager: ObservableObject {
     }
 
     func shouldSuppressSharedShoppingAlert(
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) -> Bool {
-        applicationState == .active && activeTab == .shopping
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        return resolvedApplicationState == .active && activeTab == .shopping
     }
 
     func shouldSuppressHouseholdCelebrationAlert(
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) -> Bool {
-        applicationState == .active && activeTab == .tasks
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        return resolvedApplicationState == .active && activeTab == .tasks
     }
 
     func dismissBanner() {

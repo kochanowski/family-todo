@@ -28,7 +28,7 @@ struct RemoteShoppingBundleState: Equatable {
 struct RemoteMemberState: Equatable {
     let userId: String
     let displayName: String
-    let role: MemberRole
+    let role: Member.MemberRole
     let isActive: Bool
 }
 
@@ -369,7 +369,7 @@ private struct RemoteVisibleContentResolution {
 }
 
 private struct RemoteSyncBaseline {
-    let beforeSnapshot: RemoteCloudRefreshSnapshot
+    let beforeSnapshot: HouseholdStore.RemoteCloudRefreshSnapshot
     let beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?
     let direction: HouseholdSyncDirection
 }
@@ -380,7 +380,7 @@ private struct RemoteSyncPassBuildContext {
     let triggerReceivedAt: Date
     let refreshStartedAt: Date
     let baseline: RemoteSyncBaseline
-    let refreshedHydrationSnapshot: JoinedHouseholdHydrationSnapshot?
+    let refreshedHydrationSnapshot: HouseholdStore.JoinedHouseholdHydrationSnapshot?
     let visibleContentResolution: RemoteVisibleContentResolution?
 }
 

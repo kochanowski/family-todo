@@ -18,12 +18,11 @@ final class HouseholdStoreSyncEngine: HouseholdSyncEngine {
     }
 
     func runSync(for reason: HouseholdSyncReason) async -> HouseholdSyncPassResult {
-        let context: RemoteCloudChangeContext
-        switch reason {
+        let context: RemoteCloudChangeContext = switch reason {
         case let .remotePush(remoteContext):
-            context = remoteCloudChangeContext(from: remoteContext)
+            remoteCloudChangeContext(from: remoteContext)
         default:
-            context = .unknown
+            .unknown
         }
 
         return await store.runRemoteSyncPass(

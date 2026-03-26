@@ -256,7 +256,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
     @Published private(set) var lastDiagnostics: HouseholdSyncDiagnostics?
 
     private let engine: HouseholdSyncEngine
-    private var activeSyncTask: Task<UIBackgroundFetchResult, Never>?
+    private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
 
     init(engine: HouseholdSyncEngine) {
@@ -270,7 +270,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
             return await activeSyncTask.value
         }
 
-        let syncTask = Task { @MainActor [weak self] in
+        let syncTask = _Concurrency.Task { @MainActor [weak self] in
             guard let self else { return UIBackgroundFetchResult.noData }
 
             var aggregateResult: UIBackgroundFetchResult = .noData
