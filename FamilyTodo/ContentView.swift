@@ -15,6 +15,7 @@ struct MainAppView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @Query(sort: \CachedMember.joinedAt) private var cachedMembers: [CachedMember]
 
@@ -281,6 +282,14 @@ struct MainAppView: View {
 
         let knownIds = knownActiveMemberIDs
         knownActiveMemberIDs = Set(newValue.members.map(\.id))
+
+        if householdStore.hasPendingJoinProtection(
+            for: newValue.householdId,
+            userId: newValue.currentUserId
+        ) || syncCoordinator.latestBatch?.classification == .bootstrap {
+            dismissJoinToastIfNeeded()
+            return
+        }
 
         let newlyJoinedMembers = newValue.members.filter { member in
             !knownIds.contains(member.id) && member.userId != newValue.currentUserId

@@ -417,6 +417,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         _ batch: HouseholdSyncBatch,
         applicationState: UIApplication.State? = nil
     ) {
+        guard batch.classification != .bootstrap else { return }
         let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
         for event in batch.events {
             switch event.kind {

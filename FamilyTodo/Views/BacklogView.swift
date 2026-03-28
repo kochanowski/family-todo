@@ -779,6 +779,20 @@ private struct BacklogContent: View {
     }
 
     private func handleRemoteBacklogSyncBatch(_ batch: HouseholdSyncBatch) {
+        if batch.classification == .bootstrap {
+            cancelRemoteSyncAnimationReset()
+            _ = _Concurrency.Task { @MainActor in
+                store.rehydrateVisibleSnapshotFromCache()
+                memberStore.markLocalSnapshotStale()
+                memberStore.rehydrateVisibleSnapshotFromCache()
+                let activeItemIds = Set(store.items.map(\.id))
+                hiddenPendingPromotionIds.subtract(activeItemIds)
+                syncPromotionTipAnchorWithVisibleItems()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+            return
+        }
+
         if lastProcessedRemoteAnimationBatchToken == batch.id {
             return
         }

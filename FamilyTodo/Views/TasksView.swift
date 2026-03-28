@@ -1191,6 +1191,20 @@ private struct TasksContent: View {
     }
 
     private func handleRemoteTaskSyncBatch(_ batch: HouseholdSyncBatch) {
+        if batch.classification == .bootstrap {
+            cancelRemoteSyncAnimationReset()
+            _ = _Concurrency.Task { @MainActor in
+                store.rehydrateVisibleSnapshotFromCache()
+                memberStore.markLocalSnapshotStale()
+                memberStore.rehydrateVisibleSnapshotFromCache()
+                backlogStore.markLocalSnapshotStale()
+                backlogStore.rehydrateVisibleSnapshotFromCache()
+                normalizeAssigneeFilterSelection()
+                markTasksTutorialAsSeenIfNeeded()
+            }
+            return
+        }
+
         let changedIDs = batch.taskChangedIDs
 
         cancelRemoteSyncAnimationReset()

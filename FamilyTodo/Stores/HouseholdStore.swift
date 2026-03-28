@@ -2819,25 +2819,29 @@ class HouseholdStore: ObservableObject {
                     )
                 }
         )
+        let visibleCachedWorkItems = Array(
+            WorkItemCacheStoreSupport.canonicalCachedWorkItemsByLogicalItemID(
+                fetchCachedWorkItems(householdId: householdId)
+                    .filter { $0.syncStatusRaw != "pendingDelete" }
+            ).values
+        )
         let workItemsByID = Dictionary(
-            uniqueKeysWithValues: fetchCachedWorkItems(householdId: householdId)
-                .filter { $0.syncStatusRaw != "pendingDelete" }
-                .map {
-                    (
-                        $0.id,
-                        RemoteWorkItemState(
-                            logicalItemID: $0.logicalItemID,
-                            title: $0.title,
-                            status: WorkItem.Status(rawValue: $0.statusRaw) ?? .idea,
-                            assigneeId: $0.assigneeId,
-                            assigneeIds: $0.toWorkItem().assigneeIds,
-                            completedAt: $0.completedAt,
-                            completedById: $0.completedById,
-                            order: $0.order,
-                            updatedAt: $0.updatedAt
-                        )
+            uniqueKeysWithValues: visibleCachedWorkItems.map {
+                (
+                    $0.id,
+                    RemoteWorkItemState(
+                        logicalItemID: $0.logicalItemID,
+                        title: $0.title,
+                        status: WorkItem.Status(rawValue: $0.statusRaw) ?? .idea,
+                        assigneeId: $0.assigneeId,
+                        assigneeIds: $0.toWorkItem().assigneeIds,
+                        completedAt: $0.completedAt,
+                        completedById: $0.completedById,
+                        order: $0.order,
+                        updatedAt: $0.updatedAt
                     )
-                }
+                )
+            }
         )
         let backlogCategoriesByID = Dictionary(
             uniqueKeysWithValues: fetchCachedBacklogCategories(householdId: householdId)
@@ -3505,7 +3509,8 @@ class HouseholdStore: ObservableObject {
             syncStartedAt: syncStartedAt,
             syncFinishedAt: syncFinishedAt,
             changedDomains: [],
-            changedIDsByDomain: [:]
+            changedIDsByDomain: [:],
+            activeMemberCount: currentHousehold.map { fetchCachedMembers(householdId: $0.id).filter(\.isActive).count }
         )
 
         return HouseholdSyncPassResult(
@@ -3587,7 +3592,11 @@ class HouseholdStore: ObservableObject {
             syncStartedAt: context.refreshStartedAt,
             syncFinishedAt: syncFinishedAt,
             changedDomains: Set(events.flatMap(\.domains)),
-            changedIDsByDomain: changedIDsByDomain(for: events)
+            changedIDsByDomain: changedIDsByDomain(for: events),
+            activeMemberCount: activeMemberCount(
+                from: context.visibleContentResolution?.snapshot,
+                fallbackHydrationSnapshot: refreshedSnapshot.hydrationSnapshot
+            )
         )
 
         logRemoteSyncTelemetry(
@@ -3947,6 +3956,16 @@ class HouseholdStore: ObservableObject {
                 partialResult[.backlog, default: []].formUnion(removedIDs)
             }
         }
+    }
+
+    private func activeMemberCount(
+        from visibleContentSnapshot: RemoteVisibleContentSnapshot?,
+        fallbackHydrationSnapshot: JoinedHouseholdHydrationSnapshot?
+    ) -> Int? {
+        if let visibleContentSnapshot {
+            return visibleContentSnapshot.membersByID.values.filter(\.isActive).count
+        }
+        return fallbackHydrationSnapshot?.activeMemberCount
     }
 
     private func remoteVisibleContentDiff(

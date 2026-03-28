@@ -888,6 +888,16 @@ private struct ShoppingListContent: View {
     }
 
     private func handleRemoteShoppingSyncBatch(_ batch: HouseholdSyncBatch) {
+        if batch.classification == .bootstrap {
+            cancelRemoteSyncAnimationReset()
+            _ = _Concurrency.Task { @MainActor in
+                store.rehydrateVisibleSnapshotFromCache()
+                await bundleStore.loadBundlesForDisplay()
+                markShoppingTutorialAsSeenIfNeeded()
+            }
+            return
+        }
+
         let changedIDs = batch.shoppingChangedItemIDs
 
         cancelRemoteSyncAnimationReset()

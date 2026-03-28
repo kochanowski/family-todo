@@ -316,6 +316,41 @@ final class WorkItemTransitionTests: XCTestCase {
         XCTAssertTrue(taskStore.tasks.filter { $0.logicalItemID == idea.logicalItemID }.isEmpty)
     }
 
+    func testCanonicalVisibilityPrefersTaskOverNewerIdeaWithSameLogicalItemID() {
+        let logicalItemID = UUID()
+        let categoryId = UUID()
+        let task = TestCacheFixtures.taskWorkItem(
+            id: UUID(),
+            logicalItemID: logicalItemID,
+            householdId: householdId,
+            title: "Plan the trip",
+            status: .next,
+            assigneeId: assigneeId,
+            categoryId: categoryId,
+            updatedAt: TestCacheFixtures.timestamp(100)
+        )
+        let newerIdea = TestCacheFixtures.ideaWorkItem(
+            id: UUID(),
+            logicalItemID: logicalItemID,
+            categoryId: categoryId,
+            householdId: householdId,
+            title: "Plan the trip",
+            assigneeId: assigneeId,
+            updatedAt: TestCacheFixtures.timestamp(200)
+        )
+
+        let cachedItems = [
+            TestCacheFixtures.cachedWorkItem(from: task),
+            TestCacheFixtures.cachedWorkItem(from: newerIdea),
+        ]
+
+        let visibleTasks = WorkItemCacheStoreSupport.visibleTasks(from: cachedItems)
+        let visibleIdeas = WorkItemCacheStoreSupport.visibleIdeas(from: cachedItems)
+
+        XCTAssertEqual(visibleTasks.filter { $0.logicalItemID == logicalItemID }.count, 1)
+        XCTAssertTrue(visibleIdeas.filter { $0.logicalItemID == logicalItemID }.isEmpty)
+    }
+
     private func makeTaskStore() -> TaskStore {
         let taskStore = TaskStore(modelContext: modelContainer.mainContext)
         taskStore.setHousehold(householdId)

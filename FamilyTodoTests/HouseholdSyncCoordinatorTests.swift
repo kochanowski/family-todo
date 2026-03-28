@@ -131,6 +131,151 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(thirdResult, .newData)
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .manualRefresh)
     }
+
+    func testPerformSyncSkipsSharedShoppingAlertDeliveryForBootstrapBatch() async {
+        let householdId = UUID()
+        let batchID = UUID()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [
+                        HouseholdSyncEvent(
+                            householdId: householdId,
+                            batchID: batchID,
+                            source: .remote,
+                            reason: .remotePush(context: .sharedDatabase),
+                            timestamp: Date(timeIntervalSince1970: 100),
+                            direction: .ownerToParticipant,
+                            kind: .membersChanged(ids: Set([UUID()]))
+                        ),
+                        HouseholdSyncEvent(
+                            householdId: householdId,
+                            batchID: batchID,
+                            source: .remote,
+                            reason: .remotePush(context: .sharedDatabase),
+                            timestamp: Date(timeIntervalSince1970: 100),
+                            direction: .ownerToParticipant,
+                            kind: .shoppingAdded(ids: Set([UUID()]), titles: ["Milk"])
+                        ),
+                    ],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: batchID,
+                        reason: .remotePush(context: .sharedDatabase),
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.members, .shopping]),
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let alertRecorder = SharedShoppingAlertRecorder()
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                intervalNanoseconds: 0,
+                maxPassCount: 0,
+                maxConsecutiveNoDataPasses: 0
+            ),
+            sharedShoppingAlertDelivery: { titles, householdId, householdName in
+                await alertRecorder.record(
+                    titles: titles,
+                    householdId: householdId,
+                    householdName: householdName
+                )
+            }
+        )
+
+        _ = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
+
+        let deliveries = alertRecorder.deliveries
+        XCTAssertTrue(deliveries.isEmpty)
+    }
+
+    func testPerformSyncSchedulesBoundedForegroundRepairForCollaborativeHousehold() async {
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .remotePush(context: .sharedDatabase),
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 102),
+                        syncStartedAt: Date(timeIntervalSince1970: 103),
+                        syncFinishedAt: Date(timeIntervalSince1970: 104),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 105),
+                        syncStartedAt: Date(timeIntervalSince1970: 106),
+                        syncFinishedAt: Date(timeIntervalSince1970: 107),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: true,
+                intervalNanoseconds: 0,
+                maxPassCount: 4,
+                maxConsecutiveNoDataPasses: 2
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
+        await waitUntil {
+            engine.recordedReasons.count == 3
+        }
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .remotePush(context: .sharedDatabase),
+                .foregroundRepairWindow,
+                .foregroundRepairWindow,
+            ]
+        )
+        XCTAssertEqual(coordinator.lastDiagnostics?.reason, .foregroundRepairWindow)
+        XCTAssertEqual(coordinator.lastDiagnostics?.activeMemberCount, 2)
+    }
 }
 
 @MainActor
@@ -145,6 +290,31 @@ private final class FakeHouseholdSyncEngine: HouseholdSyncEngine {
     func runSync(for reason: HouseholdSyncReason) async -> HouseholdSyncPassResult {
         recordedReasons.append(reason)
         return results.removeFirst()
+    }
+}
+
+@MainActor
+private final class SharedShoppingAlertRecorder {
+    struct Delivery: Equatable {
+        let titles: [String]
+        let householdId: UUID
+        let householdName: String?
+    }
+
+    private(set) var deliveries: [Delivery] = []
+
+    func record(
+        titles: [String],
+        householdId: UUID,
+        householdName: String?
+    ) {
+        deliveries.append(
+            Delivery(
+                titles: titles,
+                householdId: householdId,
+                householdName: householdName
+            )
+        )
     }
 }
 
@@ -178,5 +348,19 @@ private final class BlockingHouseholdSyncEngine: HouseholdSyncEngine {
         guard !resultContinuations.isEmpty else { return }
         let continuation = resultContinuations.removeFirst()
         continuation.resume(returning: result)
+    }
+}
+
+@MainActor
+private func waitUntil(
+    timeoutNanoseconds: UInt64 = 250_000_000,
+    condition: @escaping @MainActor () -> Bool
+) async {
+    let start = Date()
+    while !condition() {
+        if Date().timeIntervalSince(start) > Double(timeoutNanoseconds) / 1_000_000_000 {
+            return
+        }
+        await _Concurrency.Task.yield()
     }
 }

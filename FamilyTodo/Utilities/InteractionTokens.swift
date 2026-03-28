@@ -280,34 +280,7 @@ private struct RemoteSyncHighlightModifier: ViewModifier {
     let isActive: Bool
     let cornerRadius: CGFloat
 
-    @EnvironmentObject private var themeStore: ThemeStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     func body(content: Content) -> some View {
         content
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(themeStore.accentTabColor.opacity(fillOpacity))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(themeStore.accentTabColor.opacity(strokeOpacity), lineWidth: 1)
-                    }
-                    .allowsHitTesting(false)
-            }
-            .animation(highlightAnimation, value: isActive)
-    }
-
-    private var highlightAnimation: Animation {
-        reduceMotion ? .easeOut(duration: WowAnimation.quick) : WowAnimation.quickSpring
-    }
-
-    private var fillOpacity: Double {
-        guard isActive else { return 0 }
-        return themeStore.usesRetroChrome ? 0.16 : 0.12
-    }
-
-    private var strokeOpacity: Double {
-        guard isActive else { return 0 }
-        return themeStore.usesRetroChrome ? 0.32 : 0.22
     }
 }
