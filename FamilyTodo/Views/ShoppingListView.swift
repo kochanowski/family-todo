@@ -271,6 +271,10 @@ private struct ShoppingListContent: View {
 
             floatingAddButton(bottomInset: floatingButtonInset)
         }
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularContentMaxWidth,
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -1334,7 +1338,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
 
             let container = UIView(
                 frame: CGRect(
-                    x: 0, y: 0, width: UIScreen.main.bounds.width, height: containerHeight
+                    x: 0, y: 0, width: 0, height: containerHeight
                 )
             )
             container.backgroundColor = .clear

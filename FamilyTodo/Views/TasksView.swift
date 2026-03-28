@@ -195,6 +195,10 @@ private struct TasksContent: View {
                     .padding(.top, 40)
             }
         }
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularContentMaxWidth,
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             guard !hasStartedInitialLoad else { return }

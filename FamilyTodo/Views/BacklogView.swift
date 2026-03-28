@@ -114,6 +114,10 @@ private struct BacklogContent: View {
 
     private var screenContent: some View {
         sheetPresentationContent
+            .appAdaptiveWidth(
+                maxWidth: AppChromeMetrics.regularContentMaxWidth,
+                alignment: .topLeading
+            )
             .alert(
                 deleteConfirmationTitle,
                 isPresented: Binding(

@@ -47,63 +47,72 @@ struct OnboardingCarouselView: View {
     var body: some View {
         let isLastSlide = currentSlide == slides.count - 1
 
-        ZStack {
-            // Animated Aurora Background
-            AnimatedAuroraBackground(currentSlide: currentSlide)
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            let availableHeight = proxy.size.height
+            let carouselHeight = min(max(availableHeight * 0.48, 320), 460)
 
-            // Content
-            VStack {
-                Spacer()
+            ZStack {
+                // Animated Aurora Background
+                AnimatedAuroraBackground(currentSlide: currentSlide)
+                    .ignoresSafeArea()
 
-                // Paging TabView
-                TabView(selection: $currentSlide) {
-                    ForEach(slides) { slide in
-                        OnboardingSlideView(slide: slide)
-                            .tag(slide.id)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: UIScreen.main.bounds.height * 0.5)
+                // Content
+                VStack {
+                    Spacer()
 
-                // Page Indicator
-                HStack(spacing: 8) {
-                    ForEach(0 ..< slides.count, id: \.self) { index in
-                        Circle()
-                            .fill(currentSlide == index ? Color.primary : Color.secondary.opacity(0.4))
-                            .frame(width: 8, height: 8)
-                    }
-                }
-                .padding(.top, 16)
-
-                Spacer()
-                    .frame(height: 40)
-
-                // Keep a fixed CTA slot so page indicator dots stay vertically stable.
-                ZStack {
-                    if isLastSlide {
-                        Button {
-                            onboardingState.completeOnboarding()
-                        } label: {
-                            Text("Get Started")
-                                .font(themeStore.font(for: .buttonLabel))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.blue)
-                                )
+                    // Paging TabView
+                    TabView(selection: $currentSlide) {
+                        ForEach(slides) { slide in
+                            OnboardingSlideView(slide: slide)
+                                .tag(slide.id)
                         }
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
-                }
-                .frame(height: getStartedSlotHeight)
-                .padding(.horizontal, 40)
-                .animation(.easeInOut(duration: 0.25), value: isLastSlide)
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: carouselHeight)
 
-                Spacer()
-                    .frame(height: 60)
+                    // Page Indicator
+                    HStack(spacing: 8) {
+                        ForEach(0 ..< slides.count, id: \.self) { index in
+                            Circle()
+                                .fill(currentSlide == index ? Color.primary : Color.secondary.opacity(0.4))
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    .padding(.top, 16)
+
+                    Spacer()
+                        .frame(height: 40)
+
+                    // Keep a fixed CTA slot so page indicator dots stay vertically stable.
+                    ZStack {
+                        if isLastSlide {
+                            Button {
+                                onboardingState.completeOnboarding()
+                            } label: {
+                                Text("Get Started")
+                                    .font(themeStore.font(for: .buttonLabel))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.blue)
+                                    )
+                            }
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                    }
+                    .frame(height: getStartedSlotHeight)
+                    .padding(.horizontal, 40)
+                    .animation(.easeInOut(duration: 0.25), value: isLastSlide)
+
+                    Spacer()
+                        .frame(height: 60)
+                }
+                .appAdaptiveWidth(
+                    maxWidth: AppChromeMetrics.regularFormMaxWidth,
+                    alignment: .center
+                )
             }
         }
         .onChange(of: currentSlide) { _, _ in

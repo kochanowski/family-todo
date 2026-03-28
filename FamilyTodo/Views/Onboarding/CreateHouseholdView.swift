@@ -163,6 +163,10 @@ struct CreateHouseholdView: View {
                     Spacer()
                         .frame(height: 60)
                 }
+                .appAdaptiveWidth(
+                    maxWidth: AppChromeMetrics.regularFormMaxWidth,
+                    alignment: .top
+                )
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -423,6 +427,10 @@ struct HouseholdJoinSheet: View {
                         }
                     }
                     .padding(24)
+                    .appAdaptiveWidth(
+                        maxWidth: AppChromeMetrics.regularFormMaxWidth,
+                        alignment: .top
+                    )
                 }
 
                 if isJoining {

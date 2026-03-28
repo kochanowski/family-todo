@@ -9,6 +9,45 @@ enum AppChromeMetrics {
     static let compactCTAHeight: CGFloat = 44
     static let compactCTAHorizontalPadding: CGFloat = 20
     static let keyboardAccessoryBottomInset: CGFloat = 8
+    static let regularContentMaxWidth: CGFloat = 960
+    static let regularFormMaxWidth: CGFloat = 720
+    static let regularHorizontalPadding: CGFloat = 24
+}
+
+private struct AppAdaptiveWidthModifier: ViewModifier {
+    let maxWidth: CGFloat
+    let alignment: Alignment
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var appliesRegularLayout: Bool {
+        horizontalSizeClass == .regular
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .frame(
+                maxWidth: appliesRegularLayout ? maxWidth : .infinity,
+                maxHeight: .infinity,
+                alignment: alignment
+            )
+            .padding(.horizontal, appliesRegularLayout ? AppChromeMetrics.regularHorizontalPadding : 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+    }
+}
+
+extension View {
+    func appAdaptiveWidth(
+        maxWidth: CGFloat,
+        alignment: Alignment = .topLeading
+    ) -> some View {
+        modifier(
+            AppAdaptiveWidthModifier(
+                maxWidth: maxWidth,
+                alignment: alignment
+            )
+        )
+    }
 }
 
 struct AppScreenHeader<Accessory: View, Trailing: View>: View {

@@ -48,6 +48,7 @@
 		HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */; };
 		HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */; };
 		HSYNCTESTBUILD000000001 /* HouseholdSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */; };
+		IPADTESTBUILD0000000001 /* ProjectConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */; };
 		B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */; };
 			F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000001 /* InviteInputNormalizerTests.swift */; };
 			F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000002 /* OnboardingStateTests.swift */; };
@@ -177,6 +178,7 @@
 		HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdJoinFlowTests.swift; sourceTree = "<group>"; };
 		HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdRemoteSyncTests.swift; sourceTree = "<group>"; };
 		HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinatorTests.swift; sourceTree = "<group>"; };
+		IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectConfigurationTests.swift; sourceTree = "<group>"; };
 		B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStoreTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000001 /* InviteInputNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizerTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000002 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
@@ -381,6 +383,7 @@
 				HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */,
 				HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */,
 				HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */,
+				IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
 				TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */,
@@ -750,6 +753,7 @@
 				HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */,
 				HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */,
 				HSYNCTESTBUILD000000001 /* HouseholdSyncCoordinatorTests.swift in Sources */,
+				IPADTESTBUILD0000000001 /* ProjectConfigurationTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
 				TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */,
@@ -796,7 +800,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -812,7 +816,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -846,7 +850,6 @@
 					"remote-notification",
 				);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -857,7 +860,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.familytodo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -891,7 +894,6 @@
 					"remote-notification",
 				);
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -904,7 +906,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};

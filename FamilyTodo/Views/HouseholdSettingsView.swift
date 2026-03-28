@@ -511,6 +511,10 @@ private struct InviteMemberView: View {
                     }
                 }
                 .padding(24)
+                .appAdaptiveWidth(
+                    maxWidth: AppChromeMetrics.regularFormMaxWidth,
+                    alignment: .top
+                )
                 .frame(maxWidth: .infinity)
             }
             .navigationBarTitleDisplayMode(.inline)

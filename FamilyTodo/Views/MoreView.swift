@@ -72,6 +72,10 @@ struct MoreView: View {
 
             Spacer()
         }
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularContentMaxWidth,
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 

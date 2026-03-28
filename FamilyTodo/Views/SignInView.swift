@@ -67,6 +67,10 @@ struct SignInView: View {
             .padding(.bottom, 60)
         }
         .padding()
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularFormMaxWidth,
+            alignment: .top
+        )
         .ignoresSafeArea(edges: .bottom)
         .overlay(alignment: .topTrailing) {
             Button("Debug") {
