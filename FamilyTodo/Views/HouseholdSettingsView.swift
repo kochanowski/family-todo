@@ -430,15 +430,15 @@ struct ProfileView: View {
 private struct InviteMemberView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
-    @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @Environment(\.dismiss) private var dismiss
 
     @State private var inviteLoadGeneration = 0
     @State private var inviteToken: InviteToken?
     @State private var isLoadingInviteCode = true
+    @State private var isInviteLoadTakingLongerThanExpected = false
     @State private var errorMessage: String?
 
-    private static let inviteLoadTimeoutNanoseconds: UInt64 = 20_000_000_000
+    private static let inviteSlowLoadThresholdNanoseconds: UInt64 = 12_000_000_000
 
     var body: some View {
         NavigationStack {
@@ -466,8 +466,19 @@ private struct InviteMemberView: View {
                     }
 
                     if isLoadingInviteCode {
-                        ProgressView("Preparing invite code...")
-                            .font(themeStore.font(for: .bodyStrong))
+                        VStack(spacing: 12) {
+                            ProgressView("Preparing invite code...")
+                                .font(themeStore.font(for: .bodyStrong))
+
+                            if isInviteLoadTakingLongerThanExpected {
+                                Text(
+                                    "The first invite can take a little longer while HousePulse finishes preparing iCloud sharing. Keep this screen open for a moment."
+                                )
+                                .font(themeStore.font(for: .bodySmall))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+                                .multilineTextAlignment(.center)
+                            }
+                        }
                     } else if let errorMessage {
                         ThemedEmptyStateView(
                             title: "Invite unavailable",
@@ -542,11 +553,12 @@ private struct InviteMemberView: View {
         inviteLoadGeneration += 1
         let generation = inviteLoadGeneration
         isLoadingInviteCode = true
+        isInviteLoadTakingLongerThanExpected = false
         inviteToken = nil
         errorMessage = nil
 
         let timeoutTask = _Concurrency.Task { @MainActor in
-            try? await _Concurrency.Task.sleep(nanoseconds: Self.inviteLoadTimeoutNanoseconds)
+            try? await _Concurrency.Task.sleep(nanoseconds: Self.inviteSlowLoadThresholdNanoseconds)
             guard !_Concurrency.Task.isCancelled,
                   inviteLoadGeneration == generation,
                   isLoadingInviteCode
@@ -554,9 +566,7 @@ private struct InviteMemberView: View {
                 return
             }
 
-            inviteToken = nil
-            isLoadingInviteCode = false
-            errorMessage = inviteTimeoutMessage()
+            isInviteLoadTakingLongerThanExpected = true
         }
         defer { timeoutTask.cancel() }
 
@@ -564,25 +574,17 @@ private struct InviteMemberView: View {
             let token = try await householdStore.fetchOrCreateInviteToken()
             guard inviteLoadGeneration == generation else { return }
             inviteToken = token
+            isInviteLoadTakingLongerThanExpected = false
             errorMessage = nil
         } catch {
             guard inviteLoadGeneration == generation else { return }
             inviteToken = nil
+            isInviteLoadTakingLongerThanExpected = false
             errorMessage = inviteErrorMessage(for: error)
         }
 
         guard inviteLoadGeneration == generation else { return }
         isLoadingInviteCode = false
-    }
-
-    @MainActor
-    private func inviteTimeoutMessage() -> String {
-        let stage = cloudKitDiagnostics.lastCloudKitProgressOperation ??
-            cloudKitDiagnostics.lastCloudKitOperation
-        if let stage, !stage.isEmpty {
-            return "Invite loading timed out during \(stage)."
-        }
-        return "Invite loading timed out before CloudKit returned a result."
     }
 
     private func inviteErrorMessage(for error: Error) -> String {

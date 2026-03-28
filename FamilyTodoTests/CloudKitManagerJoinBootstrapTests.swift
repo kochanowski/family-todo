@@ -3,6 +3,24 @@ import CloudKit
 import XCTest
 
 final class CloudKitManagerJoinBootstrapTests: XCTestCase {
+    func testCreateShareDefersInteractiveSharedGraphRepairToBackground() {
+        XCTAssertFalse(CloudKitManager.createShareBlocksOnInteractiveRepair)
+    }
+
+    func testAcceptedRootFetchRetryWindowIsLongEnoughForSharePropagation() {
+        let totalDelay = CloudKitManager.acceptedRootFetchBackoffDelaysNanoseconds.reduce(0, +)
+
+        XCTAssertGreaterThanOrEqual(
+            totalDelay,
+            12_000_000_000,
+            "Participant join bootstrap should tolerate multi-second CloudKit propagation after share acceptance."
+        )
+        XCTAssertGreaterThanOrEqual(
+            CloudKitManager.acceptedRootFetchBackoffDelaysNanoseconds.count,
+            5
+        )
+    }
+
     func testParticipantSharedIgnoresCachedMetadataZoneWithDefaultOwnerSeed() {
         let zoneID = CKRecordZone.ID(
             zoneName: "HouseholdZone-\(UUID().uuidString)",

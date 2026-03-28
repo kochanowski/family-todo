@@ -12,7 +12,7 @@ actor CloudKitManager {
 
     private enum ShareCreationStage: String {
         case ensureZone
-        case migrate
+        case migrateRoot
         case fetchRoot
         case modifyRecords
         case fallbackPoll
@@ -83,6 +83,15 @@ actor CloudKitManager {
     private static let inviteCodeLockWindow: TimeInterval = 10 * 60
     private static let inviteCodeAttemptWindow: TimeInterval = 5 * 60
     private static let inviteCodeAttemptLimit = 12
+    static let createShareBlocksOnInteractiveRepair = false
+    static let acceptedRootFetchBackoffDelaysNanoseconds: [UInt64] = [
+        500_000_000,
+        1_000_000_000,
+        2_000_000_000,
+        3_000_000_000,
+        5_000_000_000,
+        8_000_000_000,
+    ]
 
     private func resolvedScope(_ explicitScope: HouseholdDatabaseScope?) -> HouseholdDatabaseScope {
         explicitScope ?? householdScope
@@ -991,6 +1000,21 @@ actor CloudKitManager {
         } catch {
             print(
                 "CloudKitScope: background shared-graph repair finished with error for household \(householdId): " +
+                    debugErrorDescription(error)
+            )
+        }
+    }
+
+    private func refreshParticipantSharedJoinBootstrap(
+        householdId: UUID?
+    ) async {
+        guard let householdId else { return }
+        resetParticipantSharedZoneResolution(for: householdId)
+        do {
+            _ = try await allSharedZoneIDs()
+        } catch {
+            print(
+                "CloudKitJoin: shared-zone refresh failed for household \(householdId): " +
                     debugErrorDescription(error)
             )
         }
@@ -3834,13 +3858,15 @@ actor CloudKitManager {
             markStage(.ensureZone)
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
 
-            markStage(.migrate)
+            markStage(.migrateRoot)
             try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: household.id)
-            try await repairSharedOwnerHouseholdGraphIfNeeded(
-                householdId: household.id,
-                force: false,
-                mode: .interactivePrimaryZones
-            )
+            if Self.createShareBlocksOnInteractiveRepair {
+                try await repairSharedOwnerHouseholdGraphIfNeeded(
+                    householdId: household.id,
+                    force: false,
+                    mode: .interactivePrimaryZones
+                )
+            }
 
             markStage(.fetchRoot)
             let db = await privateDatabase
@@ -4606,14 +4632,14 @@ actor CloudKitManager {
         householdId: UUID?,
         database: CKDatabase
     ) async throws -> CKRecord {
-        let backoffDelays: [UInt64] = [
-            300_000_000,
-            800_000_000,
-            1_500_000_000,
-        ]
+        let backoffDelays = Self.acceptedRootFetchBackoffDelaysNanoseconds
 
         var lastError: Error?
-        for attempt in 0 ..< backoffDelays.count {
+        await refreshParticipantSharedJoinBootstrap(householdId: householdId)
+        for attempt in 0 ... backoffDelays.count {
+            if attempt > 0 {
+                await refreshParticipantSharedJoinBootstrap(householdId: householdId)
+            }
             do {
                 if let householdId {
                     return try await fetchRecord(
@@ -4625,14 +4651,14 @@ actor CloudKitManager {
                 return try await database.record(for: metadata.rootRecordID)
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 lastError = ckError
-                guard attempt < backoffDelays.count - 1 else {
+                guard attempt < backoffDelays.count else {
                     break
                 }
                 try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
             } catch {
                 if isRetryableZoneResolutionError(error) {
                     lastError = error
-                    guard attempt < backoffDelays.count - 1 else {
+                    guard attempt < backoffDelays.count else {
                         break
                     }
                     try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
