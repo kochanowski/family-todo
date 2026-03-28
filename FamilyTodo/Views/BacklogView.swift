@@ -454,7 +454,7 @@ private struct BacklogContent: View {
                     onDeleteCategory: requestDeleteCategory(withID:)
                 )
                 .refreshable {
-                    await loadBacklogData()
+                    await performManualRefresh()
                     markIdeasTutorialAsSeenIfNeeded()
                 }
             }
@@ -927,6 +927,13 @@ private struct BacklogContent: View {
                 !hiddenPendingDeleteIds.contains($0.id) &&
                     !hiddenPendingPromotionIds.contains($0.id)
             }
+    }
+
+    private func performManualRefresh() async {
+        if userSession.syncMode == .cloud {
+            _ = await syncCoordinator.performSync(reason: .manualRefresh)
+        }
+        await loadBacklogData()
     }
 
     private var activeIdeasTip: IdeasOnboardingTip? {

@@ -425,6 +425,7 @@ protocol HouseholdCloudSyncing: Actor {
 
     func createInviteCode(for household: Household) async throws -> InviteToken
     func fetchInviteToken(code rawCode: String) async throws -> InviteToken
+    func resolveInviteTargetHouseholdId(from input: NormalizedInviteInput) async throws -> UUID?
     func deleteInviteTokens(for householdId: UUID) async throws
     func redeemInviteCode(_ rawCode: String) async throws -> Household
     func acceptShare(inviteCode: String) async throws -> Household
@@ -576,19 +577,17 @@ class HouseholdStore: ObservableObject {
         let userId: String
     }
 
+    private enum JoinTargetResolution: Equatable {
+        case sharedInvite
+        case sameUserRecovery
+    }
+
     private struct JoinTarget {
-        let acceptedShareContext: AcceptedShareContext
+        let household: Household
+        let resolution: JoinTargetResolution
 
         var householdId: UUID {
-            acceptedShareContext.householdId
-        }
-
-        var household: Household {
-            acceptedShareContext.household
-        }
-
-        var zoneID: CKRecordZone.ID {
-            acceptedShareContext.zoneID
+            household.id
         }
     }
 
@@ -1184,11 +1183,20 @@ class HouseholdStore: ObservableObject {
 
         try await cloudKit.checkAvailability()
         let normalizedInvite = try InviteInputNormalizer.normalizeInput(input)
-        let target = try await resolveJoinTarget(for: normalizedInvite)
+        let target = try await resolveJoinTarget(for: normalizedInvite, userId: userId)
         try await clearConflictingJoinStateBeforeTargetedJoin(
             targetHouseholdId: target.householdId,
             userId: userId
         )
+
+        if target.resolution == .sameUserRecovery {
+            await completeSameUserRecoveryJoin(
+                household: target.household,
+                userId: userId
+            )
+            return
+        }
+
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
@@ -1220,6 +1228,7 @@ class HouseholdStore: ObservableObject {
         updateCache(with: verifiedMember)
         updateCache(with: target.household)
         currentHousehold = target.household
+        clearRecoveredJoinDiagnostics()
         beginPendingJoinProtection(
             householdId: target.household.id,
             userId: userId
@@ -1238,11 +1247,20 @@ class HouseholdStore: ObservableObject {
         let validatedDisplayName = try requiredMembershipDisplayName(from: displayName)
 
         try await cloudKit.checkAvailability()
-        let target = try await resolveJoinTarget(for: metadata)
+        let target = try await resolveJoinTarget(for: metadata, userId: userId)
         try await clearConflictingJoinStateBeforeTargetedJoin(
             targetHouseholdId: target.householdId,
             userId: userId
         )
+
+        if target.resolution == .sameUserRecovery {
+            await completeSameUserRecoveryJoin(
+                household: target.household,
+                userId: userId
+            )
+            return
+        }
+
         await cloudKit.setHouseholdScope(.participantShared)
         await cloudKit.migrateMemberColorsIfNeeded(householdId: target.householdId)
 
@@ -1274,6 +1292,7 @@ class HouseholdStore: ObservableObject {
         updateCache(with: verifiedMember)
         updateCache(with: target.household)
         currentHousehold = target.household
+        clearRecoveredJoinDiagnostics()
         beginPendingJoinProtection(
             householdId: target.household.id,
             userId: userId
@@ -1795,21 +1814,213 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    private func resolveJoinTarget(for normalizedInvite: NormalizedInviteInput)
+    private func resolveJoinTarget(
+        for normalizedInvite: NormalizedInviteInput,
+        userId: String
+    )
         async throws -> JoinTarget
     {
-        let acceptedShareContext = try await cloudKit.resolveAcceptedShareContext(
-            fromInviteCode: normalizedInvite.inviteCode
-        )
-        return JoinTarget(acceptedShareContext: acceptedShareContext)
+        let previewHouseholdId = try await cloudKit.resolveInviteTargetHouseholdId(from: normalizedInvite)
+        if let previewHouseholdId,
+           let recoveredHousehold = try await resolveSameUserRecoveredHousehold(
+               householdId: previewHouseholdId,
+               userId: userId
+           )
+        {
+            return JoinTarget(household: recoveredHousehold, resolution: .sameUserRecovery)
+        }
+
+        do {
+            let acceptedShareContext = try await cloudKit.resolveAcceptedShareContext(
+                fromInviteCode: normalizedInvite.inviteCode
+            )
+            return JoinTarget(household: acceptedShareContext.household, resolution: .sharedInvite)
+        } catch {
+            if let previewHouseholdId,
+               isDeferredAcceptedShareBootstrapError(error),
+               let recoveredHousehold = try await resolveAcceptedSharedHouseholdAfterBootstrapGap(
+                   householdId: previewHouseholdId
+               )
+            {
+                clearRecoveredJoinDiagnostics()
+                return JoinTarget(household: recoveredHousehold, resolution: .sharedInvite)
+            }
+            throw error
+        }
     }
 
-    private func resolveJoinTarget(for metadata: CKShare.Metadata) async throws -> JoinTarget {
-        let acceptedShareContext = try await cloudKit.resolveAcceptedShareContext(metadata: metadata)
-        guard UUID(uuidString: metadata.rootRecordID.recordName) == acceptedShareContext.household.id else {
-            throw HouseholdError.invalidInviteCode
+    private func resolveJoinTarget(for metadata: CKShare.Metadata, userId: String) async throws -> JoinTarget {
+        let metadataHouseholdId = UUID(uuidString: metadata.rootRecordID.recordName)
+        if let metadataHouseholdId,
+           let recoveredHousehold = try await resolveSameUserRecoveredHousehold(
+               householdId: metadataHouseholdId,
+               userId: userId
+           )
+        {
+            return JoinTarget(household: recoveredHousehold, resolution: .sameUserRecovery)
         }
-        return JoinTarget(acceptedShareContext: acceptedShareContext)
+
+        do {
+            let acceptedShareContext = try await cloudKit.resolveAcceptedShareContext(metadata: metadata)
+            guard metadataHouseholdId == acceptedShareContext.household.id else {
+                throw HouseholdError.invalidInviteCode
+            }
+            return JoinTarget(household: acceptedShareContext.household, resolution: .sharedInvite)
+        } catch {
+            if let metadataHouseholdId,
+               isDeferredAcceptedShareBootstrapError(error),
+               let recoveredHousehold = try await resolveAcceptedSharedHouseholdAfterBootstrapGap(
+                   householdId: metadataHouseholdId
+               )
+            {
+                clearRecoveredJoinDiagnostics()
+                return JoinTarget(household: recoveredHousehold, resolution: .sharedInvite)
+            }
+            throw error
+        }
+    }
+
+    private func resolveSameUserRecoveredHousehold(
+        householdId: UUID,
+        userId: String
+    ) async throws -> Household? {
+        if let currentHousehold,
+           currentHousehold.id == householdId,
+           currentHousehold.ownerId == userId
+        {
+            return currentHousehold
+        }
+
+        await cloudKit.setHouseholdScope(.ownerPrivate)
+        if let ownerMember = try? await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: householdId,
+            scope: .ownerPrivate
+        ),
+            ownerMember.isActive
+        {
+            return try await recoverableHousehold(
+                from: ownerMember,
+                source: .ownerPrivate
+            )
+        }
+
+        await cloudKit.setHouseholdScope(.participantShared)
+        if let participantMember = try? await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: householdId,
+            scope: .participantShared
+        ),
+            participantMember.isActive
+        {
+            return try await recoverableHousehold(
+                from: participantMember,
+                source: .participantShared
+            )
+        }
+
+        return nil
+    }
+
+    private func resolveAcceptedSharedHouseholdAfterBootstrapGap(
+        householdId: UUID
+    ) async throws -> Household? {
+        let retryDelaysNanoseconds: [UInt64] = [
+            0,
+            500_000_000,
+            1_000_000_000,
+            2_000_000_000,
+            4_000_000_000,
+            8_000_000_000,
+        ]
+
+        var lastError: Error?
+        for delay in retryDelaysNanoseconds {
+            if delay > 0 {
+                try? await _Concurrency.Task.sleep(nanoseconds: delay)
+            }
+
+            await cloudKit.setHouseholdScope(.participantShared)
+            do {
+                return try await cloudKit.fetchHousehold(
+                    id: householdId,
+                    scope: .participantShared
+                )
+            } catch {
+                lastError = error
+                guard isRetryableParticipantSharedBootstrapRecoveryError(error) else {
+                    throw error
+                }
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+
+        return nil
+    }
+
+    private func isDeferredAcceptedShareBootstrapError(_ error: Error) -> Bool {
+        guard let cloudKitError = error as? CloudKitManager.CloudKitManagerError else {
+            return false
+        }
+
+        if case .sharedHouseholdFetchFailed = cloudKitError {
+            return true
+        }
+        return false
+    }
+
+    private func isRetryableParticipantSharedBootstrapRecoveryError(_ error: Error) -> Bool {
+        if CloudKitManager.isRetryableParticipantSharedZoneBootstrapError(error) {
+            return true
+        }
+
+        if let ckError = error as? CKError {
+            switch ckError.code {
+            case .unknownItem, .zoneNotFound, .permissionFailure:
+                return true
+            case .partialFailure:
+                if let partialErrors = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+                    return partialErrors.values.contains {
+                        isRetryableParticipantSharedBootstrapRecoveryError($0)
+                    }
+                }
+                return true
+            default:
+                return false
+            }
+        }
+
+        if let cloudKitError = error as? CloudKitManager.CloudKitManagerError {
+            switch cloudKitError {
+            case .sharedHouseholdFetchFailed:
+                return true
+            case let .unknownError(underlying):
+                return isRetryableParticipantSharedBootstrapRecoveryError(underlying)
+            default:
+                return false
+            }
+        }
+
+        return false
+    }
+
+    private func completeSameUserRecoveryJoin(
+        household: Household,
+        userId: String
+    ) async {
+        updateCache(with: household)
+        currentHousehold = household
+        clearRecoveredJoinDiagnostics()
+        await cloudKit.migrateMemberColorsIfNeeded(householdId: household.id)
+        await refreshMemberCacheFromCloudIfNeeded(household: household, userId: userId)
+        await prewarmJoinedHouseholdGraphIfNeeded(household: household, userId: userId)
+    }
+
+    private func clearRecoveredJoinDiagnostics() {
+        CloudKitDiagnosticsState.shared.clear()
     }
 
     private func clearConflictingJoinStateBeforeTargetedJoin(
@@ -2749,6 +2960,7 @@ class HouseholdStore: ObservableObject {
         pendingJoinState.hasCompletedHydrationPass = true
         if snapshot.remoteMembershipConfirmed {
             pendingJoinState.hasConfirmedRemoteMembership = true
+            clearRecoveredJoinDiagnostics()
         }
 
         if publishVisibleContentNotifications,
@@ -4051,6 +4263,7 @@ class HouseholdStore: ObservableObject {
             }
 
             if let member = try await fetchActiveMember(household, userId), member.isActive {
+                clearRecoveredJoinDiagnostics()
                 if pendingJoinStateMatches(householdId: household.id, userId: userId) {
                     pendingJoinState?.hasConfirmedRemoteMembership = true
                     if pendingJoinState?.hasCompletedHydrationPass == true {

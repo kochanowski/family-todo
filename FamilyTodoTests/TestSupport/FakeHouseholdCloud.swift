@@ -38,6 +38,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private let participantSharedReadDeniedHouseholds: Set<UUID>
     private let participantSharedVerificationDeniedHouseholds: Set<UUID>
     private let participantSharedInvisibleSavedMemberHouseholds: Set<UUID>
+    private var deferredAcceptedShareBootstrapCodes: Set<String>
     private var operationEvents: [OperationEvent] = []
     private let createInviteCodeResultsByHouseholdId: [UUID: InviteToken]
     private var createInviteCodeCalls = 0
@@ -59,6 +60,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         participantSharedReadDeniedHouseholds: Set<UUID> = [],
         participantSharedVerificationDeniedHouseholds: Set<UUID> = [],
         participantSharedInvisibleSavedMemberHouseholds: Set<UUID> = [],
+        deferredAcceptedShareBootstrapCodes: Set<String> = [],
         createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:]
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
@@ -77,6 +79,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.participantSharedReadDeniedHouseholds = participantSharedReadDeniedHouseholds
         self.participantSharedVerificationDeniedHouseholds = participantSharedVerificationDeniedHouseholds
         self.participantSharedInvisibleSavedMemberHouseholds = participantSharedInvisibleSavedMemberHouseholds
+        self.deferredAcceptedShareBootstrapCodes = deferredAcceptedShareBootstrapCodes
         self.createInviteCodeResultsByHouseholdId = createInviteCodeResultsByHouseholdId
     }
 
@@ -314,6 +317,11 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         }
 
         acceptedSharedHouseholdIDs.insert(household.id)
+        if deferredAcceptedShareBootstrapCodes.remove(rawCode) != nil {
+            throw CloudKitManager.CloudKitManagerError.sharedHouseholdFetchFailed(
+                "Shared household fetch failed: The operation couldn't be completed. (CKErrorDomain error 11.)"
+            )
+        }
         let zoneID = CKRecordZone.ID(
             zoneName: "shared-\(household.id.uuidString)",
             ownerName: "owner"
@@ -324,6 +332,19 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             zoneID: zoneID,
             shareURL: shareURL
         )
+    }
+
+    func resolveInviteTargetHouseholdId(from input: NormalizedInviteInput) async throws -> UUID? {
+        if let token = inviteTokensByCode[input.inviteCode] {
+            return token.householdId
+        }
+        if let household = inviteRedeemResults[input.inviteCode] {
+            return household.id
+        }
+        if let token = inviteTokensByCode.values.first(where: { $0.shareURL == input.inviteCode }) {
+            return token.householdId
+        }
+        return nil
     }
 
     func resolveAcceptedShareContext(metadata _: CKShare.Metadata) async throws -> AcceptedShareContext {

@@ -336,7 +336,7 @@ private struct ShoppingListContent: View {
             .padding(.bottom, listBottomInset)
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
-                await loadShoppingData()
+                await performManualRefresh()
             }
             .onChange(of: rapidEntryFocused) { _, focused in
                 guard focused else { return }
@@ -839,6 +839,13 @@ private struct ShoppingListContent: View {
         await store.loadItemsForDisplay()
         await bundleStore.loadBundlesForDisplay()
         markShoppingTutorialAsSeenIfNeeded()
+    }
+
+    private func performManualRefresh() async {
+        if userSession.syncMode == .cloud {
+            _ = await syncCoordinator.performSync(reason: .manualRefresh)
+        }
+        await loadShoppingData()
     }
 
     private func updateStoreCloudContext() {

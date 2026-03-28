@@ -4270,6 +4270,16 @@ actor CloudKitManager {
         return try inviteToken(from: record)
     }
 
+    func resolveInviteTargetHouseholdId(from input: NormalizedInviteInput) async throws -> UUID? {
+        if let code = InviteInputNormalizer.normalizeInviteCodeToken(input.inviteCode) {
+            return try await fetchInviteToken(code: code).householdId
+        }
+
+        let shareURL = try InviteInputNormalizer.normalizedURL(from: input.inviteCode)
+        let metadata = try await resolveJoinShareMetadata(for: shareURL)
+        return UUID(uuidString: metadata.rootRecordID.recordName)
+    }
+
     func deleteInviteTokens(for householdId: UUID) async throws {
         try await checkAvailability()
 

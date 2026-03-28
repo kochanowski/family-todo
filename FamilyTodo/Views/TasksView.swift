@@ -185,7 +185,7 @@ private struct TasksContent: View {
                     .padding(.bottom, listBottomInset)
                     .environment(\.editMode, $editMode)
                     .refreshable {
-                        await refreshData()
+                        await performManualRefresh()
                         markTasksTutorialAsSeenIfNeeded()
                     }
                 }
@@ -1074,6 +1074,13 @@ private struct TasksContent: View {
 
         _ = await (loadTasks, loadMembers, loadBacklog)
         normalizeAssigneeFilterSelection()
+    }
+
+    private func performManualRefresh() async {
+        if userSession.syncMode == .cloud {
+            _ = await syncCoordinator.performSync(reason: .manualRefresh)
+        }
+        await refreshData()
     }
 
     private func updateStoreCloudContext() {
