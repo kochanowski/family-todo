@@ -122,6 +122,28 @@ actor CloudKitManager {
         }
     }
 
+    static func shouldIgnoreCachedParticipantSharedZone(_ zoneID: CKRecordZone.ID) -> Bool {
+        guard isZoneCompatible(zoneID, for: .participantShared) else {
+            return true
+        }
+
+        return zoneID.ownerName == "__defaultOwner__"
+    }
+
+    static func isRetryableParticipantSharedZoneBootstrapError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError, ckError.code == .invalidArguments else {
+            return false
+        }
+
+        let candidateMessages = ([ckError.localizedDescription] + ckError.userInfo.values.compactMap {
+            $0 as? String
+        }).joined(separator: " ")
+
+        return candidateMessages.localizedCaseInsensitiveContains(
+            "Only shared zones can be accessed in the shared DB"
+        )
+    }
+
     /// Gets the shared container, must call ensureReady() first
     private var container: CKContainer {
         get async {
@@ -476,6 +498,12 @@ actor CloudKitManager {
         guard let zoneID = zoneContext(for: scope).zoneByHouseholdId[householdId] else {
             return nil
         }
+        if scope == .participantShared,
+           Self.shouldIgnoreCachedParticipantSharedZone(zoneID)
+        {
+            clearCachedZone(for: householdId, scope: scope)
+            return nil
+        }
         guard Self.isZoneCompatible(zoneID, for: scope) else {
             clearCachedZone(for: householdId, scope: scope)
             return nil
@@ -501,6 +529,15 @@ actor CloudKitManager {
         }
         persistSharedZoneContext(for: scope)
         print("CloudKitScope: cleared cached zone for household \(householdId)")
+    }
+
+    private func resetParticipantSharedZoneResolution(for householdId: UUID) {
+        clearCachedZone(for: householdId, scope: .participantShared)
+        updateZoneContext(for: .participantShared) { context in
+            context.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+            context.lastResolvedZones = []
+        }
+        print("CloudKitScope: reset participantShared zone resolution for household \(householdId)")
     }
 
     func clearAllCachedZones(for householdId: UUID) {
@@ -1384,6 +1421,10 @@ actor CloudKitManager {
     }
 
     private func isRetryableZoneResolutionError(_ error: Error) -> Bool {
+        if Self.isRetryableParticipantSharedZoneBootstrapError(error) {
+            return true
+        }
+
         guard let ckError = error as? CKError else { return false }
 
         switch ckError.code {
@@ -4488,7 +4529,7 @@ actor CloudKitManager {
 
             setHouseholdScope(.participantShared)
             if let householdId {
-                setSharedZoneContext(householdId: householdId, zoneID: zoneID)
+                resetParticipantSharedZoneResolution(for: householdId)
             }
 
             stage = .fetchRoot

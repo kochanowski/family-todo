@@ -48,6 +48,7 @@
 		HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */; };
 		HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */; };
 		HSYNCTESTBUILD000000001 /* HouseholdSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */; };
+		JOINBOOTTESTBUILD000001 /* CloudKitManagerJoinBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JOINBOOTTESTFILE0000001 /* CloudKitManagerJoinBootstrapTests.swift */; };
 		IPADTESTBUILD0000000001 /* ProjectConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */; };
 		B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */; };
 			F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A200000000000000000001 /* InviteInputNormalizerTests.swift */; };
@@ -178,6 +179,7 @@
 		HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdJoinFlowTests.swift; sourceTree = "<group>"; };
 		HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdRemoteSyncTests.swift; sourceTree = "<group>"; };
 		HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinatorTests.swift; sourceTree = "<group>"; };
+		JOINBOOTTESTFILE0000001 /* CloudKitManagerJoinBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitManagerJoinBootstrapTests.swift; sourceTree = "<group>"; };
 		IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectConfigurationTests.swift; sourceTree = "<group>"; };
 		B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStoreTests.swift; sourceTree = "<group>"; };
 			F0A200000000000000000001 /* InviteInputNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizerTests.swift; sourceTree = "<group>"; };
@@ -383,6 +385,7 @@
 				HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */,
 				HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */,
 				HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */,
+				JOINBOOTTESTFILE0000001 /* CloudKitManagerJoinBootstrapTests.swift */,
 				IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */,
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
@@ -753,6 +756,7 @@
 				HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */,
 				HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */,
 				HSYNCTESTBUILD000000001 /* HouseholdSyncCoordinatorTests.swift in Sources */,
+				JOINBOOTTESTBUILD000001 /* CloudKitManagerJoinBootstrapTests.swift in Sources */,
 				IPADTESTBUILD0000000001 /* ProjectConfigurationTests.swift in Sources */,
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
