@@ -19,6 +19,23 @@ final class ProjectConfigurationTests: XCTestCase {
         )
     }
 
+    func testHousePulseTargetDefinesSupportedInterfaceOrientations() throws {
+        let projectContents = try loadProjectFile()
+
+        XCTAssertTrue(
+            projectContents.contains(
+                "INFOPLIST_KEY_UISupportedInterfaceOrientations = \"UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight\";"
+            ),
+            "Expected explicit iPhone interface orientations for the universal target."
+        )
+        XCTAssertTrue(
+            projectContents.contains(
+                "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = \"UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight\";"
+            ),
+            "Expected explicit iPad multitasking orientations for the universal target."
+        )
+    }
+
     private func loadProjectFile() throws -> String {
         let testsDirectoryURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
