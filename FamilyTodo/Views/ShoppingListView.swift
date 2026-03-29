@@ -449,10 +449,10 @@ private struct ShoppingListContent: View {
                     ShoppingCountBadge(count: store.toBuyItems.count)
                 }
 
-                if let feedback = subscriptionManager.shoppingInlineFeedback,
+                if subscriptionManager.shoppingInlineIndicator != nil,
                    selectedTab == .shopping
                 {
-                    SyncStatusPill(text: feedback.text)
+                    SyncStatusIcon()
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -843,7 +843,7 @@ private struct ShoppingListContent: View {
 
     private func performManualRefresh() async {
         if userSession.syncMode == .cloud {
-            _ = await syncCoordinator.performSync(reason: .manualRefresh)
+            await syncCoordinator.performInteractiveManualRefresh()
         }
         await loadShoppingData()
     }

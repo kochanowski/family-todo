@@ -73,6 +73,8 @@ struct AppScreenHeader<Accessory: View, Trailing: View>: View {
                 Text(title)
                     .font(themeStore.font(for: .screenHeader))
                     .foregroundStyle(themeStore.contentPrimaryColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
 
                 accessory
             }

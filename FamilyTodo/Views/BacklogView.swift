@@ -945,7 +945,7 @@ private struct BacklogContent: View {
 
     private func performManualRefresh() async {
         if userSession.syncMode == .cloud {
-            _ = await syncCoordinator.performSync(reason: .manualRefresh)
+            await syncCoordinator.performInteractiveManualRefresh()
         }
         await loadBacklogData()
     }

@@ -337,6 +337,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private let engine: HouseholdSyncEngine
     private let applicationStateProvider: @MainActor () -> UIApplication.State
     private let foregroundRepairConfiguration: ForegroundRepairConfiguration
+    private let interactiveManualRefreshBudgetNanoseconds: UInt64
     private let sharedShoppingAlertDelivery: @MainActor ([String], UUID, String?) async -> Void
     private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
@@ -350,6 +351,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
             UIApplication.shared.applicationState
         },
         foregroundRepairConfiguration: ForegroundRepairConfiguration = .default,
+        interactiveManualRefreshBudgetNanoseconds: UInt64 = 2_500_000_000,
         sharedShoppingAlertDelivery: @escaping @MainActor ([String], UUID, String?) async -> Void = {
             titles, householdId, householdName in
             await NotificationService.shared.deliverSharedShoppingItemsAddedAlert(
@@ -362,7 +364,29 @@ final class HouseholdSyncCoordinator: ObservableObject {
         self.engine = engine
         self.applicationStateProvider = applicationStateProvider
         self.foregroundRepairConfiguration = foregroundRepairConfiguration
+        self.interactiveManualRefreshBudgetNanoseconds = interactiveManualRefreshBudgetNanoseconds
         self.sharedShoppingAlertDelivery = sharedShoppingAlertDelivery
+    }
+
+    func performInteractiveManualRefresh() async {
+        let syncTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return UIBackgroundFetchResult.noData }
+            return await performSync(reason: .manualRefresh)
+        }
+
+        let budgetNanoseconds = interactiveManualRefreshBudgetNanoseconds
+        guard budgetNanoseconds > 0 else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                _ = await syncTask.value
+            }
+            group.addTask {
+                try? await _Concurrency.Task.sleep(nanoseconds: budgetNanoseconds)
+            }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     func performSync(reason: HouseholdSyncReason) async -> UIBackgroundFetchResult {
@@ -425,9 +449,15 @@ final class HouseholdSyncCoordinator: ObservableObject {
         guard batch.classification != .bootstrap else { return }
         for event in batch.events {
             switch event.kind {
-            case let .shoppingAdded(_, titles):
-                guard !titles.isEmpty else { continue }
-                await sharedShoppingAlertDelivery(titles, event.householdId, nil)
+            case let .shoppingAdded(ids, titles):
+                guard let payload = CloudKitSubscriptionManager.shared.filteredShoppingAdditionPayload(
+                    ids: ids,
+                    titles: titles
+                ) else {
+                    continue
+                }
+                guard !payload.titles.isEmpty else { continue }
+                await sharedShoppingAlertDelivery(payload.titles, event.householdId, nil)
             default:
                 continue
             }
@@ -448,10 +478,12 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
 
         switch batch.diagnostics.reason {
-        case .remotePush, .appBecameActive, .manualRefresh, .localMutationFollowUp, .householdJoined, .householdSwitched:
+        case .remotePush, .appBecameActive, .localMutationFollowUp, .householdJoined, .householdSwitched:
             remainingForegroundRepairPasses = foregroundRepairConfiguration.maxPassCount
             consecutiveForegroundRepairNoDataPasses = 0
             scheduleNextForegroundRepairPass()
+        case .manualRefresh:
+            cancelForegroundRepair()
         case .foregroundRepairWindow:
             remainingForegroundRepairPasses = max(remainingForegroundRepairPasses - 1, 0)
             switch fetchResult {

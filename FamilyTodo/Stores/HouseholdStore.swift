@@ -2772,8 +2772,13 @@ class HouseholdStore: ObservableObject {
     }
 
     private func remoteVisibleContentSnapshot(householdId: UUID) -> RemoteVisibleContentSnapshot {
+        func isConfirmedRemoteState(_ syncStatusRaw: String) -> Bool {
+            syncStatusRaw == "synced"
+        }
+
         let membersByID = Dictionary(
             uniqueKeysWithValues: fetchCachedMembers(householdId: householdId)
+                .filter { isConfirmedRemoteState($0.syncStatusRaw) }
                 .map {
                     (
                         $0.id,
@@ -2788,7 +2793,7 @@ class HouseholdStore: ObservableObject {
         )
         let shoppingItemsByID = Dictionary(
             uniqueKeysWithValues: fetchCachedShoppingItems(householdId: householdId)
-                .filter { $0.syncStatusRaw != "pendingDelete" }
+                .filter { isConfirmedRemoteState($0.syncStatusRaw) }
                 .map {
                     (
                         $0.id,
@@ -2805,10 +2810,7 @@ class HouseholdStore: ObservableObject {
         )
         let shoppingBundlesByID = Dictionary(
             uniqueKeysWithValues: fetchCachedShoppingBundles(householdId: householdId)
-                .filter {
-                    $0.syncStatusRaw != "pendingDelete" &&
-                        $0.syncStatusRaw != "awaitingDeleteEcho"
-                }
+                .filter { isConfirmedRemoteState($0.syncStatusRaw) }
                 .map {
                     (
                         $0.id,
@@ -2822,7 +2824,7 @@ class HouseholdStore: ObservableObject {
         let visibleCachedWorkItems = Array(
             WorkItemCacheStoreSupport.canonicalCachedWorkItemsByLogicalItemID(
                 fetchCachedWorkItems(householdId: householdId)
-                    .filter { $0.syncStatusRaw != "pendingDelete" }
+                    .filter { isConfirmedRemoteState($0.syncStatusRaw) }
             ).values
         )
         let workItemsByID = Dictionary(
@@ -2845,6 +2847,7 @@ class HouseholdStore: ObservableObject {
         )
         let backlogCategoriesByID = Dictionary(
             uniqueKeysWithValues: fetchCachedBacklogCategories(householdId: householdId)
+                .filter { isConfirmedRemoteState($0.syncStatusRaw) }
                 .map {
                     (
                         $0.id,

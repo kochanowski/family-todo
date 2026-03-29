@@ -276,6 +276,47 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .foregroundRepairWindow)
         XCTAssertEqual(coordinator.lastDiagnostics?.activeMemberCount, 2)
     }
+
+    func testManualRefreshDoesNotScheduleForegroundRepairWindow() async {
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .manualRefresh,
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: true,
+                intervalNanoseconds: 0,
+                maxPassCount: 4,
+                maxConsecutiveNoDataPasses: 2
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .manualRefresh)
+        await waitUntil {
+            engine.recordedReasons.count > 1
+        }
+
+        XCTAssertEqual(engine.recordedReasons, [.manualRefresh])
+        XCTAssertEqual(coordinator.lastDiagnostics?.reason, .manualRefresh)
+    }
 }
 
 @MainActor

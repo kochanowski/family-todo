@@ -26,6 +26,10 @@ struct InlineRemoteSyncFeedback: Identifiable, Equatable {
     let text: String
 }
 
+struct InlineRemoteSyncIndicator: Identifiable, Equatable {
+    let id = UUID()
+}
+
 /// Manages CloudKit subscriptions for real-time change notifications
 @MainActor
 final class CloudKitSubscriptionManager: ObservableObject {
@@ -39,6 +43,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     @Published var newItemsCount = 0
     @Published private(set) var activeTab: AppTab = .shopping
     @Published private(set) var shoppingInlineFeedback: InlineRemoteSyncFeedback?
+    @Published private(set) var shoppingInlineIndicator: InlineRemoteSyncIndicator?
     @Published private(set) var tasksInlineFeedback: InlineRemoteSyncFeedback?
 
     // MARK: - Private State
@@ -422,16 +427,28 @@ final class CloudKitSubscriptionManager: ObservableObject {
         for event in batch.events {
             switch event.kind {
             case let .shoppingAdded(ids, titles):
+                guard let additionPayload = filteredShoppingAdditionPayload(
+                    ids: ids,
+                    titles: titles
+                ) else {
+                    continue
+                }
                 publishRemoteSyncPresentation(
                     RemoteSyncPresentation(
                         domain: .shopping,
                         kind: .additions,
-                        changeCount: ids.count,
-                        titles: titles
+                        changeCount: additionPayload.ids.count,
+                        titles: additionPayload.titles
                     ),
                     applicationState: resolvedApplicationState
                 )
             case let .shoppingUpdated(itemIDs, bundleIDs):
+                guard !shouldSuppressShoppingMutationPresentation(
+                    itemIDs: itemIDs,
+                    bundleIDs: bundleIDs
+                ) else {
+                    continue
+                }
                 let changeCount = itemIDs.count + bundleIDs.count
                 guard changeCount > 0 else { continue }
                 publishRemoteSyncPresentation(
@@ -444,6 +461,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
                     applicationState: resolvedApplicationState
                 )
             case let .shoppingRemoved(itemIDs, bundleIDs):
+                guard !shouldSuppressShoppingMutationPresentation(
+                    itemIDs: itemIDs,
+                    bundleIDs: bundleIDs
+                ) else {
+                    continue
+                }
                 let changeCount = itemIDs.count + bundleIDs.count
                 guard changeCount > 0 else { continue }
                 publishRemoteSyncPresentation(
@@ -512,6 +535,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         shoppingInlineDismissTask?.cancel()
         shoppingInlineDismissTask = nil
         shoppingInlineFeedback = nil
+        shoppingInlineIndicator = nil
         tasksInlineDismissTask?.cancel()
         tasksInlineDismissTask = nil
         tasksInlineFeedback = nil
@@ -522,10 +546,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         case .additions:
             guard presentation.changeCount > 0 else { return }
             if activeTab == .shopping {
-                publishInlineFeedback(
-                    text: shoppingInlineText(for: presentation),
-                    domain: .shopping
-                )
+                publishShoppingInlineIndicator()
                 dismissBanner()
             } else {
                 let shouldAnimateBanner = !showNewItemsBanner
@@ -539,10 +560,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
             }
         case .updates:
             guard activeTab == .shopping else { return }
-            publishInlineFeedback(
-                text: shoppingInlineText(for: presentation),
-                domain: .shopping
-            )
+            publishShoppingInlineIndicator()
         }
     }
 
@@ -576,6 +594,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
+    private func publishShoppingInlineIndicator() {
+        let indicator = InlineRemoteSyncIndicator()
+        shoppingInlineDismissTask?.cancel()
+        withAnimation(WowAnimation.spring) {
+            shoppingInlineIndicator = indicator
+            shoppingInlineFeedback = nil
+        }
+        shoppingInlineDismissTask = scheduleInlineDismiss(
+            for: .shopping,
+            feedbackId: indicator.id
+        )
+    }
+
     private func scheduleInlineDismiss(
         for domain: RemoteSyncPresentationDomain,
         feedbackId: UUID
@@ -587,8 +618,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
             switch domain {
             case .shopping:
-                guard shoppingInlineFeedback?.id == feedbackId else { return }
+                guard shoppingInlineIndicator?.id == feedbackId else { return }
                 withAnimation(WowAnimation.easeOut) {
+                    self.shoppingInlineIndicator = nil
                     self.shoppingInlineFeedback = nil
                 }
                 shoppingInlineDismissTask = nil
@@ -622,6 +654,25 @@ final class CloudKitSubscriptionManager: ObservableObject {
         case .updates:
             "Tasks updated"
         }
+    }
+
+    func filteredShoppingAdditionPayload(
+        ids: Set<UUID>,
+        titles: [String]
+    ) -> (ids: Set<UUID>, titles: [String])? {
+        guard !ids.isEmpty else { return nil }
+        let nonLocalIDs = ids.filter { !isLikelySelfNoise(recordName: $0.uuidString) }
+        guard !nonLocalIDs.isEmpty else { return nil }
+        return (Set(nonLocalIDs), titles)
+    }
+
+    func shouldSuppressShoppingMutationPresentation(
+        itemIDs: Set<UUID>,
+        bundleIDs: Set<UUID>
+    ) -> Bool {
+        let recordNames = itemIDs.map(\.uuidString) + bundleIDs.map(\.uuidString)
+        guard !recordNames.isEmpty else { return true }
+        return recordNames.allSatisfy { isLikelySelfNoise(recordName: $0) }
     }
 
     private func reportSubscriptionFailure(_ error: Error, context: String) {

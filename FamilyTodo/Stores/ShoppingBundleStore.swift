@@ -35,6 +35,10 @@ final class ShoppingBundleStore: ObservableObject {
     private var shouldReloadAfterCurrentLoad = false
     private var hasHydratedVisibleSnapshot = false
 
+    private enum BundleSyncPolicy {
+        static let awaitingCloudEchoGraceDuration: TimeInterval = 45
+    }
+
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
     }
@@ -194,6 +198,7 @@ final class ShoppingBundleStore: ObservableObject {
 
     func syncToCache(_ bundles: [ShoppingBundle], cloudBundleIDs: Set<UUID>) {
         guard let context = modelContext, let householdId else { return }
+        let syncTimestamp = Date()
 
         let descriptor = FetchDescriptor<CachedShoppingBundle>(
             predicate: #Predicate { $0.householdId == householdId }
@@ -215,12 +220,14 @@ final class ShoppingBundleStore: ObservableObject {
                     continue
                 }
                 if existing.syncStatusRaw == BundleSyncStatus.awaitingCloudEcho,
+                   !isExpiredAwaitingCloudEcho(existing, relativeTo: syncTimestamp),
                    !cloudBundleIDs.contains(bundle.id)
                 {
                     continue
                 }
                 existing.update(from: bundle)
-                existing.lastSyncedAt = Date()
+                existing.syncStatusRaw = BundleSyncStatus.synced
+                existing.lastSyncedAt = syncTimestamp
             } else {
                 context.insert(CachedShoppingBundle(from: bundle))
             }
@@ -234,7 +241,27 @@ final class ShoppingBundleStore: ObservableObject {
             context.delete(cached)
         }
 
+        for cached in cachedBundles where
+            isExpiredAwaitingCloudEcho(cached, relativeTo: syncTimestamp) &&
+            !cloudBundleIDs.contains(cached.id)
+        {
+            context.delete(cached)
+        }
+
         saveContextOrSetError(context, operation: "sync shopping bundle cache from cloud")
+    }
+
+    private func isExpiredAwaitingCloudEcho(
+        _ cached: CachedShoppingBundle,
+        relativeTo now: Date
+    ) -> Bool {
+        guard cached.syncStatusRaw == BundleSyncStatus.awaitingCloudEcho,
+              let lastSyncedAt = cached.lastSyncedAt
+        else {
+            return false
+        }
+
+        return now.timeIntervalSince(lastSyncedAt) >= BundleSyncPolicy.awaitingCloudEchoGraceDuration
     }
 
     private func replayPendingMutationsInBackground() {

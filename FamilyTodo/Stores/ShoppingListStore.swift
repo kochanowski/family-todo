@@ -29,6 +29,10 @@ final class ShoppingListStore: ObservableObject {
         var pendingDeleteIDs: Set<UUID>
     }
 
+    private enum ShoppingSyncPolicy {
+        static let awaitingCloudEchoGraceDuration: TimeInterval = 45
+    }
+
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
     }
@@ -239,6 +243,8 @@ final class ShoppingListStore: ObservableObject {
 
     func syncToCache(_ items: [ShoppingItem]) {
         guard let context = modelContext, let householdId else { return }
+        let syncTimestamp = Date()
+        let cloudItemIDs = Set(items.map(\.id))
 
         let cacheDescriptor = FetchDescriptor<CachedShoppingItem>(
             predicate: #Predicate { $0.householdId == householdId }
@@ -252,15 +258,25 @@ final class ShoppingListStore: ObservableObject {
                     continue
                 }
                 if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "awaitingCloudEcho",
+                   !isExpiredAwaitingCloudEcho(existing, relativeTo: syncTimestamp),
                    !cloudShoppingItemMatchesLocalMutationEcho(item, localItem: existing.toShoppingItem())
                 {
                     continue
                 }
                 existing.update(from: item)
+                existing.syncStatusRaw = "synced"
+                existing.lastSyncedAt = syncTimestamp
             } else {
                 let cached = CachedShoppingItem(from: item)
                 context.insert(cached)
             }
+        }
+
+        for cached in cachedItems where
+            isExpiredAwaitingCloudEcho(cached, relativeTo: syncTimestamp) &&
+            !cloudItemIDs.contains(cached.id)
+        {
+            context.delete(cached)
         }
 
         saveContextOrSetError(context, operation: "sync shopping cache from cloud")
@@ -882,11 +898,16 @@ final class ShoppingListStore: ObservableObject {
     func pendingSyncSnapshot(from cachedItems: [CachedShoppingItem]) -> PendingSyncSnapshot {
         var pendingUploadByID: [UUID: ShoppingItem] = [:]
         var pendingDeleteIDs = Set<UUID>()
+        let now = Date()
 
         for cached in cachedItems {
             switch cached.syncStatusRaw {
-            case "pendingUpload", "awaitingCloudEcho":
+            case "pendingUpload":
                 pendingUploadByID[cached.id] = cached.toShoppingItem()
+            case "awaitingCloudEcho":
+                if !isExpiredAwaitingCloudEcho(cached, relativeTo: now) {
+                    pendingUploadByID[cached.id] = cached.toShoppingItem()
+                }
             case "pendingDelete":
                 pendingDeleteIDs.insert(cached.id)
             default:
@@ -943,6 +964,19 @@ final class ShoppingListStore: ObservableObject {
             cloudItem.boughtAt == localItem.boughtAt &&
             cloudItem.restockCount == localItem.restockCount &&
             cloudItem.sortOrder == localItem.sortOrder
+    }
+
+    private func isExpiredAwaitingCloudEcho(
+        _ cached: CachedShoppingItem,
+        relativeTo now: Date
+    ) -> Bool {
+        guard cached.syncStatusRaw == "awaitingCloudEcho",
+              let lastSyncedAt = cached.lastSyncedAt
+        else {
+            return false
+        }
+
+        return now.timeIntervalSince(lastSyncedAt) >= ShoppingSyncPolicy.awaitingCloudEchoGraceDuration
     }
 
     private func upsertCachedItem(

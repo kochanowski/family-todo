@@ -64,7 +64,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testShoppingAdditionOnShoppingTabPublishesInlineFeedbackWithoutBanner() {
+    func testShoppingAdditionOnShoppingTabPublishesNoTextInlineFeedbackAndNoBanner() {
         let manager = makeManager()
         defer { manager.resetTransientPresentationState() }
         manager.updateActiveTab(.shopping)
@@ -79,7 +79,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
             applicationState: .active
         )
 
-        XCTAssertEqual(manager.shoppingInlineFeedback?.text, "3 items added")
+        XCTAssertNil(manager.shoppingInlineFeedback)
         XCTAssertFalse(manager.showNewItemsBanner)
         XCTAssertEqual(manager.newItemsCount, 0)
     }
@@ -308,5 +308,46 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertEqual(manager.newItemsCount, 0)
         XCTAssertNil(manager.shoppingInlineFeedback)
         XCTAssertNil(manager.tasksInlineFeedback)
+    }
+
+    @MainActor
+    func testConsumeSyncBatchSuppressesLikelySelfNoiseShoppingAdditionPresentation() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.tasks)
+
+        let itemID = UUID()
+        manager.registerLocalMutation(recordName: itemID.uuidString)
+
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: UUID(),
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(),
+                    direction: .ownerToParticipant,
+                    kind: .shoppingAdded(ids: Set([itemID]), titles: ["Milk"])
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: UUID(),
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(),
+                syncStartedAt: Date(),
+                syncFinishedAt: Date(),
+                changedDomains: Set([.shopping]),
+                changedIDsByDomain: [.shopping: Set([itemID])],
+                activeMemberCount: 2
+            )
+        )
+
+        manager.consumeSyncBatch(batch, applicationState: .active)
+
+        XCTAssertFalse(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 0)
+        XCTAssertNil(manager.shoppingInlineFeedback)
     }
 }

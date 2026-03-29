@@ -596,6 +596,76 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
         XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
     }
+
+    func testRunRemoteSyncPassDoesNotTreatLocalPendingShoppingInsertAsRemoteAddition() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
+
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let pendingLocalItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        let hydrationPassCount = Counter()
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+                guard pass == 2 else { return }
+
+                let cached = CachedShoppingItem(from: pendingLocalItem)
+                cached.syncStatusRaw = "pendingUpload"
+                context.insert(cached)
+                try context.save()
+            }
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        _ = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .appBecameActive
+        )
+
+        let secondResult = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .appBecameActive
+        )
+
+        XCTAssertEqual(secondResult.fetchResult, .noData)
+        XCTAssertFalse(secondResult.events.contains { event in
+            if case .shoppingAdded = event.kind {
+                return true
+            }
+            return false
+        })
+    }
 }
 
 final class SharedShoppingNotificationAccumulatorTests: XCTestCase {
