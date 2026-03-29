@@ -585,7 +585,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             userId: ownerUserId,
             preferredHouseholdId: household.id,
             context: RemoteCloudChangeContext(
-                databaseScope: .shared,
+                databaseScope: .private,
                 notificationType: .database,
                 receivedAt: Date()
             )
