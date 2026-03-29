@@ -512,6 +512,28 @@ final class BacklogStore: ObservableObject {
             context: context
         )
 
+        // Fix #5 — awaitingCloudEcho expiry sweep: reset stale echo-waiters to pendingUpload
+        // so the next flush retries them. Mirrors the ShoppingSyncPolicy.awaitingCloudEchoGraceDuration.
+        let echoGraceDuration: TimeInterval = 45
+        let now = Date()
+        var didExpireAnyEcho = false
+        for cached in cachedItems
+            where cached.syncStatusRaw == BacklogSyncStatus.awaitingCloudEcho
+        {
+            guard let lastSyncedAt = cached.lastSyncedAt else { continue }
+            if now.timeIntervalSince(lastSyncedAt) >= echoGraceDuration {
+                cached.syncStatusRaw = BacklogSyncStatus.pendingUpload
+                cached.lastSyncedAt = nil
+                didExpireAnyEcho = true
+            }
+        }
+        if didExpireAnyEcho {
+            saveContextOrSetError(
+                context,
+                operation: "reset expired awaitingCloudEcho backlog items to pendingUpload"
+            )
+        }
+
         let pendingCategoryUploads = cachedCategories.filter {
             $0.syncStatusRaw == BacklogSyncStatus.pendingUpload
         }
@@ -661,17 +683,40 @@ final class BacklogStore: ObservableObject {
 
         if !isCloudSyncEnabled { return .deleted }
 
+        // Collect child work items (BacklogItems) that belong to this category.
+        // categoryDeletionBlockReason normally prevents reaching here when ideas or linked
+        // tasks exist, but they could slip through via race conditions or edge cases, so we
+        // cascade-delete any remaining items before removing the category record itself.
+        let childItems: [BacklogItem]
+        if let context = modelContext {
+            let cachedWorkItems = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+                householdId: category.householdId,
+                context: context
+            )
+            childItems = cachedWorkItems
+                .filter { $0.categoryId == category.id }
+                .map { $0.toWorkItem() }
+                .compactMap { $0.asBacklogItem() }
+        } else {
+            childItems = []
+        }
+
+        // Tombstone child items so flushPendingSync will delete them from CloudKit.
+        // This ensures remote peers also lose the orphaned ideas.
+        for childItem in childItems {
+            markCachedItemPendingDelete(childItem, shouldSave: false)
+        }
+        if !childItems.isEmpty, let context = modelContext {
+            saveContextOrSetError(context, operation: "tombstone category child items before category delete")
+            replayPendingMutationsInBackground()
+        }
+
         do {
             try await cloudKit.deleteBacklogCategory(
                 id: category.id,
                 householdId: category.householdId,
                 scope: cloudScope
             )
-            // CloudKit should cascade delete items optionally, or we delete them explicitly?
-            // Assuming we handle items delete or specific logic elsewhere, but for now just category delete.
-            // Ideally we should delete items first or rely on CloudKit references if configured.
-            // For safety, let's assume we need to delete items locally and hope valid refs handle it or we iterate.
-            // But deleting the category is the main action here.
         } catch {
             self.error = error
             await loadData() // Reload on error

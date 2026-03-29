@@ -252,7 +252,22 @@ final class ShoppingListStore: ObservableObject {
         let cachedItems = (try? context.fetch(cacheDescriptor)) ?? []
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
 
+        // Build the set of locally-tombstoned IDs so we never resurrect
+        // items that the local device has already marked for deletion.
+        let pendingDeleteIDs = Set(
+            cachedItems
+                .filter { $0.syncStatusRaw == "pendingDelete" }
+                .map(\.id)
+        )
+
         for item in items {
+            // Fix #1 — tombstone guard: skip cloud item whose local copy is pending delete.
+            // Without this, a cloud echo from another member can resurrect an item the local
+            // user already deleted before the delete reaches CloudKit.
+            if pendingDeleteIDs.contains(item.id) {
+                continue
+            }
+
             if let existing = cachedByID[item.id] {
                 if existing.syncStatusRaw == "pendingDelete" {
                     continue
@@ -268,15 +283,29 @@ final class ShoppingListStore: ObservableObject {
                 existing.lastSyncedAt = syncTimestamp
             } else {
                 let cached = CachedShoppingItem(from: item)
+                cached.syncStatusRaw = "synced"
+                cached.lastSyncedAt = syncTimestamp
                 context.insert(cached)
             }
         }
 
-        for cached in cachedItems where
-            isExpiredAwaitingCloudEcho(cached, relativeTo: syncTimestamp) &&
-            !cloudItemIDs.contains(cached.id)
-        {
-            context.delete(cached)
+        // Fix #2 — orphan cleanup: remove cache entries no longer present in the cloud
+        // snapshot, scoped to each status bucket:
+        // • synced → deleted remotely by another member; remove from local cache.
+        // • awaitingCloudEcho (expired) → grace period elapsed, still not in cloud; remove.
+        // • pendingUpload / non-expired awaitingCloudEcho → in-flight mutation; keep.
+        // • pendingDelete → flushPendingSync will handle the remote delete; keep.
+        for cached in cachedItems where !cloudItemIDs.contains(cached.id) {
+            switch cached.syncStatusRaw {
+            case "synced":
+                context.delete(cached)
+            case "awaitingCloudEcho":
+                if isExpiredAwaitingCloudEcho(cached, relativeTo: syncTimestamp) {
+                    context.delete(cached)
+                }
+            default:
+                break
+            }
         }
 
         saveContextOrSetError(context, operation: "sync shopping cache from cloud")
@@ -493,34 +522,18 @@ final class ShoppingListStore: ObservableObject {
             }
         }
 
-        // Save to cache with pending status
+        // Save to cache with pending status, then let replayPendingMutationsInBackground
+        // handle the CloudKit write. This matches the createItem pattern and avoids a
+        // dual-write race where both updateItem and flushPendingSync could attempt to
+        // save the same record to CloudKit concurrently.
         upsertCachedItem(
             updatedItem,
             syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
             lastSyncedAt: isCloudSyncEnabled ? nil : Date()
         )
 
-        if !isCloudSyncEnabled {
-            return
-        }
-
-        do {
-            _ = try await cloudKit.saveShoppingItem(updatedItem, scope: cloudScope)
-
-            // Mark as synced
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedShoppingItem>(
-                    predicate: #Predicate { $0.id == item.id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "awaitingCloudEcho"
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "mark updated shopping item awaiting cloud echo")
-                }
-            }
-        } catch {
-            self.error = error
-            // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
+        if isCloudSyncEnabled {
+            replayPendingMutationsInBackground()
         }
     }
 
