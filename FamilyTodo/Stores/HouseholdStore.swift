@@ -2777,7 +2777,7 @@ class HouseholdStore: ObservableObject {
         }
 
         let membersByID = Dictionary(
-            uniqueKeysWithValues: fetchCachedMembers(householdId: householdId)
+            uniqueKeysWithValues: fetchCachedMemberRecords(householdId: householdId)
                 .filter { isConfirmedRemoteState($0.syncStatusRaw) }
                 .map {
                     (
@@ -3150,7 +3150,7 @@ class HouseholdStore: ObservableObject {
         return cachedHouseholds.first
     }
 
-    private func fetchCachedMembers(householdId: UUID) -> [Member] {
+    private func fetchCachedMemberRecords(householdId: UUID) -> [CachedMember] {
         guard let context = modelContext else { return [] }
 
         let descriptor = FetchDescriptor<CachedMember>(
@@ -3159,11 +3159,15 @@ class HouseholdStore: ObservableObject {
         )
 
         do {
-            return try context.fetch(descriptor).map { $0.toMember() }
+            return try context.fetch(descriptor)
         } catch {
-            print("Fetch cached members error: \(error)")
+            print("Fetch cached member records error: \(error)")
             return []
         }
+    }
+
+    private func fetchCachedMembers(householdId: UUID) -> [Member] {
+        fetchCachedMemberRecords(householdId: householdId).map { $0.toMember() }
     }
 
     private func isValidCachedMembershipForRecoveredHousehold(
