@@ -1,11 +1,166 @@
 import CloudKit
 import Foundation
+import UIKit
+
+@MainActor
+protocol HouseholdRemoteSyncDataSource: AnyObject {
+    var remoteSyncMode: SyncMode { get }
+
+    func recordRemoteSyncError(_ error: Error)
+    func emptyHouseholdSyncPassResult(
+        reason: HouseholdSyncReason,
+        direction: HouseholdSyncDirection,
+        triggerReceivedAt: Date,
+        syncStartedAt: Date,
+        syncFinishedAt: Date,
+        fetchResult: UIBackgroundFetchResult
+    ) -> HouseholdSyncPassResult
+    func makeRemoteSyncBaseline(
+        userId: String,
+        preferredHouseholdId: UUID?,
+        context: RemoteCloudChangeContext
+    ) -> RemoteSyncBaseline
+    func refreshCurrentHouseholdForRemoteCloudChange(
+        userId: String,
+        preferredHouseholdId: UUID?
+    ) async throws -> HouseholdStore.JoinedHouseholdHydrationSnapshot?
+    func processRemoteVisibleContentChangeIfNeeded(
+        beforeSnapshot: HouseholdStore.RemoteCloudRefreshSnapshot,
+        beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?,
+        userId: String,
+        context: RemoteCloudChangeContext
+    ) async -> RemoteVisibleContentResolution?
+    func buildRemoteSyncPassResult(
+        userId: String,
+        preferredHouseholdId: UUID?,
+        context: RemoteSyncPassBuildContext
+    ) -> HouseholdSyncPassResult
+}
+
+@MainActor
+struct HouseholdRemoteSyncExecutor {
+    private let dataSource: HouseholdRemoteSyncDataSource
+
+    init(dataSource: HouseholdRemoteSyncDataSource) {
+        self.dataSource = dataSource
+    }
+
+    func execute(
+        userId: String?,
+        preferredHouseholdId: UUID?,
+        reason: HouseholdSyncReason,
+        context: RemoteCloudChangeContext = .unknown
+    ) async -> HouseholdSyncPassResult {
+        let refreshStartedAt = Date()
+        let triggerReceivedAt = remoteSyncTriggerReceivedAt(
+            from: context,
+            refreshStartedAt: refreshStartedAt
+        )
+
+        guard dataSource.remoteSyncMode == .cloud else {
+            print("[RemoteSync] Ignoring remote push because sync mode is local-only.")
+            return dataSource.emptyHouseholdSyncPassResult(
+                reason: reason,
+                direction: .unknown,
+                triggerReceivedAt: triggerReceivedAt,
+                syncStartedAt: refreshStartedAt,
+                syncFinishedAt: Date(),
+                fetchResult: .noData
+            )
+        }
+
+        guard let userId else {
+            print("[RemoteSync] Ignoring remote push because there is no active cloud user.")
+            return dataSource.emptyHouseholdSyncPassResult(
+                reason: reason,
+                direction: .unknown,
+                triggerReceivedAt: triggerReceivedAt,
+                syncStartedAt: refreshStartedAt,
+                syncFinishedAt: Date(),
+                fetchResult: .noData
+            )
+        }
+
+        let syncBaseline = dataSource.makeRemoteSyncBaseline(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId,
+            context: context
+        )
+        print(
+            "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(syncBaseline.beforeSnapshot))"
+        )
+
+        let refreshedHydrationSnapshot: HouseholdStore.JoinedHouseholdHydrationSnapshot?
+        do {
+            refreshedHydrationSnapshot = try await dataSource.refreshCurrentHouseholdForRemoteCloudChange(
+                userId: userId,
+                preferredHouseholdId: preferredHouseholdId
+            ) ?? syncBaseline.beforeSnapshot.hydrationSnapshot
+        } catch {
+            dataSource.recordRemoteSyncError(error)
+            print("[RemoteSync] Hydration pass failed: \(error)")
+            return dataSource.emptyHouseholdSyncPassResult(
+                reason: reason,
+                direction: syncBaseline.direction,
+                triggerReceivedAt: triggerReceivedAt,
+                syncStartedAt: refreshStartedAt,
+                syncFinishedAt: Date(),
+                fetchResult: .failed
+            )
+        }
+
+        let visibleContentResolution = await dataSource.processRemoteVisibleContentChangeIfNeeded(
+            beforeSnapshot: syncBaseline.beforeSnapshot,
+            beforeVisibleContentSnapshot: syncBaseline.beforeVisibleContentSnapshot,
+            userId: userId,
+            context: context
+        )
+
+        let buildContext = RemoteSyncPassBuildContext(
+            reason: reason,
+            cloudContext: context,
+            triggerReceivedAt: triggerReceivedAt,
+            refreshStartedAt: refreshStartedAt,
+            baseline: syncBaseline,
+            refreshedHydrationSnapshot: refreshedHydrationSnapshot,
+            visibleContentResolution: visibleContentResolution
+        )
+
+        return dataSource.buildRemoteSyncPassResult(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId,
+            context: buildContext
+        )
+    }
+
+    private func remoteSyncTriggerReceivedAt(
+        from context: RemoteCloudChangeContext,
+        refreshStartedAt: Date
+    ) -> Date {
+        context.receivedAt == .distantPast ? refreshStartedAt : context.receivedAt
+    }
+
+    private func describeRemoteCloudRefreshSnapshot(
+        _ snapshot: HouseholdStore.RemoteCloudRefreshSnapshot
+    ) -> String {
+        let name = snapshot.householdName ?? "nil"
+        let icon = snapshot.householdIconSymbol ?? "nil"
+        let householdId = snapshot.observedHouseholdId?.uuidString ?? "nil"
+        let hydrationSummary = if let hydrationSnapshot = snapshot.hydrationSnapshot {
+            "members=\(hydrationSnapshot.activeMemberCount),tasks=\(hydrationSnapshot.taskCount),ideas=\(hydrationSnapshot.ideaCount),shopping=\(hydrationSnapshot.shoppingItemCount),bundles=\(hydrationSnapshot.bundleCount)"
+        } else {
+            "hydration=nil"
+        }
+        return "householdId=\(householdId) name=\(name) icon=\(icon) \(hydrationSummary)"
+    }
+}
 
 @MainActor
 final class HouseholdStoreSyncEngine: HouseholdSyncEngine {
     private unowned let store: HouseholdStore
     private let userIdProvider: @MainActor () -> String?
     private let preferredHouseholdIdProvider: @MainActor () -> UUID?
+    private lazy var executor = HouseholdRemoteSyncExecutor(dataSource: store)
 
     init(
         store: HouseholdStore,
@@ -25,7 +180,7 @@ final class HouseholdStoreSyncEngine: HouseholdSyncEngine {
             .unknown
         }
 
-        return await store.runRemoteSyncPass(
+        return await executor.execute(
             userId: userIdProvider(),
             preferredHouseholdId: preferredHouseholdIdProvider(),
             reason: reason,

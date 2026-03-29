@@ -410,20 +410,20 @@ struct RemoteIdeaVisibleContentDiff: Equatable {
     }
 }
 
-private struct RemoteVisibleContentResolution {
+struct RemoteVisibleContentResolution {
     let snapshot: RemoteVisibleContentSnapshot
     let diff: RemoteVisibleContentDiff
     let followUpPassCount: Int
     let cacheUpdatedAt: Date
 }
 
-private struct RemoteSyncBaseline {
+struct RemoteSyncBaseline {
     let beforeSnapshot: HouseholdStore.RemoteCloudRefreshSnapshot
     let beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?
     let direction: HouseholdSyncDirection
 }
 
-private struct RemoteSyncPassBuildContext {
+struct RemoteSyncPassBuildContext {
     let reason: HouseholdSyncReason
     let cloudContext: RemoteCloudChangeContext
     let triggerReceivedAt: Date
@@ -717,7 +717,7 @@ class HouseholdStore: ObservableObject {
         var hasPublishedVisibleContentNotifications = false
     }
 
-    fileprivate struct JoinedHouseholdHydrationSnapshot: Equatable {
+    struct JoinedHouseholdHydrationSnapshot: Equatable {
         let activeMemberCount: Int
         let currentUserHasCachedMembership: Bool
         let remoteMembershipConfirmed: Bool
@@ -736,7 +736,7 @@ class HouseholdStore: ObservableObject {
         }
     }
 
-    fileprivate struct RemoteCloudRefreshSnapshot: Equatable {
+    struct RemoteCloudRefreshSnapshot: Equatable {
         let currentHouseholdId: UUID?
         let observedHouseholdId: UUID?
         let householdName: String?
@@ -3346,85 +3346,11 @@ class HouseholdStore: ObservableObject {
         reason: HouseholdSyncReason,
         context: RemoteCloudChangeContext = .unknown
     ) async -> HouseholdSyncPassResult {
-        let refreshStartedAt = Date()
-        let triggerReceivedAt = remoteSyncTriggerReceivedAt(
-            from: context,
-            refreshStartedAt: refreshStartedAt
-        )
-
-        guard syncMode == .cloud else {
-            print("[RemoteSync] Ignoring remote push because sync mode is local-only.")
-            return emptyHouseholdSyncPassResult(
-                reason: reason,
-                direction: .unknown,
-                triggerReceivedAt: triggerReceivedAt,
-                syncStartedAt: refreshStartedAt,
-                syncFinishedAt: Date(),
-                fetchResult: .noData
-            )
-        }
-
-        guard let userId else {
-            print("[RemoteSync] Ignoring remote push because there is no active cloud user.")
-            return emptyHouseholdSyncPassResult(
-                reason: reason,
-                direction: .unknown,
-                triggerReceivedAt: triggerReceivedAt,
-                syncStartedAt: refreshStartedAt,
-                syncFinishedAt: Date(),
-                fetchResult: .noData
-            )
-        }
-
-        let syncBaseline = remoteSyncBaseline(
+        await HouseholdRemoteSyncExecutor(dataSource: self).execute(
             userId: userId,
             preferredHouseholdId: preferredHouseholdId,
-            context: context
-        )
-        print(
-            "[RemoteSync] Starting background household refresh. before=\(describeRemoteCloudRefreshSnapshot(syncBaseline.beforeSnapshot))"
-        )
-
-        let refreshedHydrationSnapshot: JoinedHouseholdHydrationSnapshot?
-        do {
-            refreshedHydrationSnapshot = try await refreshCurrentHouseholdForRemoteCloudChange(
-                userId: userId,
-                preferredHouseholdId: preferredHouseholdId
-            ) ?? syncBaseline.beforeSnapshot.hydrationSnapshot
-        } catch {
-            self.error = error
-            print("[RemoteSync] Hydration pass failed: \(error)")
-            return emptyHouseholdSyncPassResult(
-                reason: reason,
-                direction: syncBaseline.direction,
-                triggerReceivedAt: triggerReceivedAt,
-                syncStartedAt: refreshStartedAt,
-                syncFinishedAt: Date(),
-                fetchResult: .failed
-            )
-        }
-
-        let visibleContentResolution = await processRemoteVisibleContentChangeIfNeeded(
-            beforeSnapshot: syncBaseline.beforeSnapshot,
-            beforeVisibleContentSnapshot: syncBaseline.beforeVisibleContentSnapshot,
-            userId: userId,
-            context: context
-        )
-
-        let buildContext = RemoteSyncPassBuildContext(
             reason: reason,
-            cloudContext: context,
-            triggerReceivedAt: triggerReceivedAt,
-            refreshStartedAt: refreshStartedAt,
-            baseline: syncBaseline,
-            refreshedHydrationSnapshot: refreshedHydrationSnapshot,
-            visibleContentResolution: visibleContentResolution
-        )
-
-        return buildRemoteSyncPassResult(
-            userId: userId,
-            preferredHouseholdId: preferredHouseholdId,
-            context: buildContext
+            context: context
         )
     }
 
@@ -3455,7 +3381,7 @@ class HouseholdStore: ObservableObject {
         return result.fetchResult
     }
 
-    private func refreshCurrentHouseholdForRemoteCloudChange(
+    func refreshCurrentHouseholdForRemoteCloudChange(
         userId: String,
         preferredHouseholdId: UUID?
     ) async throws -> JoinedHouseholdHydrationSnapshot? {
@@ -3484,7 +3410,7 @@ class HouseholdStore: ObservableObject {
         return hydrationSnapshot
     }
 
-    private func processRemoteVisibleContentChangeIfNeeded(
+    func processRemoteVisibleContentChangeIfNeeded(
         beforeSnapshot: RemoteCloudRefreshSnapshot,
         beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?,
         userId: String,
@@ -3571,7 +3497,7 @@ class HouseholdStore: ObservableObject {
         )
     }
 
-    private func emptyHouseholdSyncPassResult(
+    func emptyHouseholdSyncPassResult(
         reason: HouseholdSyncReason,
         direction: HouseholdSyncDirection,
         triggerReceivedAt: Date,
@@ -3598,14 +3524,7 @@ class HouseholdStore: ObservableObject {
         )
     }
 
-    private func remoteSyncTriggerReceivedAt(
-        from context: RemoteCloudChangeContext,
-        refreshStartedAt: Date
-    ) -> Date {
-        context.receivedAt == .distantPast ? refreshStartedAt : context.receivedAt
-    }
-
-    private func remoteSyncBaseline(
+    func makeRemoteSyncBaseline(
         userId: String,
         preferredHouseholdId: UUID?,
         context: RemoteCloudChangeContext
@@ -3625,7 +3544,7 @@ class HouseholdStore: ObservableObject {
         )
     }
 
-    private func buildRemoteSyncPassResult(
+    func buildRemoteSyncPassResult(
         userId: String,
         preferredHouseholdId: UUID?,
         context: RemoteSyncPassBuildContext
@@ -4763,6 +4682,17 @@ class HouseholdStore: ObservableObject {
             print("Fetch cached shopping bundles error: \(error)")
             return []
         }
+    }
+}
+
+@MainActor
+extension HouseholdStore: HouseholdRemoteSyncDataSource {
+    var remoteSyncMode: SyncMode {
+        syncMode
+    }
+
+    func recordRemoteSyncError(_ error: Error) {
+        self.error = error
     }
 }
 
