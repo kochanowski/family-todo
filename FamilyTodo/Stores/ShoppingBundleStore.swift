@@ -59,6 +59,12 @@ final class ShoppingBundleStore: ObservableObject {
         return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
+    /// Scope used for all CloudKit **read** (fetch) operations.
+    /// See ShoppingListStore.readScope for full rationale.
+    private var readScope: CloudKitManager.HouseholdDatabaseScope {
+        .participantShared
+    }
+
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
@@ -151,7 +157,7 @@ final class ShoppingBundleStore: ObservableObject {
             await cloudKit.ensureReady()
             let fetchedBundles = try await cloudKit.fetchShoppingBundles(
                 householdId: householdId,
-                scope: cloudScope
+                scope: readScope
             )
             let latestCachedBundles = fetchCachedBundles(updateVisibleState: false)
             let latestPendingSnapshot = pendingSyncSnapshot(from: latestCachedBundles)

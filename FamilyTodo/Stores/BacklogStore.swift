@@ -95,6 +95,12 @@ final class BacklogStore: ObservableObject {
         return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
+    /// Scope used for all CloudKit **read** (fetch) operations.
+    /// See ShoppingListStore.readScope for full rationale.
+    private var readScope: CloudKitManager.HouseholdDatabaseScope {
+        .participantShared
+    }
+
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
@@ -264,13 +270,13 @@ final class BacklogStore: ObservableObject {
             await cloudKit.ensureReady()
             async let fetchedCategories = cloudKit.fetchBacklogCategories(
                 householdId: householdId,
-                scope: cloudScope
+                scope: readScope
             )
 
             let categoriesResult = try await fetchedCategories
             let cloudWorkItems = try await cloudKit.fetchUnifiedWorkItems(
                 householdId: householdId,
-                scope: cloudScope
+                scope: readScope
             )
 
             syncCategoriesToCache(categoriesResult)
