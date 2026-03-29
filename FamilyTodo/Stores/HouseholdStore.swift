@@ -4128,11 +4128,18 @@ class HouseholdStore: ObservableObject {
         userId: String,
         context: RemoteCloudChangeContext
     ) -> [UInt64] {
-        guard context.databaseScope == .shared else { return [] }
         if household.ownerId == userId {
+            // The owner's shared zone resides in their private database.
+            // When a participant writes to the CKShare, the owner receives a notification
+            // scoped to their private database. We must process private notifications as
+            // shared sync triggers for the owner so they see participant updates.
+            guard context.databaseScope == .private else { return [] }
             return joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds
+        } else {
+            // A participant's view of the shared zone resides in their shared database.
+            guard context.databaseScope == .shared else { return [] }
+            return joinHydrationConfiguration.participantSharedFollowUpRetryDelaysNanoseconds
         }
-        return joinHydrationConfiguration.participantSharedFollowUpRetryDelaysNanoseconds
     }
 
     private func remoteSyncDirection(
@@ -4140,11 +4147,17 @@ class HouseholdStore: ObservableObject {
         userId: String,
         context: RemoteCloudChangeContext
     ) -> HouseholdSyncDirection {
-        guard context.databaseScope == .shared, let household else {
-            return .unknown
-        }
+        guard let household else { return .unknown }
 
-        return household.ownerId == userId ? .participantToOwner : .ownerToParticipant
+        if household.ownerId == userId {
+            // The owner's shared zone resides in their private database.
+            guard context.databaseScope == .private else { return .unknown }
+            return .participantToOwner
+        } else {
+            // The participant's shared zone resides in their shared database.
+            guard context.databaseScope == .shared else { return .unknown }
+            return .ownerToParticipant
+        }
     }
 
     private func logRemoteSyncTelemetry(
