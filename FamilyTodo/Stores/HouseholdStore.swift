@@ -2785,7 +2785,7 @@ class HouseholdStore: ObservableObject {
                         RemoteMemberState(
                             userId: $0.userId,
                             displayName: $0.displayName,
-                            role: $0.role,
+                            role: Member.MemberRole(rawValue: $0.roleRaw) ?? .member,
                             isActive: $0.isActive
                         )
                     )
