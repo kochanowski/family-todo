@@ -369,25 +369,14 @@ final class HouseholdSyncCoordinator: ObservableObject {
     }
 
     func performInteractiveManualRefresh() async {
-        // Enqueue the manualRefresh reason and kick off a new sync pass. If there
-        // is already an activeSyncTask in flight (e.g. a foreground repair cycle)
-        // performSync will merge the reason and return that task's value — which
-        // could run for tens of seconds. We must NOT await beyond our budget.
         let syncTask = _Concurrency.Task { @MainActor [weak self] in
             guard let self else { return UIBackgroundFetchResult.noData }
             return await performSync(reason: .manualRefresh)
         }
 
         let budgetNanoseconds = interactiveManualRefreshBudgetNanoseconds
-        guard budgetNanoseconds > 0 else {
-            _ = await syncTask.value
-            return
-        }
+        guard budgetNanoseconds > 0 else { return }
 
-        // Race the sync task against the budget timer. Whichever finishes first
-        // wins; we then cancel lingering group children and return. The syncTask
-        // itself is NOT cancelled — it continues in the background so the result
-        // is eventually published to the UI.
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 _ = await syncTask.value

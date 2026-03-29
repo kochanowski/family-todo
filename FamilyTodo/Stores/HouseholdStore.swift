@@ -2579,20 +2579,15 @@ class HouseholdStore: ObservableObject {
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
 
-        // All fetch operations use the shared database scope regardless of whether
-        // the local user is the owner or a participant. Both owner and participant
-        // data lives in the shared zone (the owner's CKShare publishes their private
-        // zone into the shared database; participants write there too). Using
-        // ownerPrivate for reads makes the owner blind to participant mutations.
-        let readScope: CloudKitManager.HouseholdDatabaseScope = .participantShared
+        let scope = cloudScope(for: household, userId: userId)
         async let fetchedUnifiedWorkItems = cloudKit.fetchUnifiedWorkItems(
             householdId: household.id,
-            scope: readScope
+            scope: scope
         )
-        async let fetchedShoppingItems = cloudKit.fetchShoppingItems(householdId: household.id, scope: readScope)
-        async let fetchedBundles = cloudKit.fetchShoppingBundles(householdId: household.id, scope: readScope)
-        async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: household.id, scope: readScope)
-        async let fetchedBacklogItems = cloudKit.fetchBacklogItems(householdId: household.id, scope: readScope)
+        async let fetchedShoppingItems = cloudKit.fetchShoppingItems(householdId: household.id, scope: scope)
+        async let fetchedBundles = cloudKit.fetchShoppingBundles(householdId: household.id, scope: scope)
+        async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: household.id, scope: scope)
+        async let fetchedBacklogItems = cloudKit.fetchBacklogItems(householdId: household.id, scope: scope)
 
         let unifiedWorkItems = try await fetchedUnifiedWorkItems
         let shoppingItems = try await fetchedShoppingItems

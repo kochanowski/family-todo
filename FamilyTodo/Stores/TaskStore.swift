@@ -110,12 +110,6 @@ final class TaskStore: ObservableObject {
         return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
-    /// Scope used for all CloudKit **read** (fetch) operations.
-    /// See ShoppingListStore.readScope for full rationale.
-    private var readScope: CloudKitManager.HouseholdDatabaseScope {
-        .participantShared
-    }
-
     /// Default recommended WIP limit per user.
     static let defaultRecommendedWipLimit = 3
 
@@ -410,7 +404,7 @@ final class TaskStore: ObservableObject {
             await cloudKit.ensureReady()
             let cloudWorkItems = try await cloudKit.fetchUnifiedWorkItems(
                 householdId: householdId,
-                scope: readScope
+                scope: cloudScope
             )
 
             syncCloudWorkItemsToCache(cloudWorkItems)

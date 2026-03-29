@@ -53,19 +53,6 @@ final class ShoppingListStore: ObservableObject {
         return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
     }
 
-    /// Scope used for all CloudKit **read** (fetch) operations.
-    ///
-    /// In a CKShare household both parties — owner and participant — need to read
-    /// from the **shared database** to see each other's mutations. The owner's
-    /// records are visible there because the CKShare publishes the owner's zone
-    /// into the shared database; the participant's writes land there directly.
-    /// Using `ownerPrivate` for reads would make the owner blind to anything
-    /// the participant has written, which is the root cause of the asymmetric-sync
-    /// bug where Tel 2 → Tel 1 updates are never received.
-    private var readScope: CloudKitManager.HouseholdDatabaseScope {
-        .participantShared
-    }
-
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
         self.householdId = householdId
         self.modelContext = modelContext
@@ -194,7 +181,7 @@ final class ShoppingListStore: ObservableObject {
             await cloudKit.ensureReady()
             let fetchedItems = try await cloudKit.fetchShoppingItems(
                 householdId: householdId,
-                scope: readScope
+                scope: cloudScope
             )
             let latestCachedItems = fetchCachedItems(updateVisibleState: false)
             let latestPendingSnapshot = pendingSyncSnapshot(from: latestCachedItems)
