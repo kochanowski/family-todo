@@ -83,15 +83,13 @@ struct FamilyTodoApp: App {
                    let userId = userSession.userId,
                    let householdId = userSession.currentHouseholdID
                 {
-                    let subscriptionScope = await MainActor.run {
-                        activeHouseholdSubscriptionScope(userId: userId)
+                    let syncContext = await MainActor.run {
+                        householdStore.currentSyncContext(userId: userId)
                     }
                     await MainActor.run {
-                        subscriptionManager.configure(
-                            userId: userId,
-                            householdId: householdId,
-                            scope: subscriptionScope
-                        )
+                        if let syncContext, syncContext.householdId == householdId {
+                            subscriptionManager.configure(syncContext: syncContext)
+                        }
                     }
                 }
             #endif
@@ -112,15 +110,6 @@ struct FamilyTodoApp: App {
                 )
             #endif
         }
-    }
-
-    private func activeHouseholdSubscriptionScope(
-        userId: String
-    ) -> CloudKitManager.HouseholdDatabaseScope? {
-        guard let ownerId = householdStore.currentHousehold?.ownerId else {
-            return nil
-        }
-        return ownerId == userId ? .ownerPrivate : .participantShared
     }
 
     var body: some Scene {
@@ -199,15 +188,10 @@ struct FamilyTodoApp: App {
                                 #if !CI
                                     if userSession.syncMode == .cloud,
                                        let userId = userSession.userId,
-                                       let householdId = userSession.currentHouseholdID
+                                       let syncContext = householdStore.currentSyncContext(userId: userId),
+                                       userSession.currentHouseholdID == syncContext.householdId
                                     {
-                                        subscriptionManager.configure(
-                                            userId: userId,
-                                            householdId: householdId,
-                                            scope: activeHouseholdSubscriptionScope(
-                                                userId: userId
-                                            )
-                                        )
+                                        subscriptionManager.configure(syncContext: syncContext)
                                     }
                                 #endif
                                 scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
@@ -544,25 +528,13 @@ struct RootView: View {
         guard onboardingState.currentState == .mainApp else { return }
         guard userSession.syncMode == .cloud else { return }
         guard let userId = userSession.userId,
-              let householdId = userSession.currentHouseholdID
+              let syncContext = householdStore.currentSyncContext(userId: userId),
+              userSession.currentHouseholdID == syncContext.householdId
         else {
             return
         }
 
-        subscriptionManager.configure(
-            userId: userId,
-            householdId: householdId,
-            scope: activeHouseholdSubscriptionScope(userId: userId)
-        )
-    }
-
-    private func activeHouseholdSubscriptionScope(
-        userId: String
-    ) -> CloudKitManager.HouseholdDatabaseScope? {
-        guard let ownerId = householdStore.currentHousehold?.ownerId else {
-            return nil
-        }
-        return ownerId == userId ? .ownerPrivate : .participantShared
+        subscriptionManager.configure(syncContext: syncContext)
     }
 
     private var shouldShowCreateHouseholdView: Bool {

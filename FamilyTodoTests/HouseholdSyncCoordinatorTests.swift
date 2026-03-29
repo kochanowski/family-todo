@@ -5,6 +5,73 @@ import XCTest
 
 @MainActor
 final class HouseholdSyncCoordinatorTests: XCTestCase {
+    func testHouseholdSyncContextFactoryBuildsOwnerContext() {
+        let householdId = UUID()
+        let household = Household(
+            id: householdId,
+            name: "Smith Family",
+            ownerId: "owner-1"
+        )
+
+        let context = HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: "owner-1"
+        )
+
+        XCTAssertEqual(
+            context,
+            HouseholdSyncContext(
+                householdId: householdId,
+                currentUserId: "owner-1",
+                ownerUserId: "owner-1",
+                role: .owner,
+                scope: .ownerPrivate
+            )
+        )
+    }
+
+    func testHouseholdSyncContextFactoryBuildsParticipantContext() {
+        let householdId = UUID()
+        let household = Household(
+            id: householdId,
+            name: "Smith Family",
+            ownerId: "owner-1"
+        )
+
+        let context = HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: "member-2"
+        )
+
+        XCTAssertEqual(
+            context,
+            HouseholdSyncContext(
+                householdId: householdId,
+                currentUserId: "member-2",
+                ownerUserId: "owner-1",
+                role: .participant,
+                scope: .participantShared
+            )
+        )
+    }
+
+    func testHouseholdSyncContextFactoryReturnsNilWithoutRequiredInputs() {
+        XCTAssertNil(
+            HouseholdSyncContextFactory.make(
+                householdId: UUID(),
+                ownerUserId: nil,
+                currentUserId: "user-1"
+            )
+        )
+        XCTAssertNil(
+            HouseholdSyncContextFactory.make(
+                householdId: UUID(),
+                ownerUserId: "owner-1",
+                currentUserId: nil
+            )
+        )
+    }
+
     func testPerformSyncPublishesEngineEventsAndReturnsFetchResult() async {
         let householdId = UUID()
         let expectedEvents = [

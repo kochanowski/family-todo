@@ -15,8 +15,7 @@ final class ShoppingListStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
-    private var currentUserId: String?
-    private var householdOwnerId: String?
+    private var syncContext: HouseholdSyncContext?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
@@ -37,9 +36,16 @@ final class ShoppingListStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(_ syncContext: HouseholdSyncContext?) {
+        self.syncContext = syncContext
+    }
+
     func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
-        self.currentUserId = currentUserId
-        self.householdOwnerId = householdOwnerId
+        syncContext = HouseholdSyncContextFactory.make(
+            householdId: householdId,
+            ownerUserId: householdOwnerId,
+            currentUserId: currentUserId
+        )
     }
 
     private var isCloudSyncEnabled: Bool {
@@ -47,10 +53,7 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
-        guard let currentUserId, let householdOwnerId else {
-            return .participantShared
-        }
-        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
+        syncContext?.scope ?? .participantShared
     }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {

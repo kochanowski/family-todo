@@ -1084,10 +1084,10 @@ private struct TasksContent: View {
     }
 
     private func updateStoreCloudContext() {
-        let ownerId = householdStore.currentHousehold?.ownerId
-        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        backlogStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        let syncContext = householdStore.currentSyncContext(userId: userSession.userId)
+        store.setCloudContext(syncContext)
+        memberStore.setCloudContext(syncContext)
+        backlogStore.setCloudContext(syncContext)
     }
 
     private func markTasksTutorialAsSeenIfNeeded() {

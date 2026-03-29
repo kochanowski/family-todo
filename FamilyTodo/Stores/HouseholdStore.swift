@@ -351,6 +351,55 @@ struct RemoteTaskVisibleContentDiff: Equatable {
     }
 }
 
+enum HouseholdSyncRole: Equatable {
+    case owner
+    case participant
+}
+
+struct HouseholdSyncContext: Equatable {
+    let householdId: UUID
+    let currentUserId: String
+    let ownerUserId: String
+    let role: HouseholdSyncRole
+    let scope: CloudKitManager.HouseholdDatabaseScope
+}
+
+enum HouseholdSyncContextFactory {
+    static func make(
+        household: Household?,
+        currentUserId: String?
+    ) -> HouseholdSyncContext? {
+        guard let household, let currentUserId else { return nil }
+        return make(
+            householdId: household.id,
+            ownerUserId: household.ownerId,
+            currentUserId: currentUserId
+        )
+    }
+
+    static func make(
+        householdId: UUID?,
+        ownerUserId: String?,
+        currentUserId: String?
+    ) -> HouseholdSyncContext? {
+        guard let householdId, let ownerUserId, let currentUserId else { return nil }
+        let role: HouseholdSyncRole = currentUserId == ownerUserId ? .owner : .participant
+        let scope: CloudKitManager.HouseholdDatabaseScope = switch role {
+        case .owner:
+            .ownerPrivate
+        case .participant:
+            .participantShared
+        }
+        return HouseholdSyncContext(
+            householdId: householdId,
+            currentUserId: currentUserId,
+            ownerUserId: ownerUserId,
+            role: role,
+            scope: scope
+        )
+    }
+}
+
 struct RemoteIdeaVisibleContentDiff: Equatable {
     let addedIdeaIDs: Set<UUID>
     let removedIdeaIDs: Set<UUID>
@@ -1535,14 +1584,31 @@ class HouseholdStore: ObservableObject {
     }
 
     private func setCloudScope(for household: Household, userId: String) async {
-        await cloudKit.setHouseholdScope(cloudScope(for: household, userId: userId))
+        guard let syncContext = HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: userId
+        ) else {
+            await cloudKit.setHouseholdScope(.participantShared)
+            return
+        }
+        await cloudKit.setHouseholdScope(syncContext.scope)
     }
 
     private func cloudScope(
         for household: Household,
         userId: String
     ) -> CloudKitManager.HouseholdDatabaseScope {
-        household.ownerId == userId ? .ownerPrivate : .participantShared
+        HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: userId
+        )?.scope ?? .participantShared
+    }
+
+    func currentSyncContext(userId: String?) -> HouseholdSyncContext? {
+        HouseholdSyncContextFactory.make(
+            household: currentHousehold,
+            currentUserId: userId
+        )
     }
 
     private func resolveLocalLeaveBehavior(
@@ -2352,7 +2418,12 @@ class HouseholdStore: ObservableObject {
 
             let memberStore = MemberStore(householdId: household.id, modelContext: modelContext)
             memberStore.setSyncMode(syncMode)
-            memberStore.setCloudContext(currentUserId: userId, householdOwnerId: household.ownerId)
+            memberStore.setCloudContext(
+                HouseholdSyncContextFactory.make(
+                    household: household,
+                    currentUserId: userId
+                )
+            )
             await memberStore.loadMembers()
 
             if let error = memberStore.error {

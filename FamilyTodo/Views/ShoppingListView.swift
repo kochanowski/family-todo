@@ -849,9 +849,9 @@ private struct ShoppingListContent: View {
     }
 
     private func updateStoreCloudContext() {
-        let ownerId = householdStore.currentHousehold?.ownerId
-        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        bundleStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        let syncContext = householdStore.currentSyncContext(userId: userSession.userId)
+        store.setCloudContext(syncContext)
+        bundleStore.setCloudContext(syncContext)
     }
 
     private func isLocalStoreNotification(_ notification: Notification) -> Bool {

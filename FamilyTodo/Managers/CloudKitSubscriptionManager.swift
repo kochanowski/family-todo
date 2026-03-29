@@ -76,6 +76,17 @@ final class CloudKitSubscriptionManager: ObservableObject {
     // MARK: - Setup
 
     func configure(
+        syncContext: HouseholdSyncContext?
+    ) {
+        guard let syncContext else { return }
+        configure(
+            userId: syncContext.currentUserId,
+            householdId: syncContext.householdId,
+            scope: syncContext.scope
+        )
+    }
+
+    func configure(
         userId: String,
         householdId: UUID,
         scope: CloudKitManager.HouseholdDatabaseScope?
