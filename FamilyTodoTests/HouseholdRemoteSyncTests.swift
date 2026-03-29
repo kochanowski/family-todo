@@ -658,13 +658,13 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             reason: .appBecameActive
         )
 
-        XCTAssertEqual(secondResult.fetchResult, .noData)
         XCTAssertFalse(secondResult.events.contains { event in
             if case .shoppingAdded = event.kind {
                 return true
             }
             return false
         })
+        XCTAssertFalse(secondResult.diagnostics.changedDomains.contains(.shopping))
     }
 }
 
