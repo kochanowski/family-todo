@@ -800,6 +800,7 @@ class HouseholdStore: ObservableObject {
 
     private var modelContext: ModelContext?
     private let cloudKit: any HouseholdCloudSyncing
+    private lazy var householdRepository = HouseholdRepository(cloud: cloudKit)
     private var syncMode: SyncMode = .cloud
     private let userDefaults: UserDefaults
     private let recoverySuppressionDuration: TimeInterval
@@ -2640,19 +2641,25 @@ class HouseholdStore: ObservableObject {
             )
         }
 
-        await cloudKit.ensureReady()
-        await setCloudScope(for: household, userId: userId)
-
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(household.id)
         let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
 
-        let scope = cloudScope(for: household, userId: userId)
-        let snapshot = try await HouseholdCloudSnapshotLoader(cloud: cloudKit).loadSnapshot(
-            householdId: household.id,
-            scope: scope
+        guard let syncContext = HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: userId
+        ) else {
+            return cachedJoinHydrationSnapshot(
+                householdId: household.id,
+                userId: userId,
+                remoteMembershipConfirmed: false
+            )
+        }
+
+        let snapshot = try await householdRepository.loadCloudSnapshot(
+            for: syncContext
         )
 
         let mergedMembers = mergeRemoteMembersWithLocalJoinFallback(
@@ -2688,13 +2695,17 @@ class HouseholdStore: ObservableObject {
         household: Household,
         userId: String
     ) async throws -> Bool {
-        await setCloudScope(for: household, userId: userId)
-        let scope = cloudScope(for: household, userId: userId)
-        return try await cloudKit.fetchMemberByUserId(
-            userId,
-            householdId: household.id,
-            scope: scope
-        )?.isActive ?? false
+        guard let syncContext = HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: userId
+        ) else {
+            return false
+        }
+
+        return try await householdRepository.hasActiveMembership(
+            userId: userId,
+            in: syncContext
+        )
     }
 
     private func cachedJoinHydrationSnapshot(

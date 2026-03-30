@@ -84,6 +84,7 @@
 		HSYNCCOORDBUILD0000001 /* HouseholdSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */; };
 		HSYNCENGINEBUILD0000001 /* HouseholdStoreSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */; };
 		HSNAPSHOTBUILD00000001 /* HouseholdCloudSnapshotLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */; };
+		HREPOSITORYBUILD000001 /* HouseholdRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = HREPOSITORYFILE000001 /* HouseholdRepository.swift */; };
 		310A3B66D8814DB6AFB4F1E2 /* CachedMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5698A6FED3C457788B6A60C /* CachedMember.swift */; };
 		DF7CDDC1B44B40528AF2353F /* CachedShoppingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0147EDB8D54390B793EFE5 /* CachedShoppingItem.swift */; };
 		C9E8A1B2C3D4E5F607182930 /* MemberBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */; };
@@ -208,6 +209,7 @@
 		HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinator.swift; sourceTree = "<group>"; };
 		HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStoreSyncEngine.swift; sourceTree = "<group>"; };
 		HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdCloudSnapshotLoader.swift; sourceTree = "<group>"; };
+		HREPOSITORYFILE000001 /* HouseholdRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdRepository.swift; sourceTree = "<group>"; };
 			C3D1A7F2E84B45DFA676530A /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 			86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedTask.swift; sourceTree = "<group>"; };
 			WIREF000000000000000002 /* WorkItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkItem.swift; sourceTree = "<group>"; };
@@ -472,6 +474,7 @@
 				HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */,
 				HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */,
 				HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */,
+				HREPOSITORYFILE000001 /* HouseholdRepository.swift */,
 				F0A100000000000000000002 /* ShareAcceptanceCoordinator.swift */,
 				F0A100000000000000000003 /* AppDelegateBridge.swift */,
 			);
@@ -696,6 +699,7 @@
 				HSYNCCOORDBUILD0000001 /* HouseholdSyncCoordinator.swift in Sources */,
 				HSYNCENGINEBUILD0000001 /* HouseholdStoreSyncEngine.swift in Sources */,
 				HSNAPSHOTBUILD00000001 /* HouseholdCloudSnapshotLoader.swift in Sources */,
+				HREPOSITORYBUILD000001 /* HouseholdRepository.swift in Sources */,
 				E3C9F1B3FAE44A9A91D2F23C /* ShoppingListStore.swift in Sources */,
 					C6D754F86DDD4B59844CC089 /* OnboardingView.swift in Sources */,
 					4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */,
