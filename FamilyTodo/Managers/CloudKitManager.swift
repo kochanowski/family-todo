@@ -1262,6 +1262,22 @@ actor CloudKitManager {
         "BacklogItem",
     ]
 
+    private static let ownerZoneBoundQueryRecordTypes: Set<String> = [
+        "Member",
+        "Area",
+        "Task",
+        "WorkItem",
+        "RecurringChore",
+        "ShoppingItem",
+        "ShoppingBundle",
+        "BacklogCategory",
+        "BacklogItem",
+    ]
+
+    static func shouldUseOwnerZoneBoundQuery(recordType: String) -> Bool {
+        ownerZoneBoundQueryRecordTypes.contains(recordType)
+    }
+
     private static let singleGraphReferenceKeys = [
         "householdId",
         "assigneeId",
@@ -1403,6 +1419,40 @@ actor CloudKitManager {
             householdId: householdId,
             targetZoneID: targetZoneID,
             zoneIDs: zoneIDs
+        )
+    }
+
+    private func queryOwnerPrivateRecordsInTargetZone(
+        _ queryFactory: ZoneScopedQueryFactory,
+        targetZoneID: CKRecordZone.ID
+    ) async throws -> [CKRecord]? {
+        let db = await privateDatabase
+        let baselineQuery = queryFactory(targetZoneID)
+        let query = CKQuery(
+            recordType: baselineQuery.recordType,
+            predicate: NSPredicate(value: true)
+        )
+        query.sortDescriptors = baselineQuery.sortDescriptors
+
+        do {
+            return try await queryRecordsPaginated(
+                query,
+                database: db,
+                zoneID: targetZoneID
+            )
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return nil
+        }
+    }
+
+    private func canTrustOwnerZoneBoundEmptyResult(householdId: UUID) -> Bool {
+        hasCompletedSharedGraphRepair(
+            householdId: householdId,
+            mode: .backgroundExhaustive
+        ) || hasCompletedSharedGraphRepair(
+            householdId: householdId,
+            mode: .interactivePrimaryZones
         )
     }
 
@@ -1640,6 +1690,33 @@ actor CloudKitManager {
         case .ownerPrivate:
             print("CloudKitScope: query ownerPrivate \(queryFactory(nil).recordType)")
             if let householdId {
+                let recordType = queryFactory(nil).recordType
+                if Self.shouldUseOwnerZoneBoundQuery(recordType: recordType) {
+                    let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+                    if let targetZoneRecords = try await queryOwnerPrivateRecordsInTargetZone(
+                        queryFactory,
+                        targetZoneID: targetZoneID
+                    ), !targetZoneRecords.isEmpty || canTrustOwnerZoneBoundEmptyResult(
+                        householdId: householdId
+                    ) {
+                        print(
+                            "CloudKitScope: query ownerPrivate \(recordType) using household target zone \(targetZoneID.zoneName)"
+                        )
+                        let sortedRecords = Self.sortRecords(
+                            targetZoneRecords,
+                            using: baselineSortDescriptors
+                        )
+                        for sortedRecord in sortedRecords {
+                            rememberRecordZone(sortedRecord, explicitHouseholdId: householdId, scope: scope)
+                        }
+                        return sortedRecords
+                    }
+
+                    print(
+                        "CloudKitScope: ownerPrivate target-zone query for \(recordType) yielded no trusted result, falling back to exhaustive scan"
+                    )
+                }
+
                 let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
                     queryFactory,
                     householdId: householdId
