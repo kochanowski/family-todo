@@ -2642,7 +2642,6 @@ class HouseholdStore: ObservableObject {
 
         await cloudKit.ensureReady()
         await setCloudScope(for: household, userId: userId)
-        await refreshMemberCacheFromCloudIfNeeded(household: household, userId: userId)
 
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(household.id)
@@ -2651,35 +2650,32 @@ class HouseholdStore: ObservableObject {
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
 
         let scope = cloudScope(for: household, userId: userId)
-        async let fetchedUnifiedWorkItems = cloudKit.fetchUnifiedWorkItems(
+        let snapshot = try await HouseholdCloudSnapshotLoader(cloud: cloudKit).loadSnapshot(
             householdId: household.id,
             scope: scope
         )
-        async let fetchedShoppingItems = cloudKit.fetchShoppingItems(householdId: household.id, scope: scope)
-        async let fetchedBundles = cloudKit.fetchShoppingBundles(householdId: household.id, scope: scope)
-        async let fetchedCategories = cloudKit.fetchBacklogCategories(householdId: household.id, scope: scope)
-        async let fetchedBacklogItems = cloudKit.fetchBacklogItems(householdId: household.id, scope: scope)
 
-        let unifiedWorkItems = try await fetchedUnifiedWorkItems
-        let shoppingItems = try await fetchedShoppingItems
-        let bundles = try await fetchedBundles
-        let categories = try await fetchedCategories
-        let backlogItems = try await fetchedBacklogItems
+        let mergedMembers = mergeRemoteMembersWithLocalJoinFallback(
+            snapshot.members,
+            householdId: household.id,
+            currentUserId: userId
+        )
+        updateCache(with: mergedMembers)
 
-        taskStore.syncUnifiedWorkItemsToCache(unifiedWorkItems)
-        shoppingStore.syncToCache(shoppingItems)
-        bundleStore.syncToCache(bundles, cloudBundleIDs: Set(bundles.map(\.id)))
+        taskStore.syncUnifiedWorkItemsToCache(snapshot.unifiedWorkItems)
+        shoppingStore.syncToCache(snapshot.shoppingItems)
+        bundleStore.syncToCache(
+            snapshot.shoppingBundles,
+            cloudBundleIDs: Set(snapshot.shoppingBundles.map(\.id))
+        )
         backlogStore.syncToCache(
-            categories: categories,
-            items: backlogItems,
-            cloudCategoryIDs: Set(categories.map(\.id)),
-            cloudItemIDs: Set(backlogItems.map(\.id))
+            categories: snapshot.backlogCategories,
+            items: snapshot.backlogItems,
+            cloudCategoryIDs: Set(snapshot.backlogCategories.map(\.id)),
+            cloudItemIDs: Set(snapshot.backlogItems.map(\.id))
         )
 
-        let remoteMembershipConfirmed = try await confirmRemoteMembershipPresence(
-            household: household,
-            userId: userId
-        )
+        let remoteMembershipConfirmed = snapshot.hasActiveMembership(userId: userId)
 
         return cachedJoinHydrationSnapshot(
             householdId: household.id,
