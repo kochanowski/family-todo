@@ -438,6 +438,10 @@ protocol HouseholdCloudSyncing: Actor {
     func checkAvailability() async throws
     func setHouseholdScope(_ scope: CloudKitManager.HouseholdDatabaseScope)
     func getContainer() async -> CKContainer
+    func resolveSubscriptionZone(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope
+    ) async throws -> CKRecordZone.ID?
 
     func ensureHouseholdOwnerZone(householdId: UUID) async throws -> CKRecordZone.ID
     func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws

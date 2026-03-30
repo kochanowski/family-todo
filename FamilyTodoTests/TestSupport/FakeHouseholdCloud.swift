@@ -41,6 +41,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private var deferredAcceptedShareBootstrapCodes: Set<String>
     private var operationEvents: [OperationEvent] = []
     private let createInviteCodeResultsByHouseholdId: [UUID: InviteToken]
+    private let ownerZoneIDsByHouseholdId: [UUID: CKRecordZone.ID]
+    private let participantSharedZoneIDsByHouseholdId: [UUID: CKRecordZone.ID]
     private var createInviteCodeCalls = 0
 
     init(
@@ -61,7 +63,9 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         participantSharedVerificationDeniedHouseholds: Set<UUID> = [],
         participantSharedInvisibleSavedMemberHouseholds: Set<UUID> = [],
         deferredAcceptedShareBootstrapCodes: Set<String> = [],
-        createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:]
+        createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:],
+        ownerZoneIDsByHouseholdId: [UUID: CKRecordZone.ID] = [:],
+        participantSharedZoneIDsByHouseholdId: [UUID: CKRecordZone.ID] = [:]
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
         inviteTokensByCode = Dictionary(uniqueKeysWithValues: inviteTokens.map { ($0.code, $0) })
@@ -81,6 +85,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.participantSharedInvisibleSavedMemberHouseholds = participantSharedInvisibleSavedMemberHouseholds
         self.deferredAcceptedShareBootstrapCodes = deferredAcceptedShareBootstrapCodes
         self.createInviteCodeResultsByHouseholdId = createInviteCodeResultsByHouseholdId
+        self.ownerZoneIDsByHouseholdId = ownerZoneIDsByHouseholdId
+        self.participantSharedZoneIDsByHouseholdId = participantSharedZoneIDsByHouseholdId
     }
 
     private func resolvedScope(_ explicitScope: CloudKitManager.HouseholdDatabaseScope?)
@@ -167,8 +173,22 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         CKContainer(identifier: "iCloud.com.example.familytodo")
     }
 
-    func ensureHouseholdOwnerZone(householdId _: UUID) async throws -> CKRecordZone.ID {
-        CKRecordZone.default().zoneID
+    func ensureHouseholdOwnerZone(householdId: UUID) async throws -> CKRecordZone.ID {
+        appendOperation("ensureHouseholdOwnerZone", scope: .ownerPrivate, householdId: householdId)
+        return ownerZoneIDsByHouseholdId[householdId] ?? CKRecordZone.default().zoneID
+    }
+
+    func resolveSubscriptionZone(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope
+    ) async throws -> CKRecordZone.ID? {
+        appendOperation("resolveSubscriptionZone", scope: explicitScope, householdId: householdId)
+        switch explicitScope {
+        case .ownerPrivate:
+            return ownerZoneIDsByHouseholdId[householdId]
+        case .participantShared:
+            return participantSharedZoneIDsByHouseholdId[householdId]
+        }
     }
 
     func migrateHouseholdToCustomZoneIfNeeded(householdId _: UUID) async throws {}

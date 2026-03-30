@@ -1,10 +1,10 @@
 import Foundation
 
 actor HouseholdRepository {
-    private let cloud: any HouseholdCloudSyncing
+    private let zoneResolver: HouseholdZoneResolver
 
     init(cloud: any HouseholdCloudSyncing) {
-        self.cloud = cloud
+        zoneResolver = HouseholdZoneResolver(cloud: cloud)
     }
 
     func loadCloudSnapshot(
@@ -30,7 +30,6 @@ actor HouseholdRepository {
     }
 
     private func prepareCloud(for context: HouseholdSyncContext) async throws {
-        await cloud.ensureReady()
-        await cloud.setHouseholdScope(context.scope)
+        _ = try await zoneResolver.resolveZone(for: context)
     }
 }

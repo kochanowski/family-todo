@@ -1,8 +1,67 @@
+import CloudKit
 @testable import HousePulse
 import XCTest
 
 @MainActor
 final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
+    func testZoneResolverUsesOwnerZoneForOwnerContext() async throws {
+        let ownerId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerId)
+        let ownerZoneID = CKRecordZone.ID(zoneName: "household-\(household.id.uuidString)", ownerName: "__defaultOwner__")
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerZoneIDsByHouseholdId: [household.id: ownerZoneID]
+        )
+        let resolver = HouseholdZoneResolver(cloud: cloud)
+        let context = try XCTUnwrap(
+            HouseholdSyncContextFactory.make(
+                household: household,
+                currentUserId: ownerId
+            )
+        )
+
+        let zoneID = try await resolver.resolveZone(for: context)
+
+        XCTAssertEqual(zoneID, ownerZoneID)
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "ensureHouseholdOwnerZone" &&
+                $0.scope == .ownerPrivate &&
+                $0.householdId == household.id
+        })
+    }
+
+    func testZoneResolverUsesSubscriptionZoneForParticipantContext() async throws {
+        let ownerId = "owner-1"
+        let participantId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerId)
+        let sharedZoneID = CKRecordZone.ID(zoneName: "shared-\(household.id.uuidString)", ownerName: "owner")
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantSharedZoneIDsByHouseholdId: [household.id: sharedZoneID],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+        let resolver = HouseholdZoneResolver(cloud: cloud)
+        let context = try XCTUnwrap(
+            HouseholdSyncContextFactory.make(
+                household: household,
+                currentUserId: participantId
+            )
+        )
+
+        let zoneID = try await resolver.resolveZone(for: context)
+
+        XCTAssertEqual(zoneID, sharedZoneID)
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "resolveSubscriptionZone" &&
+                $0.scope == .participantShared &&
+                $0.householdId == household.id
+        })
+    }
+
     func testRepositoryLoadsSnapshotUsingSyncContextScopeAndHousehold() async throws {
         let userId = "joined-user"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
