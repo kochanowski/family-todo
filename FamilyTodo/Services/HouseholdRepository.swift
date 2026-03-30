@@ -1,9 +1,11 @@
 import Foundation
 
 actor HouseholdRepository {
+    private let cloud: any HouseholdCloudSyncing
     private let zoneResolver: HouseholdZoneResolver
 
     init(cloud: any HouseholdCloudSyncing) {
+        self.cloud = cloud
         zoneResolver = HouseholdZoneResolver(cloud: cloud)
     }
 
