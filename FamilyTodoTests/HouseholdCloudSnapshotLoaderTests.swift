@@ -4,6 +4,19 @@ import XCTest
 
 @MainActor
 final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
+    private func containsOperation(
+        _ operations: [FakeHouseholdCloud.OperationEvent],
+        name: String,
+        scope: CloudKitManager.HouseholdDatabaseScope,
+        householdId: UUID
+    ) -> Bool {
+        operations.contains { operation in
+            operation.name == name &&
+                operation.scope == scope &&
+                operation.householdId == householdId
+        }
+    }
+
     func testZoneResolverUsesOwnerZoneForOwnerContext() async throws {
         let ownerId = "owner-1"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerId)
@@ -25,11 +38,14 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         XCTAssertEqual(zoneID, ownerZoneID)
 
         let operations = await cloud.operationEventsSnapshot()
-        XCTAssertTrue(operations.contains {
-            $0.name == "ensureHouseholdOwnerZone" &&
-                $0.scope == .ownerPrivate &&
-                $0.householdId == household.id
-        })
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "ensureHouseholdOwnerZone",
+                scope: .ownerPrivate,
+                householdId: household.id
+            )
+        )
     }
 
     func testZoneResolverUsesSubscriptionZoneForParticipantContext() async throws {
@@ -39,8 +55,8 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         let sharedZoneID = CKRecordZone.ID(zoneName: "shared-\(household.id.uuidString)", ownerName: "owner")
         let cloud = FakeHouseholdCloud(
             households: [household],
-            participantSharedZoneIDsByHouseholdId: [household.id: sharedZoneID],
-            acceptedSharedHouseholdIDs: [household.id]
+            acceptedSharedHouseholdIDs: [household.id],
+            participantSharedZoneIDsByHouseholdId: [household.id: sharedZoneID]
         )
         let resolver = HouseholdZoneResolver(cloud: cloud)
         let context = try XCTUnwrap(
@@ -55,11 +71,14 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         XCTAssertEqual(zoneID, sharedZoneID)
 
         let operations = await cloud.operationEventsSnapshot()
-        XCTAssertTrue(operations.contains {
-            $0.name == "resolveSubscriptionZone" &&
-                $0.scope == .participantShared &&
-                $0.householdId == household.id
-        })
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "resolveSubscriptionZone",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
     }
 
     func testRepositoryLoadsSnapshotUsingSyncContextScopeAndHousehold() async throws {
@@ -95,12 +114,22 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         XCTAssertEqual(snapshot.shoppingItems.map(\.id), [shoppingItem.id])
 
         let operations = await cloud.operationEventsSnapshot()
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchMembers" && $0.scope == .participantShared && $0.householdId == household.id
-        })
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
-        })
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchMembers",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchShoppingItems",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
     }
 
     func testRepositoryConfirmsActiveMembershipUsingSyncContext() async throws {
@@ -133,11 +162,14 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         XCTAssertTrue(isActive)
 
         let operations = await cloud.operationEventsSnapshot()
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchMemberByUserId" &&
-                $0.scope == .participantShared &&
-                $0.householdId == household.id
-        })
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchMemberByUserId",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
     }
 
     func testLoadSnapshotFetchesEntireHouseholdGraphUsingProvidedScope() async throws {
@@ -195,23 +227,53 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         XCTAssertTrue(snapshot.hasActiveMembership(userId: userId))
 
         let operations = await cloud.operationEventsSnapshot()
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchMembers" && $0.scope == .participantShared && $0.householdId == household.id
-        })
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
-        })
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
-        })
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchShoppingBundles" && $0.scope == .participantShared && $0.householdId == household.id
-        })
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchBacklogCategories" && $0.scope == .participantShared && $0.householdId == household.id
-        })
-        XCTAssertTrue(operations.contains {
-            $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
-        })
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchMembers",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchUnifiedWorkItems",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchShoppingItems",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchShoppingBundles",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchBacklogCategories",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchBacklogItems",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
     }
 }
