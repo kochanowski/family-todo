@@ -246,9 +246,11 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
             applicationStateProvider: { .active },
             foregroundRepairConfiguration: ForegroundRepairConfiguration(
                 isEnabled: false,
-                intervalNanoseconds: 0,
-                maxPassCount: 0,
-                maxConsecutiveNoDataPasses: 0
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { titles, householdId, householdName in
                 await alertRecorder.record(
@@ -320,9 +322,11 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
             applicationStateProvider: { .active },
             foregroundRepairConfiguration: ForegroundRepairConfiguration(
                 isEnabled: true,
-                intervalNanoseconds: 0,
-                maxPassCount: 4,
-                maxConsecutiveNoDataPasses: 2
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 4,
+                maxConsecutiveNoDataBurstPasses: 2,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
@@ -369,9 +373,11 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
             applicationStateProvider: { .active },
             foregroundRepairConfiguration: ForegroundRepairConfiguration(
                 isEnabled: true,
-                intervalNanoseconds: 0,
-                maxPassCount: 4,
-                maxConsecutiveNoDataPasses: 2
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 4,
+                maxConsecutiveNoDataBurstPasses: 2,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
@@ -383,6 +389,103 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(engine.recordedReasons, [.manualRefresh])
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .manualRefresh)
+    }
+
+    func testPerformSyncFallsBackToSteadyForegroundRepairWhenBurstWindowExhausts() async {
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .remotePush(context: .privateDatabase),
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 102),
+                        syncStartedAt: Date(timeIntervalSince1970: 103),
+                        syncFinishedAt: Date(timeIntervalSince1970: 104),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 105),
+                        syncStartedAt: Date(timeIntervalSince1970: 106),
+                        syncFinishedAt: Date(timeIntervalSince1970: 107),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 108),
+                        syncStartedAt: Date(timeIntervalSince1970: 109),
+                        syncFinishedAt: Date(timeIntervalSince1970: 110),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 2,
+                maxConsecutiveNoDataBurstPasses: 1,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 2
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .remotePush(context: .privateDatabase))
+        await waitUntil {
+            engine.recordedReasons.count == 4
+        }
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .remotePush(context: .privateDatabase),
+                .foregroundRepairWindow,
+                .foregroundRepairWindow,
+                .foregroundRepairWindow,
+            ]
+        )
+        XCTAssertEqual(coordinator.lastDiagnostics?.reason, .foregroundRepairWindow)
+        XCTAssertEqual(coordinator.lastDiagnostics?.direction, .participantToOwner)
     }
 }
 

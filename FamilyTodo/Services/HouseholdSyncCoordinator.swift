@@ -311,16 +311,25 @@ struct HouseholdSyncBatch: Equatable, Identifiable {
 
 struct ForegroundRepairConfiguration: Equatable {
     let isEnabled: Bool
-    let intervalNanoseconds: UInt64
-    let maxPassCount: Int
-    let maxConsecutiveNoDataPasses: Int
+    let burstIntervalNanoseconds: UInt64
+    let burstMaxPassCount: Int
+    let maxConsecutiveNoDataBurstPasses: Int
+    let steadyIntervalNanoseconds: UInt64
+    let steadyMaxPassCount: Int
 
     static let `default` = ForegroundRepairConfiguration(
         isEnabled: true,
-        intervalNanoseconds: 4_000_000_000,
-        maxPassCount: 8,
-        maxConsecutiveNoDataPasses: 2
+        burstIntervalNanoseconds: 4_000_000_000,
+        burstMaxPassCount: 8,
+        maxConsecutiveNoDataBurstPasses: 2,
+        steadyIntervalNanoseconds: 30_000_000_000,
+        steadyMaxPassCount: 20
     )
+}
+
+private enum ForegroundRepairMode: Equatable {
+    case burst
+    case steady
 }
 
 @MainActor
@@ -342,7 +351,9 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
     private var scheduledForegroundRepairTask: _Concurrency.Task<Void, Never>?
-    private var remainingForegroundRepairPasses = 0
+    private var currentForegroundRepairMode: ForegroundRepairMode = .burst
+    private var remainingForegroundRepairBurstPasses = 0
+    private var remainingForegroundRepairSteadyPasses = 0
     private var consecutiveForegroundRepairNoDataPasses = 0
 
     init(
@@ -479,47 +490,94 @@ final class HouseholdSyncCoordinator: ObservableObject {
 
         switch batch.diagnostics.reason {
         case .remotePush, .appBecameActive, .localMutationFollowUp, .householdJoined, .householdSwitched:
-            remainingForegroundRepairPasses = foregroundRepairConfiguration.maxPassCount
-            consecutiveForegroundRepairNoDataPasses = 0
-            scheduleNextForegroundRepairPass()
+            startBurstForegroundRepair()
         case .manualRefresh:
             cancelForegroundRepair()
         case .foregroundRepairWindow:
-            remainingForegroundRepairPasses = max(remainingForegroundRepairPasses - 1, 0)
             switch fetchResult {
             case .newData:
-                consecutiveForegroundRepairNoDataPasses = 0
+                startBurstForegroundRepair()
             case .noData:
-                consecutiveForegroundRepairNoDataPasses += 1
+                handleForegroundRepairNoDataPass()
             case .failed:
                 cancelForegroundRepair()
-                return
             @unknown default:
                 cancelForegroundRepair()
-                return
             }
-
-            guard remainingForegroundRepairPasses > 0,
-                  consecutiveForegroundRepairNoDataPasses < foregroundRepairConfiguration.maxConsecutiveNoDataPasses
-            else {
-                cancelForegroundRepair()
-                return
-            }
-
-            scheduleNextForegroundRepairPass()
         case .debugRepair:
             cancelForegroundRepair()
         }
     }
 
-    private func scheduleNextForegroundRepairPass() {
-        guard remainingForegroundRepairPasses > 0 else {
+    private func startBurstForegroundRepair() {
+        currentForegroundRepairMode = .burst
+        remainingForegroundRepairBurstPasses = foregroundRepairConfiguration.burstMaxPassCount
+        remainingForegroundRepairSteadyPasses = foregroundRepairConfiguration.steadyMaxPassCount
+        consecutiveForegroundRepairNoDataPasses = 0
+        print(
+            "[RemoteSync] Starting burst foreground repair window. burstPasses=\(remainingForegroundRepairBurstPasses) steadyPasses=\(remainingForegroundRepairSteadyPasses)"
+        )
+        scheduleNextForegroundRepairPass(
+            intervalNanoseconds: foregroundRepairConfiguration.burstIntervalNanoseconds
+        )
+    }
+
+    private func handleForegroundRepairNoDataPass() {
+        switch currentForegroundRepairMode {
+        case .burst:
+            remainingForegroundRepairBurstPasses = max(
+                remainingForegroundRepairBurstPasses - 1,
+                0
+            )
+            consecutiveForegroundRepairNoDataPasses += 1
+
+            if remainingForegroundRepairBurstPasses > 0,
+               consecutiveForegroundRepairNoDataPasses <
+               foregroundRepairConfiguration.maxConsecutiveNoDataBurstPasses
+            {
+                scheduleNextForegroundRepairPass(
+                    intervalNanoseconds: foregroundRepairConfiguration.burstIntervalNanoseconds
+                )
+            } else {
+                startSteadyForegroundRepairIfNeeded()
+            }
+        case .steady:
+            remainingForegroundRepairSteadyPasses = max(
+                remainingForegroundRepairSteadyPasses - 1,
+                0
+            )
+            guard remainingForegroundRepairSteadyPasses > 0 else {
+                cancelForegroundRepair()
+                return
+            }
+            scheduleNextForegroundRepairPass(
+                intervalNanoseconds: foregroundRepairConfiguration.steadyIntervalNanoseconds
+            )
+        }
+    }
+
+    private func startSteadyForegroundRepairIfNeeded() {
+        guard foregroundRepairConfiguration.steadyMaxPassCount > 0 else {
             cancelForegroundRepair()
             return
         }
 
+        currentForegroundRepairMode = .steady
+        consecutiveForegroundRepairNoDataPasses = 0
+        remainingForegroundRepairSteadyPasses = max(
+            remainingForegroundRepairSteadyPasses,
+            foregroundRepairConfiguration.steadyMaxPassCount
+        )
+        print(
+            "[RemoteSync] Extending foreground repair into steady mode. remainingSteadyPasses=\(remainingForegroundRepairSteadyPasses)"
+        )
+        scheduleNextForegroundRepairPass(
+            intervalNanoseconds: foregroundRepairConfiguration.steadyIntervalNanoseconds
+        )
+    }
+
+    private func scheduleNextForegroundRepairPass(intervalNanoseconds: UInt64) {
         scheduledForegroundRepairTask?.cancel()
-        let intervalNanoseconds = foregroundRepairConfiguration.intervalNanoseconds
         scheduledForegroundRepairTask = _Concurrency.Task { @MainActor [weak self] in
             guard let self else { return }
             if intervalNanoseconds > 0 {
@@ -533,7 +591,9 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private func cancelForegroundRepair() {
         scheduledForegroundRepairTask?.cancel()
         scheduledForegroundRepairTask = nil
-        remainingForegroundRepairPasses = 0
+        currentForegroundRepairMode = .burst
+        remainingForegroundRepairBurstPasses = 0
+        remainingForegroundRepairSteadyPasses = 0
         consecutiveForegroundRepairNoDataPasses = 0
     }
 }
