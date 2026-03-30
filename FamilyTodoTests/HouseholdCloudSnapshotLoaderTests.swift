@@ -23,14 +23,14 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
             acceptedSharedHouseholdIDs: [household.id]
         )
         let repository = HouseholdRepository(cloud: cloud)
-        let context = HouseholdSyncContextFactory.make(
-            household: household,
-            currentUserId: userId
+        let context = try XCTUnwrap(
+            HouseholdSyncContextFactory.make(
+                household: household,
+                currentUserId: userId
+            )
         )
 
-        let snapshot = try await XCTUnwrap(
-            try repository.loadCloudSnapshot(for: context)
-        )
+        let snapshot = try await repository.loadCloudSnapshot(for: context)
 
         XCTAssertEqual(snapshot.members.map(\.id), [member.id])
         XCTAssertEqual(snapshot.shoppingItems.map(\.id), [shoppingItem.id])

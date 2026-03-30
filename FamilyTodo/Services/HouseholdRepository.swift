@@ -8,13 +8,6 @@ actor HouseholdRepository {
     }
 
     func loadCloudSnapshot(
-        for context: HouseholdSyncContext?
-    ) async throws -> HouseholdCloudSnapshot? {
-        guard let context else { return nil }
-        return try await loadCloudSnapshot(for: context)
-    }
-
-    func loadCloudSnapshot(
         for context: HouseholdSyncContext
     ) async throws -> HouseholdCloudSnapshot {
         try await prepareCloud(for: context)
