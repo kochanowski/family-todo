@@ -425,8 +425,10 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
                 householdId: sharedHousehold.id
             )
         )
-        await XCTAssertEqual(cloud.inactiveUpdateCount(for: ownerHousehold.id), 1)
-        await XCTAssertEqual(cloud.inactiveUpdateCount(for: sharedHousehold.id), 1)
+        let ownerInactiveUpdateCount = await cloud.inactiveUpdateCount(for: ownerHousehold.id)
+        let sharedInactiveUpdateCount = await cloud.inactiveUpdateCount(for: sharedHousehold.id)
+        XCTAssertEqual(ownerInactiveUpdateCount, 1)
+        XCTAssertEqual(sharedInactiveUpdateCount, 1)
     }
 
     func testLoadSnapshotFetchesEntireHouseholdGraphUsingProvidedScope() async throws {
