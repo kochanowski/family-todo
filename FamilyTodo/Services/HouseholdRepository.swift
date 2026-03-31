@@ -1,6 +1,6 @@
 import Foundation
 
-struct HouseholdScopedMembership: Equatable {
+struct HouseholdScopedMembership {
     let member: Member
     let scope: CloudKitManager.HouseholdDatabaseScope
 }
