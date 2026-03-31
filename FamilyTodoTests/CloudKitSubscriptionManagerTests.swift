@@ -21,6 +21,41 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testOwnerPrivateSubscriptionPlanIncludesDatabaseAndOwnerZoneSubscriptions() {
+        let householdId = UUID()
+
+        let plan = CloudKitSubscriptionManager.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: .ownerPrivate
+        )
+
+        XCTAssertEqual(
+            Set(plan.databaseSubscriptionIDs),
+            Set(["shared-database-changes", "private-database-changes"])
+        )
+        XCTAssertEqual(
+            plan.zoneSubscriptionID,
+            "household-zone-ownerPrivate-\(householdId.uuidString)"
+        )
+        XCTAssertTrue(plan.requiresOwnerZoneSubscription)
+    }
+
+    @MainActor
+    func testParticipantSharedSubscriptionPlanKeepsOnlyDatabaseSubscriptions() {
+        let plan = CloudKitSubscriptionManager.makeSubscriptionPlan(
+            householdId: UUID(),
+            scope: .participantShared
+        )
+
+        XCTAssertEqual(
+            Set(plan.databaseSubscriptionIDs),
+            Set(["shared-database-changes", "private-database-changes"])
+        )
+        XCTAssertNil(plan.zoneSubscriptionID)
+        XCTAssertFalse(plan.requiresOwnerZoneSubscription)
+    }
+
     func testCloudKitSchemaKeepsHouseholdMemberRecordIndexesAndInviteTokenRoles() throws {
         let schemaURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

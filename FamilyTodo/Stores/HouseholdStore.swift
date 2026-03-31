@@ -417,6 +417,75 @@ struct RemoteVisibleContentResolution {
     let cacheUpdatedAt: Date
 }
 
+enum HouseholdRemoteSyncDiagnosticStage: String, Equatable {
+    case visibleChangeSkipped
+    case followUpPlan
+    case followUpSkipped
+    case followUpPassStarted
+    case followUpPassCompleted
+}
+
+struct HouseholdRemoteSyncDiagnostic: Equatable {
+    let stage: HouseholdRemoteSyncDiagnosticStage
+    let householdId: UUID?
+    let userId: String?
+    let notificationType: CKNotification.NotificationType?
+    let declaredDatabaseScope: CKDatabase.Scope?
+    let effectiveDatabaseScope: CKDatabase.Scope?
+    let direction: HouseholdSyncDirection?
+    let retryDelaysNanoseconds: [UInt64]
+    let followUpPassIndex: Int?
+    let didCaptureAdditionalChanges: Bool?
+    let note: String?
+
+    var progressOperation: String {
+        [
+            "remoteSync",
+            "stage=\(stage.rawValue)",
+            "householdId=\(householdId?.uuidString ?? "nil")",
+            "userId=\(userId ?? "nil")",
+            "notificationType=\(notificationTypeLabel(notificationType))",
+            "declaredScope=\(scopeLabel(declaredDatabaseScope))",
+            "effectiveScope=\(scopeLabel(effectiveDatabaseScope))",
+            "direction=\(direction?.rawValue ?? "nil")",
+            "retryDelays=\(retryDelaysNanoseconds.map { String($0) }.joined(separator: ","))",
+            "followUpPassIndex=\(followUpPassIndex.map { String($0) } ?? "nil")",
+            "didCaptureAdditionalChanges=\(didCaptureAdditionalChanges.map { String($0) } ?? "nil")",
+            "note=\(note ?? "nil")",
+        ].joined(separator: " ")
+    }
+
+    private func scopeLabel(_ scope: CKDatabase.Scope?) -> String {
+        guard let scope else { return "nil" }
+        return switch scope {
+        case .private:
+            "private"
+        case .public:
+            "public"
+        case .shared:
+            "shared"
+        @unknown default:
+            "unknown"
+        }
+    }
+
+    private func notificationTypeLabel(_ type: CKNotification.NotificationType?) -> String {
+        guard let type else { return "nil" }
+        return switch type {
+        case .database:
+            "database"
+        case .query:
+            "query"
+        case .readNotification:
+            "read"
+        case .recordZone:
+            "recordZone"
+        @unknown default:
+            "unknown"
+        }
+    }
+}
+
 struct RemoteSyncBaseline {
     let beforeSnapshot: HouseholdStore.RemoteCloudRefreshSnapshot
     let beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?
@@ -721,6 +790,21 @@ class HouseholdStore: ObservableObject {
         var hasPublishedVisibleContentNotifications = false
     }
 
+    private struct RemoteVisibleContentFollowUpContext {
+        let household: Household
+        let beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot
+        let userId: String
+        let context: RemoteCloudChangeContext
+        let effectiveDatabaseScope: CKDatabase.Scope?
+        let direction: HouseholdSyncDirection
+        let retryDelaysNanoseconds: [UInt64]
+    }
+
+    private struct RemoteVisibleContentFollowUpPass {
+        let index: Int
+        let delayNanoseconds: UInt64
+    }
+
     struct JoinedHouseholdHydrationSnapshot: Equatable {
         let activeMemberCount: Int
         let currentUserHasCachedMembership: Bool
@@ -809,6 +893,7 @@ class HouseholdStore: ObservableObject {
     private let userDefaults: UserDefaults
     private let recoverySuppressionDuration: TimeInterval
     private let joinHydrationConfiguration: JoinHydrationConfiguration
+    private let remoteSyncDiagnosticsRecorder: @MainActor (HouseholdRemoteSyncDiagnostic) -> Void
     private var isRefreshingCloudHousehold = false
     private var lastRemoteCloudRefreshSnapshot: RemoteCloudRefreshSnapshot?
     private var isReplayingPendingExitOperations = false
@@ -829,6 +914,10 @@ class HouseholdStore: ObservableObject {
         joinedHouseholdPrewarmOverride: ((Household, String, ModelContext?) async throws -> Void)? = nil,
         userDefaults: UserDefaults = .standard,
         recoverySuppressionDuration: TimeInterval = 300,
+        remoteSyncDiagnosticsRecorder: @escaping @MainActor (HouseholdRemoteSyncDiagnostic) -> Void = {
+            diagnostic in
+            CloudKitDiagnosticsState.shared.recordProgress(operation: diagnostic.progressOperation)
+        },
         joinHydrationConfiguration: JoinHydrationConfiguration = .default
     ) {
         self.modelContext = modelContext
@@ -836,6 +925,7 @@ class HouseholdStore: ObservableObject {
         self.joinedHouseholdPrewarmOverride = joinedHouseholdPrewarmOverride
         self.userDefaults = userDefaults
         self.recoverySuppressionDuration = recoverySuppressionDuration
+        self.remoteSyncDiagnosticsRecorder = remoteSyncDiagnosticsRecorder
         self.joinHydrationConfiguration = joinHydrationConfiguration
     }
 
@@ -3451,10 +3541,60 @@ class HouseholdStore: ObservableObject {
         userId: String,
         context: RemoteCloudChangeContext
     ) async -> RemoteVisibleContentResolution? {
-        guard let household = currentHousehold,
-              beforeSnapshot.observedHouseholdId == household.id,
-              let beforeVisibleContentSnapshot
-        else {
+        guard let household = currentHousehold else {
+            recordRemoteSyncDiagnostic(
+                HouseholdRemoteSyncDiagnostic(
+                    stage: .visibleChangeSkipped,
+                    householdId: beforeSnapshot.observedHouseholdId,
+                    userId: userId,
+                    notificationType: context.notificationType,
+                    declaredDatabaseScope: context.databaseScope,
+                    effectiveDatabaseScope: nil,
+                    direction: nil,
+                    retryDelaysNanoseconds: [],
+                    followUpPassIndex: nil,
+                    didCaptureAdditionalChanges: nil,
+                    note: "currentHouseholdMissing"
+                )
+            )
+            return nil
+        }
+
+        guard beforeSnapshot.observedHouseholdId == household.id else {
+            recordRemoteSyncDiagnostic(
+                HouseholdRemoteSyncDiagnostic(
+                    stage: .visibleChangeSkipped,
+                    householdId: household.id,
+                    userId: userId,
+                    notificationType: context.notificationType,
+                    declaredDatabaseScope: context.databaseScope,
+                    effectiveDatabaseScope: nil,
+                    direction: nil,
+                    retryDelaysNanoseconds: [],
+                    followUpPassIndex: nil,
+                    didCaptureAdditionalChanges: nil,
+                    note: "observedHouseholdMismatch"
+                )
+            )
+            return nil
+        }
+
+        guard let beforeVisibleContentSnapshot else {
+            recordRemoteSyncDiagnostic(
+                HouseholdRemoteSyncDiagnostic(
+                    stage: .visibleChangeSkipped,
+                    householdId: household.id,
+                    userId: userId,
+                    notificationType: context.notificationType,
+                    declaredDatabaseScope: context.databaseScope,
+                    effectiveDatabaseScope: nil,
+                    direction: nil,
+                    retryDelaysNanoseconds: [],
+                    followUpPassIndex: nil,
+                    didCaptureAdditionalChanges: nil,
+                    note: "beforeVisibleContentSnapshotMissing"
+                )
+            )
             return nil
         }
 
@@ -3475,14 +3615,58 @@ class HouseholdStore: ObservableObject {
         var afterVisibleContentSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
         var contentDiff = afterVisibleContentSnapshot.diff(from: beforeVisibleContentSnapshot)
         var followUpPassCount = 0
+        let effectiveDatabaseScope = effectiveRemoteDatabaseScope(
+            household: household,
+            userId: userId,
+            context: context
+        )
+        let direction = remoteSyncDirection(
+            household: household,
+            userId: userId,
+            context: context
+        )
 
         let followUpRetryDelays = sharedFollowUpRetryDelays(
             household: household,
             userId: userId,
             context: context
         )
+        let followUpContext = RemoteVisibleContentFollowUpContext(
+            household: household,
+            beforeVisibleContentSnapshot: beforeVisibleContentSnapshot,
+            userId: userId,
+            context: context,
+            effectiveDatabaseScope: effectiveDatabaseScope,
+            direction: direction,
+            retryDelaysNanoseconds: followUpRetryDelays
+        )
+
+        recordRemoteSyncDiagnostic(
+            makeRemoteSyncDiagnostic(
+                stage: .followUpPlan,
+                householdId: household.id,
+                userId: userId,
+                context: context,
+                effectiveDatabaseScope: effectiveDatabaseScope,
+                direction: direction,
+                retryDelaysNanoseconds: followUpRetryDelays,
+                note: nil
+            )
+        )
 
         guard !followUpRetryDelays.isEmpty else {
+            recordRemoteSyncDiagnostic(
+                makeRemoteSyncDiagnostic(
+                    stage: .followUpSkipped,
+                    householdId: household.id,
+                    userId: userId,
+                    context: context,
+                    effectiveDatabaseScope: effectiveDatabaseScope,
+                    direction: direction,
+                    retryDelaysNanoseconds: followUpRetryDelays,
+                    note: "emptyRetryDelaySet"
+                )
+            )
             return RemoteVisibleContentResolution(
                 snapshot: afterVisibleContentSnapshot,
                 diff: contentDiff,
@@ -3491,29 +3675,21 @@ class HouseholdStore: ObservableObject {
             )
         }
 
-        for delay in followUpRetryDelays {
-            if delay > 0 {
-                try? await _Concurrency.Task.sleep(nanoseconds: delay)
-            }
-            if let retryHydrationSnapshot = try? await runJoinedHouseholdHydrationPass(
-                household: household,
-                userId: userId
-            ) {
-                applyPendingJoinHydrationSnapshot(
-                    retryHydrationSnapshot,
-                    householdId: household.id,
-                    userId: userId,
-                    publishVisibleContentNotifications: false
+        for (index, delay) in followUpRetryDelays.enumerated() {
+            let followUpResult = await executeRemoteVisibleContentFollowUpPass(
+                followUpContext: followUpContext,
+                previousSnapshot: afterVisibleContentSnapshot,
+                pass: RemoteVisibleContentFollowUpPass(
+                    index: index + 1,
+                    delayNanoseconds: delay
                 )
-            }
+            )
 
-            let candidateSnapshot = remoteVisibleContentSnapshot(householdId: household.id)
-            let previousSnapshot = afterVisibleContentSnapshot
-            afterVisibleContentSnapshot = candidateSnapshot
-            contentDiff = candidateSnapshot.diff(from: beforeVisibleContentSnapshot)
+            afterVisibleContentSnapshot = followUpResult.snapshot
+            contentDiff = followUpResult.diff
             followUpPassCount += 1
 
-            if candidateSnapshot != previousSnapshot {
+            if followUpResult.didCaptureAdditionalChanges {
                 print(
                     "[RemoteSync] Shared follow-up pass \(followUpPassCount) captured additional changes for household \(household.id)."
                 )
@@ -3530,6 +3706,68 @@ class HouseholdStore: ObservableObject {
             followUpPassCount: followUpPassCount,
             cacheUpdatedAt: Date()
         )
+    }
+
+    private func executeRemoteVisibleContentFollowUpPass(
+        followUpContext: RemoteVisibleContentFollowUpContext,
+        previousSnapshot: RemoteVisibleContentSnapshot,
+        pass: RemoteVisibleContentFollowUpPass
+    ) async -> (
+        snapshot: RemoteVisibleContentSnapshot,
+        diff: RemoteVisibleContentDiff,
+        didCaptureAdditionalChanges: Bool
+    ) {
+        recordRemoteSyncDiagnostic(
+            makeRemoteSyncDiagnostic(
+                stage: .followUpPassStarted,
+                householdId: followUpContext.household.id,
+                userId: followUpContext.userId,
+                context: followUpContext.context,
+                effectiveDatabaseScope: followUpContext.effectiveDatabaseScope,
+                direction: followUpContext.direction,
+                retryDelaysNanoseconds: followUpContext.retryDelaysNanoseconds,
+                followUpPassIndex: pass.index,
+                note: "delay=\(pass.delayNanoseconds)"
+            )
+        )
+
+        if pass.delayNanoseconds > 0 {
+            try? await _Concurrency.Task.sleep(nanoseconds: pass.delayNanoseconds)
+        }
+        if let retryHydrationSnapshot = try? await runJoinedHouseholdHydrationPass(
+            household: followUpContext.household,
+            userId: followUpContext.userId
+        ) {
+            applyPendingJoinHydrationSnapshot(
+                retryHydrationSnapshot,
+                householdId: followUpContext.household.id,
+                userId: followUpContext.userId,
+                publishVisibleContentNotifications: false
+            )
+        }
+
+        let candidateSnapshot = remoteVisibleContentSnapshot(
+            householdId: followUpContext.household.id
+        )
+        let diff = candidateSnapshot.diff(from: followUpContext.beforeVisibleContentSnapshot)
+        let didCaptureAdditionalChanges = candidateSnapshot != previousSnapshot
+
+        recordRemoteSyncDiagnostic(
+            makeRemoteSyncDiagnostic(
+                stage: .followUpPassCompleted,
+                householdId: followUpContext.household.id,
+                userId: followUpContext.userId,
+                context: followUpContext.context,
+                effectiveDatabaseScope: followUpContext.effectiveDatabaseScope,
+                direction: followUpContext.direction,
+                retryDelaysNanoseconds: followUpContext.retryDelaysNanoseconds,
+                followUpPassIndex: pass.index,
+                didCaptureAdditionalChanges: didCaptureAdditionalChanges,
+                note: nil
+            )
+        )
+
+        return (candidateSnapshot, diff, didCaptureAdditionalChanges)
     }
 
     func emptyHouseholdSyncPassResult(
@@ -4233,6 +4471,37 @@ class HouseholdStore: ObservableObject {
         print(
             "[RemoteSync] Telemetry direction=\(direction.rawValue) pushToCacheMs=\(pushToCacheLabel) refreshMs=\(refreshMilliseconds) followUpPasses=\(followUpPassCount) didChange=\(didChange)"
         )
+    }
+
+    private func makeRemoteSyncDiagnostic(
+        stage: HouseholdRemoteSyncDiagnosticStage,
+        householdId: UUID?,
+        userId: String?,
+        context: RemoteCloudChangeContext,
+        effectiveDatabaseScope: CKDatabase.Scope?,
+        direction: HouseholdSyncDirection?,
+        retryDelaysNanoseconds: [UInt64] = [],
+        followUpPassIndex: Int? = nil,
+        didCaptureAdditionalChanges: Bool? = nil,
+        note: String?
+    ) -> HouseholdRemoteSyncDiagnostic {
+        HouseholdRemoteSyncDiagnostic(
+            stage: stage,
+            householdId: householdId,
+            userId: userId,
+            notificationType: context.notificationType,
+            declaredDatabaseScope: context.databaseScope,
+            effectiveDatabaseScope: effectiveDatabaseScope,
+            direction: direction,
+            retryDelaysNanoseconds: retryDelaysNanoseconds,
+            followUpPassIndex: followUpPassIndex,
+            didCaptureAdditionalChanges: didCaptureAdditionalChanges,
+            note: note
+        )
+    }
+
+    private func recordRemoteSyncDiagnostic(_ diagnostic: HouseholdRemoteSyncDiagnostic) {
+        remoteSyncDiagnosticsRecorder(diagnostic)
     }
 
     private func shoppingRemoteSyncPresentation(

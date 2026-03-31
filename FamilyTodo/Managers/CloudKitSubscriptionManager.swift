@@ -30,10 +30,21 @@ struct InlineRemoteSyncIndicator: Identifiable, Equatable {
     let id = UUID()
 }
 
+struct CloudKitSubscriptionPlan: Equatable {
+    let databaseSubscriptionIDs: [String]
+    let zoneSubscriptionID: String?
+
+    var requiresOwnerZoneSubscription: Bool {
+        zoneSubscriptionID != nil
+    }
+}
+
 /// Manages CloudKit subscriptions for real-time change notifications
 @MainActor
 final class CloudKitSubscriptionManager: ObservableObject {
     static let shared = CloudKitSubscriptionManager()
+    static let sharedDatabaseSubscriptionID = "shared-database-changes"
+    static let privateDatabaseSubscriptionID = "private-database-changes"
 
     // MARK: - Published State
 
@@ -73,6 +84,27 @@ final class CloudKitSubscriptionManager: ObservableObject {
         scope == .ownerPrivate
     }
 
+    static func makeSubscriptionPlan(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope?
+    ) -> CloudKitSubscriptionPlan {
+        let zoneSubscriptionID: String? = if let scope,
+                                             shouldCreateZoneSubscription(for: scope)
+        {
+            "household-zone-ownerPrivate-\(householdId.uuidString)"
+        } else {
+            nil
+        }
+
+        return CloudKitSubscriptionPlan(
+            databaseSubscriptionIDs: [
+                sharedDatabaseSubscriptionID,
+                privateDatabaseSubscriptionID,
+            ],
+            zoneSubscriptionID: zoneSubscriptionID
+        )
+    }
+
     // MARK: - Setup
 
     func configure(
@@ -101,6 +133,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         configuredHouseholdId = householdId
         configuredScope = scope
         resetTransientPresentationState()
+        recordSubscriptionProgress(
+            "subscription.configure userId=\(userId) householdId=\(householdId.uuidString) scope=\(scopeLabel(scope))"
+        )
 
         _Concurrency.Task {
             await setupSubscriptions(householdId: householdId, scope: scope)
@@ -120,13 +155,21 @@ final class CloudKitSubscriptionManager: ObservableObject {
         let container = await cloudKit.getContainer()
         let sharedDatabase = container.sharedCloudDatabase
         let privateDatabase = container.privateCloudDatabase
+        let subscriptionPlan = Self.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: scope
+        )
+
+        recordSubscriptionProgress(
+            "subscription.plan householdId=\(householdId.uuidString) scope=\(scopeLabel(scope)) databaseIds=\(subscriptionPlan.databaseSubscriptionIDs.joined(separator: ",")) zoneId=\(subscriptionPlan.zoneSubscriptionID ?? "none")"
+        )
 
         await createDatabaseSubscription(
-            subscriptionId: "shared-database-changes",
+            subscriptionId: Self.sharedDatabaseSubscriptionID,
             database: sharedDatabase
         )
         await createDatabaseSubscription(
-            subscriptionId: "private-database-changes",
+            subscriptionId: Self.privateDatabaseSubscriptionID,
             database: privateDatabase
         )
 
@@ -145,6 +188,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             let existingSubscription = try await database.subscription(for: subscriptionId)
             databaseSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.database.reused id=\(subscriptionId) type=\(type(of: existingSubscription))"
+            )
             print(
                 "[CloudKitSubscription] Reusing database subscription id=\(subscriptionId) type=\(type(of: existingSubscription))"
             )
@@ -162,6 +208,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
             _ = try await database.save(subscription)
             let confirmedSubscription = try await database.subscription(for: subscriptionId)
             databaseSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.database.created id=\(subscriptionId) type=\(type(of: confirmedSubscription))"
+            )
             print(
                 "✅ Created database subscription id=\(subscriptionId) confirmedType=\(type(of: confirmedSubscription))"
             )
@@ -179,7 +228,11 @@ final class CloudKitSubscriptionManager: ObservableObject {
         sharedDatabase: CKDatabase,
         privateDatabase: CKDatabase
     ) async {
-        let requiredSubscriptionIds = Set(zoneSubscriptionIDs(for: householdId, scope: scope))
+        let subscriptionPlan = Self.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: scope
+        )
+        let requiredSubscriptionIds = Set(subscriptionPlan.zoneSubscriptionID.map { [$0] } ?? [])
         let obsoleteSubscriptionIds = householdZoneSubscriptionIds.subtracting(requiredSubscriptionIds)
 
         for subscriptionId in obsoleteSubscriptionIds {
@@ -226,6 +279,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             let existingSubscription = try await database.subscription(for: subscriptionId)
             householdZoneSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.zone.reused id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: existingSubscription))"
+            )
             print(
                 "[CloudKitSubscription] Reusing zone subscription id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: existingSubscription))"
             )
@@ -248,6 +304,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
             _ = try await database.save(subscription)
             let confirmedSubscription = try await database.subscription(for: subscriptionId)
             householdZoneSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.zone.created id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: confirmedSubscription))"
+            )
             print(
                 "✅ Created zone subscription id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) confirmedType=\(type(of: confirmedSubscription))"
             )
@@ -266,6 +325,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         for database in databases {
             do {
                 try await database.deleteSubscription(withID: subscriptionId)
+                recordSubscriptionProgress("subscription.deleted id=\(subscriptionId)")
                 print("🗑️ Removed subscription: \(subscriptionId)")
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 continue
@@ -290,8 +350,13 @@ final class CloudKitSubscriptionManager: ObservableObject {
         for householdId: UUID,
         scope: CloudKitManager.HouseholdDatabaseScope?
     ) -> [String] {
-        guard let scope, Self.shouldCreateZoneSubscription(for: scope) else { return [] }
-        return [zoneSubscriptionID(householdId: householdId, scope: scope)]
+        guard let zoneSubscriptionID = Self.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: scope
+        ).zoneSubscriptionID else {
+            return []
+        }
+        return [zoneSubscriptionID]
     }
 
     // MARK: - Push Notification Registration
@@ -313,13 +378,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
 
         if let dbNotification = notification as? CKDatabaseNotification {
+            recordSubscriptionProgress("push.received type=database")
             print("[CloudKitSubscription] Received database notification.")
             handleDatabaseNotification(dbNotification)
         } else if let zoneNotification = notification as? CKRecordZoneNotification {
+            recordSubscriptionProgress("push.received type=recordZone")
             print("[CloudKitSubscription] Received record-zone notification.")
             handleRecordZoneNotification(zoneNotification)
         } else if let queryNotification = notification as? CKQueryNotification {
             let recordType = (queryNotification.recordFields?["recordType"] as? String) ?? "unknown"
+            recordSubscriptionProgress("push.received type=query recordType=\(recordType)")
             print("[CloudKitSubscription] Received query notification for recordType=\(recordType).")
             handleQueryNotification(queryNotification)
         } else {
@@ -689,6 +757,20 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private func reportSubscriptionFailure(_ error: Error, context: String) {
         print("[CloudKitSubscription] \(context) failed: \(error.localizedDescription)")
         CloudKitDiagnosticsState.shared.record(error: error, operation: context)
+    }
+
+    private func recordSubscriptionProgress(_ operation: String) {
+        CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+    }
+
+    private func scopeLabel(_ scope: CloudKitManager.HouseholdDatabaseScope?) -> String {
+        guard let scope else { return "nil" }
+        return switch scope {
+        case .ownerPrivate:
+            "ownerPrivate"
+        case .participantShared:
+            "participantShared"
+        }
     }
 
     // MARK: - Cleanup
