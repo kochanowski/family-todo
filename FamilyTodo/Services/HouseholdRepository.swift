@@ -1,5 +1,10 @@
 import Foundation
 
+struct HouseholdScopedMembership: Equatable {
+    let member: Member
+    let scope: CloudKitManager.HouseholdDatabaseScope
+}
+
 actor HouseholdRepository {
     private let cloud: any HouseholdCloudSyncing
     private let zoneResolver: HouseholdZoneResolver
@@ -29,6 +34,41 @@ actor HouseholdRepository {
             householdId: context.householdId,
             scope: context.scope
         )?.isActive ?? false
+    }
+
+    func fetchActiveScopedMemberships(
+        userId: String,
+        householdId: UUID? = nil
+    ) async throws -> [HouseholdScopedMembership] {
+        let participantMembers = try await fetchActiveMembers(
+            userId: userId,
+            householdId: householdId,
+            scope: .participantShared
+        )
+        let ownerMembers = try await fetchActiveMembers(
+            userId: userId,
+            householdId: householdId,
+            scope: .ownerPrivate
+        )
+
+        return participantMembers.map {
+            HouseholdScopedMembership(member: $0, scope: .participantShared)
+        } + ownerMembers.map {
+            HouseholdScopedMembership(member: $0, scope: .ownerPrivate)
+        }
+    }
+
+    private func fetchActiveMembers(
+        userId: String,
+        householdId: UUID?,
+        scope: CloudKitManager.HouseholdDatabaseScope
+    ) async throws -> [Member] {
+        _ = try await zoneResolver.prepare(householdId: householdId, scope: scope)
+        return try await cloud.fetchActiveMembersByUserId(
+            userId,
+            householdId: householdId,
+            scope: scope
+        )
     }
 
     private func prepareCloud(for context: HouseholdSyncContext) async throws {

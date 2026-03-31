@@ -2129,22 +2129,18 @@ class HouseholdStore: ObservableObject {
         userId: String,
         householdId: UUID? = nil
     ) async throws -> [ScopedMembership] {
-        await cloudKit.setHouseholdScope(.participantShared)
-        let participantMembers = try await cloudKit.fetchActiveMembersByUserId(
-            userId,
-            householdId: householdId,
-            scope: .participantShared
-        )
-        await cloudKit.setHouseholdScope(.ownerPrivate)
-        let ownerMembers = try await cloudKit.fetchActiveMembersByUserId(
-            userId,
-            householdId: householdId,
-            scope: .ownerPrivate
+        let memberships = try await householdRepository.fetchActiveScopedMemberships(
+            userId: userId,
+            householdId: householdId
         )
 
-        let participantScoped = participantMembers.map { ScopedMembership(member: $0, source: .participantShared) }
-        let ownerScoped = ownerMembers.map { ScopedMembership(member: $0, source: .ownerPrivate) }
-        return deduplicatedScopedMemberships(participantScoped + ownerScoped)
+        let scopedMemberships = memberships.map { membership in
+            ScopedMembership(
+                member: membership.member,
+                source: membership.scope == .ownerPrivate ? .ownerPrivate : .participantShared
+            )
+        }
+        return deduplicatedScopedMemberships(scopedMemberships)
     }
 
     private func deduplicatedScopedMemberships(_ memberships: [ScopedMembership]) -> [ScopedMembership] {
