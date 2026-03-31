@@ -597,6 +597,85 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
     }
 
+    func testOwnerRecordZoneRemoteChangeWithoutDeclaredScopeStillKeepsHydratingUntilDelayedTaskArrives() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
+
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let delayedTask = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash"
+        )
+        let immediateShoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let hydrationPassCount = Counter()
+        let joinHydrationConfiguration = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 5_000_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [0]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+
+                if pass == 1 {
+                    context.insert(CachedShoppingItem(from: immediateShoppingItem))
+                } else {
+                    context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(task: delayedTask)))
+                }
+                try context.save()
+            },
+            joinHydrationConfiguration: joinHydrationConfiguration
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .unknown),
+            context: RemoteCloudChangeContext(
+                databaseScope: nil,
+                notificationType: .recordZone,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+        XCTAssertEqual(result.diagnostics.direction, .participantToOwner)
+        XCTAssertGreaterThanOrEqual(hydrationPassCount.value, 2)
+        XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
+        XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
+    }
+
     func testRunRemoteSyncPassDoesNotTreatLocalPendingShoppingInsertAsRemoteAddition() async throws {
         final class Counter {
             var value = 0

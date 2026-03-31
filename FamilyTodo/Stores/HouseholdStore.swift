@@ -4153,16 +4153,22 @@ class HouseholdStore: ObservableObject {
         userId: String,
         context: RemoteCloudChangeContext
     ) -> [UInt64] {
+        let effectiveDatabaseScope = effectiveRemoteDatabaseScope(
+            household: household,
+            userId: userId,
+            context: context
+        )
+
         if household.ownerId == userId {
             // The owner's shared zone resides in their private database.
             // When a participant writes to the CKShare, the owner receives a notification
             // scoped to their private database. We must process private notifications as
             // shared sync triggers for the owner so they see participant updates.
-            guard context.databaseScope == .private else { return [] }
+            guard effectiveDatabaseScope == .private else { return [] }
             return joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds
         } else {
             // A participant's view of the shared zone resides in their shared database.
-            guard context.databaseScope == .shared else { return [] }
+            guard effectiveDatabaseScope == .shared else { return [] }
             return joinHydrationConfiguration.participantSharedFollowUpRetryDelaysNanoseconds
         }
     }
@@ -4173,16 +4179,39 @@ class HouseholdStore: ObservableObject {
         context: RemoteCloudChangeContext
     ) -> HouseholdSyncDirection {
         guard let household else { return .unknown }
+        let effectiveDatabaseScope = effectiveRemoteDatabaseScope(
+            household: household,
+            userId: userId,
+            context: context
+        )
 
         if household.ownerId == userId {
             // The owner's shared zone resides in their private database.
-            guard context.databaseScope == .private else { return .unknown }
+            guard effectiveDatabaseScope == .private else { return .unknown }
             return .participantToOwner
         } else {
             // The participant's shared zone resides in their shared database.
-            guard context.databaseScope == .shared else { return .unknown }
+            guard effectiveDatabaseScope == .shared else { return .unknown }
             return .ownerToParticipant
         }
+    }
+
+    private func effectiveRemoteDatabaseScope(
+        household: Household,
+        userId: String,
+        context: RemoteCloudChangeContext
+    ) -> CKDatabase.Scope? {
+        if let databaseScope = context.databaseScope {
+            return databaseScope
+        }
+
+        guard context.notificationType == .recordZone,
+              household.ownerId == userId
+        else {
+            return nil
+        }
+
+        return .private
     }
 
     private func logRemoteSyncTelemetry(

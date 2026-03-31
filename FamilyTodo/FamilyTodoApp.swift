@@ -164,6 +164,12 @@ struct FamilyTodoApp: App {
                                 #if !CI
                                     appDelegate.installNotificationCenterDelegate()
                                 #endif
+                                appDelegate.currentSyncContextProvider = {
+                                    guard let userId = userSession.userId else {
+                                        return nil
+                                    }
+                                    return householdStore.currentSyncContext(userId: userId)
+                                }
                                 appDelegate.remoteCloudChangeHandler = { [weak syncCoordinator] context in
                                     guard let syncCoordinator else {
                                         return .noData

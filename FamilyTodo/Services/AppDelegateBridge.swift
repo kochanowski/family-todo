@@ -30,10 +30,38 @@ struct RemoteCloudChangeContext: Equatable {
     }
 }
 
+struct RemoteCloudChangeContextResolver {
+    let currentSyncContextProvider: @MainActor () -> HouseholdSyncContext?
+
+    @MainActor
+    func resolveDatabaseScope(
+        declaredScope: CKDatabase.Scope?,
+        notificationType: CKNotification.NotificationType
+    ) -> CKDatabase.Scope? {
+        if let declaredScope {
+            return declaredScope
+        }
+
+        guard notificationType == .recordZone,
+              let syncContext = currentSyncContextProvider()
+        else {
+            return nil
+        }
+
+        switch syncContext.scope {
+        case .ownerPrivate:
+            return .private
+        case .participantShared:
+            return .shared
+        }
+    }
+}
+
 @MainActor
 final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     weak var shareAcceptanceCoordinator: ShareAcceptanceCoordinator?
     var remoteCloudChangeHandler: (@MainActor (RemoteCloudChangeContext) async -> UIBackgroundFetchResult)?
+    var currentSyncContextProvider: @MainActor () -> HouseholdSyncContext? = { nil }
     private var pendingMetadata: CKShare.Metadata?
     private var activeRemoteRefreshTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingRemoteRefreshContext: RemoteCloudChangeContext?
@@ -163,11 +191,17 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
     private func remoteCloudChangeContext(
         for notification: CKNotification
     ) -> RemoteCloudChangeContext {
-        let databaseScope: CKDatabase.Scope? = if let databaseNotification = notification as? CKDatabaseNotification {
+        let declaredDatabaseScope: CKDatabase.Scope? = if let databaseNotification = notification as? CKDatabaseNotification {
             databaseNotification.databaseScope
         } else {
             nil
         }
+        let databaseScope = RemoteCloudChangeContextResolver(
+            currentSyncContextProvider: currentSyncContextProvider
+        ).resolveDatabaseScope(
+            declaredScope: declaredDatabaseScope,
+            notificationType: notification.notificationType
+        )
 
         return RemoteCloudChangeContext(
             databaseScope: databaseScope,

@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 @testable import HousePulse
 import UIKit
@@ -144,6 +145,66 @@ final class HouseholdStoreSyncEngineTests: XCTestCase {
         XCTAssertEqual(result.fetchResult, .failed)
         XCTAssertEqual(dataSource.recordedCalls, ["baseline", "refresh", "empty"])
         XCTAssertEqual(dataSource.recordedError as? TestSyncError, expectedError)
+    }
+
+    func testRemoteCloudChangeContextResolverInfersPrivateScopeForOwnerRecordZonePushWithoutDeclaredScope() {
+        let householdId = UUID()
+        let resolver = RemoteCloudChangeContextResolver {
+            HouseholdSyncContext(
+                householdId: householdId,
+                currentUserId: "owner-1",
+                ownerUserId: "owner-1",
+                role: .owner,
+                scope: .ownerPrivate
+            )
+        }
+
+        let resolvedScope = resolver.resolveDatabaseScope(
+            declaredScope: nil,
+            notificationType: .recordZone
+        )
+
+        XCTAssertEqual(resolvedScope, .private)
+    }
+
+    func testRemoteCloudChangeContextResolverInfersSharedScopeForParticipantRecordZonePushWithoutDeclaredScope() {
+        let householdId = UUID()
+        let resolver = RemoteCloudChangeContextResolver {
+            HouseholdSyncContext(
+                householdId: householdId,
+                currentUserId: "member-2",
+                ownerUserId: "owner-1",
+                role: .participant,
+                scope: .participantShared
+            )
+        }
+
+        let resolvedScope = resolver.resolveDatabaseScope(
+            declaredScope: nil,
+            notificationType: .recordZone
+        )
+
+        XCTAssertEqual(resolvedScope, .shared)
+    }
+
+    func testRemoteCloudChangeContextResolverKeepsDeclaredScopeAuthoritative() {
+        let householdId = UUID()
+        let resolver = RemoteCloudChangeContextResolver {
+            HouseholdSyncContext(
+                householdId: householdId,
+                currentUserId: "owner-1",
+                ownerUserId: "owner-1",
+                role: .owner,
+                scope: .ownerPrivate
+            )
+        }
+
+        let resolvedScope = resolver.resolveDatabaseScope(
+            declaredScope: .shared,
+            notificationType: .recordZone
+        )
+
+        XCTAssertEqual(resolvedScope, .shared)
     }
 }
 
