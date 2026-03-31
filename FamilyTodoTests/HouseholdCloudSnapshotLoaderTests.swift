@@ -278,8 +278,8 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         )
         let cloud = FakeHouseholdCloud(
             households: [ownerHousehold, participantHousehold],
-            ownerMembers: [ownerMember],
             participantMembers: [participantMember],
+            ownerMembers: [ownerMember],
             acceptedSharedHouseholdIDs: [participantHousehold.id],
             ownerZoneIDsByHouseholdId: [ownerHousehold.id: ownerZoneID],
             participantSharedZoneIDsByHouseholdId: [participantHousehold.id: sharedZoneID]
