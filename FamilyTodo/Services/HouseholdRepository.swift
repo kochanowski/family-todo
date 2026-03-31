@@ -68,10 +68,21 @@ actor HouseholdRepository {
         userId: String,
         householdId: UUID? = nil
     ) async throws -> [HouseholdRecoveryCandidate] {
-        let memberships = try await fetchActiveScopedMemberships(
+        let participantMembers = try await fetchActiveMembersForRecovery(
             userId: userId,
-            householdId: householdId
+            householdId: householdId,
+            scope: .participantShared
         )
+        let ownerMembers = try await fetchActiveMembersForRecovery(
+            userId: userId,
+            householdId: householdId,
+            scope: .ownerPrivate
+        )
+        let memberships = participantMembers.map {
+            HouseholdScopedMembership(member: $0, scope: .participantShared)
+        } + ownerMembers.map {
+            HouseholdScopedMembership(member: $0, scope: .ownerPrivate)
+        }
 
         var candidates: [HouseholdRecoveryCandidate] = []
         candidates.reserveCapacity(memberships.count)
@@ -151,6 +162,29 @@ actor HouseholdRepository {
         }
     }
 
+    private func fetchActiveMembersForRecovery(
+        userId: String,
+        householdId: UUID?,
+        scope: CloudKitManager.HouseholdDatabaseScope
+    ) async throws -> [Member] {
+        do {
+            return try await fetchActiveMembers(
+                userId: userId,
+                householdId: householdId,
+                scope: scope
+            )
+        } catch {
+            guard shouldTreatMissingRecoveryMembershipsAsEmpty(
+                error,
+                householdId: householdId,
+                scope: scope
+            ) else {
+                throw error
+            }
+            return []
+        }
+    }
+
     private func prepareCloud(for context: HouseholdSyncContext) async throws {
         _ = try await zoneResolver.resolveZone(for: context)
     }
@@ -164,6 +198,37 @@ actor HouseholdRepository {
         {
             return isRecordMissingError(underlying)
         }
+        return false
+    }
+
+    private func shouldTreatMissingRecoveryMembershipsAsEmpty(
+        _ error: Error,
+        householdId: UUID?,
+        scope: CloudKitManager.HouseholdDatabaseScope
+    ) -> Bool {
+        guard scope == .participantShared, householdId != nil else {
+            return false
+        }
+
+        if let ckError = error as? CKError {
+            switch ckError.code {
+            case .zoneNotFound, .permissionFailure, .unknownItem:
+                return true
+            default:
+                return false
+            }
+        }
+
+        if let managerError = error as? CloudKitManager.CloudKitManagerError,
+           case let .unknownError(underlying) = managerError
+        {
+            return shouldTreatMissingRecoveryMembershipsAsEmpty(
+                underlying,
+                householdId: householdId,
+                scope: scope
+            )
+        }
+
         return false
     }
 }

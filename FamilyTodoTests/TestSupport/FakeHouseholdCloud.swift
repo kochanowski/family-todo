@@ -223,8 +223,17 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
 
     func fetchHousehold(
         id: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> Household {
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchHousehold", scope: scope, householdId: id)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: id,
+                operation: "fetchHousehold",
+                forWrite: false
+            )
+        }
         guard let household = householdsById[id] else {
             throw CKError(.unknownItem)
         }
