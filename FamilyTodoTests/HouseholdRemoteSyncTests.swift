@@ -37,9 +37,9 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         HouseholdStore(
             modelContext: modelContainer.mainContext,
             cloudKit: cloud,
-            remoteSyncDiagnosticsRecorder: remoteSyncDiagnosticsRecorder,
             userDefaults: defaults,
             recoverySuppressionDuration: 300,
+            remoteSyncDiagnosticsRecorder: remoteSyncDiagnosticsRecorder,
             joinHydrationConfiguration: joinHydrationConfiguration
         )
     }
@@ -54,9 +54,9 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             modelContext: modelContainer.mainContext,
             cloudKit: cloud,
             joinedHouseholdPrewarmOverride: joinedHouseholdPrewarmOverride,
-            remoteSyncDiagnosticsRecorder: remoteSyncDiagnosticsRecorder,
             userDefaults: defaults,
             recoverySuppressionDuration: 300,
+            remoteSyncDiagnosticsRecorder: remoteSyncDiagnosticsRecorder,
             joinHydrationConfiguration: joinHydrationConfiguration
         )
     }
