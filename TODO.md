@@ -14,6 +14,7 @@
 - Retro Dark, Retro Light, and Paper theme support has been rolled out broadly; new UI is expected to wire theme fonts from day one.
 - Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
 - Multi-user sync is partially hardened, but still not considered fully closed until real-device owner/participant behavior is consistent and predictable.
+- Latest blocker inside multi-user sync: `participant -> owner` still appears to fail at the owner push-trigger / follow-up-retry layer, especially when owner receives `record-zone` notifications without an inferred private-db scope.
 - Remote-update UI has partially shipped (`Tasks`/`Shopping` inline feedback + shopping banner), but it still needs a dedicated polish pass after sync reliability is acceptable.
 - Immediate roadmap focus has changed: sync reliability, update UX cleanup, notification-permission timing, onboarding refresh, and invite flow polish now take precedence over previously planned polish-only work.
 

@@ -60,6 +60,111 @@ Use it together with the one-task-at-a-time workflow.
   - household name/icon and member names sync with the same reliability as tasks and shopping
   - no duplicate or misleading notification copy is produced during sync storms
 
+
+### Current 2026-03-31 diagnosis
+- Latest real-device state after the recent refactor cuts:
+  - `owner -> participant` is now much better and often lands in roughly `5-15s` for `Shopping`, with initial household hydration working correctly after join.
+  - `participant -> owner` is still the main blocker:
+    - owner often does not see `Shopping`, `Ideas`, or `Tasks` changes at all,
+    - when changes do appear, they may require minutes or unrelated later triggers.
+- The most likely current root cause is no longer record save or join bootstrap.
+- Current strongest hypothesis from code inspection:
+  - participant writes are landing through the shared-zone save path,
+  - owner-side follow-up retry depends on `RemoteCloudChangeContext.databaseScope == .private`,
+  - `AppDelegateBridge` currently reads `databaseScope` only from `CKDatabaseNotification`,
+  - owner also uses `CKRecordZoneSubscription`,
+  - for `CKRecordZoneNotification`, the current app path can leave `databaseScope == nil`,
+  - that prevents owner-specific `participantToOwner` follow-up retries from starting,
+  - result: owner often performs only one early pass and then stops waiting for delayed participant data.
+
+### Current 2026-03-31 implemented refactor baseline
+- Already landed and should be treated as the current baseline:
+  - central `HouseholdSyncCoordinator`
+  - `HouseholdSyncContext` and `HouseholdSyncContextFactory`
+  - `HouseholdRemoteSyncExecutor` seam
+  - `HouseholdCloudSnapshotLoader`
+  - `HouseholdRepository`
+  - early `HouseholdZoneResolver`
+  - owner-side target-zone reads before exhaustive fallback
+  - same-account recovery split from real invited-member flow
+  - iPad/universal layout baseline
+- Important constraint for follow-up work:
+  - do not restart from a new architecture idea,
+  - continue from this baseline and tighten the remaining owner-side trigger/fetch path.
+
+### Next implementation cut: owner push-context normalization
+- Goal:
+  - make owner treat `participant -> owner` pushes as `private` shared-sync triggers even when the system delivers them as `record-zone` notifications without a declared database scope.
+- Production changes:
+  - In `FamilyTodo/Services/AppDelegateBridge.swift`:
+    - add a tiny inference seam that resolves effective CloudKit database scope from:
+      - notification type,
+      - declared system scope if present,
+      - current `HouseholdSyncContext` when declared scope is missing.
+    - keep declared scope authoritative when it exists.
+    - infer:
+      - `ownerPrivate -> .private`
+      - `participantShared -> .shared`
+      - only for `recordZone` notifications when scope is missing.
+  - In `FamilyTodo/FamilyTodoApp.swift`:
+    - inject a current-sync-context provider into `AppDelegateBridge`,
+    - source it from `householdStore.currentSyncContext(userId:)`.
+  - In `FamilyTodo/Stores/HouseholdStore.swift`:
+    - add a defensive fallback so owner-side remote sync still resolves to:
+      - `databaseScope = .private`
+      - `direction = .participantToOwner`
+      - owner follow-up retry delays,
+      when the incoming context is `recordZone` with missing scope and the current household belongs to the current user.
+    - keep this as backup logic, not the main source of truth.
+- Do not change in this cut:
+  - record save mapping
+  - zone rewrite logic
+  - `HouseholdRepository` fetch semantics
+  - `HouseholdZoneResolver` behavior
+  - schema or invite model
+
+### Tests to add in the next session
+- Add focused tests before production edits:
+  - `AppDelegateBridge` inference seam:
+    - owner sync context + `recordZone` + missing scope -> `.private`
+    - participant sync context + `recordZone` + missing scope -> `.shared`
+    - declared scope still wins over inference
+  - owner-side remote sync path:
+    - owner household + `recordZone` push with missing scope still runs `participantToOwner` follow-up hydration
+    - delayed shared content appearing on the second hydration pass must still produce `.newData`
+- Prefer adding these to existing test files instead of creating a new test target/file set unless needed:
+  - `FamilyTodoTests/HouseholdSyncCoordinatorTests.swift`
+  - `FamilyTodoTests/HouseholdRemoteSyncTests.swift`
+
+### Device validation immediately after that cut
+- Use fresh apps, separate Apple IDs, fresh household, QR join.
+- Test only the current blocker path first:
+  - `Tel 2 -> Tel 1` add/edit/delete for:
+    - `Shopping`
+    - `Tasks`
+    - `Ideas`
+    - `BacklogCategory`
+- Success signal:
+  - owner starts seeing participant changes in the same short window as current `owner -> participant` sync,
+  - no more “never appears until much later” behavior.
+- If `Shopping` improves but `Ideas` / `BacklogCategory` still lag badly:
+  - next cut should move to owner-side merge/fetch handling for `WorkItem` and `BacklogCategory`,
+  - not back to invite/join or save-path debugging.
+
+### Remaining refactor after the push-context fix
+- Continue the larger refactor only after validating the owner push-context fix on devices.
+- Next architectural steps after that validation:
+  - expand `HouseholdRepository` so `HouseholdStore` owns less cloud transport/recovery logic,
+  - continue moving zone prep/fallback decisions out of `CloudKitManager` into `HouseholdZoneResolver`,
+  - keep converging on one central sync path:
+    - trigger
+    - context
+    - snapshot fetch
+    - cache merge
+    - typed events
+  - only later evaluate zone-token incremental sync,
+  - `CKSyncEngine` remains explicitly deferred until the current custom pipeline is more centralized.
+
 ## <a id="i11"></a>I1.1 Remote Update UX Cleanup
 - Objective: make remote-sync feedback consistent and low-noise across `Tasks`, `Shopping`, and `Ideas`.
 - Background:
