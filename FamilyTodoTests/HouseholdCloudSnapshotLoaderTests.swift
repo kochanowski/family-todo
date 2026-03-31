@@ -251,6 +251,86 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         )
     }
 
+    func testRepositoryFetchesHouseholdForScopedMembershipUsingMatchingScope() async throws {
+        let ownerId = "owner-1"
+        let participantId = "joined-user"
+        let ownerHousehold = TestCacheFixtures.household(name: "Owner House", ownerId: ownerId)
+        let participantHousehold = TestCacheFixtures.household(name: "Shared House", ownerId: ownerId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: ownerHousehold.id,
+            userId: ownerId,
+            displayName: "Owner",
+            role: .owner
+        )
+        let participantMember = TestCacheFixtures.member(
+            householdId: participantHousehold.id,
+            userId: participantId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let ownerZoneID = CKRecordZone.ID(
+            zoneName: "household-\(ownerHousehold.id.uuidString)",
+            ownerName: "__defaultOwner__"
+        )
+        let sharedZoneID = CKRecordZone.ID(
+            zoneName: "shared-\(participantHousehold.id.uuidString)",
+            ownerName: "owner"
+        )
+        let cloud = FakeHouseholdCloud(
+            households: [ownerHousehold, participantHousehold],
+            ownerMembers: [ownerMember],
+            participantMembers: [participantMember],
+            acceptedSharedHouseholdIDs: [participantHousehold.id],
+            ownerZoneIDsByHouseholdId: [ownerHousehold.id: ownerZoneID],
+            participantSharedZoneIDsByHouseholdId: [participantHousehold.id: sharedZoneID]
+        )
+        let repository = HouseholdRepository(cloud: cloud)
+
+        let fetchedOwnerHousehold = try await repository.fetchHousehold(
+            for: HouseholdScopedMembership(member: ownerMember, scope: .ownerPrivate)
+        )
+        let fetchedParticipantHousehold = try await repository.fetchHousehold(
+            for: HouseholdScopedMembership(member: participantMember, scope: .participantShared)
+        )
+
+        XCTAssertEqual(fetchedOwnerHousehold.id, ownerHousehold.id)
+        XCTAssertEqual(fetchedParticipantHousehold.id, participantHousehold.id)
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "ensureHouseholdOwnerZone",
+                scope: .ownerPrivate,
+                householdId: ownerHousehold.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchHousehold",
+                scope: .ownerPrivate,
+                householdId: ownerHousehold.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "resolveSubscriptionZone",
+                scope: .participantShared,
+                householdId: participantHousehold.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchHousehold",
+                scope: .participantShared,
+                householdId: participantHousehold.id
+            )
+        )
+    }
+
     func testLoadSnapshotFetchesEntireHouseholdGraphUsingProvidedScope() async throws {
         let userId = "joined-user"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")

@@ -58,6 +58,19 @@ actor HouseholdRepository {
         }
     }
 
+    func fetchHousehold(
+        for membership: HouseholdScopedMembership
+    ) async throws -> Household {
+        _ = try await zoneResolver.prepare(
+            householdId: membership.member.householdId,
+            scope: membership.scope
+        )
+        return try await cloud.fetchHousehold(
+            id: membership.member.householdId,
+            scope: membership.scope
+        )
+    }
+
     private func fetchActiveMembers(
         userId: String,
         householdId: UUID?,

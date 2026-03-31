@@ -1962,32 +1962,15 @@ class HouseholdStore: ObservableObject {
             return currentHousehold
         }
 
-        await cloudKit.setHouseholdScope(.ownerPrivate)
-        if let ownerMember = try? await cloudKit.fetchMemberByUserId(
-            userId,
-            householdId: householdId,
-            scope: .ownerPrivate
-        ),
-            ownerMember.isActive
-        {
-            return try await recoverableHousehold(
-                from: ownerMember,
-                source: .ownerPrivate
-            )
-        }
+        let memberships = try await householdRepository.fetchActiveScopedMemberships(
+            userId: userId,
+            householdId: householdId
+        )
 
-        await cloudKit.setHouseholdScope(.participantShared)
-        if let participantMember = try? await cloudKit.fetchMemberByUserId(
-            userId,
-            householdId: householdId,
-            scope: .participantShared
-        ),
-            participantMember.isActive
-        {
-            return try await recoverableHousehold(
-                from: participantMember,
-                source: .participantShared
-            )
+        for membership in memberships {
+            if let recoveredHousehold = try await recoverableHousehold(from: membership) {
+                return recoveredHousehold
+            }
         }
 
         return nil
@@ -4326,6 +4309,24 @@ class HouseholdStore: ObservableObject {
         )
         await invalidateRecoveredHousehold(household.id)
         return false
+    }
+
+    private func recoverableHousehold(
+        from membership: HouseholdScopedMembership?
+    ) async throws -> Household? {
+        guard let membership else {
+            return nil
+        }
+
+        let source: RecoverableMembershipSource =
+            membership.scope == .ownerPrivate ? .ownerPrivate : .participantShared
+        return try await recoverableHousehold(
+            from: membership.member,
+            source: source,
+            fetchHousehold: { [householdRepository] _ in
+                try await householdRepository.fetchHousehold(for: membership)
+            }
+        )
     }
 
     func recoverableHousehold(
