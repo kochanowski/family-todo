@@ -1962,14 +1962,22 @@ class HouseholdStore: ObservableObject {
             return currentHousehold
         }
 
-        let memberships = try await householdRepository.fetchActiveScopedMemberships(
-            userId: userId,
-            householdId: householdId
+        let candidates = try await deduplicatedRecoveryCandidates(
+            householdRepository.fetchRecoverableCandidates(
+                userId: userId,
+                householdId: householdId
+            )
         )
 
-        for membership in memberships {
-            if let recoveredHousehold = try await recoverableHousehold(from: membership) {
+        for candidate in candidates {
+            if let recoveredHousehold = candidate.household,
+               !isRecoverySuppressed(for: recoveredHousehold.id)
+            {
                 return recoveredHousehold
+            }
+
+            if candidate.household == nil {
+                await handleMissingRecoverableMembership(candidate.membership)
             }
         }
 
@@ -2144,6 +2152,43 @@ class HouseholdStore: ObservableObject {
         return byHouseholdId.values.sorted { lhs, rhs in
             lhs.member.joinedAt > rhs.member.joinedAt
         }
+    }
+
+    private func deduplicatedRecoveryCandidates(
+        _ candidates: [HouseholdRecoveryCandidate]
+    ) -> [HouseholdRecoveryCandidate] {
+        var byHouseholdId: [UUID: HouseholdRecoveryCandidate] = [:]
+
+        for candidate in candidates {
+            let householdId = candidate.membership.member.householdId
+            guard let existing = byHouseholdId[householdId] else {
+                byHouseholdId[householdId] = candidate
+                continue
+            }
+
+            if candidate.membership.member.joinedAt >= existing.membership.member.joinedAt {
+                byHouseholdId[householdId] = candidate
+            }
+        }
+
+        return byHouseholdId.values.sorted { lhs, rhs in
+            lhs.membership.member.joinedAt > rhs.membership.member.joinedAt
+        }
+    }
+
+    private func handleMissingRecoverableMembership(
+        _ membership: HouseholdScopedMembership
+    ) async {
+        let source: RecoverableMembershipSource =
+            membership.scope == .ownerPrivate ? .ownerPrivate : .participantShared
+        print(
+            "DEBUG: Ignoring stale \(source.rawValue) membership for missing household \(membership.member.householdId)"
+        )
+        suppressRecovery(for: membership.member.householdId)
+        await cleanupStaleRecoverableMembership(
+            membership.member,
+            source: source
+        )
     }
 
     private func severMembershipAssociation(_ scopedMembership: ScopedMembership) async throws {
@@ -4216,16 +4261,22 @@ class HouseholdStore: ObservableObject {
         preferredHouseholdId: UUID? = nil
     ) async throws -> Household? {
         if let preferredHouseholdId, !isRecoverySuppressed(for: preferredHouseholdId) {
-            let preferredMemberships = try await fetchScopedActiveMemberships(
-                userId: userId,
-                householdId: preferredHouseholdId
+            let preferredCandidates = try await deduplicatedRecoveryCandidates(
+                householdRepository.fetchRecoverableCandidates(
+                    userId: userId,
+                    householdId: preferredHouseholdId
+                )
             )
-            for scopedMembership in preferredMemberships {
-                if let recoveredHousehold = try await recoverableHousehold(
-                    from: scopedMembership.member,
-                    source: scopedMembership.source
-                ) {
+
+            for candidate in preferredCandidates {
+                if let recoveredHousehold = candidate.household,
+                   !isRecoverySuppressed(for: recoveredHousehold.id)
+                {
                     return recoveredHousehold
+                }
+
+                if candidate.household == nil {
+                    await handleMissingRecoverableMembership(candidate.membership)
                 }
             }
 
@@ -4235,16 +4286,22 @@ class HouseholdStore: ObservableObject {
             await invalidateRecoveredHousehold(preferredHouseholdId)
         }
 
-        let scopedMemberships = try await fetchScopedActiveMemberships(userId: userId)
-        guard !scopedMemberships.isEmpty else { return nil }
+        let candidates = try await deduplicatedRecoveryCandidates(
+            householdRepository.fetchRecoverableCandidates(userId: userId)
+        )
+        guard !candidates.isEmpty else { return nil }
 
         var recoveredByHouseholdId: [UUID: Household] = [:]
-        for scopedMembership in scopedMemberships {
-            if let recoveredHousehold = try await recoverableHousehold(
-                from: scopedMembership.member,
-                source: scopedMembership.source
-            ) {
+        for candidate in candidates {
+            if let recoveredHousehold = candidate.household,
+               !isRecoverySuppressed(for: recoveredHousehold.id)
+            {
                 recoveredByHouseholdId[recoveredHousehold.id] = recoveredHousehold
+                continue
+            }
+
+            if candidate.household == nil {
+                await handleMissingRecoverableMembership(candidate.membership)
             }
         }
 
@@ -4311,24 +4368,6 @@ class HouseholdStore: ObservableObject {
         return false
     }
 
-    private func recoverableHousehold(
-        from membership: HouseholdScopedMembership?
-    ) async throws -> Household? {
-        guard let membership else {
-            return nil
-        }
-
-        let source: RecoverableMembershipSource =
-            membership.scope == .ownerPrivate ? .ownerPrivate : .participantShared
-        return try await recoverableHousehold(
-            from: membership.member,
-            source: source,
-            fetchHousehold: { [householdRepository] _ in
-                try await householdRepository.fetchHousehold(for: membership)
-            }
-        )
-    }
-
     func recoverableHousehold(
         from member: Member?,
         source: RecoverableMembershipSource,
@@ -4378,22 +4417,14 @@ class HouseholdStore: ObservableObject {
         _ member: Member,
         source: RecoverableMembershipSource
     ) async {
-        await cloudKit.clearAllCachedZones(for: member.householdId)
+        let scope: CloudKitManager.HouseholdDatabaseScope =
+            source == .ownerPrivate ? .ownerPrivate : .participantShared
 
         do {
-            let scope: CloudKitManager.HouseholdDatabaseScope =
-                source == .ownerPrivate ? .ownerPrivate : .participantShared
-            _ = try await cloudKit.updateMemberState(
-                memberId: member.id,
-                householdId: member.householdId,
-                newDisplayName: member.displayName,
-                newRole: member.role,
-                isActive: false,
-                colorHex: member.colorHex,
-                scope: scope
+            try await householdRepository.cleanupStaleRecoverableMembership(
+                HouseholdScopedMembership(member: member, scope: scope)
             )
         } catch {
-            guard !isRecordMissingError(error) else { return }
             print(
                 "DEBUG: Failed to deactivate stale \(source.rawValue) membership for household \(member.householdId): \(error)"
             )

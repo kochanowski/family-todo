@@ -331,6 +331,104 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         )
     }
 
+    func testRepositoryFetchesRecoverableCandidatesAcrossScopesAndMissingHouseholds() async throws {
+        let userId = "joined-user"
+        let ownerHousehold = TestCacheFixtures.household(name: "Owner House", ownerId: userId)
+        let missingSharedHouseholdId = UUID()
+        let ownerMember = TestCacheFixtures.member(
+            householdId: ownerHousehold.id,
+            userId: userId,
+            displayName: "Owner",
+            role: .owner
+        )
+        let participantMember = TestCacheFixtures.member(
+            householdId: missingSharedHouseholdId,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let ownerZoneID = CKRecordZone.ID(
+            zoneName: "household-\(ownerHousehold.id.uuidString)",
+            ownerName: "__defaultOwner__"
+        )
+        let missingSharedZoneID = CKRecordZone.ID(
+            zoneName: "shared-\(missingSharedHouseholdId.uuidString)",
+            ownerName: "owner"
+        )
+        let cloud = FakeHouseholdCloud(
+            households: [ownerHousehold],
+            participantMembers: [participantMember],
+            ownerMembers: [ownerMember],
+            acceptedSharedHouseholdIDs: [missingSharedHouseholdId],
+            ownerZoneIDsByHouseholdId: [ownerHousehold.id: ownerZoneID],
+            participantSharedZoneIDsByHouseholdId: [missingSharedHouseholdId: missingSharedZoneID]
+        )
+        let repository = HouseholdRepository(cloud: cloud)
+
+        let candidates = try await repository.fetchRecoverableCandidates(userId: userId)
+
+        XCTAssertEqual(candidates.count, 2)
+        XCTAssertEqual(
+            candidates.first { $0.membership.scope == .ownerPrivate }?.household?.id,
+            ownerHousehold.id
+        )
+        XCTAssertNil(
+            candidates.first { $0.membership.scope == .participantShared }?.household
+        )
+    }
+
+    func testRepositoryCleansUpStaleRecoverableMembershipUsingMatchingScope() async throws {
+        let userId = "joined-user"
+        let ownerHousehold = TestCacheFixtures.household(name: "Owner House", ownerId: userId)
+        let sharedHousehold = TestCacheFixtures.household(name: "Shared House", ownerId: "owner-1")
+        let ownerMember = TestCacheFixtures.member(
+            householdId: ownerHousehold.id,
+            userId: userId,
+            displayName: "Owner",
+            role: .owner
+        )
+        let participantMember = TestCacheFixtures.member(
+            householdId: sharedHousehold.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let cloud = FakeHouseholdCloud(
+            households: [ownerHousehold, sharedHousehold],
+            participantMembers: [participantMember],
+            ownerMembers: [ownerMember],
+            acceptedSharedHouseholdIDs: [sharedHousehold.id]
+        )
+        let repository = HouseholdRepository(cloud: cloud)
+
+        try await repository.cleanupStaleRecoverableMembership(
+            HouseholdScopedMembership(member: ownerMember, scope: .ownerPrivate)
+        )
+        try await repository.cleanupStaleRecoverableMembership(
+            HouseholdScopedMembership(member: participantMember, scope: .participantShared)
+        )
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "updateMemberState",
+                scope: .ownerPrivate,
+                householdId: ownerHousehold.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "updateMemberState",
+                scope: .participantShared,
+                householdId: sharedHousehold.id
+            )
+        )
+        await XCTAssertEqual(cloud.inactiveUpdateCount(for: ownerHousehold.id), 1)
+        await XCTAssertEqual(cloud.inactiveUpdateCount(for: sharedHousehold.id), 1)
+    }
+
     func testLoadSnapshotFetchesEntireHouseholdGraphUsingProvidedScope() async throws {
         let userId = "joined-user"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
