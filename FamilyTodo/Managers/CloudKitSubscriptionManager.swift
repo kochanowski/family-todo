@@ -87,13 +87,12 @@ final class CloudKitSubscriptionManager: ObservableObject {
         householdId: UUID,
         scope: CloudKitManager.HouseholdDatabaseScope?
     ) -> CloudKitSubscriptionPlan {
-        let zoneSubscriptionID: String? = if let scope,
-                                             shouldCreateZoneSubscription(for: scope)
-        {
+        let zoneSubscriptionID: String?
+        if let scope, shouldCreateZoneSubscription(for: scope) {
             let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
-            "household-zone-\(scopeName)-\(householdId.uuidString)"
+            zoneSubscriptionID = "household-zone-\(scopeName)-\(householdId.uuidString)"
         } else {
-            nil
+            zoneSubscriptionID = nil
         }
 
         let databaseSubscriptionIDs: [String] = switch scope {
