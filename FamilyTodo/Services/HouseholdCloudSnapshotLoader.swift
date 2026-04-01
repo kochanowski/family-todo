@@ -51,7 +51,7 @@ actor HouseholdCloudSnapshotLoader {
         return try await withTimeout(
             nanoseconds: snapshotTimeoutNanoseconds,
             timeoutError: HouseholdCloudSnapshotLoaderError.snapshotTimedOut
-        ) {
+        ) { [self] in
             let members = try await fetchDomain(
                 "members",
                 householdId: householdId,
@@ -125,7 +125,7 @@ actor HouseholdCloudSnapshotLoader {
 
             return HouseholdCloudSnapshot(
                 members: members,
-                unifiedWorkItems: mergeUnifiedWorkItems(
+                unifiedWorkItems: Self.mergeUnifiedWorkItems(
                     workItems: workItems,
                     tasks: tasks,
                     ideas: backlogItems
@@ -176,7 +176,7 @@ actor HouseholdCloudSnapshotLoader {
                 try await operation()
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: nanoseconds)
+                try await _Concurrency.Task.sleep(nanoseconds: nanoseconds)
                 throw timeoutError
             }
 
@@ -186,7 +186,7 @@ actor HouseholdCloudSnapshotLoader {
         }
     }
 
-    private func mergeUnifiedWorkItems(
+    private static func mergeUnifiedWorkItems(
         workItems: [WorkItem],
         tasks: [Task],
         ideas: [BacklogItem]
@@ -217,7 +217,9 @@ actor HouseholdCloudSnapshotLoader {
         }
     }
 
-    private func shouldReplaceUnifiedWorkItem(existing: WorkItem, with candidate: WorkItem) -> Bool {
+    private static func shouldReplaceUnifiedWorkItem(existing: WorkItem, with candidate: WorkItem)
+        -> Bool
+    {
         let existingPriority = unifiedWorkItemStatusPriority(existing.status)
         let candidatePriority = unifiedWorkItemStatusPriority(candidate.status)
 
@@ -228,7 +230,7 @@ actor HouseholdCloudSnapshotLoader {
         return candidate.updatedAt > existing.updatedAt
     }
 
-    private func unifiedWorkItemStatusPriority(_ status: WorkItem.Status) -> Int {
+    private static func unifiedWorkItemStatusPriority(_ status: WorkItem.Status) -> Int {
         switch status {
         case .done:
             4
