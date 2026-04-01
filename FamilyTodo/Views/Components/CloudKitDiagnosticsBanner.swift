@@ -65,10 +65,10 @@ struct CloudKitDiagnosticsBanner: View {
                 }
             }
             .padding(12)
-            .background(themeStore.cardBackgroundColor.opacity(0.9))
+            .background(themeStore.surfaceElevatedColor.opacity(0.9))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(themeStore.dividerColor.opacity(0.55), lineWidth: 1)
+                    .stroke(themeStore.contentSecondaryColor.opacity(0.4), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .accessibilityIdentifier("cloudKitDiagnosticsBanner")
@@ -213,10 +213,10 @@ private struct CloudKitDiagnosticsSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(themeStore.cardBackgroundColor.opacity(0.9))
+        .background(themeStore.surfaceElevatedColor.opacity(0.9))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(themeStore.dividerColor.opacity(0.45), lineWidth: 1)
+                .stroke(themeStore.contentSecondaryColor.opacity(0.32), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
