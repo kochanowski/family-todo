@@ -1034,10 +1034,10 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             cloud: cloud,
             joinedHouseholdPrewarmOverride: { _, _, _ in
                 _ = invocationCount.increment()
-                try await Task.sleep(nanoseconds: 150_000_000)
+                try await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
             }
         )
-        store.setSyncMode(.cloud)
+        store.setSyncMode(SyncMode.cloud)
         store.currentHousehold = household
 
         modelContainer.mainContext.insert(CachedHousehold(from: household))
@@ -1047,12 +1047,12 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         async let firstPass = store.runRemoteSyncPass(
             userId: userId,
             preferredHouseholdId: household.id,
-            reason: .appBecameActive
+            reason: HouseholdSyncReason.appBecameActive
         )
         async let secondPass = store.runRemoteSyncPass(
             userId: userId,
             preferredHouseholdId: household.id,
-            reason: .appBecameActive
+            reason: HouseholdSyncReason.appBecameActive
         )
 
         _ = await (firstPass, secondPass)
