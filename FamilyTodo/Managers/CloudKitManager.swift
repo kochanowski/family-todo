@@ -1644,8 +1644,8 @@ actor CloudKitManager {
                 continuation.resume(with: result)
             }
 
-            let timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: Self.queryPageTimeoutNanoseconds)
+            let timeoutTask = _Concurrency.Task {
+                try? await _Concurrency.Task.sleep(nanoseconds: Self.queryPageTimeoutNanoseconds)
                 operation.cancel()
                 resumeOnce(
                     with: .failure(
