@@ -584,12 +584,16 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
     func testClearRemovesDiagnosticsPayload() {
         let error = NSError(domain: "CKErrorDomain", code: 1, userInfo: nil)
         CloudKitDiagnosticsState.shared.record(error: error, operation: "saveHousehold")
+        CloudKitDiagnosticsState.shared.recordProgress(operation: "remotePush type=recordZone")
 
         CloudKitDiagnosticsState.shared.clear()
 
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitError)
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitOperation)
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitErrorTimestampISO8601)
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitProgressOperation)
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitProgressTimestampISO8601)
+        XCTAssertTrue(CloudKitDiagnosticsState.shared.entries.isEmpty)
     }
 
     func testRecordKeepsCreateShareStageOperationName() {
@@ -603,6 +607,40 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertTrue(payload?.contains("operation=createShare.final") == true)
         XCTAssertTrue(payload?.contains("Failed to create share") == true)
         XCTAssertEqual(CloudKitDiagnosticsState.shared.lastCloudKitOperation, "createShare.final")
+    }
+
+    func testRecordProgressAppendsDiagnosticsHistoryEntry() {
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "remoteSync stage=followUpPlan direction=participantToOwner"
+        )
+
+        XCTAssertEqual(
+            CloudKitDiagnosticsState.shared.lastCloudKitProgressOperation,
+            "remoteSync stage=followUpPlan direction=participantToOwner"
+        )
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.count, 1)
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.first?.kind, .progress)
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.diagnosticsReport.contains(
+                "remoteSync stage=followUpPlan direction=participantToOwner"
+            )
+        )
+    }
+
+    func testRecordErrorAppendsErrorHistoryEntry() {
+        let error = NSError(domain: "CKErrorDomain", code: 13, userInfo: [
+            NSLocalizedDescriptionKey: "Permission denied.",
+        ])
+
+        CloudKitDiagnosticsState.shared.record(error: error, operation: "createZoneSubscription")
+
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.count, 1)
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.first?.kind, .error)
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.diagnosticsReport.contains(
+                "operation=createZoneSubscription"
+            )
+        )
     }
 }
 

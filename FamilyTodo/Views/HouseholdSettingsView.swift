@@ -110,9 +110,10 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var diagnosticsSection: some View {
-        if cloudKitDiagnostics.lastCloudKitError != nil {
+        if cloudKitDiagnostics.hasVisibleDiagnostics {
             Section {
                 CloudKitDiagnosticsBanner()
+                    .environmentObject(themeStore)
                     .environmentObject(cloudKitDiagnostics)
                     .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                     .listRowBackground(Color.clear)
