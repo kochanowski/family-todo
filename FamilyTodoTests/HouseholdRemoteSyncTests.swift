@@ -867,6 +867,68 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         })
     }
 
+    func testOwnerSharedDatabaseRemoteChangeStillUsesParticipantToOwnerFollowUp() async throws {
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        var diagnostics: [HouseholdRemoteSyncDiagnostic] = []
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                context.insert(CachedShoppingItem(from: shoppingItem))
+                try context.save()
+            },
+            remoteSyncDiagnosticsRecorder: { diagnostics.append($0) },
+            joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration(
+                initialHydrationBudgetNanoseconds: 5_000_000_000,
+                initialRetryDelaysNanoseconds: [0],
+                backgroundRetryDelaysNanoseconds: [],
+                pendingJoinGraceDuration: 30,
+                ownerSharedFollowUpRetryDelaysNanoseconds: [0]
+            )
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .sharedDatabase),
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+        XCTAssertEqual(result.diagnostics.direction, .participantToOwner)
+
+        let followUpPlan = try XCTUnwrap(diagnostics.first { $0.stage == .followUpPlan })
+        XCTAssertEqual(followUpPlan.effectiveDatabaseScope, .shared)
+        XCTAssertEqual(followUpPlan.direction, .participantToOwner)
+        XCTAssertEqual(followUpPlan.retryDelaysNanoseconds, [0])
+    }
+
     func testRunRemoteSyncPassDoesNotTreatLocalPendingShoppingInsertAsRemoteAddition() async throws {
         final class Counter {
             var value = 0

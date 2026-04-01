@@ -3,6 +3,7 @@ import CloudKit
 import SwiftData
 import XCTest
 
+// swiftlint:disable file_length
 final class HouseholdTests: XCTestCase {
     // MARK: - Initialization Tests
 
@@ -1135,6 +1136,22 @@ final class CloudKitManagerScopeTests: XCTestCase {
         XCTAssertEqual(
             result.authoritativeRecords.map(\.recordID.recordName),
             [first.recordID.recordName, second.recordID.recordName]
+        )
+    }
+
+    func testOwnerPrivateEmptyTargetZoneResultRequiresFallbackScan() {
+        XCTAssertTrue(
+            CloudKitManager.shouldFallbackToOwnerPrivateExhaustiveScan(
+                targetZoneRecordCount: 0
+            )
+        )
+    }
+
+    func testOwnerPrivateNonEmptyTargetZoneResultSkipsFallbackScan() {
+        XCTAssertFalse(
+            CloudKitManager.shouldFallbackToOwnerPrivateExhaustiveScan(
+                targetZoneRecordCount: 2
+            )
         )
     }
 

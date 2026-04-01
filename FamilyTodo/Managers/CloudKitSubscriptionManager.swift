@@ -67,7 +67,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private var configuredHouseholdId: UUID?
     private var configuredScope: CloudKitManager.HouseholdDatabaseScope?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
-    private var lastLocalMutationAt: Date?
     private var shoppingInlineDismissTask: _Concurrency.Task<Void, Never>?
     private var tasksInlineDismissTask: _Concurrency.Task<Void, Never>?
 
@@ -81,7 +80,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     static func shouldCreateZoneSubscription(
         for scope: CloudKitManager.HouseholdDatabaseScope
     ) -> Bool {
-        scope == .ownerPrivate
+        scope == .ownerPrivate || scope == .participantShared
     }
 
     static func makeSubscriptionPlan(
@@ -91,16 +90,21 @@ final class CloudKitSubscriptionManager: ObservableObject {
         let zoneSubscriptionID: String? = if let scope,
                                              shouldCreateZoneSubscription(for: scope)
         {
-            "household-zone-ownerPrivate-\(householdId.uuidString)"
+            let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+            "household-zone-\(scopeName)-\(householdId.uuidString)"
         } else {
             nil
         }
 
+        let databaseSubscriptionIDs: [String] = switch scope {
+        case .participantShared:
+            [sharedDatabaseSubscriptionID]
+        case .ownerPrivate, nil:
+            [sharedDatabaseSubscriptionID, privateDatabaseSubscriptionID]
+        }
+
         return CloudKitSubscriptionPlan(
-            databaseSubscriptionIDs: [
-                sharedDatabaseSubscriptionID,
-                privateDatabaseSubscriptionID,
-            ],
+            databaseSubscriptionIDs: databaseSubscriptionIDs,
             zoneSubscriptionID: zoneSubscriptionID
         )
     }
@@ -164,14 +168,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
             "subscription.plan householdId=\(householdId.uuidString) scope=\(scopeLabel(scope)) databaseIds=\(subscriptionPlan.databaseSubscriptionIDs.joined(separator: ",")) zoneId=\(subscriptionPlan.zoneSubscriptionID ?? "none")"
         )
 
-        await createDatabaseSubscription(
-            subscriptionId: Self.sharedDatabaseSubscriptionID,
-            database: sharedDatabase
-        )
-        await createDatabaseSubscription(
-            subscriptionId: Self.privateDatabaseSubscriptionID,
-            database: privateDatabase
-        )
+        for subscriptionId in subscriptionPlan.databaseSubscriptionIDs {
+            let database: CKDatabase = switch subscriptionId {
+            case Self.privateDatabaseSubscriptionID:
+                privateDatabase
+            default:
+                sharedDatabase
+            }
+
+            await createDatabaseSubscription(
+                subscriptionId: subscriptionId,
+                database: database
+            )
+        }
 
         await syncHouseholdZoneSubscriptions(
             householdId: householdId,
@@ -363,6 +372,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     private func registerForRemoteNotifications() async {
         #if !CI
+            recordSubscriptionProgress("push.registration.requested")
             await MainActor.run {
                 UIApplication.shared.registerForRemoteNotifications()
             }
@@ -397,7 +407,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func registerLocalMutation(recordName: String?) {
         let now = Date()
-        lastLocalMutationAt = now
         if let recordName {
             recentLocalMutationByRecordName[recordName] = now
         }
@@ -408,9 +417,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
         recentLocalMutationByRecordName = recentLocalMutationByRecordName.filter { _, timestamp in
             now.timeIntervalSince(timestamp) <= selfNoiseWindow
         }
-        if let lastLocalMutationAt, now.timeIntervalSince(lastLocalMutationAt) > selfNoiseWindow {
-            self.lastLocalMutationAt = nil
-        }
     }
 
     private func isLikelySelfNoise(recordName: String?) -> Bool {
@@ -420,12 +426,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
         if let recordName,
            let timestamp = recentLocalMutationByRecordName[recordName],
            now.timeIntervalSince(timestamp) <= selfNoiseWindow
-        {
-            return true
-        }
-
-        if let lastLocalMutationAt,
-           now.timeIntervalSince(lastLocalMutationAt) <= selfNoiseWindow
         {
             return true
         }

@@ -575,7 +575,7 @@ actor CloudKitManager {
 
     private nonisolated func clearCloudKitFailure() {
         _Concurrency.Task { @MainActor in
-            CloudKitDiagnosticsState.shared.clear()
+            CloudKitDiagnosticsState.shared.clearLastError()
         }
     }
 
@@ -1278,6 +1278,12 @@ actor CloudKitManager {
         ownerZoneBoundQueryRecordTypes.contains(recordType)
     }
 
+    static func shouldFallbackToOwnerPrivateExhaustiveScan(
+        targetZoneRecordCount: Int
+    ) -> Bool {
+        targetZoneRecordCount == 0
+    }
+
     private static let singleGraphReferenceKeys = [
         "householdId",
         "assigneeId",
@@ -1444,16 +1450,6 @@ actor CloudKitManager {
             guard Self.isMissingRecordTypeError(error) else { throw error }
             return nil
         }
-    }
-
-    private func canTrustOwnerZoneBoundEmptyResult(householdId: UUID) -> Bool {
-        hasCompletedSharedGraphRepair(
-            householdId: householdId,
-            mode: .backgroundExhaustive
-        ) || hasCompletedSharedGraphRepair(
-            householdId: householdId,
-            mode: .interactivePrimaryZones
-        )
     }
 
     private func deleteLegacyOwnerPrivateRecordsIfNeeded(_ recordIDs: [CKRecord.ID]) async throws {
@@ -1693,33 +1689,55 @@ actor CloudKitManager {
                 let recordType = queryFactory(nil).recordType
                 if Self.shouldUseOwnerZoneBoundQuery(recordType: recordType) {
                     let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+                    recordCloudKitProgress(
+                        "ownerQuery.targetZone.started recordType=\(recordType) zone=\(targetZoneID.zoneName)|\(targetZoneID.ownerName)"
+                    )
                     if let targetZoneRecords = try await queryOwnerPrivateRecordsInTargetZone(
                         queryFactory,
                         targetZoneID: targetZoneID
-                    ), !targetZoneRecords.isEmpty || canTrustOwnerZoneBoundEmptyResult(
-                        householdId: householdId
                     ) {
-                        print(
-                            "CloudKitScope: query ownerPrivate \(recordType) using household target zone \(targetZoneID.zoneName)"
+                        recordCloudKitProgress(
+                            "ownerQuery.targetZone.completed recordType=\(recordType) count=\(targetZoneRecords.count)"
                         )
-                        let sortedRecords = Self.sortRecords(
-                            targetZoneRecords,
-                            using: baselineSortDescriptors
-                        )
-                        for sortedRecord in sortedRecords {
-                            rememberRecordZone(sortedRecord, explicitHouseholdId: householdId, scope: scope)
+                        if !Self.shouldFallbackToOwnerPrivateExhaustiveScan(
+                            targetZoneRecordCount: targetZoneRecords.count
+                        ) {
+                            print(
+                                "CloudKitScope: query ownerPrivate \(recordType) using household target zone \(targetZoneID.zoneName)"
+                            )
+                            let sortedRecords = Self.sortRecords(
+                                targetZoneRecords,
+                                using: baselineSortDescriptors
+                            )
+                            for sortedRecord in sortedRecords {
+                                rememberRecordZone(
+                                    sortedRecord,
+                                    explicitHouseholdId: householdId,
+                                    scope: scope
+                                )
+                            }
+                            return sortedRecords
                         }
-                        return sortedRecords
+                    } else {
+                        recordCloudKitProgress(
+                            "ownerQuery.targetZone.completed recordType=\(recordType) count=missingRecordType"
+                        )
                     }
 
                     print(
-                        "CloudKitScope: ownerPrivate target-zone query for \(recordType) yielded no trusted result, falling back to exhaustive scan"
+                        "CloudKitScope: ownerPrivate target-zone query for \(recordType) yielded an empty result, falling back to exhaustive scan"
                     )
                 }
 
+                recordCloudKitProgress(
+                    "ownerQuery.fallbackScan.started recordType=\(recordType)"
+                )
                 let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
                     queryFactory,
                     householdId: householdId
+                )
+                recordCloudKitProgress(
+                    "ownerQuery.fallbackScan.completed recordType=\(recordType) authoritativeCount=\(scanResult.authoritativeRecords.count) zoneCount=\(Set(scanResult.authoritativeRecords.map { "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)" }).count)"
                 )
                 for authoritativeRecord in scanResult.authoritativeRecords {
                     rememberRecordZone(authoritativeRecord, explicitHouseholdId: householdId, scope: scope)

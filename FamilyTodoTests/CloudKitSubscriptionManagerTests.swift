@@ -12,8 +12,8 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testParticipantSharedSkipsZoneSubscriptions() {
-        XCTAssertFalse(
+    func testParticipantSharedCreatesZoneSubscriptions() {
+        XCTAssertTrue(
             CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
         )
         XCTAssertTrue(
@@ -43,17 +43,22 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
 
     @MainActor
     func testParticipantSharedSubscriptionPlanKeepsOnlyDatabaseSubscriptions() {
+        let householdId = UUID()
+
         let plan = CloudKitSubscriptionManager.makeSubscriptionPlan(
-            householdId: UUID(),
+            householdId: householdId,
             scope: .participantShared
         )
 
         XCTAssertEqual(
             Set(plan.databaseSubscriptionIDs),
-            Set(["shared-database-changes", "private-database-changes"])
+            Set(["shared-database-changes"])
         )
-        XCTAssertNil(plan.zoneSubscriptionID)
-        XCTAssertFalse(plan.requiresOwnerZoneSubscription)
+        XCTAssertEqual(
+            plan.zoneSubscriptionID,
+            "household-zone-participantShared-\(householdId.uuidString)"
+        )
+        XCTAssertTrue(plan.requiresOwnerZoneSubscription)
     }
 
     func testCloudKitSchemaKeepsHouseholdMemberRecordIndexesAndInviteTokenRoles() throws {
@@ -383,6 +388,48 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
 
         XCTAssertFalse(manager.showNewItemsBanner)
         XCTAssertEqual(manager.newItemsCount, 0)
+        XCTAssertNil(manager.shoppingInlineFeedback)
+    }
+
+    @MainActor
+    func testConsumeSyncBatchDoesNotSuppressDifferentShoppingRecordAfterLocalMutation() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.tasks)
+
+        let localItemID = UUID()
+        let remoteItemID = UUID()
+        manager.registerLocalMutation(recordName: localItemID.uuidString)
+
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: UUID(),
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(),
+                    direction: .ownerToParticipant,
+                    kind: .shoppingAdded(ids: Set([remoteItemID]), titles: ["Milk"])
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: UUID(),
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(),
+                syncStartedAt: Date(),
+                syncFinishedAt: Date(),
+                changedDomains: Set([.shopping]),
+                changedIDsByDomain: [.shopping: Set([remoteItemID])],
+                activeMemberCount: 2
+            )
+        )
+
+        manager.consumeSyncBatch(batch, applicationState: .active)
+
+        XCTAssertTrue(manager.showNewItemsBanner)
+        XCTAssertEqual(manager.newItemsCount, 1)
         XCTAssertNil(manager.shoppingInlineFeedback)
     }
 }

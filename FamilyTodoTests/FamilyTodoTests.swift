@@ -558,9 +558,26 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
 
 @MainActor
 final class CloudKitDiagnosticsStateTests: XCTestCase {
+    private var diagnosticsDefaults: UserDefaults!
+    private var diagnosticsSuiteName: String!
+
     override func setUp() async throws {
         try await super.setUp()
+        diagnosticsSuiteName = "CloudKitDiagnosticsStateTests-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: diagnosticsSuiteName) else {
+            XCTFail("Failed to create diagnostics defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: diagnosticsSuiteName)
+        diagnosticsDefaults = defaults
         CloudKitDiagnosticsState.shared.clear()
+    }
+
+    override func tearDown() async throws {
+        diagnosticsDefaults?.removePersistentDomain(forName: diagnosticsSuiteName)
+        diagnosticsDefaults = nil
+        diagnosticsSuiteName = nil
+        try await super.tearDown()
     }
 
     func testRecordFormatsFullCloudKitPayload() {
@@ -641,6 +658,33 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
                 "operation=createZoneSubscription"
             )
         )
+    }
+
+    func testDiagnosticsEntriesPersistAcrossFreshStateInitialization() {
+        let firstState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        firstState.recordProgress(operation: "push.received type=recordZone")
+        firstState.record(error: NSError(domain: "CKErrorDomain", code: 7), operation: "saveRecord")
+
+        let restoredState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        XCTAssertEqual(restoredState.entries.count, 2)
+        XCTAssertEqual(restoredState.entries.first?.kind, .progress)
+        XCTAssertEqual(restoredState.entries.last?.kind, .error)
+        XCTAssertTrue(restoredState.hasVisibleDiagnostics)
+        XCTAssertTrue(restoredState.diagnosticsReport.contains("push.received type=recordZone"))
+        XCTAssertTrue(restoredState.diagnosticsReport.contains("operation=saveRecord"))
+    }
+
+    func testClearRemovesPersistedDiagnosticsEntries() {
+        let firstState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        firstState.recordProgress(operation: "snapshot.load.started")
+        XCTAssertEqual(firstState.entries.count, 1)
+
+        firstState.clear()
+
+        let restoredState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        XCTAssertTrue(restoredState.entries.isEmpty)
+        XCTAssertFalse(restoredState.hasVisibleDiagnostics)
     }
 }
 

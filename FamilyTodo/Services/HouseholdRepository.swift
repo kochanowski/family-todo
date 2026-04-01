@@ -23,11 +23,18 @@ actor HouseholdRepository {
     func loadCloudSnapshot(
         for context: HouseholdSyncContext
     ) async throws -> HouseholdCloudSnapshot {
+        await recordSnapshotProgress(
+            "snapshot.load.started scope=\(scopeLabel(context.scope)) householdId=\(context.householdId.uuidString)"
+        )
         try await prepareCloud(for: context)
-        return try await HouseholdCloudSnapshotLoader(cloud: cloud).loadSnapshot(
+        let snapshot = try await HouseholdCloudSnapshotLoader(cloud: cloud).loadSnapshot(
             householdId: context.householdId,
             scope: context.scope
         )
+        await recordSnapshotProgress(
+            "snapshot.load.completed scope=\(scopeLabel(context.scope)) householdId=\(context.householdId.uuidString) members=\(snapshot.members.count) shopping=\(snapshot.shoppingItems.count) bundles=\(snapshot.shoppingBundles.count) workItems=\(snapshot.unifiedWorkItems.count) categories=\(snapshot.backlogCategories.count) backlogItems=\(snapshot.backlogItems.count)"
+        )
+        return snapshot
     }
 
     func hasActiveMembership(
@@ -187,6 +194,21 @@ actor HouseholdRepository {
 
     private func prepareCloud(for context: HouseholdSyncContext) async throws {
         _ = try await zoneResolver.resolveZone(for: context)
+    }
+
+    private func recordSnapshotProgress(_ operation: String) async {
+        await MainActor.run {
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+        }
+    }
+
+    private func scopeLabel(_ scope: CloudKitManager.HouseholdDatabaseScope) -> String {
+        switch scope {
+        case .ownerPrivate:
+            "ownerPrivate"
+        case .participantShared:
+            "participantShared"
+        }
     }
 
     private func isRecordMissingError(_ error: Error) -> Bool {

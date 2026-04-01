@@ -2172,7 +2172,8 @@ class HouseholdStore: ObservableObject {
     }
 
     private func clearRecoveredJoinDiagnostics() {
-        CloudKitDiagnosticsState.shared.clear()
+        // Keep CloudKit diagnostics until the user explicitly clears them in Settings
+        // or performs a hard reset. This log is needed for on-device sync debugging.
     }
 
     private func clearConflictingJoinStateBeforeTargetedJoin(
@@ -3447,6 +3448,9 @@ class HouseholdStore: ObservableObject {
 
     func forceCloudSyncDebug(userId: String) async {
         guard syncMode == .cloud, let household = currentHousehold else { return }
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "forceCloudSync.started householdId=\(household.id.uuidString) userId=\(userId)"
+        )
 
         isLoading = true
         defer { isLoading = false }
@@ -3461,6 +3465,10 @@ class HouseholdStore: ObservableObject {
             household: refreshedHousehold,
             userId: userId,
             publishVisibleContentNotifications: true
+        )
+        let refreshedSnapshot = remoteVisibleContentSnapshot(householdId: refreshedHousehold.id)
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "forceCloudSync.completed householdId=\(refreshedHousehold.id.uuidString) shopping=\(refreshedSnapshot.shoppingItemsByID.count) bundles=\(refreshedSnapshot.shoppingBundlesByID.count) workItems=\(refreshedSnapshot.workItemsByID.count) categories=\(refreshedSnapshot.backlogCategoriesByID.count)"
         )
         publishRemoteCloudRefreshNotifications(source: "forceCloudSync")
     }
@@ -4399,10 +4407,9 @@ class HouseholdStore: ObservableObject {
 
         if household.ownerId == userId {
             // The owner's shared zone resides in their private database.
-            // When a participant writes to the CKShare, the owner receives a notification
-            // scoped to their private database. We must process private notifications as
-            // shared sync triggers for the owner so they see participant updates.
-            guard effectiveDatabaseScope == .private else { return [] }
+            // Some owner notifications still surface as shared-database changes, so the
+            // owner follow-up path must accept either private or shared scope.
+            guard effectiveDatabaseScope == .private || effectiveDatabaseScope == .shared else { return [] }
             return joinHydrationConfiguration.ownerSharedFollowUpRetryDelaysNanoseconds
         } else {
             // A participant's view of the shared zone resides in their shared database.
@@ -4425,7 +4432,9 @@ class HouseholdStore: ObservableObject {
 
         if household.ownerId == userId {
             // The owner's shared zone resides in their private database.
-            guard effectiveDatabaseScope == .private else { return .unknown }
+            guard effectiveDatabaseScope == .private || effectiveDatabaseScope == .shared else {
+                return .unknown
+            }
             return .participantToOwner
         } else {
             // The participant's shared zone resides in their shared database.

@@ -234,6 +234,9 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         let tokenPreview = deviceToken.map { String(format: "%02x", $0) }.joined()
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "push.registration.succeeded tokenLength=\(tokenPreview.count)"
+        )
         print(
             "[RemoteSync] Registered for remote notifications. tokenPrefix=\(tokenPreview.prefix(16)) length=\(tokenPreview.count)"
         )
