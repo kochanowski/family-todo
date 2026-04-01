@@ -4,6 +4,18 @@ import XCTest
 
 @MainActor
 final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
+    private struct SnapshotGraphFixture {
+        let userId: String
+        let household: Household
+        let member: Member
+        let category: BacklogCategory
+        let task: Task
+        let workItem: WorkItem
+        let idea: BacklogItem
+        let shoppingItem: ShoppingItem
+        let bundle: ShoppingBundle
+    }
+
     private func containsOperation(
         _ operations: [FakeHouseholdCloud.OperationEvent],
         name: String,
@@ -15,6 +27,88 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
                 operation.scope == scope &&
                 operation.householdId == householdId
         }
+    }
+
+    private func makeSnapshotGraphFixture() -> SnapshotGraphFixture {
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let member = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let category = TestCacheFixtures.category(householdId: household.id, title: "Planning")
+        let task = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash",
+            backlogCategoryId: category.id
+        )
+        let workItem = WorkItem(
+            householdId: household.id,
+            title: "Legacy work item",
+            status: .backlog,
+            categoryId: category.id,
+            createdAt: Date(timeIntervalSince1970: 3),
+            updatedAt: Date(timeIntervalSince1970: 4)
+        )
+        let idea = TestCacheFixtures.idea(
+            categoryId: category.id,
+            householdId: household.id,
+            title: "Plan spring cleaning"
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        let bundle = TestCacheFixtures.shoppingBundle(
+            householdId: household.id,
+            name: "Weekly"
+        )
+
+        return SnapshotGraphFixture(
+            userId: userId,
+            household: household,
+            member: member,
+            category: category,
+            task: task,
+            workItem: workItem,
+            idea: idea,
+            shoppingItem: shoppingItem,
+            bundle: bundle
+        )
+    }
+
+    private func assertSnapshotGraphFetchOperations(
+        _ operations: [FakeHouseholdCloud.OperationEvent],
+        householdId: UUID
+    ) {
+        let expectedOperations = [
+            "fetchMembers",
+            "fetchTasks",
+            "fetchWorkItems",
+            "fetchShoppingItems",
+            "fetchShoppingBundles",
+            "fetchBacklogCategories",
+            "fetchBacklogItems",
+        ]
+
+        for operationName in expectedOperations {
+            XCTAssertTrue(
+                containsOperation(
+                    operations,
+                    name: operationName,
+                    scope: .participantShared,
+                    householdId: householdId
+                )
+            )
+        }
+
+        XCTAssertFalse(operations.contains { $0.name == "fetchUnifiedWorkItems" })
+        XCTAssertEqual(
+            operations.filter { $0.name == "fetchBacklogItems" && $0.householdId == householdId }.count,
+            1
+        )
     }
 
     func testZoneResolverUsesOwnerZoneForOwnerContext() async throws {
@@ -432,130 +526,39 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
     }
 
     func testLoadSnapshotFetchesEntireHouseholdGraphUsingProvidedScope() async throws {
-        let userId = "joined-user"
-        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
-        let member = TestCacheFixtures.member(
-            householdId: household.id,
-            userId: userId,
-            displayName: "Taylor",
-            role: .member
-        )
-        let category = TestCacheFixtures.category(householdId: household.id, title: "Planning")
-        let task = TestCacheFixtures.task(
-            householdId: household.id,
-            title: "Take out trash",
-            backlogCategoryId: category.id
-        )
-        let workItem = WorkItem(
-            householdId: household.id,
-            title: "Legacy work item",
-            status: .backlog,
-            categoryId: category.id,
-            createdAt: Date(timeIntervalSince1970: 3),
-            updatedAt: Date(timeIntervalSince1970: 4)
-        )
-        let idea = TestCacheFixtures.idea(
-            categoryId: category.id,
-            householdId: household.id,
-            title: "Plan spring cleaning"
-        )
-        let shoppingItem = TestCacheFixtures.shoppingItem(
-            householdId: household.id,
-            title: "Milk"
-        )
-        let bundle = TestCacheFixtures.shoppingBundle(
-            householdId: household.id,
-            name: "Weekly"
-        )
+        let fixture = makeSnapshotGraphFixture()
 
         let cloud = FakeHouseholdCloud(
-            households: [household],
-            participantMembers: [member],
-            tasks: [task],
-            workItems: [workItem],
-            shoppingItems: [shoppingItem],
-            shoppingBundles: [bundle],
-            backlogItems: [idea],
-            backlogCategories: [category],
-            acceptedSharedHouseholdIDs: [household.id]
+            households: [fixture.household],
+            participantMembers: [fixture.member],
+            tasks: [fixture.task],
+            workItems: [fixture.workItem],
+            shoppingItems: [fixture.shoppingItem],
+            shoppingBundles: [fixture.bundle],
+            backlogItems: [fixture.idea],
+            backlogCategories: [fixture.category],
+            acceptedSharedHouseholdIDs: [fixture.household.id]
         )
         let loader = HouseholdCloudSnapshotLoader(cloud: cloud)
 
         let snapshot = try await loader.loadSnapshot(
-            householdId: household.id,
+            householdId: fixture.household.id,
             scope: .participantShared
         )
 
-        XCTAssertEqual(snapshot.members.map(\.id), [member.id])
-        XCTAssertEqual(Set(snapshot.unifiedWorkItems.map(\.id)), Set([task.id, workItem.id, idea.id]))
-        XCTAssertEqual(snapshot.shoppingItems.map(\.id), [shoppingItem.id])
-        XCTAssertEqual(snapshot.shoppingBundles.map(\.id), [bundle.id])
-        XCTAssertEqual(snapshot.backlogCategories.map(\.id), [category.id])
-        XCTAssertEqual(snapshot.backlogItems.map(\.id), [idea.id])
-        XCTAssertTrue(snapshot.hasActiveMembership(userId: userId))
+        XCTAssertEqual(snapshot.members.map(\.id), [fixture.member.id])
+        XCTAssertEqual(
+            Set(snapshot.unifiedWorkItems.map(\.id)),
+            Set([fixture.task.id, fixture.workItem.id, fixture.idea.id])
+        )
+        XCTAssertEqual(snapshot.shoppingItems.map(\.id), [fixture.shoppingItem.id])
+        XCTAssertEqual(snapshot.shoppingBundles.map(\.id), [fixture.bundle.id])
+        XCTAssertEqual(snapshot.backlogCategories.map(\.id), [fixture.category.id])
+        XCTAssertEqual(snapshot.backlogItems.map(\.id), [fixture.idea.id])
+        XCTAssertTrue(snapshot.hasActiveMembership(userId: fixture.userId))
 
         let operations = await cloud.operationEventsSnapshot()
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchMembers",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchTasks",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchWorkItems",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchShoppingItems",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchShoppingBundles",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchBacklogCategories",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertTrue(
-            containsOperation(
-                operations,
-                name: "fetchBacklogItems",
-                scope: .participantShared,
-                householdId: household.id
-            )
-        )
-        XCTAssertFalse(operations.contains { $0.name == "fetchUnifiedWorkItems" })
-        XCTAssertEqual(
-            operations.filter { $0.name == "fetchBacklogItems" && $0.householdId == household.id }.count,
-            1
-        )
+        assertSnapshotGraphFetchOperations(operations, householdId: fixture.household.id)
     }
 
     func testLoadSnapshotTimesOutWhenDomainFetchStalls() async throws {
