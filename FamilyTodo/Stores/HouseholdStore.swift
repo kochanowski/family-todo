@@ -596,6 +596,10 @@ protocol HouseholdCloudSyncing: Actor {
         householdId: UUID,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [Task]
+    func fetchWorkItems(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [WorkItem]
     func fetchUnifiedWorkItems(
         householdId: UUID,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
@@ -805,6 +809,16 @@ class HouseholdStore: ObservableObject {
         let delayNanoseconds: UInt64
     }
 
+    private struct JoinedHydrationTaskKey: Equatable {
+        let householdId: UUID
+        let userId: String
+    }
+
+    private enum JoinedHydrationTrigger {
+        case automatic
+        case manual
+    }
+
     struct JoinedHouseholdHydrationSnapshot: Equatable {
         let activeMemberCount: Int
         let currentUserHasCachedMembership: Bool
@@ -902,6 +916,10 @@ class HouseholdStore: ObservableObject {
     private let joinedHouseholdPrewarmOverride: ((Household, String, ModelContext?) async throws -> Void)?
     private var pendingJoinState: PendingJoinState?
     private var joinHydrationTask: _Concurrency.Task<Void, Never>?
+    private var activeJoinedHydrationKey: JoinedHydrationTaskKey?
+    private var activeJoinedHydrationTaskID: UUID?
+    private var activeJoinedHydrationTask:
+        _Concurrency.Task<JoinedHouseholdHydrationSnapshot, Error>?
     private var activeInviteToken: InviteToken?
 
     // Cache for sharing controller
@@ -931,6 +949,7 @@ class HouseholdStore: ObservableObject {
 
     deinit {
         joinHydrationTask?.cancel()
+        activeJoinedHydrationTask?.cancel()
     }
 
     func setModelContext(_ context: ModelContext) {
@@ -2704,12 +2723,14 @@ class HouseholdStore: ObservableObject {
     private func performJoinedHouseholdHydrationPass(
         household: Household,
         userId: String,
-        publishVisibleContentNotifications: Bool
+        publishVisibleContentNotifications: Bool,
+        trigger: JoinedHydrationTrigger = .automatic
     ) async -> JoinedHouseholdHydrationSnapshot {
         do {
-            let snapshot = try await runJoinedHouseholdHydrationPass(
+            let snapshot = try await joinedHouseholdHydrationSnapshot(
                 household: household,
-                userId: userId
+                userId: userId,
+                trigger: trigger
             )
             applyPendingJoinHydrationSnapshot(
                 snapshot,
@@ -2733,6 +2754,61 @@ class HouseholdStore: ObservableObject {
             )
             return snapshot
         }
+    }
+
+    private func joinedHouseholdHydrationSnapshot(
+        household: Household,
+        userId: String,
+        trigger: JoinedHydrationTrigger
+    ) async throws -> JoinedHouseholdHydrationSnapshot {
+        let key = JoinedHydrationTaskKey(householdId: household.id, userId: userId)
+
+        if let activeJoinedHydrationTask, let activeJoinedHydrationKey, activeJoinedHydrationKey != key {
+            activeJoinedHydrationTask.cancel()
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "snapshot.load.cancelled reason=replacedByNewHydration householdId=\(activeJoinedHydrationKey.householdId.uuidString) userId=\(activeJoinedHydrationKey.userId)"
+            )
+            self.activeJoinedHydrationTask = nil
+            self.activeJoinedHydrationKey = nil
+            activeJoinedHydrationTaskID = nil
+        }
+
+        if let activeJoinedHydrationTask, activeJoinedHydrationKey == key {
+            switch trigger {
+            case .automatic:
+                CloudKitDiagnosticsState.shared.recordProgress(
+                    operation: "snapshot.load.reusedInFlight=true householdId=\(household.id.uuidString) userId=\(userId)"
+                )
+                return try await activeJoinedHydrationTask.value
+            case .manual:
+                activeJoinedHydrationTask.cancel()
+                CloudKitDiagnosticsState.shared.recordProgress(
+                    operation: "snapshot.load.cancelled reason=replacedByManualSync householdId=\(household.id.uuidString) userId=\(userId)"
+                )
+            }
+        }
+
+        let taskID = UUID()
+        let task = _Concurrency.Task<JoinedHouseholdHydrationSnapshot, Error> {
+            try await self.runJoinedHouseholdHydrationPass(
+                household: household,
+                userId: userId
+            )
+        }
+
+        activeJoinedHydrationKey = key
+        activeJoinedHydrationTaskID = taskID
+        activeJoinedHydrationTask = task
+
+        defer {
+            if activeJoinedHydrationTaskID == taskID {
+                activeJoinedHydrationTask = nil
+                activeJoinedHydrationKey = nil
+                activeJoinedHydrationTaskID = nil
+            }
+        }
+
+        return try await task.value
     }
 
     private func runJoinedHouseholdHydrationPass(
@@ -3237,6 +3313,10 @@ class HouseholdStore: ObservableObject {
     func clearCurrentHousehold() {
         joinHydrationTask?.cancel()
         joinHydrationTask = nil
+        activeJoinedHydrationTask?.cancel()
+        activeJoinedHydrationTask = nil
+        activeJoinedHydrationKey = nil
+        activeJoinedHydrationTaskID = nil
         pendingJoinState = nil
         lastRemoteCloudRefreshSnapshot = nil
         currentHousehold = nil
@@ -3464,7 +3544,8 @@ class HouseholdStore: ObservableObject {
         _ = await performJoinedHouseholdHydrationPass(
             household: refreshedHousehold,
             userId: userId,
-            publishVisibleContentNotifications: true
+            publishVisibleContentNotifications: true,
+            trigger: .manual
         )
         let refreshedSnapshot = remoteVisibleContentSnapshot(householdId: refreshedHousehold.id)
         CloudKitDiagnosticsState.shared.recordProgress(
@@ -4892,6 +4973,10 @@ class HouseholdStore: ObservableObject {
     private func beginPendingJoinProtection(householdId: UUID, userId: String) {
         joinHydrationTask?.cancel()
         joinHydrationTask = nil
+        activeJoinedHydrationTask?.cancel()
+        activeJoinedHydrationTask = nil
+        activeJoinedHydrationKey = nil
+        activeJoinedHydrationTaskID = nil
         pendingJoinState = PendingJoinState(
             householdId: householdId,
             userId: userId,

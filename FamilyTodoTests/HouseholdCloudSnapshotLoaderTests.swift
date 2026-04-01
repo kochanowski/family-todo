@@ -446,6 +446,14 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
             title: "Take out trash",
             backlogCategoryId: category.id
         )
+        let workItem = WorkItem(
+            householdId: household.id,
+            title: "Legacy work item",
+            status: .backlog,
+            categoryId: category.id,
+            createdAt: Date(timeIntervalSince1970: 3),
+            updatedAt: Date(timeIntervalSince1970: 4)
+        )
         let idea = TestCacheFixtures.idea(
             categoryId: category.id,
             householdId: household.id,
@@ -464,6 +472,7 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
             households: [household],
             participantMembers: [member],
             tasks: [task],
+            workItems: [workItem],
             shoppingItems: [shoppingItem],
             shoppingBundles: [bundle],
             backlogItems: [idea],
@@ -478,7 +487,7 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.members.map(\.id), [member.id])
-        XCTAssertEqual(Set(snapshot.unifiedWorkItems.map(\.id)), Set([task.id, idea.id]))
+        XCTAssertEqual(Set(snapshot.unifiedWorkItems.map(\.id)), Set([task.id, workItem.id, idea.id]))
         XCTAssertEqual(snapshot.shoppingItems.map(\.id), [shoppingItem.id])
         XCTAssertEqual(snapshot.shoppingBundles.map(\.id), [bundle.id])
         XCTAssertEqual(snapshot.backlogCategories.map(\.id), [category.id])
@@ -497,7 +506,15 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
         XCTAssertTrue(
             containsOperation(
                 operations,
-                name: "fetchUnifiedWorkItems",
+                name: "fetchTasks",
+                scope: .participantShared,
+                householdId: household.id
+            )
+        )
+        XCTAssertTrue(
+            containsOperation(
+                operations,
+                name: "fetchWorkItems",
                 scope: .participantShared,
                 householdId: household.id
             )
@@ -534,5 +551,34 @@ final class HouseholdCloudSnapshotLoaderTests: XCTestCase {
                 householdId: household.id
             )
         )
+        XCTAssertFalse(operations.contains { $0.name == "fetchUnifiedWorkItems" })
+        XCTAssertEqual(
+            operations.filter { $0.name == "fetchBacklogItems" && $0.householdId == household.id }.count,
+            1
+        )
+    }
+
+    func testLoadSnapshotTimesOutWhenDomainFetchStalls() async throws {
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            acceptedSharedHouseholdIDs: [household.id],
+            fetchDelayNanosecondsByOperation: ["fetchShoppingItems": 500_000_000]
+        )
+        let loader = HouseholdCloudSnapshotLoader(
+            cloud: cloud,
+            domainFetchTimeoutNanoseconds: 50_000_000,
+            snapshotTimeoutNanoseconds: 250_000_000
+        )
+
+        do {
+            _ = try await loader.loadSnapshot(
+                householdId: household.id,
+                scope: .participantShared
+            )
+            XCTFail("Expected snapshot timeout")
+        } catch let error as HouseholdCloudSnapshotLoaderError {
+            XCTAssertEqual(error, .domainFetchTimedOut("shoppingItems"))
+        }
     }
 }

@@ -176,7 +176,10 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
         let operations = await cloud.operationEventsSnapshot()
         XCTAssertTrue(operations.contains {
-            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
             $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
@@ -347,7 +350,10 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             $0.name == "fetchMembers" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
-            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
             $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
@@ -997,6 +1003,61 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             return false
         })
         XCTAssertFalse(secondResult.diagnostics.changedDomains.contains(.shopping))
+    }
+
+    func testRunRemoteSyncPassReusesInFlightJoinedHouseholdHydration() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
+
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let invocationCount = Counter()
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, _ in
+                _ = invocationCount.increment()
+                try await Task.sleep(nanoseconds: 150_000_000)
+            }
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        async let firstPass = store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .appBecameActive
+        )
+        async let secondPass = store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .appBecameActive
+        )
+
+        _ = await (firstPass, secondPass)
+
+        XCTAssertEqual(invocationCount.value, 1)
     }
 }
 

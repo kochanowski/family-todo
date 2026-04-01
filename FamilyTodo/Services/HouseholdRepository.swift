@@ -26,15 +26,22 @@ actor HouseholdRepository {
         await recordSnapshotProgress(
             "snapshot.load.started scope=\(scopeLabel(context.scope)) householdId=\(context.householdId.uuidString)"
         )
-        try await prepareCloud(for: context)
-        let snapshot = try await HouseholdCloudSnapshotLoader(cloud: cloud).loadSnapshot(
-            householdId: context.householdId,
-            scope: context.scope
-        )
-        await recordSnapshotProgress(
-            "snapshot.load.completed scope=\(scopeLabel(context.scope)) householdId=\(context.householdId.uuidString) members=\(snapshot.members.count) shopping=\(snapshot.shoppingItems.count) bundles=\(snapshot.shoppingBundles.count) workItems=\(snapshot.unifiedWorkItems.count) categories=\(snapshot.backlogCategories.count) backlogItems=\(snapshot.backlogItems.count)"
-        )
-        return snapshot
+        do {
+            try await prepareCloud(for: context)
+            let snapshot = try await HouseholdCloudSnapshotLoader(cloud: cloud).loadSnapshot(
+                householdId: context.householdId,
+                scope: context.scope
+            )
+            await recordSnapshotProgress(
+                "snapshot.load.completed scope=\(scopeLabel(context.scope)) householdId=\(context.householdId.uuidString) members=\(snapshot.members.count) shopping=\(snapshot.shoppingItems.count) bundles=\(snapshot.shoppingBundles.count) workItems=\(snapshot.unifiedWorkItems.count) categories=\(snapshot.backlogCategories.count) backlogItems=\(snapshot.backlogItems.count)"
+            )
+            return snapshot
+        } catch {
+            await recordSnapshotProgress(
+                "snapshot.load.failed scope=\(scopeLabel(context.scope)) householdId=\(context.householdId.uuidString) error=\(String(describing: error))"
+            )
+            throw error
+        }
     }
 
     func hasActiveMembership(

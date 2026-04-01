@@ -75,6 +75,7 @@ actor CloudKitManager {
         "CloudKit.sharedGraphRepairCompletedHouseholds.exhaustive.v1"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let defaultQueryPageSize = 200
+    private static let queryPageTimeoutNanoseconds: UInt64 = 12_000_000_000
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
     private static let inviteCodeLength = InviteInputNormalizer.preferredInviteCodeLength
     private static let inviteCodeMaxAttempts = 24
@@ -1627,19 +1628,46 @@ actor CloudKitManager {
 
             operation.resultsLimit = max(1, resultsLimit)
             operation.qualityOfService = .userInitiated
+            let resumeLock = NSLock()
+            var hasResumed = false
+            let timeoutDescription = [
+                "recordType=\(query?.recordType ?? "cursor")",
+                "zone=\(zoneID?.zoneName ?? "all")",
+            ].joined(separator: " ")
 
             var pageRecords: [CKRecord] = []
+            func resumeOnce(with result: Result<([CKRecord], CKQueryOperation.Cursor?), Error>) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(with: result)
+            }
+
+            let timeoutTask = Task {
+                try? await Task.sleep(nanoseconds: Self.queryPageTimeoutNanoseconds)
+                operation.cancel()
+                resumeOnce(
+                    with: .failure(
+                        CloudKitManagerError.queryTimedOut(
+                            "CloudKit query timed out \(timeoutDescription)"
+                        )
+                    )
+                )
+            }
+
             operation.recordMatchedBlock = { _, result in
                 guard case let .success(record) = result else { return }
                 pageRecords.append(record)
             }
 
             operation.queryResultBlock = { result in
+                timeoutTask.cancel()
                 switch result {
                 case let .success(nextCursor):
-                    continuation.resume(returning: (pageRecords, nextCursor))
+                    resumeOnce(with: .success((pageRecords, nextCursor)))
                 case let .failure(error):
-                    continuation.resume(throwing: error)
+                    resumeOnce(with: .failure(error))
                 }
             }
 
@@ -1692,36 +1720,47 @@ actor CloudKitManager {
                     recordCloudKitProgress(
                         "ownerQuery.targetZone.started recordType=\(recordType) zone=\(targetZoneID.zoneName)|\(targetZoneID.ownerName)"
                     )
-                    if let targetZoneRecords = try await queryOwnerPrivateRecordsInTargetZone(
-                        queryFactory,
-                        targetZoneID: targetZoneID
-                    ) {
-                        recordCloudKitProgress(
-                            "ownerQuery.targetZone.completed recordType=\(recordType) count=\(targetZoneRecords.count)"
-                        )
-                        if !Self.shouldFallbackToOwnerPrivateExhaustiveScan(
-                            targetZoneRecordCount: targetZoneRecords.count
+                    do {
+                        if let targetZoneRecords = try await queryOwnerPrivateRecordsInTargetZone(
+                            queryFactory,
+                            targetZoneID: targetZoneID
                         ) {
-                            print(
-                                "CloudKitScope: query ownerPrivate \(recordType) using household target zone \(targetZoneID.zoneName)"
+                            recordCloudKitProgress(
+                                "ownerQuery.targetZone.completed recordType=\(recordType) count=\(targetZoneRecords.count)"
                             )
-                            let sortedRecords = Self.sortRecords(
-                                targetZoneRecords,
-                                using: baselineSortDescriptors
-                            )
-                            for sortedRecord in sortedRecords {
-                                rememberRecordZone(
-                                    sortedRecord,
-                                    explicitHouseholdId: householdId,
-                                    scope: scope
+                            if !Self.shouldFallbackToOwnerPrivateExhaustiveScan(
+                                targetZoneRecordCount: targetZoneRecords.count
+                            ) {
+                                print(
+                                    "CloudKitScope: query ownerPrivate \(recordType) using household target zone \(targetZoneID.zoneName)"
                                 )
+                                let sortedRecords = Self.sortRecords(
+                                    targetZoneRecords,
+                                    using: baselineSortDescriptors
+                                )
+                                for sortedRecord in sortedRecords {
+                                    rememberRecordZone(
+                                        sortedRecord,
+                                        explicitHouseholdId: householdId,
+                                        scope: scope
+                                    )
+                                }
+                                return sortedRecords
                             }
-                            return sortedRecords
+                        } else {
+                            recordCloudKitProgress(
+                                "ownerQuery.targetZone.completed recordType=\(recordType) count=missingRecordType"
+                            )
                         }
-                    } else {
+                    } catch {
                         recordCloudKitProgress(
-                            "ownerQuery.targetZone.completed recordType=\(recordType) count=missingRecordType"
+                            ownerQueryFailureOperation(
+                                stage: "targetZone",
+                                recordType: recordType,
+                                error: error
+                            )
                         )
+                        throw error
                     }
 
                     print(
@@ -1732,10 +1771,22 @@ actor CloudKitManager {
                 recordCloudKitProgress(
                     "ownerQuery.fallbackScan.started recordType=\(recordType)"
                 )
-                let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
-                    queryFactory,
-                    householdId: householdId
-                )
+                let scanResult: OwnerPrivateScanResult
+                do {
+                    scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
+                        queryFactory,
+                        householdId: householdId
+                    )
+                } catch {
+                    recordCloudKitProgress(
+                        ownerQueryFailureOperation(
+                            stage: "fallbackScan",
+                            recordType: recordType,
+                            error: error
+                        )
+                    )
+                    throw error
+                }
                 recordCloudKitProgress(
                     "ownerQuery.fallbackScan.completed recordType=\(recordType) authoritativeCount=\(scanResult.authoritativeRecords.count) zoneCount=\(Set(scanResult.authoritativeRecords.map { "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)" }).count)"
                 )
@@ -1850,6 +1901,31 @@ actor CloudKitManager {
         scope: HouseholdDatabaseScope
     ) async throws -> [CKRecord] {
         try await queryRecords(query, householdId: nil, scope: scope)
+    }
+
+    private func ownerQueryFailureOperation(
+        stage: String,
+        recordType: String,
+        error: Error
+    ) -> String {
+        let suffix = isQueryTimeoutError(error) ? "timedOut" : "failed"
+        return "ownerQuery.\(stage).\(suffix) recordType=\(recordType) error=\(String(describing: error))"
+    }
+
+    private func isQueryTimeoutError(_ error: Error) -> Bool {
+        if let managerError = error as? CloudKitManagerError,
+           case .queryTimedOut = managerError
+        {
+            return true
+        }
+
+        if let managerError = error as? CloudKitManagerError,
+           case let .unknownError(underlying) = managerError
+        {
+            return isQueryTimeoutError(underlying)
+        }
+
+        return false
     }
 
     // swiftlint:enable cyclomatic_complexity function_body_length
@@ -2488,6 +2564,7 @@ actor CloudKitManager {
         case notAuthenticated
         case quotaExceeded
         case serverRecordChanged
+        case queryTimedOut(String)
         case unknownError(Error)
 
         var errorDescription: String? {
@@ -2529,6 +2606,8 @@ actor CloudKitManager {
                 "iCloud storage is full. Please free up space."
             case .serverRecordChanged:
                 "This item was modified elsewhere. Refreshing..."
+            case let .queryTimedOut(message):
+                message
             case let .unknownError(error):
                 "An error occurred: \(error.localizedDescription)"
             }
