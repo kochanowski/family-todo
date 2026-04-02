@@ -779,6 +779,19 @@ final class HouseholdSyncCoordinator: ObservableObject {
             "steady"
         }
     }
+
+    private func backgroundFetchResultLabel(_ result: UIBackgroundFetchResult) -> String {
+        switch result {
+        case .newData:
+            "newData"
+        case .noData:
+            "noData"
+        case .failed:
+            "failed"
+        @unknown default:
+            "unknown"
+        }
+    }
 }
 
 private extension HouseholdSyncReason {
