@@ -180,6 +180,10 @@ final class HouseholdStoreSyncEngine: HouseholdSyncEngine {
             .unknown
         }
 
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "sync.engine.context reason=\(schedulerReasonLabel(reason)) databaseScope=\(databaseScopeLabel(context.databaseScope)) notificationType=\(context.notificationType.rawValue)"
+        )
+
         return await executor.execute(
             userId: userIdProvider(),
             preferredHouseholdId: preferredHouseholdIdProvider(),
@@ -205,5 +209,47 @@ final class HouseholdStoreSyncEngine: HouseholdSyncEngine {
             notificationType: .database,
             receivedAt: Date()
         )
+    }
+
+    private func schedulerReasonLabel(_ reason: HouseholdSyncReason) -> String {
+        switch reason {
+        case let .remotePush(context):
+            switch context {
+            case .sharedDatabase:
+                "remotePushShared"
+            case .privateDatabase:
+                "remotePushPrivate"
+            case .unknown:
+                "remotePushUnknown"
+            }
+        case .foregroundRepairWindow:
+            "foregroundRepairWindow"
+        case .appBecameActive:
+            "appBecameActive"
+        case .manualRefresh:
+            "manualRefresh"
+        case .localMutationFollowUp:
+            "localMutationFollowUp"
+        case .householdJoined:
+            "householdJoined"
+        case .householdSwitched:
+            "householdSwitched"
+        case .debugRepair:
+            "debugRepair"
+        }
+    }
+
+    private func databaseScopeLabel(_ scope: CKDatabase.Scope?) -> String {
+        guard let scope else { return "nil" }
+        return switch scope {
+        case .private:
+            "private"
+        case .public:
+            "public"
+        case .shared:
+            "shared"
+        @unknown default:
+            "unknown"
+        }
     }
 }

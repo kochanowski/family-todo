@@ -73,6 +73,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
     }
 
     func testPerformSyncPublishesEngineEventsAndReturnsFetchResult() async {
+        CloudKitDiagnosticsState.shared.clear()
         let householdId = UUID()
         let expectedEvents = [
             HouseholdSyncEvent(
@@ -123,6 +124,21 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(engine.recordedReasons, [.remotePush(context: .sharedDatabase)])
         XCTAssertEqual(coordinator.lastPublishedEvents, expectedEvents)
         XCTAssertEqual(coordinator.lastDiagnostics?.changedDomains, Set([.shopping, .household]))
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.pass.started reason=remotePushShared")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.batch.published reason=remotePushShared")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.pass.completed reason=remotePushShared fetchResult=newData")
+            }
+        )
     }
 
     func testPerformSyncCoalescesPendingReasonsIntoFollowUpPass() async {
@@ -396,6 +412,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
     }
 
     func testOwnerParticipantToOwnerSyncSchedulesOwnerFallbackPolls() async {
+        CloudKitDiagnosticsState.shared.clear()
         let engine = FakeHouseholdSyncEngine(
             results: [
                 HouseholdSyncPassResult(
@@ -473,6 +490,26 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                 .foregroundRepairWindow,
                 .foregroundRepairWindow,
             ]
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.started reason=appBecameActive ownerFallback=true")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.scheduled kind=ownerFallback")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.fired kind=ownerFallback")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.pass.started reason=foregroundRepairWindow")
+            }
         )
     }
 

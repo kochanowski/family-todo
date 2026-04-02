@@ -408,6 +408,9 @@ final class HouseholdSyncCoordinator: ObservableObject {
 
     func performSync(reason: HouseholdSyncReason) async -> UIBackgroundFetchResult {
         pendingReason = pendingReason?.merged(with: reason) ?? reason
+        recordSchedulerProgress(
+            "sync.pass.enqueued requestedReason=\(schedulerReasonLabel(reason)) effectivePendingReason=\(schedulerReasonLabel(pendingReason ?? reason)) activeTask=\(activeSyncTask != nil)"
+        )
 
         if let activeSyncTask {
             return await activeSyncTask.value
@@ -420,11 +423,17 @@ final class HouseholdSyncCoordinator: ObservableObject {
 
             while let nextReason = pendingReason {
                 pendingReason = nil
+                recordSchedulerProgress(
+                    "sync.pass.started reason=\(schedulerReasonLabel(nextReason))"
+                )
                 let result = await engine.runSync(for: nextReason)
                 await publish(result)
                 aggregateResult = mergedBackgroundFetchResult(
                     aggregateResult,
                     with: result.fetchResult
+                )
+                recordSchedulerProgress(
+                    "sync.pass.completed reason=\(schedulerReasonLabel(nextReason)) fetchResult=\(backgroundFetchResultLabel(result.fetchResult)) direction=\(result.diagnostics.direction.rawValue) eventCount=\(result.events.count)"
                 )
             }
 
@@ -444,6 +453,10 @@ final class HouseholdSyncCoordinator: ObservableObject {
             diagnostics: result.diagnostics
         )
         latestBatch = batch
+        let changedDomainLabels = batch.domains.map(\.rawValue).sorted().joined(separator: ",")
+        recordSchedulerProgress(
+            "sync.batch.published reason=\(schedulerReasonLabel(result.diagnostics.reason)) direction=\(result.diagnostics.direction.rawValue) changedDomains=\(changedDomainLabels) eventCount=\(batch.events.count)"
+        )
         CloudKitSubscriptionManager.shared.consumeSyncBatch(batch)
         await deliverSystemAlerts(for: batch)
         scheduleForegroundRepairIfNeeded(for: batch, fetchResult: result.fetchResult)
@@ -709,24 +722,36 @@ final class HouseholdSyncCoordinator: ObservableObject {
 
         scheduledOwnerFallbackTask?.cancel()
         let intervalNanoseconds = foregroundRepairConfiguration.ownerFallbackIntervalNanoseconds
+        recordSchedulerProgress(
+            "sync.scheduler.scheduled kind=ownerFallback intervalNs=\(intervalNanoseconds) remainingPasses=\(remainingOwnerFallbackPasses)"
+        )
         scheduledOwnerFallbackTask = _Concurrency.Task { @MainActor [weak self] in
             guard let self else { return }
             if intervalNanoseconds > 0 {
                 try? await _Concurrency.Task.sleep(nanoseconds: intervalNanoseconds)
             }
             guard !_Concurrency.Task.isCancelled else { return }
+            recordSchedulerProgress(
+                "sync.scheduler.fired kind=ownerFallback remainingPasses=\(remainingOwnerFallbackPasses)"
+            )
             _ = await performSync(reason: .foregroundRepairWindow)
         }
     }
 
     private func scheduleNextForegroundRepairPass(intervalNanoseconds: UInt64) {
         scheduledForegroundRepairTask?.cancel()
+        recordSchedulerProgress(
+            "sync.scheduler.scheduled kind=foregroundRepair mode=\(foregroundRepairModeLabel(currentForegroundRepairMode)) intervalNs=\(intervalNanoseconds) remainingBurstPasses=\(remainingForegroundRepairBurstPasses) remainingSteadyPasses=\(remainingForegroundRepairSteadyPasses)"
+        )
         scheduledForegroundRepairTask = _Concurrency.Task { @MainActor [weak self] in
             guard let self else { return }
             if intervalNanoseconds > 0 {
                 try? await _Concurrency.Task.sleep(nanoseconds: intervalNanoseconds)
             }
             guard !_Concurrency.Task.isCancelled else { return }
+            recordSchedulerProgress(
+                "sync.scheduler.fired kind=foregroundRepair mode=\(foregroundRepairModeLabel(currentForegroundRepairMode)) remainingBurstPasses=\(remainingForegroundRepairBurstPasses) remainingSteadyPasses=\(remainingForegroundRepairSteadyPasses)"
+            )
             _ = await performSync(reason: .foregroundRepairWindow)
         }
     }
@@ -744,6 +769,15 @@ final class HouseholdSyncCoordinator: ObservableObject {
         scheduledOwnerFallbackTask?.cancel()
         scheduledOwnerFallbackTask = nil
         remainingOwnerFallbackPasses = 0
+    }
+
+    private func foregroundRepairModeLabel(_ mode: ForegroundRepairMode) -> String {
+        switch mode {
+        case .burst:
+            "burst"
+        case .steady:
+            "steady"
+        }
     }
 }
 
