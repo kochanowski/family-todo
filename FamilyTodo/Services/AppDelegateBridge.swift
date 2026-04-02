@@ -335,7 +335,7 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
             "unresolved"
         }
 
-        AppDelegateRemotePushDiagnostic(
+        return AppDelegateRemotePushDiagnostic(
             notificationType: resolution.notificationType,
             declaredScope: resolution.declaredScope,
             effectiveScope: resolution.effectiveScope,
