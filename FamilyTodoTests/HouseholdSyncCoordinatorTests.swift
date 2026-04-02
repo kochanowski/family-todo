@@ -267,7 +267,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(deliveries.isEmpty)
     }
 
-    func testPerformSyncSchedulesBoundedForegroundRepairForCollaborativeHousehold() async {
+    func testPerformSyncDoesNotScheduleForegroundRepairWindowForRemotePush() async {
         let engine = FakeHouseholdSyncEngine(
             results: [
                 HouseholdSyncPassResult(
@@ -276,6 +276,49 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                     diagnostics: HouseholdSyncDiagnostics(
                         batchID: UUID(),
                         reason: .remotePush(context: .sharedDatabase),
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 4,
+                maxConsecutiveNoDataBurstPasses: 2,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
+        await waitUntil {
+            engine.recordedReasons.count == 1
+        }
+
+        XCTAssertEqual(engine.recordedReasons, [.remotePush(context: .sharedDatabase)])
+        XCTAssertEqual(coordinator.lastDiagnostics?.reason, .remotePush(context: .sharedDatabase))
+    }
+
+    func testPerformSyncSchedulesBoundedForegroundRepairForAppBecameActive() async {
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .appBecameActive,
                         direction: .ownerToParticipant,
                         triggerReceivedAt: Date(timeIntervalSince1970: 99),
                         syncStartedAt: Date(timeIntervalSince1970: 100),
@@ -331,7 +374,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
 
-        _ = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
+        _ = await coordinator.performSync(reason: .appBecameActive)
         await waitUntil {
             engine.recordedReasons.count == 3
         }
@@ -339,7 +382,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             engine.recordedReasons,
             [
-                .remotePush(context: .sharedDatabase),
+                .appBecameActive,
                 .foregroundRepairWindow,
                 .foregroundRepairWindow,
             ]
@@ -399,7 +442,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                     events: [],
                     diagnostics: HouseholdSyncDiagnostics(
                         batchID: UUID(),
-                        reason: .remotePush(context: .privateDatabase),
+                        reason: .appBecameActive,
                         direction: .participantToOwner,
                         triggerReceivedAt: Date(timeIntervalSince1970: 99),
                         syncStartedAt: Date(timeIntervalSince1970: 100),
@@ -470,7 +513,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
 
-        _ = await coordinator.performSync(reason: .remotePush(context: .privateDatabase))
+        _ = await coordinator.performSync(reason: .appBecameActive)
         await waitUntil {
             engine.recordedReasons.count == 4
         }
@@ -478,7 +521,7 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             engine.recordedReasons,
             [
-                .remotePush(context: .privateDatabase),
+                .appBecameActive,
                 .foregroundRepairWindow,
                 .foregroundRepairWindow,
                 .foregroundRepairWindow,

@@ -496,6 +496,34 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNil(localStore.currentHousehold)
     }
 
+    func testResolveStartupHouseholdLocallyProvisionallyRestoresCachedHouseholdWithoutCachedMembership()
+        throws
+    {
+        let container = try requireContainer()
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let household = Household(
+            name: "Startup Recovery Home",
+            ownerId: "owner-user"
+        )
+
+        container.mainContext.insert(CachedHousehold(from: household))
+        try container.mainContext.save()
+
+        let restored = localStore.resolveStartupHouseholdLocally(
+            userId: "owner-user",
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertEqual(restored?.id, household.id)
+        XCTAssertEqual(localStore.currentHousehold?.id, household.id)
+        XCTAssertEqual(
+            try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).map(\.id),
+            [household.id]
+        )
+    }
+
     func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
         let container = try requireContainer()
         let localStore = HouseholdStore(modelContext: container.mainContext)

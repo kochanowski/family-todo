@@ -1027,6 +1027,15 @@ class HouseholdStore: ObservableObject {
             return household
         }
 
+        if syncMode == .cloud,
+           let restoredHousehold = restoreCachedHouseholdForStartup(
+               userId: userId,
+               preferredHouseholdId: preferredHouseholdId
+           )
+        {
+            return restoredHousehold
+        }
+
         return restoreCachedHousehold(
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
@@ -1057,6 +1066,34 @@ class HouseholdStore: ObservableObject {
             currentHousehold = nil
             return nil
         }
+        currentHousehold = restoredHousehold
+        return restoredHousehold
+    }
+
+    @discardableResult
+    private func restoreCachedHouseholdForStartup(
+        userId: String,
+        preferredHouseholdId: UUID? = nil
+    ) -> Household? {
+        guard let cached = fetchCachedHousehold(
+            userId: userId,
+            preferredHouseholdId: preferredHouseholdId
+        ) else {
+            return nil
+        }
+
+        let restoredHousehold = cached.toHousehold()
+        guard !isValidCachedMembershipForRecoveredHousehold(
+            householdId: restoredHousehold.id,
+            userId: userId
+        ) else {
+            currentHousehold = restoredHousehold
+            return restoredHousehold
+        }
+
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "startup.route.recovery.provisionalRestore householdId=\(restoredHousehold.id.uuidString) userId=\(userId)"
+        )
         currentHousehold = restoredHousehold
         return restoredHousehold
     }
@@ -3756,11 +3793,10 @@ class HouseholdStore: ObservableObject {
                     note: "emptyRetryDelaySet"
                 )
             )
-            return RemoteVisibleContentResolution(
+            return makeRemoteVisibleContentResolution(
                 snapshot: afterVisibleContentSnapshot,
                 diff: contentDiff,
-                followUpPassCount: followUpPassCount,
-                cacheUpdatedAt: Date()
+                followUpPassCount: followUpPassCount
             )
         }
 
@@ -3786,14 +3822,65 @@ class HouseholdStore: ObservableObject {
                 print(
                     "[RemoteSync] Shared follow-up pass \(followUpPassCount) found no new changes for household \(household.id)."
                 )
+                recordFollowUpStoppedAfterNoAdditionalChanges(
+                    householdId: household.id,
+                    userId: userId,
+                    context: context,
+                    effectiveDatabaseScope: effectiveDatabaseScope,
+                    direction: direction,
+                    retryDelaysNanoseconds: followUpRetryDelays,
+                    followUpPassCount: followUpPassCount,
+                    remainingPassCount: followUpRetryDelays.count - (index + 1)
+                )
+                break
             }
         }
 
-        return RemoteVisibleContentResolution(
+        return makeRemoteVisibleContentResolution(
             snapshot: afterVisibleContentSnapshot,
             diff: contentDiff,
+            followUpPassCount: followUpPassCount
+        )
+    }
+
+    private func makeRemoteVisibleContentResolution(
+        snapshot: RemoteVisibleContentSnapshot,
+        diff: RemoteVisibleContentDiff,
+        followUpPassCount: Int
+    ) -> RemoteVisibleContentResolution {
+        RemoteVisibleContentResolution(
+            snapshot: snapshot,
+            diff: diff,
             followUpPassCount: followUpPassCount,
             cacheUpdatedAt: Date()
+        )
+    }
+
+    private func recordFollowUpStoppedAfterNoAdditionalChanges(
+        householdId: UUID,
+        userId: String,
+        context: RemoteCloudChangeContext,
+        effectiveDatabaseScope: CKDatabase.Scope?,
+        direction: HouseholdSyncDirection,
+        retryDelaysNanoseconds: [UInt64],
+        followUpPassCount: Int,
+        remainingPassCount: Int
+    ) {
+        guard remainingPassCount > 0 else { return }
+
+        recordRemoteSyncDiagnostic(
+            makeRemoteSyncDiagnostic(
+                stage: .followUpSkipped,
+                householdId: householdId,
+                userId: userId,
+                context: context,
+                effectiveDatabaseScope: effectiveDatabaseScope,
+                direction: direction,
+                retryDelaysNanoseconds: retryDelaysNanoseconds,
+                followUpPassIndex: followUpPassCount,
+                didCaptureAdditionalChanges: false,
+                note: "stoppedAfterNoAdditionalChanges"
+            )
         )
     }
 

@@ -319,11 +319,11 @@ struct ForegroundRepairConfiguration: Equatable {
 
     static let `default` = ForegroundRepairConfiguration(
         isEnabled: true,
-        burstIntervalNanoseconds: 4_000_000_000,
-        burstMaxPassCount: 8,
+        burstIntervalNanoseconds: 5_000_000_000,
+        burstMaxPassCount: 2,
         maxConsecutiveNoDataBurstPasses: 2,
         steadyIntervalNanoseconds: 30_000_000_000,
-        steadyMaxPassCount: 20
+        steadyMaxPassCount: 0
     )
 }
 
@@ -489,14 +489,22 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
 
         switch batch.diagnostics.reason {
-        case .remotePush, .appBecameActive, .localMutationFollowUp, .householdJoined, .householdSwitched:
-            startBurstForegroundRepair()
+        case .remotePush:
+            recordSchedulerProgress(
+                "sync.scheduler.skipped reason=remotePush followUpManaged=true"
+            )
+        case .localMutationFollowUp:
+            recordSchedulerProgress(
+                "sync.scheduler.skipped reason=localMutationFollowUp followUpManaged=true"
+            )
+        case .appBecameActive, .householdJoined, .householdSwitched:
+            startBurstForegroundRepair(trigger: batch.diagnostics.reason)
         case .manualRefresh:
             cancelForegroundRepair()
         case .foregroundRepairWindow:
             switch fetchResult {
             case .newData:
-                startBurstForegroundRepair()
+                startBurstForegroundRepair(trigger: batch.diagnostics.reason)
             case .noData:
                 handleForegroundRepairNoDataPass()
             case .failed:
@@ -509,11 +517,14 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
     }
 
-    private func startBurstForegroundRepair() {
+    private func startBurstForegroundRepair(trigger: HouseholdSyncReason) {
         currentForegroundRepairMode = .burst
         remainingForegroundRepairBurstPasses = foregroundRepairConfiguration.burstMaxPassCount
         remainingForegroundRepairSteadyPasses = foregroundRepairConfiguration.steadyMaxPassCount
         consecutiveForegroundRepairNoDataPasses = 0
+        recordSchedulerProgress(
+            "sync.scheduler.started reason=\(schedulerReasonLabel(trigger)) burstPasses=\(remainingForegroundRepairBurstPasses) steadyPasses=\(remainingForegroundRepairSteadyPasses)"
+        )
         print(
             "[RemoteSync] Starting burst foreground repair window. burstPasses=\(remainingForegroundRepairBurstPasses) steadyPasses=\(remainingForegroundRepairSteadyPasses)"
         )
@@ -553,6 +564,38 @@ final class HouseholdSyncCoordinator: ObservableObject {
             scheduleNextForegroundRepairPass(
                 intervalNanoseconds: foregroundRepairConfiguration.steadyIntervalNanoseconds
             )
+        }
+    }
+
+    private func recordSchedulerProgress(_ operation: String) {
+        CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+    }
+
+    private func schedulerReasonLabel(_ reason: HouseholdSyncReason) -> String {
+        switch reason {
+        case let .remotePush(context):
+            switch context {
+            case .sharedDatabase:
+                "remotePushShared"
+            case .privateDatabase:
+                "remotePushPrivate"
+            case .unknown:
+                "remotePushUnknown"
+            }
+        case .foregroundRepairWindow:
+            "foregroundRepairWindow"
+        case .appBecameActive:
+            "appBecameActive"
+        case .manualRefresh:
+            "manualRefresh"
+        case .localMutationFollowUp:
+            "localMutationFollowUp"
+        case .householdJoined:
+            "householdJoined"
+        case .householdSwitched:
+            "householdSwitched"
+        case .debugRepair:
+            "debugRepair"
         }
     }
 
