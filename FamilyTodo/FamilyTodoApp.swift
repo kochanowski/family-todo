@@ -508,16 +508,44 @@ struct RootView: View {
     }
 
     private func configureSubscriptionsIfNeeded() {
-        guard onboardingState.currentState == .mainApp else { return }
-        guard userSession.syncMode == .cloud else { return }
+        guard onboardingState.currentState == .mainApp else {
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "subscription.configure.skipped source=taskKey reason=notMainApp"
+            )
+            return
+        }
+        guard userSession.syncMode == .cloud else {
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "subscription.configure.skipped source=taskKey reason=localSyncMode"
+            )
+            return
+        }
         guard let userId = userSession.userId,
               let syncContext = householdStore.currentSyncContext(userId: userId),
               userSession.currentHouseholdID == syncContext.householdId
         else {
+            let reason = if userSession.userId == nil {
+                "missingUserId"
+            } else if userSession.currentHouseholdID == nil {
+                "missingCurrentHouseholdId"
+            } else if householdStore.currentSyncContext(userId: userSession.userId) == nil {
+                "missingSyncContext"
+            } else {
+                "householdMismatch"
+            }
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "subscription.configure.skipped source=taskKey reason=\(reason)"
+            )
             return
         }
 
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "subscription.configure.request source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
+        )
         subscriptionManager.configure(syncContext: syncContext)
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "subscription.configure.completed source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
+        )
     }
 
     private var shouldShowCreateHouseholdView: Bool {

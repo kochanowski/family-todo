@@ -686,6 +686,69 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertTrue(restoredState.entries.isEmpty)
         XCTAssertFalse(restoredState.hasVisibleDiagnostics)
     }
+
+    func testTriggerSummaryTracksSubscriptionAndPushHealth() {
+        let diagnostics = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        diagnostics.recordProgress(
+            operation: "subscription.configure.request source=taskKey role=owner scope=ownerPrivate householdId=household-1"
+        )
+        diagnostics.recordProgress(
+            operation: "subscription.plan householdId=household-1 scope=ownerPrivate databaseIds=shared-database-changes,private-database-changes zoneId=household-zone-ownerPrivate-household-1"
+        )
+        diagnostics.recordProgress(operation: "push.registration.succeeded tokenLength=64")
+        diagnostics.recordProgress(operation: "push.received type=database")
+        diagnostics.recordProgress(
+            operation: "remotePush type=4 declaredScope=private effectiveScope=private currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=false willInvokeHandler=true role=owner householdId=household-1 appState=active scopeResolution=declared"
+        )
+        diagnostics.recordProgress(
+            operation: "sync.scheduler.started reason=appBecameActive ownerFallback=true intervalNs=15000000000 maxPasses=40"
+        )
+        diagnostics.recordProgress(
+            operation: "sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1"
+        )
+
+        XCTAssertEqual(diagnostics.triggerSummary.syncRole, "owner")
+        XCTAssertEqual(diagnostics.triggerSummary.syncScope, "ownerPrivate")
+        XCTAssertEqual(diagnostics.triggerSummary.subscriptionRequestSource, "taskKey")
+        XCTAssertEqual(diagnostics.triggerSummary.subscriptionConfigurationStatus, "requested")
+        XCTAssertEqual(
+            diagnostics.triggerSummary.subscriptionPlanDatabaseIDs,
+            ["shared-database-changes", "private-database-changes"]
+        )
+        XCTAssertEqual(
+            diagnostics.triggerSummary.subscriptionPlanZoneID,
+            "household-zone-ownerPrivate-household-1"
+        )
+        XCTAssertEqual(diagnostics.triggerSummary.pushRegistrationStatus, "succeeded")
+        XCTAssertEqual(diagnostics.triggerSummary.pushReceivedCount, 1)
+        XCTAssertEqual(diagnostics.triggerSummary.remotePushCount, 1)
+        XCTAssertEqual(diagnostics.triggerSummary.remoteHandlerInvocationCount, 1)
+        XCTAssertEqual(diagnostics.triggerSummary.lastOwnerFallbackReason, "appBecameActive")
+        XCTAssertEqual(diagnostics.triggerSummary.lastFetchResult, "newData")
+    }
+
+    func testTriggerSummaryRestoresFromPersistedEntries() {
+        let firstState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        firstState.recordProgress(
+            operation: "subscription.configure.completed source=taskKey role=participant scope=participantShared householdId=household-2"
+        )
+        firstState.recordProgress(operation: "push.registration.failed description=network_error")
+        firstState.recordProgress(
+            operation: "sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=appBecameActive activeMembers=2 appState=active"
+        )
+        firstState.recordProgress(
+            operation: "sync.pass.completed reason=appBecameActive triggerSource=foregroundRepair fetchResult=noData direction=unknown eventCount=0"
+        )
+
+        let restoredState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        XCTAssertEqual(restoredState.triggerSummary.syncRole, "participant")
+        XCTAssertEqual(restoredState.triggerSummary.syncScope, "participantShared")
+        XCTAssertEqual(restoredState.triggerSummary.subscriptionConfigurationStatus, "configured")
+        XCTAssertEqual(restoredState.triggerSummary.pushRegistrationStatus, "failed")
+        XCTAssertEqual(restoredState.triggerSummary.lastFetchResult, "noData")
+    }
 }
 
 @MainActor

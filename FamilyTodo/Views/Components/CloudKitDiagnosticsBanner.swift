@@ -22,12 +22,20 @@ struct CloudKitDiagnosticsBanner: View {
         diagnostics.lastCloudKitErrorTimestampISO8601
     }
 
+    private var triggerSummary: CloudKitTriggerSummary {
+        diagnostics.triggerSummary
+    }
+
     var body: some View {
         if diagnostics.hasVisibleDiagnostics {
             VStack(alignment: .leading, spacing: 10) {
                 Label("CloudKit Diagnostics (Debug)", systemImage: "ladybug.fill")
                     .font(themeStore.font(for: .bodyStrong))
                     .foregroundStyle(themeStore.contentPrimaryColor)
+
+                if triggerSummary.hasAnyValue {
+                    triggerSummaryCard(triggerSummary)
+                }
 
                 if let latestProgressText {
                     diagnosticsRow(
@@ -80,6 +88,42 @@ struct CloudKitDiagnosticsBanner: View {
         }
     }
 
+    private func triggerSummaryCard(_ summary: CloudKitTriggerSummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Trigger Summary")
+                .font(themeStore.font(for: .bodyStrong))
+                .foregroundStyle(themeStore.accentTabColor)
+
+            triggerSummaryRow(
+                title: "Context",
+                value: "\(summary.syncRole ?? "nil") / \(summary.syncScope ?? "nil")"
+            )
+            triggerSummaryRow(
+                title: "Subscriptions",
+                value: "\(summary.subscriptionConfigurationStatus ?? "unknown") via \(summary.subscriptionRequestSource ?? "unknown")"
+            )
+            triggerSummaryRow(
+                title: "Plan",
+                value: summary.subscriptionPlanDescription
+            )
+            triggerSummaryRow(
+                title: "Push",
+                value: "\(summary.pushRegistrationStatus ?? "unknown"), received=\(summary.pushReceivedCount), remote=\(summary.remotePushCount), handler=\(summary.remoteHandlerInvocationCount)"
+            )
+            triggerSummaryRow(
+                title: "Last triggers",
+                value: "push=\(summary.lastPushReceivedTimestampISO8601 ?? "never"), fallback=\(summary.lastOwnerFallbackTimestampISO8601 ?? "never")"
+            )
+            triggerSummaryRow(
+                title: "Last sync",
+                value: "\(summary.lastSchedulerReason ?? "unknown") / \(summary.lastFetchResult ?? "unknown")"
+            )
+        }
+        .padding(10)
+        .background(themeStore.surfaceColor.opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
     private func diagnosticsRow(
         title: String,
         timestamp: String?,
@@ -107,6 +151,19 @@ struct CloudKitDiagnosticsBanner: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
+
+    private func triggerSummaryRow(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(themeStore.contentSecondaryColor)
+            Text(value)
+                .font(.footnote.monospaced())
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 }
 
 private struct CloudKitDiagnosticsSheet: View {
@@ -122,6 +179,10 @@ private struct CloudKitDiagnosticsSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if diagnostics.triggerSummary.hasAnyValue {
+                        triggerSummarySection(diagnostics.triggerSummary)
+                    }
+
                     ForEach(Array(diagnostics.entries.reversed())) { entry in
                         diagnosticsEntryCard(entry)
                     }
@@ -219,6 +280,58 @@ private struct CloudKitDiagnosticsSheet: View {
                 .stroke(themeStore.contentSecondaryColor.opacity(0.32), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func triggerSummarySection(_ summary: CloudKitTriggerSummary) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Trigger Summary")
+                .font(themeStore.font(for: .bodyStrong))
+                .foregroundStyle(themeStore.accentTabColor)
+
+            triggerSummarySheetRow("Context", "\(summary.syncRole ?? "nil") / \(summary.syncScope ?? "nil")")
+            triggerSummarySheetRow(
+                "Subscriptions",
+                "\(summary.subscriptionConfigurationStatus ?? "unknown") via \(summary.subscriptionRequestSource ?? "unknown")"
+            )
+            triggerSummarySheetRow("Plan", summary.subscriptionPlanDescription)
+            triggerSummarySheetRow(
+                "Push registration",
+                "\(summary.pushRegistrationStatus ?? "unknown") @ \(summary.pushRegistrationTimestampISO8601 ?? "never")"
+            )
+            triggerSummarySheetRow(
+                "Push counts",
+                "received=\(summary.pushReceivedCount), remote=\(summary.remotePushCount), handler=\(summary.remoteHandlerInvocationCount)"
+            )
+            triggerSummarySheetRow(
+                "Last triggers",
+                "push=\(summary.lastPushReceivedTimestampISO8601 ?? "never"), remote=\(summary.lastRemotePushTimestampISO8601 ?? "never"), fallback=\(summary.lastOwnerFallbackTimestampISO8601 ?? "never")"
+            )
+            triggerSummarySheetRow(
+                "Last sync",
+                "\(summary.lastSchedulerReason ?? "unknown") / \(summary.lastFetchResult ?? "unknown")"
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(themeStore.surfaceElevatedColor.opacity(0.9))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(themeStore.contentSecondaryColor.opacity(0.32), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func triggerSummarySheetRow(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(themeStore.contentSecondaryColor)
+            Text(value)
+                .font(.footnote.monospaced())
+                .foregroundStyle(themeStore.contentPrimaryColor)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

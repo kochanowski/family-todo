@@ -430,7 +430,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
             while let nextReason = pendingReason {
                 pendingReason = nil
                 recordSchedulerProgress(
-                    "sync.pass.started reason=\(schedulerReasonLabel(nextReason))"
+                    "sync.pass.started reason=\(schedulerReasonLabel(nextReason)) triggerSource=\(triggerSourceLabel(nextReason))"
                 )
                 let result = await engine.runSync(for: nextReason)
                 await publish(result)
@@ -439,7 +439,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
                     with: result.fetchResult
                 )
                 recordSchedulerProgress(
-                    "sync.pass.completed reason=\(schedulerReasonLabel(nextReason)) fetchResult=\(backgroundFetchResultLabel(result.fetchResult)) direction=\(result.diagnostics.direction.rawValue) eventCount=\(result.events.count)"
+                    "sync.pass.completed reason=\(schedulerReasonLabel(nextReason)) triggerSource=\(triggerSourceLabel(nextReason)) fetchResult=\(backgroundFetchResultLabel(result.fetchResult)) direction=\(result.diagnostics.direction.rawValue) eventCount=\(result.events.count)"
                 )
             }
 
@@ -461,7 +461,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
         latestBatch = batch
         let changedDomainLabels = batch.domains.map(\.rawValue).sorted().joined(separator: ",")
         recordSchedulerProgress(
-            "sync.batch.published reason=\(schedulerReasonLabel(result.diagnostics.reason)) direction=\(result.diagnostics.direction.rawValue) changedDomains=\(changedDomainLabels) eventCount=\(batch.events.count)"
+            "sync.batch.published reason=\(schedulerReasonLabel(result.diagnostics.reason)) triggerSource=\(triggerSourceLabel(result.diagnostics.reason)) direction=\(result.diagnostics.direction.rawValue) changedDomains=\(changedDomainLabels) eventCount=\(batch.events.count)"
         )
         CloudKitSubscriptionManager.shared.consumeSyncBatch(batch)
         await deliverSystemAlerts(for: batch)
@@ -684,6 +684,23 @@ final class HouseholdSyncCoordinator: ObservableObject {
             "householdSwitched"
         case .debugRepair:
             "debugRepair"
+        }
+    }
+
+    private func triggerSourceLabel(_ reason: HouseholdSyncReason) -> String {
+        switch HouseholdSyncEventSource(reason: reason) {
+        case .remote:
+            "push"
+        case .foregroundRepair:
+            "foregroundRepair"
+        case .manual:
+            "manual"
+        case .localFollowUp:
+            "localMutationFollowUp"
+        case .lifecycle:
+            "lifecycle"
+        case .debug:
+            "debug"
         }
     }
 

@@ -53,6 +53,8 @@ struct AppDelegateRemotePushDiagnostic: Equatable {
     let willInvokeRemoteCloudChangeHandler: Bool
     let syncRole: HouseholdSyncRole?
     let syncHouseholdId: UUID?
+    let applicationState: UIApplication.State
+    let scopeResolution: String
 
     var progressOperation: String {
         [
@@ -67,6 +69,8 @@ struct AppDelegateRemotePushDiagnostic: Equatable {
             "willInvokeHandler=\(willInvokeRemoteCloudChangeHandler)",
             "role=\(roleLabel(syncRole))",
             "householdId=\(syncHouseholdId?.uuidString ?? "nil")",
+            "appState=\(applicationStateLabel(applicationState))",
+            "scopeResolution=\(scopeResolution)",
         ].joined(separator: " ")
     }
 
@@ -91,6 +95,19 @@ struct AppDelegateRemotePushDiagnostic: Equatable {
             "owner"
         case .participant:
             "participant"
+        }
+    }
+
+    private func applicationStateLabel(_ state: UIApplication.State) -> String {
+        switch state {
+        case .active:
+            "active"
+        case .inactive:
+            "inactive"
+        case .background:
+            "background"
+        @unknown default:
+            "unknown"
         }
     }
 }
@@ -176,6 +193,11 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         print("[RemoteSync] AppDelegate received CloudKit push of type \(notificationTypeLabel(notification)).")
         CloudKitSubscriptionManager.shared.handleRemoteNotification(userInfo: userInfo)
         let resolution = remoteCloudChangeScopeResolution(for: notification)
+        if resolution.effectiveScope == nil {
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "remotePush.scopeUnresolved type=\(notification.notificationType.rawValue) declaredScope=\(scopeLabel(resolution.declaredScope)) currentSyncContextAvailable=\(resolution.currentSyncContextAvailable) role=\(resolution.currentSyncContext?.role == .owner ? "owner" : resolution.currentSyncContext?.role == .participant ? "participant" : "nil")"
+            )
+        }
         let remotePushDiagnostic = makeRemotePushDiagnostic(
             resolution: resolution,
             handlerInstalled: remoteCloudChangeHandler != nil,
@@ -247,6 +269,9 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         print("[RemoteSync] Failed to register for remote notifications: \(error.localizedDescription)")
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "push.registration.failed description=\(sanitizeProgressValue(error.localizedDescription))"
+        )
         CloudKitDiagnosticsState.shared.record(
             error: error,
             operation: "registerForRemoteNotifications"
@@ -304,6 +329,12 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         handlerInstalled: Bool,
         queuedBehindActiveRefresh: Bool
     ) -> AppDelegateRemotePushDiagnostic {
+        let scopeResolution: String = if resolution.effectiveScope != nil {
+            resolution.inferredFromSyncContext ? "inferred" : "declared"
+        } else {
+            "unresolved"
+        }
+
         AppDelegateRemotePushDiagnostic(
             notificationType: resolution.notificationType,
             declaredScope: resolution.declaredScope,
@@ -314,7 +345,9 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
             queuedBehindActiveRefresh: queuedBehindActiveRefresh,
             willInvokeRemoteCloudChangeHandler: handlerInstalled,
             syncRole: resolution.currentSyncContext?.role,
-            syncHouseholdId: resolution.currentSyncContext?.householdId
+            syncHouseholdId: resolution.currentSyncContext?.householdId,
+            applicationState: UIApplication.shared.applicationState,
+            scopeResolution: scopeResolution
         )
     }
 
@@ -359,5 +392,25 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         @unknown default:
             "unknown"
         }
+    }
+
+    private func scopeLabel(_ scope: CKDatabase.Scope?) -> String {
+        guard let scope else { return "nil" }
+        return switch scope {
+        case .private:
+            "private"
+        case .public:
+            "public"
+        case .shared:
+            "shared"
+        @unknown default:
+            "unknown"
+        }
+    }
+
+    private func sanitizeProgressValue(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "\n", with: "_")
     }
 }
