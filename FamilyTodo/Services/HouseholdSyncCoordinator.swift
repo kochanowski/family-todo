@@ -319,11 +319,11 @@ struct ForegroundRepairConfiguration: Equatable {
 
     static let `default` = ForegroundRepairConfiguration(
         isEnabled: true,
-        burstIntervalNanoseconds: 5_000_000_000,
-        burstMaxPassCount: 2,
+        burstIntervalNanoseconds: 4_000_000_000,
+        burstMaxPassCount: 8,
         maxConsecutiveNoDataBurstPasses: 2,
         steadyIntervalNanoseconds: 30_000_000_000,
-        steadyMaxPassCount: 0
+        steadyMaxPassCount: 20
     )
 }
 
@@ -489,15 +489,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
 
         switch batch.diagnostics.reason {
-        case .remotePush:
-            recordSchedulerProgress(
-                "sync.scheduler.skipped reason=remotePush followUpManaged=true"
-            )
-        case .localMutationFollowUp:
-            recordSchedulerProgress(
-                "sync.scheduler.skipped reason=localMutationFollowUp followUpManaged=true"
-            )
-        case .appBecameActive, .householdJoined, .householdSwitched:
+        case .remotePush, .appBecameActive, .localMutationFollowUp, .householdJoined, .householdSwitched:
             startBurstForegroundRepair(trigger: batch.diagnostics.reason)
         case .manualRefresh:
             cancelForegroundRepair()

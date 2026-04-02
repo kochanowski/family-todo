@@ -1,137 +1,1269 @@
-timestamp=2026-04-02T07:31:22Z
-kind=progress
-operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
-snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
-
----
-
-timestamp=2026-04-02T07:31:22Z
-kind=progress
-operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-
----
-
-timestamp=2026-04-02T07:31:26Z
-kind=progress
-operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
-snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
-
----
-
-timestamp=2026-04-02T07:31:26Z
-kind=progress
-operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-
----
-
-timestamp=2026-04-02T07:31:31Z
-kind=progress
-operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
-snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
-
----
-
-timestamp=2026-04-02T07:31:31Z
-kind=progress
-operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-
----
-
-timestamp=2026-04-02T07:31:34Z
-kind=progress
-operation=snapshot.fetch.failed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
-snapshot.fetch.failed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
-
----
-
-timestamp=2026-04-02T07:31:34Z
-kind=progress
-operation=snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
-snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
-
----
-
-timestamp=2026-04-02T07:31:39Z
-kind=progress
-operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
-
----
-
-timestamp=2026-04-02T07:31:39Z
+timestamp=2026-04-02T08:26:04Z
 kind=progress
 operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 
 ---
 
-timestamp=2026-04-02T07:31:43Z
+timestamp=2026-04-02T08:26:04Z
 kind=progress
 operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
 snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
 
 ---
 
-timestamp=2026-04-02T07:31:43Z
+timestamp=2026-04-02T08:26:04Z
 kind=progress
 operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 
 ---
 
-timestamp=2026-04-02T07:31:49Z
+timestamp=2026-04-02T08:26:05Z
 kind=progress
 operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
 snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
 
 ---
 
-timestamp=2026-04-02T07:31:49Z
+timestamp=2026-04-02T08:26:05Z
 kind=progress
 operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 
 ---
 
-timestamp=2026-04-02T07:31:52Z
+timestamp=2026-04-02T08:26:06Z
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-02T08:26:06Z
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:06Z
 kind=progress
 operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
 snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
 
 ---
 
-timestamp=2026-04-02T07:31:52Z
+timestamp=2026-04-02T08:26:06Z
 kind=progress
 operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 
 ---
 
-timestamp=2026-04-02T07:31:55Z
+timestamp=2026-04-02T08:26:07Z
 kind=progress
 operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
 snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
 
 ---
 
-timestamp=2026-04-02T07:31:55Z
+timestamp=2026-04-02T08:26:07Z
 kind=progress
 operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
 
 ---
 
-timestamp=2026-04-02T07:32:01Z
+timestamp=2026-04-02T08:26:08Z
 kind=progress
-operation=snapshot.fetch.failed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
-snapshot.fetch.failed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
 
 ---
 
-timestamp=2026-04-02T07:32:01Z
+timestamp=2026-04-02T08:26:08Z
 kind=progress
-operation=snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
-snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:09Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:09Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:10Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:26:10Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:26:10Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:26:10Z
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-02T08:26:14Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:14Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:15Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:26:15Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:16Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:26:16Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:18Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:26:18Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:19Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:26:19Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:20Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:20Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:21Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:21Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:23Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:26:23Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:26:23Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:26:23Z
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+
+---
+
+timestamp=2026-04-02T08:26:23Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:23Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:24Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:26:24Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:25Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:26:25Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:26Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:26:26Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:26Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:26:26Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:27Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:27Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:28Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:28Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:30Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:26:30Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:26:30Z
+kind=progress
+operation=remoteSync stage=followUpPassCompleted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=nil
+remoteSync stage=followUpPassCompleted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=nil
+
+---
+
+timestamp=2026-04-02T08:26:30Z
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=2 didCaptureAdditionalChanges=nil note=delay=1000000000
+remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=2 didCaptureAdditionalChanges=nil note=delay=1000000000
+
+---
+
+timestamp=2026-04-02T08:26:31Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:31Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:31Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:26:31Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:32Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:26:32Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:33Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:26:33Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:34Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:26:34Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:35Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:35Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:36Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:36Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:37Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:26:37Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:26:37Z
+kind=progress
+operation=remoteSync stage=followUpPassCompleted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=2 didCaptureAdditionalChanges=false note=nil
+remoteSync stage=followUpPassCompleted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=2 didCaptureAdditionalChanges=false note=nil
+
+---
+
+timestamp=2026-04-02T08:26:37Z
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=3 didCaptureAdditionalChanges=nil note=delay=2500000000
+remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=3 didCaptureAdditionalChanges=nil note=delay=2500000000
+
+---
+
+timestamp=2026-04-02T08:26:40Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:40Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:41Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:26:41Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:42Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:26:42Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:43Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:26:43Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:43Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:26:43Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:44Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:44Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:47Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:26:47Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:26:49Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:26:49Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:26:49Z
+kind=progress
+operation=remoteSync stage=followUpPassCompleted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=3 didCaptureAdditionalChanges=false note=nil
+remoteSync stage=followUpPassCompleted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=3 didCaptureAdditionalChanges=false note=nil
+
+---
+
+timestamp=2026-04-02T08:27:00Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:00Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:03Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:27:03Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:07Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:27:07Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:09Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:27:09Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:10Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:27:10Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:11Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:11Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:12Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:12Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:13Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:27:13Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:27:13Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:27:13Z
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-02T08:27:16Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:16Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:17Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:27:17Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:18Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:27:18Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:18Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:27:18Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:19Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:27:19Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:20Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:20Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:21Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:21Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:22Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:27:22Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:27:22Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:27:22Z
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-02T08:27:31Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:31Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:32Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:27:32Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:33Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:27:33Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:34Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:27:34Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:34Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:27:34Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:35Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:35Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:36Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:36Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:37Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:27:37Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:27:37Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:27:37Z
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-02T08:27:40Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:40Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:41Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:27:41Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:42Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:27:42Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:42Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:27:42Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:43Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:27:43Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:44Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:44Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:44Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:44Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T08:27:46Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:48Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T08:27:48Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:49Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T08:27:49Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:51Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T08:27:51Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:52Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:52Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:53Z
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T08:27:53Z
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:54Z
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=9
+
+---
+
+timestamp=2026-04-02T08:27:54Z
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 members=2 shopping=13 bundles=3 workItems=9 categories=1 backlogItems=0
+
+---
+
+timestamp=2026-04-02T08:27:54Z
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-02T08:27:54Z
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+remoteSync stage=followUpPassStarted householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+
+---
+
+timestamp=2026-04-02T08:27:54Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T08:27:54Z
+kind=pr

@@ -65,7 +65,7 @@ Jednocześnie nowe triggery (foreground, repair window, lifecycle) uruchamiają 
 
 **Problem główny B — push notifications nie docierają dla participant → owner**
 
-Zero `push.received` przez 2 minuty w aktywnej sesji potwierdza, że CloudKit nie dostarcza powiadomień do owner gdy participant modyfikuje rekordy w shared zone. 
+Zero `push.received` przez 2 minuty w aktywnej sesji potwierdza, że CloudKit nie dostarcza powiadomień do owner gdy participant modyfikuje rekordy w shared zone.
 
 Logika subskrypcji jest poprawna: `household-zone-ownerPrivate-*` `CKRecordZoneSubscription` POWINNA strzelać gdy participant pisze. Ale w praktyce — CloudKit ma znany problem z dostarczaniem zone-level pushów dla zmian zrobionych przez participant (nie przez owner urządzenia) w shared zone. Apple Developer Forums potwierdzają ten przypadek.
 
@@ -193,7 +193,7 @@ Participant nigdy nie otrzyma notyfikacji z własnej private DB o zmianach w hou
 private func remoteSyncDirection(...) -> HouseholdSyncDirection {
     guard let household else { return .unknown }
     let effectiveDatabaseScope = effectiveRemoteDatabaseScope(...)
-    
+
     if household.ownerId == userId {
         guard effectiveDatabaseScope == .private else { return .unknown }
         //                                             ↑ jeśli owner dostanie CKDatabaseNotification
@@ -375,7 +375,7 @@ static func makeSubscriptionPlan(
 private func remoteSyncDirection(...) -> HouseholdSyncDirection {
     guard let household else { return .unknown }
     let effectiveDatabaseScope = effectiveRemoteDatabaseScope(...)
-    
+
     if household.ownerId == userId {
         // Owner receives participant changes via:
         // - private DB zone sub → .private
