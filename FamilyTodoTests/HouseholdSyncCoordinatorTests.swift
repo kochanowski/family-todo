@@ -415,50 +415,26 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         CloudKitDiagnosticsState.shared.clear()
         let engine = FakeHouseholdSyncEngine(
             results: [
-                HouseholdSyncPassResult(
-                    fetchResult: .noData,
-                    events: [],
-                    diagnostics: HouseholdSyncDiagnostics(
-                        batchID: UUID(),
-                        reason: .appBecameActive,
-                        direction: .participantToOwner,
-                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
-                        syncStartedAt: Date(timeIntervalSince1970: 100),
-                        syncFinishedAt: Date(timeIntervalSince1970: 101),
-                        changedDomains: [],
-                        changedIDsByDomain: [:],
-                        activeMemberCount: 2
-                    )
+                makeLifecycleNoDataPassResult(
+                    reason: .appBecameActive,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 99
                 ),
-                HouseholdSyncPassResult(
-                    fetchResult: .noData,
-                    events: [],
-                    diagnostics: HouseholdSyncDiagnostics(
-                        batchID: UUID(),
-                        reason: .foregroundRepairWindow,
-                        direction: .participantToOwner,
-                        triggerReceivedAt: Date(timeIntervalSince1970: 102),
-                        syncStartedAt: Date(timeIntervalSince1970: 103),
-                        syncFinishedAt: Date(timeIntervalSince1970: 104),
-                        changedDomains: [],
-                        changedIDsByDomain: [:],
-                        activeMemberCount: 2
-                    )
+                makeLifecycleNoDataPassResult(
+                    reason: .foregroundRepairWindow,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 102
                 ),
-                HouseholdSyncPassResult(
-                    fetchResult: .noData,
-                    events: [],
-                    diagnostics: HouseholdSyncDiagnostics(
-                        batchID: UUID(),
-                        reason: .foregroundRepairWindow,
-                        direction: .participantToOwner,
-                        triggerReceivedAt: Date(timeIntervalSince1970: 105),
-                        syncStartedAt: Date(timeIntervalSince1970: 106),
-                        syncFinishedAt: Date(timeIntervalSince1970: 107),
-                        changedDomains: [],
-                        changedIDsByDomain: [:],
-                        activeMemberCount: 2
-                    )
+                makeLifecycleNoDataPassResult(
+                    reason: .foregroundRepairWindow,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 105
                 ),
             ]
         )
@@ -493,6 +469,11 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         )
         XCTAssertTrue(
             CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.ownerFallbackDecision eligible=true role=owner scope=ownerPrivate direction=unknown reason=appBecameActive")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
                 $0.operation.contains("sync.scheduler.started reason=appBecameActive ownerFallback=true")
             }
         )
@@ -509,6 +490,53 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(
             CloudKitDiagnosticsState.shared.entries.contains {
                 $0.operation.contains("sync.pass.started reason=foregroundRepairWindow")
+            }
+        )
+    }
+
+    func testParticipantLifecycleSyncDoesNotScheduleOwnerFallback() async {
+        CloudKitDiagnosticsState.shared.clear()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                makeLifecycleNoDataPassResult(
+                    reason: .appBecameActive,
+                    direction: .unknown,
+                    syncRole: .participant,
+                    syncScope: .participantShared,
+                    timelineStart: 99
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 2
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .appBecameActive)
+        await waitUntil {
+            engine.recordedReasons.count == 1
+        }
+
+        XCTAssertEqual(engine.recordedReasons, [.appBecameActive])
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=appBecameActive")
+            }
+        )
+        XCTAssertFalse(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("ownerFallback=true")
             }
         )
     }
@@ -739,6 +767,33 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .foregroundRepairWindow)
         XCTAssertEqual(coordinator.lastDiagnostics?.direction, .participantToOwner)
     }
+}
+
+private func makeLifecycleNoDataPassResult(
+    reason: HouseholdSyncReason,
+    direction: HouseholdSyncDirection,
+    syncRole: HouseholdSyncRole,
+    syncScope: CloudKitManager.HouseholdDatabaseScope,
+    timelineStart: TimeInterval,
+    activeMemberCount: Int = 2
+) -> HouseholdSyncPassResult {
+    HouseholdSyncPassResult(
+        fetchResult: .noData,
+        events: [],
+        diagnostics: HouseholdSyncDiagnostics(
+            batchID: UUID(),
+            reason: reason,
+            direction: direction,
+            syncRole: syncRole,
+            syncScope: syncScope,
+            triggerReceivedAt: Date(timeIntervalSince1970: timelineStart),
+            syncStartedAt: Date(timeIntervalSince1970: timelineStart + 1),
+            syncFinishedAt: Date(timeIntervalSince1970: timelineStart + 2),
+            changedDomains: [],
+            changedIDsByDomain: [:],
+            activeMemberCount: activeMemberCount
+        )
+    )
 }
 
 @MainActor

@@ -187,6 +187,8 @@ struct HouseholdSyncDiagnostics: Equatable {
     let batchID: UUID
     let reason: HouseholdSyncReason
     let direction: HouseholdSyncDirection
+    let syncRole: HouseholdSyncRole?
+    let syncScope: CloudKitManager.HouseholdDatabaseScope?
     let triggerReceivedAt: Date
     let syncStartedAt: Date
     let syncFinishedAt: Date
@@ -198,6 +200,8 @@ struct HouseholdSyncDiagnostics: Equatable {
         batchID: UUID,
         reason: HouseholdSyncReason,
         direction: HouseholdSyncDirection,
+        syncRole: HouseholdSyncRole? = nil,
+        syncScope: CloudKitManager.HouseholdDatabaseScope? = nil,
         triggerReceivedAt: Date,
         syncStartedAt: Date,
         syncFinishedAt: Date,
@@ -208,6 +212,8 @@ struct HouseholdSyncDiagnostics: Equatable {
         self.batchID = batchID
         self.reason = reason
         self.direction = direction
+        self.syncRole = syncRole
+        self.syncScope = syncScope
         self.triggerReceivedAt = triggerReceivedAt
         self.syncStartedAt = syncStartedAt
         self.syncFinishedAt = syncFinishedAt
@@ -539,11 +545,17 @@ final class HouseholdSyncCoordinator: ObservableObject {
     }
 
     private func updateOwnerFallbackIfNeeded(for batch: HouseholdSyncBatch) {
+        let applicationState = applicationStateProvider()
+        let activeMemberCount = batch.diagnostics.activeMemberCount ?? 0
         let shouldScheduleOwnerFallback =
             foregroundRepairConfiguration.ownerFallbackMaxPassCount > 0 &&
-            batch.diagnostics.direction == .participantToOwner &&
-            applicationStateProvider() == .active &&
-            (batch.diagnostics.activeMemberCount ?? 0) > 1
+            batch.diagnostics.syncRole == .owner &&
+            applicationState == .active &&
+            activeMemberCount > 1
+
+        recordSchedulerProgress(
+            "sync.scheduler.ownerFallbackDecision eligible=\(shouldScheduleOwnerFallback) role=\(syncRoleLabel(batch.diagnostics.syncRole)) scope=\(syncScopeLabel(batch.diagnostics.syncScope)) direction=\(batch.diagnostics.direction.rawValue) reason=\(schedulerReasonLabel(batch.diagnostics.reason)) activeMembers=\(activeMemberCount) appState=\(applicationStateLabel(applicationState))"
+        )
 
         guard shouldScheduleOwnerFallback else {
             cancelOwnerFallback()
@@ -788,6 +800,39 @@ final class HouseholdSyncCoordinator: ObservableObject {
             "noData"
         case .failed:
             "failed"
+        @unknown default:
+            "unknown"
+        }
+    }
+
+    private func syncRoleLabel(_ role: HouseholdSyncRole?) -> String {
+        guard let role else { return "nil" }
+        return switch role {
+        case .owner:
+            "owner"
+        case .participant:
+            "participant"
+        }
+    }
+
+    private func syncScopeLabel(_ scope: CloudKitManager.HouseholdDatabaseScope?) -> String {
+        guard let scope else { return "nil" }
+        return switch scope {
+        case .ownerPrivate:
+            "ownerPrivate"
+        case .participantShared:
+            "participantShared"
+        }
+    }
+
+    private func applicationStateLabel(_ state: UIApplication.State) -> String {
+        switch state {
+        case .active:
+            "active"
+        case .inactive:
+            "inactive"
+        case .background:
+            "background"
         @unknown default:
             "unknown"
         }

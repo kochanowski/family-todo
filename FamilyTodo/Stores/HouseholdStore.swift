@@ -490,6 +490,7 @@ struct RemoteSyncBaseline {
     let beforeSnapshot: HouseholdStore.RemoteCloudRefreshSnapshot
     let beforeVisibleContentSnapshot: RemoteVisibleContentSnapshot?
     let direction: HouseholdSyncDirection
+    let syncContext: HouseholdSyncContext?
 }
 
 struct RemoteSyncPassBuildContext {
@@ -3969,6 +3970,8 @@ class HouseholdStore: ObservableObject {
             batchID: UUID(),
             reason: reason,
             direction: direction,
+            syncRole: nil,
+            syncScope: nil,
             triggerReceivedAt: triggerReceivedAt,
             syncStartedAt: syncStartedAt,
             syncFinishedAt: syncFinishedAt,
@@ -3993,6 +3996,7 @@ class HouseholdStore: ObservableObject {
             userId: userId,
             preferredHouseholdId: preferredHouseholdId
         )
+        let syncContext = currentSyncContext(userId: userId)
         return RemoteSyncBaseline(
             beforeSnapshot: beforeSnapshot,
             beforeVisibleContentSnapshot: beforeSnapshot.observedHouseholdId.map(remoteVisibleContentSnapshot),
@@ -4000,7 +4004,8 @@ class HouseholdStore: ObservableObject {
                 household: currentHousehold,
                 userId: userId,
                 context: context
-            )
+            ),
+            syncContext: syncContext
         )
     }
 
@@ -4045,6 +4050,8 @@ class HouseholdStore: ObservableObject {
             batchID: batchID,
             reason: context.reason,
             direction: context.baseline.direction,
+            syncRole: context.baseline.syncContext?.role,
+            syncScope: context.baseline.syncContext?.scope,
             triggerReceivedAt: context.triggerReceivedAt,
             syncStartedAt: context.refreshStartedAt,
             syncFinishedAt: syncFinishedAt,
