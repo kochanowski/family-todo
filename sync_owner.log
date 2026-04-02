@@ -1,0 +1,1397 @@
+timestamp=2026-04-02T07:31:50Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:31:51Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=4
+ownerQuery.targetZone.completed recordType=WorkItem count=4
+
+---
+
+timestamp=2026-04-02T07:31:51Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:31:51Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:31:52Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:31:52Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:31:53Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:31:54Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+
+---
+
+timestamp=2026-04-02T07:31:54Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T07:31:54Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:54Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:31:55Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:31:55Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:31:55Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:31:56Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:31:56Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:31:57Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+
+---
+
+timestamp=2026-04-02T07:31:58Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+
+---
+
+timestamp=2026-04-02T07:31:59Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:00Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:32:07Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:08Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:32:09Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:10Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:32:12Z
+kind=progress
+operation=ownerQuery.fallbackScan.completed recordType=Task authoritativeCount=0 zoneCount=0
+ownerQuery.fallbackScan.completed recordType=Task authoritativeCount=0 zoneCount=0
+
+---
+
+timestamp=2026-04-02T07:32:13Z
+kind=progress
+operation=ownerQuery.fallbackScan.completed recordType=BacklogItem authoritativeCount=0 zoneCount=0
+ownerQuery.fallbackScan.completed recordType=BacklogItem authoritativeCount=0 zoneCount=0
+
+---
+
+timestamp=2026-04-02T07:32:13Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:13Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:13Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:14Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=6
+ownerQuery.targetZone.completed recordType=WorkItem count=6
+
+---
+
+timestamp=2026-04-02T07:32:14Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:32:14Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:32:15Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:32:15Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:32:16Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:17Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:32:17Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:32:18Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-81DAD667-93B2-44E4-AC8B-C6BDDF91B950")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-81DAD667-93B2-44E4-AC8B-C6BDDF91B950")
+
+---
+
+timestamp=2026-04-02T07:33:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-2483F940-58CD-46AA-B21D-9BC17FA27220")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-2483F940-58CD-46AA-B21D-9BC17FA27220")
+
+---
+
+timestamp=2026-04-02T07:33:02Z
+kind=progress
+operation=snapshot.fetch.failed domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=domainFetchTimedOut("backlogItems")
+snapshot.fetch.failed domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=domainFetchTimedOut("backlogItems")
+
+---
+
+timestamp=2026-04-02T07:33:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-37B1FBEF-FABD-4FB9-8B57-C9525FC97A14")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-37B1FBEF-FABD-4FB9-8B57-C9525FC97A14")
+
+---
+
+timestamp=2026-04-02T07:33:02Z
+kind=progress
+operation=snapshot.load.failed scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+snapshot.load.failed scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+
+---
+
+timestamp=2026-04-02T07:33:04Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:05Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:05Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:06Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:06Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=snapshot.load.started scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:33:07Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:08Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:33:08Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+
+---
+
+timestamp=2026-04-02T07:33:08Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=ownerQuery.fallbackScan.completed recordType=Task authoritativeCount=0 zoneCount=0
+ownerQuery.fallbackScan.completed recordType=Task authoritativeCount=0 zoneCount=0
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:09Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:15Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:16Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=6
+ownerQuery.targetZone.completed recordType=WorkItem count=6
+
+---
+
+timestamp=2026-04-02T07:33:16Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:33:16Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:33:17Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:33:17Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:33:17Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:17Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:33:17Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:33:17Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:33:18Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+
+---
+
+timestamp=2026-04-02T07:33:18Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+
+---
+
+timestamp=2026-04-02T07:35:04Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708")
+
+---
+
+timestamp=2026-04-02T07:35:04Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=Task error=queryTimedOut("CloudKit query timed out recordType=Task zone=HouseholdZone-A0DF2635-022C-4627-9113-6D0D04B395F8")
+ownerQuery.fallbackScan.timedOut recordType=Task error=queryTimedOut("CloudKit query timed out recordType=Task zone=HouseholdZone-A0DF2635-022C-4627-9113-6D0D04B395F8")
+
+---
+
+timestamp=2026-04-02T07:35:04Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:04Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:04Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:05Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=6
+ownerQuery.targetZone.completed recordType=WorkItem count=6
+
+---
+
+timestamp=2026-04-02T07:35:06Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:35:06Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:35:06Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:35:06Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:35:07Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:08Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:08Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:10Z
+kind=progress
+operation=ownerQuery.fallbackScan.completed recordType=Task authoritativeCount=0 zoneCount=0
+ownerQuery.fallbackScan.completed recordType=Task authoritativeCount=0 zoneCount=0
+
+---
+
+timestamp=2026-04-02T07:35:11Z
+kind=progress
+operation=ownerQuery.fallbackScan.completed recordType=BacklogItem authoritativeCount=0 zoneCount=0
+ownerQuery.fallbackScan.completed recordType=BacklogItem authoritativeCount=0 zoneCount=0
+
+---
+
+timestamp=2026-04-02T07:35:11Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:11Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+
+---
+
+timestamp=2026-04-02T07:35:11Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:11Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:11Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:12Z
+kind=progress
+operation=forceCloudSync.started householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_9f7a5eefe971a61cf175e9acbd0f6fe5
+forceCloudSync.started householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 userId=_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-02T07:35:12Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=6
+ownerQuery.targetZone.completed recordType=WorkItem count=6
+
+---
+
+timestamp=2026-04-02T07:35:13Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:35:13Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:35:13Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:35:13Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:35:15Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:16Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:16Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:17Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:17Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:17Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:18Z
+kind=progress
+operation=snapshot.load.started scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:35:18Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:35:18Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:18Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:18Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T07:35:19Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:35:19Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:20Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+
+---
+
+timestamp=2026-04-02T07:35:20Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T07:35:20Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:35:20Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:21Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+
+---
+
+timestamp=2026-04-02T07:35:21Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T07:35:21Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:35:21Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:22Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=ShoppingBundle zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:23Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:24Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+ownerQuery.targetZone.completed recordType=ShoppingItem count=13
+
+---
+
+timestamp=2026-04-02T07:35:24Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+ownerQuery.targetZone.completed recordType=ShoppingBundle count=3
+
+---
+
+timestamp=2026-04-02T07:35:25Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:27Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:28Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:35:28Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:35:29Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-E94B5C79-FE8D-42D1-B20A-E1B154ACC5AE")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-E94B5C79-FE8D-42D1-B20A-E1B154ACC5AE")
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=Task error=queryTimedOut("CloudKit query timed out recordType=Task zone=HouseholdZone-6F75DD28-EEE1-498F-873C-49C06B1DCF92")
+ownerQuery.fallbackScan.timedOut recordType=Task error=queryTimedOut("CloudKit query timed out recordType=Task zone=HouseholdZone-6F75DD28-EEE1-498F-873C-49C06B1DCF92")
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-99919185-8CBB-404B-A2D6-E399EC66E3EE")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-99919185-8CBB-404B-A2D6-E399EC66E3EE")
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=Task error=queryTimedOut("CloudKit query timed out recordType=Task zone=HouseholdZone-1FC92AD7-5ACB-42C6-A540-EB30235347C2")
+ownerQuery.fallbackScan.timedOut recordType=Task error=queryTimedOut("CloudKit query timed out recordType=Task zone=HouseholdZone-1FC92AD7-5ACB-42C6-A540-EB30235347C2")
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-E5E349F7-C8AC-4EB9-ABE7-5EB69C33834C")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-E5E349F7-C8AC-4EB9-ABE7-5EB69C33834C")
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=snapshot.fetch.failed domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=domainFetchTimedOut("backlogItems")
+snapshot.fetch.failed domain=backlogItems scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=domainFetchTimedOut("backlogItems")
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=snapshot.load.failed scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+snapshot.load.failed scope=ownerPrivate householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=forceCloudSync.completed householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 shopping=13 bundles=3 workItems=4 categories=1
+forceCloudSync.completed householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 shopping=13 bundles=3 workItems=4 categories=1
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:02Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogCategory zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:03Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=6
+ownerQuery.targetZone.completed recordType=WorkItem count=6
+
+---
+
+timestamp=2026-04-02T07:37:04Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:37:04Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:37:04Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:37:04Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:37:04Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+ownerQuery.targetZone.completed recordType=BacklogCategory count=1
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=WorkItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Task zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:37:05Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:37:06Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=WorkItem count=6
+ownerQuery.targetZone.completed recordType=WorkItem count=6
+
+---
+
+timestamp=2026-04-02T07:37:07Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Task count=0
+ownerQuery.targetZone.completed recordType=Task count=0
+
+---
+
+timestamp=2026-04-02T07:37:07Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=Task
+ownerQuery.fallbackScan.started recordType=Task
+
+---
+
+timestamp=2026-04-02T07:37:07Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=BacklogItem count=0
+ownerQuery.targetZone.completed recordType=BacklogItem count=0
+
+---
+
+timestamp=2026-04-02T07:37:07Z
+kind=progress
+operation=ownerQuery.fallbackScan.started recordType=BacklogItem
+ownerQuery.fallbackScan.started recordType=BacklogItem
+
+---
+
+timestamp=2026-04-02T07:37:08Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:37:08Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:38:02Z
+kind=progress
+operation=ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708")
+ownerQuery.fallbackScan.timedOut recordType=BacklogItem error=queryTimedOut("CloudKit query timed out recordType=BacklogItem zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708")
+
+---
+
+timestamp=2026-04-02T07:38:02Z
+kind=progress
+operation=ownerQuery.targetZone.timedOut recordType=Member error=queryTimedOut("CloudKit query timed out recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708")
+ownerQuery.targetZone.timedOut recordType=Member error=queryTimedOut("CloudKit query timed out recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708")
+
+---
+
+timestamp=2026-04-02T07:38:02Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:38:03Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:38:04Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2
+
+---
+
+timestamp=2026-04-02T07:38:06Z
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-9F176075-EDA4-4F1C-863A-94D5F5CF8708|__defaultOwner__
+
+---
+
+timestamp=2026-04-02T07:38:07Z
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=2
+ownerQuery.targetZone.completed recordType=Member count=2

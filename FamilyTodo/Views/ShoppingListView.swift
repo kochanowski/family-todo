@@ -164,6 +164,7 @@ private struct ShoppingListContent: View {
                 if selectedTab == .shopping {
                     handleRemoteShoppingSyncBatch(batch)
                 } else {
+                    store.rehydrateVisibleSnapshotFromCache()
                     store.replayPendingMutationsIfNeeded()
                 }
             }

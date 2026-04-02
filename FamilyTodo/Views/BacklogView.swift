@@ -379,6 +379,7 @@ private struct BacklogContent: View {
                 if selectedTab == .backlog {
                     handleRemoteBacklogSyncBatch(batch)
                 } else {
+                    store.rehydrateVisibleSnapshotFromCache()
                     store.replayPendingMutationsIfNeeded()
                 }
             }

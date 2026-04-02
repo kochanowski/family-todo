@@ -35,7 +35,7 @@ actor HouseholdCloudSnapshotLoader {
     init(
         cloud: any HouseholdCloudSyncing,
         domainFetchTimeoutNanoseconds: UInt64 = 10_000_000_000,
-        snapshotTimeoutNanoseconds: UInt64 = 20_000_000_000
+        snapshotTimeoutNanoseconds: UInt64 = 60_000_000_000
     ) {
         self.cloud = cloud
         self.domainFetchTimeoutNanoseconds = domainFetchTimeoutNanoseconds

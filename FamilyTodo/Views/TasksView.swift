@@ -259,7 +259,7 @@ private struct TasksContent: View {
         }
         .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
             guard let batch = syncCoordinator.latestBatch,
-                  !batch.domains.isDisjoint(with: [.tasks, .members, .backlog])
+                  !batch.domains.isDisjoint(with: [.tasks, .members, .backlog, .ideas])
             else {
                 return
             }
@@ -268,6 +268,7 @@ private struct TasksContent: View {
             if selectedTab == .tasks {
                 handleRemoteTaskSyncBatch(batch)
             } else {
+                store.rehydrateVisibleSnapshotFromCache()
                 store.replayPendingMutationsIfNeeded()
             }
         }

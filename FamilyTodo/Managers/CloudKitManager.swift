@@ -1280,9 +1280,9 @@ actor CloudKitManager {
     }
 
     static func shouldFallbackToOwnerPrivateExhaustiveScan(
-        targetZoneRecordCount: Int
+        targetZoneRecordCount _: Int
     ) -> Bool {
-        targetZoneRecordCount == 0
+        false
     }
 
     private static let singleGraphReferenceKeys = [

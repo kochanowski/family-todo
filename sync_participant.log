@@ -1,0 +1,137 @@
+timestamp=2026-04-02T07:31:22Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T07:31:22Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:26Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T07:31:26Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:31Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=0
+
+---
+
+timestamp=2026-04-02T07:31:31Z
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:34Z
+kind=progress
+operation=snapshot.fetch.failed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
+snapshot.fetch.failed domain=tasks scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
+
+---
+
+timestamp=2026-04-02T07:31:34Z
+kind=progress
+operation=snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+
+---
+
+timestamp=2026-04-02T07:31:39Z
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.load.started scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:39Z
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:43Z
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=2
+
+---
+
+timestamp=2026-04-02T07:31:43Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:49Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=13
+
+---
+
+timestamp=2026-04-02T07:31:49Z
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:52Z
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=3
+
+---
+
+timestamp=2026-04-02T07:31:52Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:31:55Z
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 count=1
+
+---
+
+timestamp=2026-04-02T07:31:55Z
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708
+
+---
+
+timestamp=2026-04-02T07:32:01Z
+kind=progress
+operation=snapshot.fetch.failed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
+snapshot.fetch.failed domain=backlogItems scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=CancellationError()
+
+---
+
+timestamp=2026-04-02T07:32:01Z
+kind=progress
+operation=snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
+snapshot.load.failed scope=participantShared householdId=9F176075-EDA4-4F1C-863A-94D5F5CF8708 error=snapshotTimedOut
