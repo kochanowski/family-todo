@@ -102,6 +102,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
     }
 
     func testHandleRemoteCloudChangeRefreshesSharedCachesAndReturnsNewData() async throws {
+        CloudKitDiagnosticsState.shared.clear()
         let userId = "joined-user"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
         let membership = TestCacheFixtures.member(
@@ -187,6 +188,16 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertTrue(operations.contains {
             $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("snapshot.cacheApplied householdId=\(household.id.uuidString)")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("snapshot.uiPublished source=remotePush")
+            }
+        )
     }
 
     func testHandleRemoteCloudChangeReturnsNoDataWhenCachesAreAlreadyCurrent() async throws {

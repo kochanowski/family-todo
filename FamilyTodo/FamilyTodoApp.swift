@@ -79,19 +79,6 @@ struct FamilyTodoApp: App {
         _ = _Concurrency.Task(priority: .utility) {
             #if !CI
                 await userSession.checkAuthenticationStatus()
-                if userSession.syncMode == .cloud,
-                   let userId = userSession.userId,
-                   let householdId = userSession.currentHouseholdID
-                {
-                    let syncContext = await MainActor.run {
-                        householdStore.currentSyncContext(userId: userId)
-                    }
-                    await MainActor.run {
-                        if let syncContext, syncContext.householdId == householdId {
-                            subscriptionManager.configure(syncContext: syncContext)
-                        }
-                    }
-                }
             #endif
 
             await shareAcceptanceCoordinator.processPendingIfPossible(
@@ -190,16 +177,6 @@ struct FamilyTodoApp: App {
 
                                 // Configure for UI Testing if needed
                                 UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
-
-                                #if !CI
-                                    if userSession.syncMode == .cloud,
-                                       let userId = userSession.userId,
-                                       let syncContext = householdStore.currentSyncContext(userId: userId),
-                                       userSession.currentHouseholdID == syncContext.householdId
-                                    {
-                                        subscriptionManager.configure(syncContext: syncContext)
-                                    }
-                                #endif
                                 scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
                             }
                             .onOpenURL { url in

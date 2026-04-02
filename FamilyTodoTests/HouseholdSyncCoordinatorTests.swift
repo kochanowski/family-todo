@@ -250,7 +250,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                 burstMaxPassCount: 0,
                 maxConsecutiveNoDataBurstPasses: 0,
                 steadyIntervalNanoseconds: 0,
-                steadyMaxPassCount: 0
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { titles, householdId, householdName in
                 await alertRecorder.record(
@@ -296,7 +298,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                 burstMaxPassCount: 4,
                 maxConsecutiveNoDataBurstPasses: 2,
                 steadyIntervalNanoseconds: 0,
-                steadyMaxPassCount: 0
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
@@ -308,6 +312,168 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(engine.recordedReasons, [.remotePush(context: .sharedDatabase)])
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .remotePush(context: .sharedDatabase))
+    }
+
+    func testForegroundRepairWindowWithNewDataDoesNotRestartBurstWindow() async {
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .appBecameActive,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 102),
+                        syncStartedAt: Date(timeIntervalSince1970: 103),
+                        syncFinishedAt: Date(timeIntervalSince1970: 104),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 105),
+                        syncStartedAt: Date(timeIntervalSince1970: 106),
+                        syncFinishedAt: Date(timeIntervalSince1970: 107),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 2,
+                maxConsecutiveNoDataBurstPasses: 2,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .appBecameActive)
+        await waitUntil {
+            engine.recordedReasons.count == 3
+        }
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .appBecameActive,
+                .foregroundRepairWindow,
+                .foregroundRepairWindow,
+            ]
+        )
+    }
+
+    func testOwnerParticipantToOwnerSyncSchedulesOwnerFallbackPolls() async {
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .appBecameActive,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 102),
+                        syncStartedAt: Date(timeIntervalSince1970: 103),
+                        syncFinishedAt: Date(timeIntervalSince1970: 104),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .noData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .foregroundRepairWindow,
+                        direction: .participantToOwner,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 105),
+                        syncStartedAt: Date(timeIntervalSince1970: 106),
+                        syncFinishedAt: Date(timeIntervalSince1970: 107),
+                        changedDomains: [],
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 2
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .appBecameActive)
+        await waitUntil {
+            engine.recordedReasons.count == 3
+        }
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .appBecameActive,
+                .foregroundRepairWindow,
+                .foregroundRepairWindow,
+            ]
+        )
     }
 
     func testPerformSyncSchedulesBoundedForegroundRepairForAppBecameActive() async {
@@ -369,7 +535,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                 burstMaxPassCount: 4,
                 maxConsecutiveNoDataBurstPasses: 2,
                 steadyIntervalNanoseconds: 0,
-                steadyMaxPassCount: 0
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
@@ -420,7 +588,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                 burstMaxPassCount: 4,
                 maxConsecutiveNoDataBurstPasses: 2,
                 steadyIntervalNanoseconds: 0,
-                steadyMaxPassCount: 0
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { _, _, _ in }
         )
@@ -508,7 +678,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
                 burstMaxPassCount: 2,
                 maxConsecutiveNoDataBurstPasses: 1,
                 steadyIntervalNanoseconds: 0,
-                steadyMaxPassCount: 2
+                steadyMaxPassCount: 2,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
             ),
             sharedShoppingAlertDelivery: { _, _, _ in }
         )

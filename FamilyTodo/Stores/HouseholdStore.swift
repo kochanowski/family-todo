@@ -2913,6 +2913,9 @@ class HouseholdStore: ObservableObject {
             cloudCategoryIDs: Set(snapshot.backlogCategories.map(\.id)),
             cloudItemIDs: Set(snapshot.backlogItems.map(\.id))
         )
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "snapshot.cacheApplied householdId=\(household.id.uuidString) members=\(mergedMembers.count) shopping=\(snapshot.shoppingItems.count) bundles=\(snapshot.shoppingBundles.count) workItems=\(snapshot.unifiedWorkItems.count) categories=\(snapshot.backlogCategories.count) backlogItems=\(snapshot.backlogItems.count)"
+        )
 
         let remoteMembershipConfirmed = snapshot.hasActiveMembership(userId: userId)
 
@@ -3037,6 +3040,14 @@ class HouseholdStore: ObservableObject {
             name: .backlogDataDidChange,
             object: source,
             userInfo: userInfo
+        )
+        let shoppingChangeCount = remoteVisibleContentDiff.map {
+            $0.changedShoppingItemIDs.count + $0.changedShoppingBundleIDs.count
+        } ?? 0
+        let workItemChangeCount = remoteVisibleContentDiff?.changedWorkItemIDs.count ?? 0
+        let backlogChangeCount = remoteVisibleContentDiff?.changedBacklogCategoryIDs.count ?? 0
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "snapshot.uiPublished source=\(source) direction=\(direction.rawValue) shoppingChanges=\(shoppingChangeCount) workItemChanges=\(workItemChangeCount) backlogChanges=\(backlogChangeCount)"
         )
     }
 

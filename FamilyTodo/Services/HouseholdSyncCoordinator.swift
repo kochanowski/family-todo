@@ -316,6 +316,8 @@ struct ForegroundRepairConfiguration: Equatable {
     let maxConsecutiveNoDataBurstPasses: Int
     let steadyIntervalNanoseconds: UInt64
     let steadyMaxPassCount: Int
+    let ownerFallbackIntervalNanoseconds: UInt64
+    let ownerFallbackMaxPassCount: Int
 
     static let `default` = ForegroundRepairConfiguration(
         isEnabled: true,
@@ -323,7 +325,9 @@ struct ForegroundRepairConfiguration: Equatable {
         burstMaxPassCount: 8,
         maxConsecutiveNoDataBurstPasses: 2,
         steadyIntervalNanoseconds: 30_000_000_000,
-        steadyMaxPassCount: 20
+        steadyMaxPassCount: 20,
+        ownerFallbackIntervalNanoseconds: 15_000_000_000,
+        ownerFallbackMaxPassCount: 40
     )
 }
 
@@ -351,10 +355,12 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
     private var scheduledForegroundRepairTask: _Concurrency.Task<Void, Never>?
+    private var scheduledOwnerFallbackTask: _Concurrency.Task<Void, Never>?
     private var currentForegroundRepairMode: ForegroundRepairMode = .burst
     private var remainingForegroundRepairBurstPasses = 0
     private var remainingForegroundRepairSteadyPasses = 0
     private var consecutiveForegroundRepairNoDataPasses = 0
+    private var remainingOwnerFallbackPasses = 0
 
     init(
         engine: HouseholdSyncEngine,
@@ -479,24 +485,34 @@ final class HouseholdSyncCoordinator: ObservableObject {
         for batch: HouseholdSyncBatch,
         fetchResult: UIBackgroundFetchResult
     ) {
-        guard foregroundRepairConfiguration.isEnabled else { return }
-
         guard applicationStateProvider() == .active,
               (batch.diagnostics.activeMemberCount ?? 0) > 1
         else {
             cancelForegroundRepair()
+            cancelOwnerFallback()
             return
         }
 
+        updateOwnerFallbackIfNeeded(for: batch)
+        guard foregroundRepairConfiguration.isEnabled else { return }
+
         switch batch.diagnostics.reason {
-        case .remotePush, .appBecameActive, .localMutationFollowUp, .householdJoined, .householdSwitched:
+        case .remotePush:
+            guard batch.diagnostics.direction != .ownerToParticipant else {
+                recordSchedulerProgress(
+                    "sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=\(batch.diagnostics.direction.rawValue)"
+                )
+                return
+            }
+            startBurstForegroundRepair(trigger: batch.diagnostics.reason)
+        case .appBecameActive, .localMutationFollowUp, .householdJoined, .householdSwitched:
             startBurstForegroundRepair(trigger: batch.diagnostics.reason)
         case .manualRefresh:
             cancelForegroundRepair()
         case .foregroundRepairWindow:
             switch fetchResult {
             case .newData:
-                startBurstForegroundRepair(trigger: batch.diagnostics.reason)
+                handleForegroundRepairDataPass()
             case .noData:
                 handleForegroundRepairNoDataPass()
             case .failed:
@@ -506,6 +522,28 @@ final class HouseholdSyncCoordinator: ObservableObject {
             }
         case .debugRepair:
             cancelForegroundRepair()
+        }
+    }
+
+    private func updateOwnerFallbackIfNeeded(for batch: HouseholdSyncBatch) {
+        let shouldScheduleOwnerFallback =
+            foregroundRepairConfiguration.ownerFallbackMaxPassCount > 0 &&
+            batch.diagnostics.direction == .participantToOwner &&
+            applicationStateProvider() == .active &&
+            (batch.diagnostics.activeMemberCount ?? 0) > 1
+
+        guard shouldScheduleOwnerFallback else {
+            cancelOwnerFallback()
+            return
+        }
+
+        switch batch.diagnostics.reason {
+        case .appBecameActive, .householdJoined, .householdSwitched, .localMutationFollowUp:
+            startOwnerFallback(trigger: batch.diagnostics.reason)
+        case .foregroundRepairWindow:
+            handleOwnerFallbackPassCompletion()
+        case .remotePush, .manualRefresh, .debugRepair:
+            break
         }
     }
 
@@ -549,6 +587,39 @@ final class HouseholdSyncCoordinator: ObservableObject {
                 remainingForegroundRepairSteadyPasses - 1,
                 0
             )
+            guard remainingForegroundRepairSteadyPasses > 0 else {
+                cancelForegroundRepair()
+                return
+            }
+            scheduleNextForegroundRepairPass(
+                intervalNanoseconds: foregroundRepairConfiguration.steadyIntervalNanoseconds
+            )
+        }
+    }
+
+    private func handleForegroundRepairDataPass() {
+        switch currentForegroundRepairMode {
+        case .burst:
+            remainingForegroundRepairBurstPasses = max(
+                remainingForegroundRepairBurstPasses - 1,
+                0
+            )
+            consecutiveForegroundRepairNoDataPasses = 0
+
+            guard remainingForegroundRepairBurstPasses > 0 else {
+                startSteadyForegroundRepairIfNeeded()
+                return
+            }
+            scheduleNextForegroundRepairPass(
+                intervalNanoseconds: foregroundRepairConfiguration.burstIntervalNanoseconds
+            )
+        case .steady:
+            remainingForegroundRepairSteadyPasses = max(
+                remainingForegroundRepairSteadyPasses - 1,
+                0
+            )
+            consecutiveForegroundRepairNoDataPasses = 0
+
             guard remainingForegroundRepairSteadyPasses > 0 else {
                 cancelForegroundRepair()
                 return
@@ -611,6 +682,43 @@ final class HouseholdSyncCoordinator: ObservableObject {
         )
     }
 
+    private func startOwnerFallback(trigger: HouseholdSyncReason) {
+        remainingOwnerFallbackPasses = foregroundRepairConfiguration.ownerFallbackMaxPassCount
+        recordSchedulerProgress(
+            "sync.scheduler.started reason=\(schedulerReasonLabel(trigger)) ownerFallback=true intervalNs=\(foregroundRepairConfiguration.ownerFallbackIntervalNanoseconds) maxPasses=\(remainingOwnerFallbackPasses)"
+        )
+        scheduleNextOwnerFallbackPass()
+    }
+
+    private func handleOwnerFallbackPassCompletion() {
+        guard scheduledOwnerFallbackTask != nil else { return }
+
+        remainingOwnerFallbackPasses = max(remainingOwnerFallbackPasses - 1, 0)
+        guard remainingOwnerFallbackPasses > 0 else {
+            cancelOwnerFallback()
+            return
+        }
+        scheduleNextOwnerFallbackPass()
+    }
+
+    private func scheduleNextOwnerFallbackPass() {
+        guard remainingOwnerFallbackPasses > 0 else {
+            cancelOwnerFallback()
+            return
+        }
+
+        scheduledOwnerFallbackTask?.cancel()
+        let intervalNanoseconds = foregroundRepairConfiguration.ownerFallbackIntervalNanoseconds
+        scheduledOwnerFallbackTask = _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
+            if intervalNanoseconds > 0 {
+                try? await _Concurrency.Task.sleep(nanoseconds: intervalNanoseconds)
+            }
+            guard !_Concurrency.Task.isCancelled else { return }
+            _ = await performSync(reason: .foregroundRepairWindow)
+        }
+    }
+
     private func scheduleNextForegroundRepairPass(intervalNanoseconds: UInt64) {
         scheduledForegroundRepairTask?.cancel()
         scheduledForegroundRepairTask = _Concurrency.Task { @MainActor [weak self] in
@@ -630,6 +738,12 @@ final class HouseholdSyncCoordinator: ObservableObject {
         remainingForegroundRepairBurstPasses = 0
         remainingForegroundRepairSteadyPasses = 0
         consecutiveForegroundRepairNoDataPasses = 0
+    }
+
+    private func cancelOwnerFallback() {
+        scheduledOwnerFallbackTask?.cancel()
+        scheduledOwnerFallbackTask = nil
+        remainingOwnerFallbackPasses = 0
     }
 }
 
