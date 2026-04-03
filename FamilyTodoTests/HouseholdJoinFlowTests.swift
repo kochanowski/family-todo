@@ -200,6 +200,54 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertEqual(try cachedHouseholds().map(\.id), [targetHousehold.id])
     }
 
+    func testJoinInviteCodeRestoresExistingOwnerHouseholdForSameCloudUser() async throws {
+        let userId = "owner-user"
+        let ownedHousehold = TestCacheFixtures.household(name: "Owned Home", ownerId: userId)
+        let ownerMembership = TestCacheFixtures.member(
+            householdId: ownedHousehold.id,
+            userId: userId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let inviteToken = InviteToken(
+            id: "SAME11",
+            code: "SAME11",
+            householdId: ownedHousehold.id,
+            shareURL: "https://www.icloud.com/share/same-account",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [ownedHousehold],
+            inviteTokens: [inviteToken],
+            ownerMembers: [ownerMembership]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Wojt2"
+        )
+
+        XCTAssertEqual(store.currentHousehold?.id, ownedHousehold.id)
+        let cachedOwnerMembers = try cachedMembers(for: ownedHousehold.id)
+        XCTAssertEqual(cachedOwnerMembers.count, 1)
+        XCTAssertEqual(cachedOwnerMembers.first?.displayName, ownerMembership.displayName)
+        XCTAssertEqual(cachedOwnerMembers.first?.roleRaw, Member.MemberRole.owner.rawValue)
+        let acceptedShare = await cloud.hasAcceptedSharedHousehold(ownedHousehold.id)
+        XCTAssertFalse(acceptedShare)
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertNil(
+            operations.first { $0.name == "saveMember" && $0.scope == .participantShared }
+        )
+    }
+
     func testCreateHouseholdPreflightDoesNotMutateCurrentHouseholdWhenRemoteMembershipExists() async throws {
         let userId = "existing-user"
         let existingHousehold = TestCacheFixtures.household(name: "Already There", ownerId: "owner")
@@ -482,6 +530,45 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertEqual(memberSaveEvent?.scope, .participantShared)
         XCTAssertEqual(memberVerifyEvent?.scope, .participantShared)
         XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+    }
+
+    func testJoinRecoversWhenAcceptedShareBootstrapIsDeferredAfterAcceptOperation() async throws {
+        let userId = "joined-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Deferred Share", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "D3F4R5",
+            code: "D3F4R5",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/deferred-share",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            deferredAcceptedShareBootstrapCodes: [inviteToken.code]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Taylor"
+        )
+
+        XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+        XCTAssertEqual(try cachedMembers(for: targetHousehold.id).count, 1)
+        let acceptedShare = await cloud.hasAcceptedSharedHousehold(targetHousehold.id)
+        XCTAssertTrue(acceptedShare)
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertNotNil(
+            operations.first { $0.name == "saveMember" && $0.scope == .participantShared }
+        )
     }
 
     func testJoinDoesNotSetCurrentHouseholdWhenParticipantSharedMembershipVerificationFails() async throws {

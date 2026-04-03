@@ -15,8 +15,7 @@ final class ShoppingListStore: ObservableObject {
     private let householdId: UUID?
     private var modelContext: ModelContext?
     private var syncMode: SyncMode = .cloud
-    private var currentUserId: String?
-    private var householdOwnerId: String?
+    private var syncContext: HouseholdSyncContext?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
@@ -29,13 +28,24 @@ final class ShoppingListStore: ObservableObject {
         var pendingDeleteIDs: Set<UUID>
     }
 
+    private enum ShoppingSyncPolicy {
+        static let awaitingCloudEchoGraceDuration: TimeInterval = 45
+    }
+
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
     }
 
+    func setCloudContext(_ syncContext: HouseholdSyncContext?) {
+        self.syncContext = syncContext
+    }
+
     func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
-        self.currentUserId = currentUserId
-        self.householdOwnerId = householdOwnerId
+        syncContext = HouseholdSyncContextFactory.make(
+            householdId: householdId,
+            ownerUserId: householdOwnerId,
+            currentUserId: currentUserId
+        )
     }
 
     private var isCloudSyncEnabled: Bool {
@@ -43,10 +53,7 @@ final class ShoppingListStore: ObservableObject {
     }
 
     private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
-        guard let currentUserId, let householdOwnerId else {
-            return .participantShared
-        }
-        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
+        syncContext?.scope ?? .participantShared
     }
 
     init(householdId: UUID?, modelContext: ModelContext? = nil) {
@@ -239,6 +246,8 @@ final class ShoppingListStore: ObservableObject {
 
     func syncToCache(_ items: [ShoppingItem]) {
         guard let context = modelContext, let householdId else { return }
+        let syncTimestamp = Date()
+        let cloudItemIDs = Set(items.map(\.id))
 
         let cacheDescriptor = FetchDescriptor<CachedShoppingItem>(
             predicate: #Predicate { $0.householdId == householdId }
@@ -246,20 +255,59 @@ final class ShoppingListStore: ObservableObject {
         let cachedItems = (try? context.fetch(cacheDescriptor)) ?? []
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedItems.map { ($0.id, $0) })
 
+        // Build the set of locally-tombstoned IDs so we never resurrect
+        // items that the local device has already marked for deletion.
+        let pendingDeleteIDs = Set(
+            cachedItems
+                .filter { $0.syncStatusRaw == "pendingDelete" }
+                .map(\.id)
+        )
+
         for item in items {
+            // Fix #1 — tombstone guard: skip cloud item whose local copy is pending delete.
+            // Without this, a cloud echo from another member can resurrect an item the local
+            // user already deleted before the delete reaches CloudKit.
+            if pendingDeleteIDs.contains(item.id) {
+                continue
+            }
+
             if let existing = cachedByID[item.id] {
                 if existing.syncStatusRaw == "pendingDelete" {
                     continue
                 }
                 if existing.syncStatusRaw == "pendingUpload" || existing.syncStatusRaw == "awaitingCloudEcho",
+                   !isExpiredAwaitingCloudEcho(existing, relativeTo: syncTimestamp),
                    !cloudShoppingItemMatchesLocalMutationEcho(item, localItem: existing.toShoppingItem())
                 {
                     continue
                 }
                 existing.update(from: item)
+                existing.syncStatusRaw = "synced"
+                existing.lastSyncedAt = syncTimestamp
             } else {
                 let cached = CachedShoppingItem(from: item)
+                cached.syncStatusRaw = "synced"
+                cached.lastSyncedAt = syncTimestamp
                 context.insert(cached)
+            }
+        }
+
+        // Fix #2 — orphan cleanup: remove cache entries no longer present in the cloud
+        // snapshot, scoped to each status bucket:
+        // • synced → deleted remotely by another member; remove from local cache.
+        // • awaitingCloudEcho (expired) → grace period elapsed, still not in cloud; remove.
+        // • pendingUpload / non-expired awaitingCloudEcho → in-flight mutation; keep.
+        // • pendingDelete → flushPendingSync will handle the remote delete; keep.
+        for cached in cachedItems where !cloudItemIDs.contains(cached.id) {
+            switch cached.syncStatusRaw {
+            case "synced":
+                context.delete(cached)
+            case "awaitingCloudEcho":
+                if isExpiredAwaitingCloudEcho(cached, relativeTo: syncTimestamp) {
+                    context.delete(cached)
+                }
+            default:
+                break
             }
         }
 
@@ -477,34 +525,18 @@ final class ShoppingListStore: ObservableObject {
             }
         }
 
-        // Save to cache with pending status
+        // Save to cache with pending status, then let replayPendingMutationsInBackground
+        // handle the CloudKit write. This matches the createItem pattern and avoids a
+        // dual-write race where both updateItem and flushPendingSync could attempt to
+        // save the same record to CloudKit concurrently.
         upsertCachedItem(
             updatedItem,
             syncStatusRaw: isCloudSyncEnabled ? "pendingUpload" : "synced",
             lastSyncedAt: isCloudSyncEnabled ? nil : Date()
         )
 
-        if !isCloudSyncEnabled {
-            return
-        }
-
-        do {
-            _ = try await cloudKit.saveShoppingItem(updatedItem, scope: cloudScope)
-
-            // Mark as synced
-            if let context = modelContext {
-                let descriptor = FetchDescriptor<CachedShoppingItem>(
-                    predicate: #Predicate { $0.id == item.id }
-                )
-                if let cached = try? context.fetch(descriptor).first {
-                    cached.syncStatusRaw = "awaitingCloudEcho"
-                    cached.lastSyncedAt = Date()
-                    saveContextOrSetError(context, operation: "mark updated shopping item awaiting cloud echo")
-                }
-            }
-        } catch {
-            self.error = error
-            // Keep optimistic + pending cache state; avoid immediate stale-cloud rollback.
+        if isCloudSyncEnabled {
+            replayPendingMutationsInBackground()
         }
     }
 
@@ -882,11 +914,16 @@ final class ShoppingListStore: ObservableObject {
     func pendingSyncSnapshot(from cachedItems: [CachedShoppingItem]) -> PendingSyncSnapshot {
         var pendingUploadByID: [UUID: ShoppingItem] = [:]
         var pendingDeleteIDs = Set<UUID>()
+        let now = Date()
 
         for cached in cachedItems {
             switch cached.syncStatusRaw {
-            case "pendingUpload", "awaitingCloudEcho":
+            case "pendingUpload":
                 pendingUploadByID[cached.id] = cached.toShoppingItem()
+            case "awaitingCloudEcho":
+                if !isExpiredAwaitingCloudEcho(cached, relativeTo: now) {
+                    pendingUploadByID[cached.id] = cached.toShoppingItem()
+                }
             case "pendingDelete":
                 pendingDeleteIDs.insert(cached.id)
             default:
@@ -943,6 +980,19 @@ final class ShoppingListStore: ObservableObject {
             cloudItem.boughtAt == localItem.boughtAt &&
             cloudItem.restockCount == localItem.restockCount &&
             cloudItem.sortOrder == localItem.sortOrder
+    }
+
+    private func isExpiredAwaitingCloudEcho(
+        _ cached: CachedShoppingItem,
+        relativeTo now: Date
+    ) -> Bool {
+        guard cached.syncStatusRaw == "awaitingCloudEcho",
+              let lastSyncedAt = cached.lastSyncedAt
+        else {
+            return false
+        }
+
+        return now.timeIntervalSince(lastSyncedAt) >= ShoppingSyncPolicy.awaitingCloudEchoGraceDuration
     }
 
     private func upsertCachedItem(

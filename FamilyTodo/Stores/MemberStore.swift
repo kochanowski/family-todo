@@ -16,7 +16,7 @@ class MemberStore: ObservableObject {
     private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
     private var currentUserId: String?
-    private var householdOwnerId: String?
+    private var syncContext: HouseholdSyncContext?
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
     private var shouldReloadAfterCurrentLoad = false
     private var hasHydratedVisibleSnapshot = false
@@ -49,16 +49,22 @@ class MemberStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(_ syncContext: HouseholdSyncContext?) {
+        self.syncContext = syncContext
+        currentUserId = syncContext?.currentUserId
+    }
+
     func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
         self.currentUserId = currentUserId
-        self.householdOwnerId = householdOwnerId
+        syncContext = HouseholdSyncContextFactory.make(
+            householdId: householdId,
+            ownerUserId: householdOwnerId,
+            currentUserId: currentUserId
+        )
     }
 
     private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
-        guard let currentUserId, let householdOwnerId else {
-            return .participantShared
-        }
-        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
+        syncContext?.scope ?? .participantShared
     }
 
     @discardableResult

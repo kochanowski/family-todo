@@ -82,7 +82,7 @@ final class TaskStore: ObservableObject {
     private var householdId: UUID?
     private var syncMode: SyncMode = .cloud
     private var currentUserId: String?
-    private var householdOwnerId: String?
+    private var syncContext: HouseholdSyncContext?
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
@@ -94,9 +94,18 @@ final class TaskStore: ObservableObject {
         syncMode = mode
     }
 
+    func setCloudContext(_ syncContext: HouseholdSyncContext?) {
+        self.syncContext = syncContext
+        currentUserId = syncContext?.currentUserId
+    }
+
     func setCloudContext(currentUserId: String?, householdOwnerId: String?) {
         self.currentUserId = currentUserId
-        self.householdOwnerId = householdOwnerId
+        syncContext = HouseholdSyncContextFactory.make(
+            householdId: householdId,
+            ownerUserId: householdOwnerId,
+            currentUserId: currentUserId
+        )
     }
 
     private var isCloudSyncEnabled: Bool {
@@ -104,10 +113,7 @@ final class TaskStore: ObservableObject {
     }
 
     private var cloudScope: CloudKitManager.HouseholdDatabaseScope {
-        guard let currentUserId, let householdOwnerId else {
-            return .participantShared
-        }
-        return currentUserId == householdOwnerId ? .ownerPrivate : .participantShared
+        syncContext?.scope ?? .participantShared
     }
 
     /// Default recommended WIP limit per user.
@@ -573,6 +579,28 @@ final class TaskStore: ObservableObject {
         guard isCloudSyncEnabled, householdId != nil else { return }
 
         let cachedTasks = fetchCachedTasksForCurrentHousehold()
+
+        // Fix #5 — awaitingCloudEcho expiry sweep: if a task has been awaiting a cloud echo
+        // for longer than the grace period, reset it to pendingUpload so the next flush retries.
+        // This prevents items from being permanently stuck if a cloud echo never arrives
+        // (e.g. after a transient CloudKit outage or silent push throttling).
+        let echoGraceDuration: TimeInterval = 45
+        let now = Date()
+        var didExpireAnyEcho = false
+        for cached in cachedTasks
+            where cached.syncStatusRaw == TaskSyncStatus.awaitingCloudEcho
+        {
+            guard let lastSyncedAt = cached.lastSyncedAt else { continue }
+            if now.timeIntervalSince(lastSyncedAt) >= echoGraceDuration {
+                cached.syncStatusRaw = TaskSyncStatus.pendingUpload
+                cached.lastSyncedAt = nil
+                didExpireAnyEcho = true
+            }
+        }
+        if didExpireAnyEcho {
+            saveContextOrSetError(operation: "reset expired awaitingCloudEcho tasks to pendingUpload")
+        }
+
         let pendingUploads = cachedTasks.filter { $0.syncStatusRaw == TaskSyncStatus.pendingUpload }
         let pendingDeletes = cachedTasks.filter { $0.syncStatusRaw == TaskSyncStatus.pendingDelete }
 

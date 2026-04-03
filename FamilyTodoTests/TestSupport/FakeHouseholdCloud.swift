@@ -26,6 +26,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private var participantMembers: [Member]
     private var ownerMembers: [Member]
     private var tasks: [Task]
+    private var workItems: [WorkItem]
     private var shoppingItems: [ShoppingItem]
     private var shoppingBundles: [ShoppingBundle]
     private var backlogItems: [BacklogItem]
@@ -38,8 +39,14 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private let participantSharedReadDeniedHouseholds: Set<UUID>
     private let participantSharedVerificationDeniedHouseholds: Set<UUID>
     private let participantSharedInvisibleSavedMemberHouseholds: Set<UUID>
+    private var deferredAcceptedShareBootstrapCodes: Set<String>
     private var operationEvents: [OperationEvent] = []
     private let createInviteCodeResultsByHouseholdId: [UUID: InviteToken]
+    private let ownerZoneIDsByHouseholdId: [UUID: CKRecordZone.ID]
+    private let participantSharedZoneIDsByHouseholdId: [UUID: CKRecordZone.ID]
+    private let ownerPrivateDeltasByHouseholdId: [UUID: HouseholdCloudDelta]
+    private let participantSharedDeltasByHouseholdId: [UUID: HouseholdCloudDelta]
+    private let fetchDelayNanosecondsByOperation: [String: UInt64]
     private var createInviteCodeCalls = 0
 
     init(
@@ -49,6 +56,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         participantMembers: [Member] = [],
         ownerMembers: [Member] = [],
         tasks: [Task] = [],
+        workItems: [WorkItem] = [],
         shoppingItems: [ShoppingItem] = [],
         shoppingBundles: [ShoppingBundle] = [],
         backlogItems: [BacklogItem] = [],
@@ -59,7 +67,13 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         participantSharedReadDeniedHouseholds: Set<UUID> = [],
         participantSharedVerificationDeniedHouseholds: Set<UUID> = [],
         participantSharedInvisibleSavedMemberHouseholds: Set<UUID> = [],
-        createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:]
+        deferredAcceptedShareBootstrapCodes: Set<String> = [],
+        createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:],
+        ownerZoneIDsByHouseholdId: [UUID: CKRecordZone.ID] = [:],
+        participantSharedZoneIDsByHouseholdId: [UUID: CKRecordZone.ID] = [:],
+        ownerPrivateDeltasByHouseholdId: [UUID: HouseholdCloudDelta] = [:],
+        participantSharedDeltasByHouseholdId: [UUID: HouseholdCloudDelta] = [:],
+        fetchDelayNanosecondsByOperation: [String: UInt64] = [:]
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
         inviteTokensByCode = Dictionary(uniqueKeysWithValues: inviteTokens.map { ($0.code, $0) })
@@ -67,6 +81,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.participantMembers = participantMembers
         self.ownerMembers = ownerMembers
         self.tasks = tasks
+        self.workItems = workItems
         self.shoppingItems = shoppingItems
         self.shoppingBundles = shoppingBundles
         self.backlogItems = backlogItems
@@ -77,7 +92,13 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.participantSharedReadDeniedHouseholds = participantSharedReadDeniedHouseholds
         self.participantSharedVerificationDeniedHouseholds = participantSharedVerificationDeniedHouseholds
         self.participantSharedInvisibleSavedMemberHouseholds = participantSharedInvisibleSavedMemberHouseholds
+        self.deferredAcceptedShareBootstrapCodes = deferredAcceptedShareBootstrapCodes
         self.createInviteCodeResultsByHouseholdId = createInviteCodeResultsByHouseholdId
+        self.ownerZoneIDsByHouseholdId = ownerZoneIDsByHouseholdId
+        self.participantSharedZoneIDsByHouseholdId = participantSharedZoneIDsByHouseholdId
+        self.ownerPrivateDeltasByHouseholdId = ownerPrivateDeltasByHouseholdId
+        self.participantSharedDeltasByHouseholdId = participantSharedDeltasByHouseholdId
+        self.fetchDelayNanosecondsByOperation = fetchDelayNanosecondsByOperation
     }
 
     private func resolvedScope(_ explicitScope: CloudKitManager.HouseholdDatabaseScope?)
@@ -112,6 +133,16 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         operationEvents.append(
             OperationEvent(name: name, scope: scope, householdId: householdId)
         )
+    }
+
+    private func applyFetchDelayIfNeeded(for operation: String) async throws {
+        guard let delayNanoseconds = fetchDelayNanosecondsByOperation[operation],
+              delayNanoseconds > 0
+        else {
+            return
+        }
+
+        try await Task.sleep(nanoseconds: delayNanoseconds)
     }
 
     private func ensureParticipantSharedAccess(
@@ -164,13 +195,51 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         CKContainer(identifier: "iCloud.com.example.familytodo")
     }
 
-    func ensureHouseholdOwnerZone(householdId _: UUID) async throws -> CKRecordZone.ID {
-        CKRecordZone.default().zoneID
+    func ensureHouseholdOwnerZone(householdId: UUID) async throws -> CKRecordZone.ID {
+        appendOperation("ensureHouseholdOwnerZone", scope: .ownerPrivate, householdId: householdId)
+        return ownerZoneIDsByHouseholdId[householdId] ?? CKRecordZone.default().zoneID
+    }
+
+    func resolveSubscriptionZone(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope
+    ) async throws -> CKRecordZone.ID? {
+        appendOperation("resolveSubscriptionZone", scope: explicitScope, householdId: householdId)
+        switch explicitScope {
+        case .ownerPrivate:
+            return ownerZoneIDsByHouseholdId[householdId]
+        case .participantShared:
+            return participantSharedZoneIDsByHouseholdId[householdId]
+        }
     }
 
     func migrateHouseholdToCustomZoneIfNeeded(householdId _: UUID) async throws {}
     func repairSharedHouseholdGraphIfNeeded(householdId _: UUID) async throws {}
     func migrateMemberColorsIfNeeded(householdId _: UUID) async {}
+
+    func fetchHouseholdDelta(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> HouseholdCloudDelta {
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchHouseholdDelta", scope: scope, householdId: householdId)
+        return switch scope {
+        case .ownerPrivate:
+            ownerPrivateDeltasByHouseholdId[householdId] ?? HouseholdCloudDelta(
+                householdId: householdId,
+                scope: .ownerPrivate,
+                changedDomains: [],
+                fallbackReason: "fakeDeltaUnavailable"
+            )
+        case .participantShared:
+            participantSharedDeltasByHouseholdId[householdId] ?? HouseholdCloudDelta(
+                householdId: householdId,
+                scope: .participantShared,
+                changedDomains: [],
+                fallbackReason: "fakeDeltaUnavailable"
+            )
+        }
+    }
 
     func createHouseholdWithMember(
         _ household: Household,
@@ -200,8 +269,17 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
 
     func fetchHousehold(
         id: UUID,
-        scope _: CloudKitManager.HouseholdDatabaseScope?
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> Household {
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchHousehold", scope: scope, householdId: id)
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: id,
+                operation: "fetchHousehold",
+                forWrite: false
+            )
+        }
         guard let household = householdsById[id] else {
             throw CKError(.unknownItem)
         }
@@ -314,6 +392,11 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         }
 
         acceptedSharedHouseholdIDs.insert(household.id)
+        if deferredAcceptedShareBootstrapCodes.remove(rawCode) != nil {
+            throw CloudKitManager.CloudKitManagerError.sharedHouseholdFetchFailed(
+                "Shared household fetch failed: The operation couldn't be completed. (CKErrorDomain error 11.)"
+            )
+        }
         let zoneID = CKRecordZone.ID(
             zoneName: "shared-\(household.id.uuidString)",
             ownerName: "owner"
@@ -324,6 +407,19 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             zoneID: zoneID,
             shareURL: shareURL
         )
+    }
+
+    func resolveInviteTargetHouseholdId(from input: NormalizedInviteInput) async throws -> UUID? {
+        if let token = inviteTokensByCode[input.inviteCode] {
+            return token.householdId
+        }
+        if let household = inviteRedeemResults[input.inviteCode] {
+            return household.id
+        }
+        if let token = inviteTokensByCode.values.first(where: { $0.shareURL == input.inviteCode }) {
+            return token.householdId
+        }
+        return nil
     }
 
     func resolveAcceptedShareContext(metadata _: CKShare.Metadata) async throws -> AcceptedShareContext {
@@ -496,6 +592,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws -> [Task] {
         let scope = resolvedScope(explicitScope)
         appendOperation("fetchTasks", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchTasks")
         if scope == .participantShared {
             try ensureParticipantSharedAccess(
                 householdId: householdId,
@@ -508,12 +605,33 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
+    func fetchWorkItems(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> [WorkItem] {
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchWorkItems", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchWorkItems")
+        if scope == .participantShared {
+            try ensureParticipantSharedAccess(
+                householdId: householdId,
+                operation: "fetchWorkItems",
+                forWrite: false
+            )
+        }
+
+        return workItems
+            .filter { $0.householdId == householdId }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     func fetchUnifiedWorkItems(
         householdId: UUID,
         scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
     ) async throws -> [WorkItem] {
         let scope = resolvedScope(explicitScope)
         appendOperation("fetchUnifiedWorkItems", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchUnifiedWorkItems")
         if scope == .participantShared {
             try ensureParticipantSharedAccess(
                 householdId: householdId,
@@ -549,6 +667,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws -> [ShoppingItem] {
         let scope = resolvedScope(explicitScope)
         appendOperation("fetchShoppingItems", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchShoppingItems")
         if scope == .participantShared {
             try ensureParticipantSharedAccess(
                 householdId: householdId,
@@ -573,6 +692,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws -> [ShoppingBundle] {
         let scope = resolvedScope(explicitScope)
         appendOperation("fetchShoppingBundles", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchShoppingBundles")
         if scope == .participantShared {
             try ensureParticipantSharedAccess(
                 householdId: householdId,
@@ -597,6 +717,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws -> [BacklogItem] {
         let scope = resolvedScope(explicitScope)
         appendOperation("fetchBacklogItems", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchBacklogItems")
         if scope == .participantShared {
             try ensureParticipantSharedAccess(
                 householdId: householdId,
@@ -621,6 +742,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     ) async throws -> [BacklogCategory] {
         let scope = resolvedScope(explicitScope)
         appendOperation("fetchBacklogCategories", scope: scope, householdId: householdId)
+        try await applyFetchDelayIfNeeded(for: "fetchBacklogCategories")
         if scope == .participantShared {
             try ensureParticipantSharedAccess(
                 householdId: householdId,

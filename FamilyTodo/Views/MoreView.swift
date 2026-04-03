@@ -72,6 +72,10 @@ struct MoreView: View {
 
             Spacer()
         }
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularContentMaxWidth,
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -335,10 +339,7 @@ struct CategoriesManagementView: View {
             Text(categoryDeletionBlockReason?.alertDetail ?? "")
         }
         .task {
-            store.setCloudContext(
-                currentUserId: userSession.userId,
-                householdOwnerId: householdStore.currentHousehold?.ownerId
-            )
+            store.setCloudContext(householdStore.currentSyncContext(userId: userSession.userId))
             store.setSyncMode(userSession.syncMode)
             await store.loadData()
         }
@@ -501,10 +502,7 @@ private struct CompletedTasksContent: View {
             )
         }
         .task {
-            store.setCloudContext(
-                currentUserId: userSession.userId,
-                householdOwnerId: householdStore.currentHousehold?.ownerId
-            )
+            store.setCloudContext(householdStore.currentSyncContext(userId: userSession.userId))
             store.setSyncMode(userSession.syncMode)
             await store.loadTasks()
         }

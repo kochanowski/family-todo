@@ -163,6 +163,10 @@ struct CreateHouseholdView: View {
                     Spacer()
                         .frame(height: 60)
                 }
+                .appAdaptiveWidth(
+                    maxWidth: AppChromeMetrics.regularFormMaxWidth,
+                    alignment: .top
+                )
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -296,8 +300,12 @@ struct CreateHouseholdView: View {
             userId: userId,
             displayName: displayName
         )
+        let resolvedDisplayName = householdStore.resolveMembershipDisplayNameLocally(
+            userId: userId,
+            preferredHouseholdId: householdStore.currentHousehold?.id
+        ) ?? displayName
         await MainActor.run {
-            userSession.applyProfileUpdate(displayName: displayName)
+            userSession.applyProfileUpdate(displayName: resolvedDisplayName)
         }
         if let household = householdStore.currentHousehold {
             userSession.setCurrentHousehold(household.id)
@@ -423,6 +431,10 @@ struct HouseholdJoinSheet: View {
                         }
                     }
                     .padding(24)
+                    .appAdaptiveWidth(
+                        maxWidth: AppChromeMetrics.regularFormMaxWidth,
+                        alignment: .top
+                    )
                 }
 
                 if isJoining {

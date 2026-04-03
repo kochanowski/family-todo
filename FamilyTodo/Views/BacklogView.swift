@@ -57,6 +57,7 @@ private struct BacklogContent: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -108,9 +109,299 @@ private struct BacklogContent: View {
     }
 
     var body: some View {
+        screenContent
+    }
+
+    private var screenContent: some View {
+        sheetPresentationContent
+            .appAdaptiveWidth(
+                maxWidth: AppChromeMetrics.regularContentMaxWidth,
+                alignment: .topLeading
+            )
+            .alert(
+                deleteConfirmationTitle,
+                isPresented: Binding(
+                    get: { pendingDeleteConfirmationTarget != nil },
+                    set: { if !$0 { pendingDeleteConfirmationTarget = nil } }
+                ),
+                presenting: pendingDeleteConfirmationTarget
+            ) { target in
+                Button(deleteConfirmationPrimaryTitle(for: target), role: .destructive) {
+                    confirmDeletion(target)
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingDeleteConfirmationTarget = nil
+                }
+            } message: { target in
+                Text(deleteConfirmationMessage(for: target))
+            }
+            .background {
+                Color.clear
+                    .alert(
+                        "Cannot delete category.",
+                        isPresented: Binding(
+                            get: { categoryDeletionBlockReason != nil },
+                            set: { if !$0 { categoryDeletionBlockReason = nil } }
+                        )
+                    ) {
+                        Button("OK", role: .cancel) {
+                            categoryDeletionBlockReason = nil
+                        }
+                    } message: {
+                        Text(categoryDeletionBlockReason?.alertDetail ?? "")
+                    }
+            }
+            .overlay(alignment: .bottom) {
+                if let pendingDeletionItem {
+                    ToastView(
+                        message: "\"\(pendingDeletionItem.title)\" deleted",
+                        actionTitle: "Undo",
+                        action: undoPendingDeleteItem
+                    )
+                    .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                    .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                    .transition(ToastView.AnimationTokens.transition)
+                    .id(pendingDeletionItem.id)
+                }
+            }
+            .animation(ToastView.AnimationTokens.curve, value: pendingDeletionItem?.id)
+    }
+
+    private var sheetPresentationContent: some View {
+        syncReactiveContent
+            .sheet(isPresented: $isAddingCategory) {
+                CategoryEditorSheet(
+                    title: "New Category",
+                    initialName: newCategoryName,
+                    initialColorHex: newCategoryColorHex,
+                    primaryTitle: "Create",
+                    onCancel: {
+                        newCategoryName = ""
+                        newCategoryColorHex = MemberColorToken.randomHex()
+                    },
+                    onSubmit: { name, colorHex in
+                        newCategoryName = ""
+                        newCategoryColorHex = MemberColorToken.randomHex()
+                        HapticManager.lightTap()
+                        _ = _Concurrency.Task {
+                            let previousCategoryCount = store.categories.count
+                            await store.addCategory(name, colorHex: colorHex)
+                            await MainActor.run {
+                                if store.categories.count > previousCategoryCount {
+                                    AppTips.donateIdeasCategoryCreated()
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+            .sheet(item: $editingCategory) { category in
+                CategoryEditorSheet(
+                    title: "Edit Category",
+                    initialName: category.title,
+                    initialColorHex: category.colorHex,
+                    primaryTitle: "Save",
+                    onCancel: {},
+                    onSubmit: { newName, newColorHex in
+                        _ = _Concurrency.Task {
+                            await store.updateCategory(
+                                category,
+                                newTitle: newName,
+                                newColorHex: newColorHex
+                            )
+                        }
+                    }
+                )
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { pendingPromotionItemID != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            cancelPendingPromotion()
+                        }
+                    }
+                )
+            ) {
+                if let pendingPromotionItem = currentPendingPromotionItem {
+                    BacklogAssigneePickerSheet(
+                        title: "Assign before start",
+                        actionTitle: "Promote",
+                        members: activeMembers,
+                        autoConfirmOnSelection: false,
+                        showsUnassignedOption: false,
+                        selectedAssigneeId: $selectedAssigneeIdForPromotion,
+                        onCancel: {
+                            cancelPendingPromotion()
+                        },
+                        onConfirm: {
+                            guard let assigneeId = selectedAssigneeIdForPromotion else { return }
+                            let itemID = pendingPromotionItem.id
+                            pendingPromotionItemID = nil
+                            selectedAssigneeIdForPromotion = nil
+                            completePromotion(of: itemID, assigneeId: assigneeId)
+                        }
+                    )
+                    .id(pendingPromotionItem.id)
+                } else {
+                    Color.clear
+                        .presentationDetents([.height(1)])
+                        .onAppear {
+                            cancelPendingPromotion()
+                        }
+                }
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { pendingAssignmentItemID != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            pendingAssignmentItemID = nil
+                            selectedAssigneeIdForAssignment = nil
+                        }
+                    }
+                )
+            ) {
+                if let pendingAssignmentItem = currentPendingAssignmentItem {
+                    BacklogAssigneePickerSheet(
+                        title: "Assign owner",
+                        actionTitle: "Save",
+                        members: activeMembers,
+                        autoConfirmOnSelection: true,
+                        showsUnassignedOption: true,
+                        selectedAssigneeId: $selectedAssigneeIdForAssignment,
+                        onCancel: {
+                            pendingAssignmentItemID = nil
+                            selectedAssigneeIdForAssignment = nil
+                        },
+                        onConfirm: {
+                            guard let item = currentPendingAssignmentItem else { return }
+                            let selectedAssignee = selectedAssigneeIdForAssignment
+                            let hadAssignee = item.assigneeId != nil
+                            let pendingItemID = item.id
+                            pendingAssignmentItemID = nil
+                            selectedAssigneeIdForAssignment = nil
+                            store.updateItem(
+                                item,
+                                title: item.title,
+                                notes: item.notes,
+                                assigneeId: selectedAssignee
+                            )
+                            guard !hadAssignee else { return }
+                            if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
+                               updatedItem.assigneeId != nil
+                            {
+                                AppTips.donateIdeasOwnerAssigned()
+                                armPromotionTip(for: updatedItem.id)
+                            }
+                        }
+                    )
+                    .id(pendingAssignmentItem.id)
+                } else {
+                    Color.clear
+                        .presentationDetents([.height(1)])
+                        .onAppear {
+                            pendingAssignmentItemID = nil
+                            selectedAssigneeIdForAssignment = nil
+                        }
+                }
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { editingItemID != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            editingItemID = nil
+                        }
+                    }
+                )
+            ) {
+                if let item = currentEditingItem {
+                    BacklogItemEditSheet(
+                        item: item,
+                        members: activeMembers,
+                        onSave: { title, notes, assigneeId in
+                            let hadAssignee = item.assigneeId != nil
+                            store.updateItem(
+                                item,
+                                title: title,
+                                notes: notes,
+                                assigneeId: assigneeId
+                            )
+                            if !hadAssignee,
+                               let updatedItem = latestItem(withID: item.id),
+                               updatedItem.assigneeId != nil
+                            {
+                                AppTips.donateIdeasOwnerAssigned()
+                                armPromotionTip(for: updatedItem.id)
+                            }
+                        },
+                        onDelete: {
+                            performImmediateDeleteItem(withID: item.id)
+                        }
+                    )
+                    .id(item.id)
+                } else {
+                    Color.clear
+                        .presentationDetents([.height(1)])
+                        .onAppear {
+                            editingItemID = nil
+                        }
+                }
+            }
+    }
+
+    private var syncReactiveContent: some View {
+        layoutContent
+            .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { notification in
+                store.markLocalSnapshotStale()
+                if selectedNotificationIsLocal(notification) {
+                    store.rehydrateVisibleSnapshotFromCache()
+                    // Un-suppress items that have returned to Ideas via demotion.
+                    // subtract(_:) removes IDs that ARE in the store — keeping promoted-item
+                    // suppressions intact for IDs no longer present locally.
+                    let activeItemIds = Set(store.items.map(\.id))
+                    hiddenPendingPromotionIds.subtract(activeItemIds)
+                    syncPromotionTipAnchorWithVisibleItems()
+                    markIdeasTutorialAsSeenIfNeeded()
+                } else {
+                    store.replayPendingMutationsIfNeeded()
+                }
+            }
+            .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
+                guard let batch = syncCoordinator.latestBatch,
+                      !batch.domains.isDisjoint(with: [.ideas, .backlog, .members, .tasks])
+                else {
+                    return
+                }
+
+                store.markLocalSnapshotStale()
+                if selectedTab == .backlog {
+                    handleRemoteBacklogSyncBatch(batch)
+                } else {
+                    store.rehydrateVisibleSnapshotFromCache()
+                    store.replayPendingMutationsIfNeeded()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
+                memberStore.markLocalSnapshotStale()
+                if selectedNotificationIsLocal(notification) {
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                } else if selectedTab == .backlog {
+                    _ = _Concurrency.Task {
+                        await memberStore.loadMembersForDisplay()
+                    }
+                }
+            }
+            .onDisappear {
+                cancelRemoteSyncAnimationReset()
+            }
+    }
+
+    private var layoutContent: some View {
         let listBottomInset: CGFloat = 16
 
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             header
                 .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
                 .padding(.top, AppChromeMetrics.screenHeaderTopPadding)
@@ -136,75 +427,35 @@ private struct BacklogContent: View {
                         .padding(.top, 40)
                 }
             } else {
-                ScrollViewReader { scrollProxy in
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            ForEach(store.categories) { category in
-                                let categoryItems = visibleItems(for: category.id)
-                                CategoryCard(
-                                    category: category,
-                                    items: categoryItems,
-                                    highlightedItemIDs: remoteHighlightedItemIDs,
-                                    isCategoryHighlighted: remoteHighlightedCategoryIDs.contains(
-                                        category.id
-                                    ),
-                                    isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
-                                    appTipRuntimeGeneration: appTipRuntimeGeneration,
-                                    addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
-                                    ideaAssignTipItemID: ideaAssignTipAnchorItemID,
-                                    ideaPromotionTipItemID: ideaPromotionTipItemID,
-                                    isPromotingItem: { hiddenPendingPromotionIds.contains($0) || pendingPromotionItemID == $0 },
-                                    assigneeFor: { assigneeId in
-                                        assignee(for: assigneeId)
-                                    },
-                                    isAddingItem: activeComposerCategoryId == category.id,
-                                    newItemText: Binding(
-                                        get: {
-                                            activeComposerCategoryId == category.id
-                                                ? composerText : ""
-                                        },
-                                        set: { composerText = $0 }
-                                    ),
-                                    focusedComposerCategoryId: $focusedComposerCategoryId,
-                                    onActivateComposer: {
-                                        activateComposer(for: category.id, scrollProxy: scrollProxy)
-                                    },
-                                    onSubmitItem: {
-                                        submitComposer(for: category.id)
-                                    },
-                                    onCancelItem: {
-                                        cancelComposer(for: category.id)
-                                    },
-                                    onDeleteItem: { item in
-                                        requestDeleteItem(withID: item)
-                                    },
-                                    onEditItem: { item in
-                                        editItem(withID: item)
-                                    },
-                                    onAssignItem: { item in
-                                        beginAssigningItem(withID: item)
-                                    },
-                                    onPromoteItem: { item in
-                                        promoteItem(withID: item)
-                                    },
-                                    onEditCategory: {
-                                        editingCategory = category
-                                    },
-                                    onDeleteCategory: {
-                                        requestDeleteCategory(withID: category.id)
-                                    }
-                                )
-                                .id(category.id)
-                                .rowInsertAnimation()
-                            }
-                        }
-                        .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                        .padding(.bottom, listBottomInset)
-                    }
-                    .scrollDismissesKeyboard(.never)
-                }
+                BacklogCategoryListSection(
+                    categories: store.categories,
+                    listBottomInset: listBottomInset,
+                    visibleItems: visibleItems(for:),
+                    highlightedItemIDs: remoteHighlightedItemIDs,
+                    highlightedCategoryIDs: remoteHighlightedCategoryIDs,
+                    isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
+                    appTipRuntimeGeneration: appTipRuntimeGeneration,
+                    addIdeaTipCategoryID: addIdeaTipAnchorCategoryID,
+                    ideaAssignTipItemID: ideaAssignTipAnchorItemID,
+                    ideaPromotionTipItemID: ideaPromotionTipItemID,
+                    hiddenPendingPromotionIds: hiddenPendingPromotionIds,
+                    pendingPromotionItemID: pendingPromotionItemID,
+                    assigneeFor: assignee(for:),
+                    activeComposerCategoryId: activeComposerCategoryId,
+                    composerText: $composerText,
+                    focusedComposerCategoryId: $focusedComposerCategoryId,
+                    onActivateComposer: activateComposer(for:scrollProxy:),
+                    onSubmitItem: submitComposer(for:),
+                    onCancelItem: cancelComposer(for:),
+                    onDeleteItem: requestDeleteItem(withID:),
+                    onEditItem: editItem(withID:),
+                    onAssignItem: beginAssigningItem(withID:),
+                    onPromoteItem: promoteItem(withID:),
+                    onEditCategory: { editingCategory = $0 },
+                    onDeleteCategory: requestDeleteCategory(withID:)
+                )
                 .refreshable {
-                    await loadBacklogData()
+                    await performManualRefresh()
                     markIdeasTutorialAsSeenIfNeeded()
                 }
             }
@@ -247,269 +498,10 @@ private struct BacklogContent: View {
             if selectedNotificationIsLocal(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
                 markIdeasTutorialAsSeenIfNeeded()
-            } else if selectedTab == .backlog {
-                handleRemoteBacklogRefresh(notification)
             } else {
                 store.replayPendingMutationsIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .backlogDataDidChange)) { notification in
-            store.markLocalSnapshotStale()
-            if selectedNotificationIsLocal(notification) {
-                store.rehydrateVisibleSnapshotFromCache()
-                // Un-suppress items that have returned to Ideas via demotion.
-                // subtract(_:) removes IDs that ARE in the store — keeping promoted-item
-                // suppressions intact for IDs no longer present locally.
-                let activeItemIds = Set(store.items.map(\.id))
-                hiddenPendingPromotionIds.subtract(activeItemIds)
-                syncPromotionTipAnchorWithVisibleItems()
-                markIdeasTutorialAsSeenIfNeeded()
-            } else if selectedTab == .backlog {
-                handleRemoteBacklogRefresh(notification)
-            } else {
-                store.replayPendingMutationsIfNeeded()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .memberProfileDidChange)) { notification in
-            memberStore.markLocalSnapshotStale()
-            if selectedNotificationIsLocal(notification) {
-                memberStore.rehydrateVisibleSnapshotFromCache()
-            } else if selectedTab == .backlog {
-                _ = _Concurrency.Task {
-                    await memberStore.loadMembersForDisplay()
-                }
-            }
-        }
-        .onDisappear {
-            cancelRemoteSyncAnimationReset()
-        }
-        .sheet(isPresented: $isAddingCategory) {
-            CategoryEditorSheet(
-                title: "New Category",
-                initialName: newCategoryName,
-                initialColorHex: newCategoryColorHex,
-                primaryTitle: "Create",
-                onCancel: {
-                    newCategoryName = ""
-                    newCategoryColorHex = MemberColorToken.randomHex()
-                },
-                onSubmit: { name, colorHex in
-                    newCategoryName = ""
-                    newCategoryColorHex = MemberColorToken.randomHex()
-                    HapticManager.lightTap()
-                    _ = _Concurrency.Task {
-                        let previousCategoryCount = store.categories.count
-                        await store.addCategory(name, colorHex: colorHex)
-                        await MainActor.run {
-                            if store.categories.count > previousCategoryCount {
-                                AppTips.donateIdeasCategoryCreated()
-                            }
-                        }
-                    }
-                }
-            )
-        }
-        .sheet(item: $editingCategory) { category in
-            CategoryEditorSheet(
-                title: "Edit Category",
-                initialName: category.title,
-                initialColorHex: category.colorHex,
-                primaryTitle: "Save",
-                onCancel: {},
-                onSubmit: { newName, newColorHex in
-                    _ = _Concurrency.Task {
-                        await store.updateCategory(
-                            category,
-                            newTitle: newName,
-                            newColorHex: newColorHex
-                        )
-                    }
-                }
-            )
-        }
-        .sheet(
-            isPresented: Binding(
-                get: { pendingPromotionItemID != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        cancelPendingPromotion()
-                    }
-                }
-            )
-        ) {
-            if let pendingPromotionItem = currentPendingPromotionItem {
-                BacklogAssigneePickerSheet(
-                    title: "Assign before start",
-                    actionTitle: "Promote",
-                    members: activeMembers,
-                    autoConfirmOnSelection: false,
-                    showsUnassignedOption: false,
-                    selectedAssigneeId: $selectedAssigneeIdForPromotion,
-                    onCancel: {
-                        cancelPendingPromotion()
-                    },
-                    onConfirm: {
-                        guard let assigneeId = selectedAssigneeIdForPromotion else { return }
-                        let itemID = pendingPromotionItem.id
-                        pendingPromotionItemID = nil
-                        selectedAssigneeIdForPromotion = nil
-                        completePromotion(of: itemID, assigneeId: assigneeId)
-                    }
-                )
-                .id(pendingPromotionItem.id)
-            } else {
-                Color.clear
-                    .presentationDetents([.height(1)])
-                    .onAppear {
-                        cancelPendingPromotion()
-                    }
-            }
-        }
-        .sheet(
-            isPresented: Binding(
-                get: { pendingAssignmentItemID != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingAssignmentItemID = nil
-                        selectedAssigneeIdForAssignment = nil
-                    }
-                }
-            )
-        ) {
-            if let pendingAssignmentItem = currentPendingAssignmentItem {
-                BacklogAssigneePickerSheet(
-                    title: "Assign owner",
-                    actionTitle: "Save",
-                    members: activeMembers,
-                    autoConfirmOnSelection: true,
-                    showsUnassignedOption: true,
-                    selectedAssigneeId: $selectedAssigneeIdForAssignment,
-                    onCancel: {
-                        pendingAssignmentItemID = nil
-                        selectedAssigneeIdForAssignment = nil
-                    },
-                    onConfirm: {
-                        guard let item = currentPendingAssignmentItem else { return }
-                        let selectedAssignee = selectedAssigneeIdForAssignment
-                        let hadAssignee = item.assigneeId != nil
-                        let pendingItemID = item.id
-                        pendingAssignmentItemID = nil
-                        selectedAssigneeIdForAssignment = nil
-                        store.updateItem(
-                            item,
-                            title: item.title,
-                            notes: item.notes,
-                            assigneeId: selectedAssignee
-                        )
-                        guard !hadAssignee else { return }
-                        if let updatedItem = store.items.first(where: { $0.id == pendingItemID }),
-                           updatedItem.assigneeId != nil
-                        {
-                            AppTips.donateIdeasOwnerAssigned()
-                            armPromotionTip(for: updatedItem.id)
-                        }
-                    }
-                )
-                .id(pendingAssignmentItem.id)
-            } else {
-                Color.clear
-                    .presentationDetents([.height(1)])
-                    .onAppear {
-                        pendingAssignmentItemID = nil
-                        selectedAssigneeIdForAssignment = nil
-                    }
-            }
-        }
-        .sheet(
-            isPresented: Binding(
-                get: { editingItemID != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        editingItemID = nil
-                    }
-                }
-            )
-        ) {
-            if let item = currentEditingItem {
-                BacklogItemEditSheet(
-                    item: item,
-                    members: activeMembers,
-                    onSave: { title, notes, assigneeId in
-                        let hadAssignee = item.assigneeId != nil
-                        store.updateItem(
-                            item,
-                            title: title,
-                            notes: notes,
-                            assigneeId: assigneeId
-                        )
-                        if !hadAssignee,
-                           let updatedItem = latestItem(withID: item.id),
-                           updatedItem.assigneeId != nil
-                        {
-                            AppTips.donateIdeasOwnerAssigned()
-                            armPromotionTip(for: updatedItem.id)
-                        }
-                    },
-                    onDelete: {
-                        performImmediateDeleteItem(withID: item.id)
-                    }
-                )
-                .id(item.id)
-            } else {
-                Color.clear
-                    .presentationDetents([.height(1)])
-                    .onAppear {
-                        editingItemID = nil
-                    }
-            }
-        }
-        .alert(
-            deleteConfirmationTitle,
-            isPresented: Binding(
-                get: { pendingDeleteConfirmationTarget != nil },
-                set: { if !$0 { pendingDeleteConfirmationTarget = nil } }
-            ),
-            presenting: pendingDeleteConfirmationTarget
-        ) { target in
-            Button(deleteConfirmationPrimaryTitle(for: target), role: .destructive) {
-                confirmDeletion(target)
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteConfirmationTarget = nil
-            }
-        } message: { target in
-            Text(deleteConfirmationMessage(for: target))
-        }
-        .background {
-            Color.clear
-                .alert(
-                    "Cannot delete category.",
-                    isPresented: Binding(
-                        get: { categoryDeletionBlockReason != nil },
-                        set: { if !$0 { categoryDeletionBlockReason = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) {
-                        categoryDeletionBlockReason = nil
-                    }
-                } message: {
-                    Text(categoryDeletionBlockReason?.alertDetail ?? "")
-                }
-        }
-        .overlay(alignment: .bottom) {
-            if let pendingDeletionItem {
-                ToastView(
-                    message: "\"\(pendingDeletionItem.title)\" deleted",
-                    actionTitle: "Undo",
-                    action: undoPendingDeleteItem
-                )
-                .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
-                .transition(ToastView.AnimationTokens.transition)
-                .id(pendingDeletionItem.id)
-            }
-        }
-        .animation(ToastView.AnimationTokens.curve, value: pendingDeletionItem?.id)
     }
 
     private func loadBacklogData() async {
@@ -526,9 +518,9 @@ private struct BacklogContent: View {
     }
 
     private func updateStoreCloudContext() {
-        let ownerId = householdStore.currentHousehold?.ownerId
-        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        let syncContext = householdStore.currentSyncContext(userId: userSession.userId)
+        store.setCloudContext(syncContext)
+        memberStore.setCloudContext(syncContext)
     }
 
     private var activeMembers: [Member] {
@@ -787,6 +779,63 @@ private struct BacklogContent: View {
         }
     }
 
+    private func handleRemoteBacklogSyncBatch(_ batch: HouseholdSyncBatch) {
+        if batch.classification == .bootstrap {
+            cancelRemoteSyncAnimationReset()
+            _ = _Concurrency.Task { @MainActor in
+                store.rehydrateVisibleSnapshotFromCache()
+                memberStore.markLocalSnapshotStale()
+                memberStore.rehydrateVisibleSnapshotFromCache()
+                let activeItemIds = Set(store.items.map(\.id))
+                hiddenPendingPromotionIds.subtract(activeItemIds)
+                syncPromotionTipAnchorWithVisibleItems()
+                markIdeasTutorialAsSeenIfNeeded()
+            }
+            return
+        }
+
+        if lastProcessedRemoteAnimationBatchToken == batch.id {
+            return
+        }
+
+        let beforeIdeaLocations = backlogIdeaLocations()
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let categoryRefreshTask = RemoteVisibleRefreshTask(
+                changedIDs: batch.backlogChangedCategoryIDs,
+                captureVisibleLocations: backlogCategoryLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                }
+            )
+            let categoryDelta = await categoryRefreshTask.run()
+
+            let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
+                beforeLocations: beforeIdeaLocations,
+                afterLocations: backlogIdeaLocations(),
+                changedIDs: batch.ideaChangedIDs
+            )
+
+            remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
+            remoteHighlightedItemIDs = itemDelta.highlightedIDs
+            lastProcessedRemoteAnimationBatchToken = batch.id
+
+            let activeItemIds = Set(store.items.map(\.id))
+            hiddenPendingPromotionIds.subtract(activeItemIds)
+            syncPromotionTipAnchorWithVisibleItems()
+            scheduleRemoteSyncAnimationReset()
+            markIdeasTutorialAsSeenIfNeeded()
+        }
+    }
+
     private func backlogCategoryLocations() -> [UUID: Int] {
         Dictionary(uniqueKeysWithValues: store.categories.map { ($0.id, 0) })
     }
@@ -893,6 +942,13 @@ private struct BacklogContent: View {
                 !hiddenPendingDeleteIds.contains($0.id) &&
                     !hiddenPendingPromotionIds.contains($0.id)
             }
+    }
+
+    private func performManualRefresh() async {
+        if userSession.syncMode == .cloud {
+            await syncCoordinator.performInteractiveManualRefresh()
+        }
+        await loadBacklogData()
     }
 
     private var activeIdeasTip: IdeasOnboardingTip? {
@@ -1121,6 +1177,141 @@ private struct BacklogContent: View {
             self.pendingDeletionItem = nil
         }
         HapticManager.lightTap()
+    }
+}
+
+private struct BacklogCategoryListSection: View {
+    let categories: [BacklogCategory]
+    let listBottomInset: CGFloat
+    let visibleItems: (UUID) -> [BacklogItem]
+    let highlightedItemIDs: Set<UUID>
+    let highlightedCategoryIDs: Set<UUID>
+    let isApplyingRemoteSyncAnimation: Bool
+    let appTipRuntimeGeneration: Int
+    let addIdeaTipCategoryID: UUID?
+    let ideaAssignTipItemID: UUID?
+    let ideaPromotionTipItemID: UUID?
+    let hiddenPendingPromotionIds: Set<UUID>
+    let pendingPromotionItemID: UUID?
+    let assigneeFor: (UUID?) -> Member?
+    let activeComposerCategoryId: UUID?
+    @Binding var composerText: String
+    let focusedComposerCategoryId: FocusState<UUID?>.Binding
+    let onActivateComposer: (UUID, ScrollViewProxy) -> Void
+    let onSubmitItem: (UUID) -> Void
+    let onCancelItem: (UUID) -> Void
+    let onDeleteItem: (UUID) -> Void
+    let onEditItem: (UUID) -> Void
+    let onAssignItem: (UUID) -> Void
+    let onPromoteItem: (UUID) -> Void
+    let onEditCategory: (BacklogCategory) -> Void
+    let onDeleteCategory: (UUID) -> Void
+
+    var body: some View {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(categories) { category in
+                        BacklogCategoryCardContainer(
+                            category: category,
+                            items: visibleItems(category.id),
+                            highlightedItemIDs: highlightedItemIDs,
+                            isCategoryHighlighted: highlightedCategoryIDs.contains(category.id),
+                            isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
+                            appTipRuntimeGeneration: appTipRuntimeGeneration,
+                            addIdeaTipCategoryID: addIdeaTipCategoryID,
+                            ideaAssignTipItemID: ideaAssignTipItemID,
+                            ideaPromotionTipItemID: ideaPromotionTipItemID,
+                            isPromotingItem: {
+                                hiddenPendingPromotionIds.contains($0) || pendingPromotionItemID == $0
+                            },
+                            assigneeFor: assigneeFor,
+                            isAddingItem: activeComposerCategoryId == category.id,
+                            composerText: $composerText,
+                            focusedComposerCategoryId: focusedComposerCategoryId,
+                            onActivateComposer: {
+                                onActivateComposer(category.id, scrollProxy)
+                            },
+                            onSubmitItem: {
+                                onSubmitItem(category.id)
+                            },
+                            onCancelItem: {
+                                onCancelItem(category.id)
+                            },
+                            onDeleteItem: onDeleteItem,
+                            onEditItem: onEditItem,
+                            onAssignItem: onAssignItem,
+                            onPromoteItem: onPromoteItem,
+                            onEditCategory: {
+                                onEditCategory(category)
+                            },
+                            onDeleteCategory: {
+                                onDeleteCategory(category.id)
+                            }
+                        )
+                        .id(category.id)
+                        .rowInsertAnimation()
+                    }
+                }
+                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                .padding(.bottom, listBottomInset)
+            }
+            .scrollDismissesKeyboard(.never)
+        }
+    }
+}
+
+private struct BacklogCategoryCardContainer: View {
+    let category: BacklogCategory
+    let items: [BacklogItem]
+    let highlightedItemIDs: Set<UUID>
+    let isCategoryHighlighted: Bool
+    let isApplyingRemoteSyncAnimation: Bool
+    let appTipRuntimeGeneration: Int
+    let addIdeaTipCategoryID: UUID?
+    let ideaAssignTipItemID: UUID?
+    let ideaPromotionTipItemID: UUID?
+    let isPromotingItem: (UUID) -> Bool
+    let assigneeFor: (UUID?) -> Member?
+    let isAddingItem: Bool
+    @Binding var composerText: String
+    let focusedComposerCategoryId: FocusState<UUID?>.Binding
+    let onActivateComposer: () -> Void
+    let onSubmitItem: () -> Void
+    let onCancelItem: () -> Void
+    let onDeleteItem: (UUID) -> Void
+    let onEditItem: (UUID) -> Void
+    let onAssignItem: (UUID) -> Void
+    let onPromoteItem: (UUID) -> Void
+    let onEditCategory: () -> Void
+    let onDeleteCategory: () -> Void
+
+    var body: some View {
+        CategoryCard(
+            category: category,
+            items: items,
+            highlightedItemIDs: highlightedItemIDs,
+            isCategoryHighlighted: isCategoryHighlighted,
+            isApplyingRemoteSyncAnimation: isApplyingRemoteSyncAnimation,
+            appTipRuntimeGeneration: appTipRuntimeGeneration,
+            addIdeaTipCategoryID: addIdeaTipCategoryID,
+            ideaAssignTipItemID: ideaAssignTipItemID,
+            ideaPromotionTipItemID: ideaPromotionTipItemID,
+            isPromotingItem: isPromotingItem,
+            assigneeFor: assigneeFor,
+            isAddingItem: isAddingItem,
+            newItemText: $composerText,
+            focusedComposerCategoryId: focusedComposerCategoryId,
+            onActivateComposer: onActivateComposer,
+            onSubmitItem: onSubmitItem,
+            onCancelItem: onCancelItem,
+            onDeleteItem: onDeleteItem,
+            onEditItem: onEditItem,
+            onAssignItem: onAssignItem,
+            onPromoteItem: onPromoteItem,
+            onEditCategory: onEditCategory,
+            onDeleteCategory: onDeleteCategory
+        )
     }
 }
 

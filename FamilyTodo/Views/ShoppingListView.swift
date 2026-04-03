@@ -35,6 +35,7 @@ private struct ShoppingListContent: View {
     @StateObject private var restockPulse = RestockPulseState()
     @Binding private var selectedTab: AppTab
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
@@ -148,9 +149,22 @@ private struct ShoppingListContent: View {
                 store.markLocalSnapshotStale()
                 if isLocalStoreNotification(notification) {
                     store.rehydrateVisibleSnapshotFromCache()
-                } else if selectedTab == .shopping {
-                    handleRemoteShoppingListChange(notification)
                 } else {
+                    store.replayPendingMutationsIfNeeded()
+                }
+            }
+            .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
+                guard let batch = syncCoordinator.latestBatch,
+                      batch.domains.contains(.shopping)
+                else {
+                    return
+                }
+
+                store.markLocalSnapshotStale()
+                if selectedTab == .shopping {
+                    handleRemoteShoppingSyncBatch(batch)
+                } else {
+                    store.rehydrateVisibleSnapshotFromCache()
                     store.replayPendingMutationsIfNeeded()
                 }
             }
@@ -258,6 +272,10 @@ private struct ShoppingListContent: View {
 
             floatingAddButton(bottomInset: floatingButtonInset)
         }
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularContentMaxWidth,
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -319,7 +337,7 @@ private struct ShoppingListContent: View {
             .padding(.bottom, listBottomInset)
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
-                await loadShoppingData()
+                await performManualRefresh()
             }
             .onChange(of: rapidEntryFocused) { _, focused in
                 guard focused else { return }
@@ -432,10 +450,10 @@ private struct ShoppingListContent: View {
                     ShoppingCountBadge(count: store.toBuyItems.count)
                 }
 
-                if let feedback = subscriptionManager.shoppingInlineFeedback,
+                if subscriptionManager.shoppingInlineIndicator != nil,
                    selectedTab == .shopping
                 {
-                    SyncStatusPill(text: feedback.text)
+                    SyncStatusIcon()
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -824,10 +842,17 @@ private struct ShoppingListContent: View {
         markShoppingTutorialAsSeenIfNeeded()
     }
 
+    private func performManualRefresh() async {
+        if userSession.syncMode == .cloud {
+            await syncCoordinator.performInteractiveManualRefresh()
+        }
+        await loadShoppingData()
+    }
+
     private func updateStoreCloudContext() {
-        let ownerId = householdStore.currentHousehold?.ownerId
-        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        bundleStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        let syncContext = householdStore.currentSyncContext(userId: userSession.userId)
+        store.setCloudContext(syncContext)
+        bundleStore.setCloudContext(syncContext)
     }
 
     private func isLocalStoreNotification(_ notification: Notification) -> Bool {
@@ -858,6 +883,43 @@ private struct ShoppingListContent: View {
             let delta = await refreshTask.run()
             remoteHighlightedItemIDs = delta.highlightedIDs
             logRemoteSyncVisibleRefreshLatency(screen: "Shopping", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markShoppingTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func handleRemoteShoppingSyncBatch(_ batch: HouseholdSyncBatch) {
+        if batch.classification == .bootstrap {
+            cancelRemoteSyncAnimationReset()
+            _ = _Concurrency.Task { @MainActor in
+                store.rehydrateVisibleSnapshotFromCache()
+                await bundleStore.loadBundlesForDisplay()
+                markShoppingTutorialAsSeenIfNeeded()
+            }
+            return
+        }
+
+        let changedIDs = batch.shoppingChangedItemIDs
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: { shoppingVisibleLocations(from: store.toBuyItems) },
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    await bundleStore.loadBundlesForDisplay()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedItemIDs = delta.highlightedIDs
             scheduleRemoteSyncAnimationReset()
             markShoppingTutorialAsSeenIfNeeded()
         }
@@ -1294,7 +1356,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
 
             let container = UIView(
                 frame: CGRect(
-                    x: 0, y: 0, width: UIScreen.main.bounds.width, height: containerHeight
+                    x: 0, y: 0, width: 0, height: containerHeight
                 )
             )
             container.backgroundColor = .clear

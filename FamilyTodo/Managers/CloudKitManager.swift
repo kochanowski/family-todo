@@ -5,6 +5,17 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
+    struct HouseholdDeltaClassification: Equatable {
+        let changedDomains: Set<HouseholdCloudDeltaDomain>
+        let observedRecordTypes: Set<String>
+        let ignoredRecordTypes: Set<String>
+        let unknownRecordTypes: Set<String>
+
+        var fallbackReason: String? {
+            unknownRecordTypes.isEmpty ? nil : "unknownRecordType"
+        }
+    }
+
     enum HouseholdDatabaseScope {
         case ownerPrivate
         case participantShared
@@ -12,7 +23,7 @@ actor CloudKitManager {
 
     private enum ShareCreationStage: String {
         case ensureZone
-        case migrate
+        case migrateRoot
         case fetchRoot
         case modifyRecords
         case fallbackPoll
@@ -66,6 +77,7 @@ actor CloudKitManager {
     private var migratedMemberColorHouseholds: Set<UUID>
     private var backgroundSharedGraphRepairsInFlight: Set<UUID> = []
     private var recentInviteRedeemAttempts: [Date] = []
+    private let changeTokenStore = CloudKitChangeTokenStore()
 
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
@@ -74,7 +86,12 @@ actor CloudKitManager {
     private static let exhaustiveSharedGraphRepairDefaultsKey =
         "CloudKit.sharedGraphRepairCompletedHouseholds.exhaustive.v1"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
+    private static let ignorableHouseholdDeltaRecordTypes: Set<String> = [
+        "Area",
+        "RecurringChore",
+    ]
     private static let defaultQueryPageSize = 200
+    private static let queryPageTimeoutNanoseconds: UInt64 = 12_000_000_000
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
     private static let inviteCodeLength = InviteInputNormalizer.preferredInviteCodeLength
     private static let inviteCodeMaxAttempts = 24
@@ -83,6 +100,15 @@ actor CloudKitManager {
     private static let inviteCodeLockWindow: TimeInterval = 10 * 60
     private static let inviteCodeAttemptWindow: TimeInterval = 5 * 60
     private static let inviteCodeAttemptLimit = 12
+    static let createShareBlocksOnInteractiveRepair = false
+    static let acceptedRootFetchBackoffDelaysNanoseconds: [UInt64] = [
+        500_000_000,
+        1_000_000_000,
+        2_000_000_000,
+        3_000_000_000,
+        5_000_000_000,
+        8_000_000_000,
+    ]
 
     private func resolvedScope(_ explicitScope: HouseholdDatabaseScope?) -> HouseholdDatabaseScope {
         explicitScope ?? householdScope
@@ -120,6 +146,28 @@ actor CloudKitManager {
             let defaultZone = CKRecordZone.default().zoneID
             return zoneID != defaultZone
         }
+    }
+
+    static func shouldIgnoreCachedParticipantSharedZone(_ zoneID: CKRecordZone.ID) -> Bool {
+        guard isZoneCompatible(zoneID, for: .participantShared) else {
+            return true
+        }
+
+        return zoneID.ownerName == "__defaultOwner__"
+    }
+
+    static func isRetryableParticipantSharedZoneBootstrapError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError, ckError.code == .invalidArguments else {
+            return false
+        }
+
+        let candidateMessages = ([ckError.localizedDescription] + ckError.userInfo.values.compactMap {
+            $0 as? String
+        }).joined(separator: " ")
+
+        return candidateMessages.localizedCaseInsensitiveContains(
+            "Only shared zones can be accessed in the shared DB"
+        )
     }
 
     /// Gets the shared container, must call ensureReady() first
@@ -168,6 +216,105 @@ actor CloudKitManager {
         get async {
             await activeHouseholdDatabase(for: householdScope)
         }
+    }
+
+    func fetchHouseholdDelta(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> HouseholdCloudDelta {
+        let scope = resolvedScope(explicitScope)
+        await ensureReady()
+
+        guard let zoneID = try await resolveSubscriptionZone(
+            householdId: householdId,
+            scope: scope
+        ) else {
+            return HouseholdCloudDelta(
+                householdId: householdId,
+                scope: scope,
+                changedDomains: [],
+                fallbackReason: "missingZone"
+            )
+        }
+
+        let database = await activeHouseholdDatabase(for: scope)
+        await recordDeltaProgress(
+            "delta.zone.started scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName)"
+        )
+
+        var previousToken = await changeTokenStore.zoneToken(
+            scope: scope,
+            zoneID: zoneID
+        )
+        var changedRecordTypes: Set<String> = []
+        var totalChangedRecordCount = 0
+        var totalDeletedRecordCount = 0
+        var moreComing = true
+
+        while moreComing {
+            let page = try await fetchZoneDeltaPage(
+                database: database,
+                zoneID: zoneID,
+                previousToken: previousToken
+            )
+
+            if let fallbackReason = page.fallbackReason {
+                await changeTokenStore.setZoneToken(nil, scope: scope, zoneID: zoneID)
+                await recordDeltaProgress(
+                    "delta.token.reset scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName) reason=\(fallbackReason)"
+                )
+                return HouseholdCloudDelta(
+                    householdId: householdId,
+                    scope: scope,
+                    changedDomains: [],
+                    fallbackReason: fallbackReason
+                )
+            }
+
+            changedRecordTypes.formUnion(page.changedRecordTypes)
+            totalChangedRecordCount += page.changedRecordCount
+            totalDeletedRecordCount += page.deletedRecordCount
+            previousToken = page.serverChangeToken
+            moreComing = page.moreComing
+        }
+
+        await changeTokenStore.setZoneToken(previousToken, scope: scope, zoneID: zoneID)
+        await recordDeltaProgress(
+            "delta.token.updated scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName)"
+        )
+
+        let classification = Self.classifyHouseholdDeltaRecordTypes(changedRecordTypes)
+        let observedRecordLabels = classification.observedRecordTypes.sorted().joined(separator: ",")
+        let ignoredRecordLabels = classification.ignoredRecordTypes.sorted().joined(separator: ",")
+        let unknownRecordLabels = classification.unknownRecordTypes.sorted().joined(separator: ",")
+        await recordDeltaProgress(
+            "delta.recordTypes scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName) observed=\(observedRecordLabels) ignored=\(ignoredRecordLabels) unknown=\(unknownRecordLabels)"
+        )
+
+        if let fallbackReason = classification.fallbackReason {
+            return HouseholdCloudDelta(
+                householdId: householdId,
+                scope: scope,
+                changedDomains: classification.changedDomains,
+                observedRecordTypes: classification.observedRecordTypes,
+                ignoredRecordTypes: classification.ignoredRecordTypes,
+                unknownRecordTypes: classification.unknownRecordTypes,
+                fallbackReason: fallbackReason
+            )
+        }
+
+        await recordDeltaProgress(
+            "delta.zone.completed scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName) changedRecords=\(totalChangedRecordCount) deletedRecords=\(totalDeletedRecordCount)"
+        )
+
+        return HouseholdCloudDelta(
+            householdId: householdId,
+            scope: scope,
+            changedDomains: classification.changedDomains,
+            observedRecordTypes: classification.observedRecordTypes,
+            ignoredRecordTypes: classification.ignoredRecordTypes,
+            unknownRecordTypes: classification.unknownRecordTypes
+        )
     }
 
     init() {
@@ -476,6 +623,12 @@ actor CloudKitManager {
         guard let zoneID = zoneContext(for: scope).zoneByHouseholdId[householdId] else {
             return nil
         }
+        if scope == .participantShared,
+           Self.shouldIgnoreCachedParticipantSharedZone(zoneID)
+        {
+            clearCachedZone(for: householdId, scope: scope)
+            return nil
+        }
         guard Self.isZoneCompatible(zoneID, for: scope) else {
             clearCachedZone(for: householdId, scope: scope)
             return nil
@@ -501,6 +654,15 @@ actor CloudKitManager {
         }
         persistSharedZoneContext(for: scope)
         print("CloudKitScope: cleared cached zone for household \(householdId)")
+    }
+
+    private func resetParticipantSharedZoneResolution(for householdId: UUID) {
+        clearCachedZone(for: householdId, scope: .participantShared)
+        updateZoneContext(for: .participantShared) { context in
+            context.zoneByRecordName.removeValue(forKey: householdId.uuidString)
+            context.lastResolvedZones = []
+        }
+        print("CloudKitScope: reset participantShared zone resolution for household \(householdId)")
     }
 
     func clearAllCachedZones(for householdId: UUID) {
@@ -529,7 +691,7 @@ actor CloudKitManager {
 
     private nonisolated func clearCloudKitFailure() {
         _Concurrency.Task { @MainActor in
-            CloudKitDiagnosticsState.shared.clear()
+            CloudKitDiagnosticsState.shared.clearLastError()
         }
     }
 
@@ -959,6 +1121,21 @@ actor CloudKitManager {
         }
     }
 
+    private func refreshParticipantSharedJoinBootstrap(
+        householdId: UUID?
+    ) async {
+        guard let householdId else { return }
+        resetParticipantSharedZoneResolution(for: householdId)
+        do {
+            _ = try await allSharedZoneIDs()
+        } catch {
+            print(
+                "CloudKitJoin: shared-zone refresh failed for household \(householdId): " +
+                    debugErrorDescription(error)
+            )
+        }
+    }
+
     // swiftlint:enable function_body_length
 
     private func fetchRecordIfExists(
@@ -1201,6 +1378,28 @@ actor CloudKitManager {
         "BacklogItem",
     ]
 
+    private static let ownerZoneBoundQueryRecordTypes: Set<String> = [
+        "Member",
+        "Area",
+        "Task",
+        "WorkItem",
+        "RecurringChore",
+        "ShoppingItem",
+        "ShoppingBundle",
+        "BacklogCategory",
+        "BacklogItem",
+    ]
+
+    static func shouldUseOwnerZoneBoundQuery(recordType: String) -> Bool {
+        ownerZoneBoundQueryRecordTypes.contains(recordType)
+    }
+
+    static func shouldFallbackToOwnerPrivateExhaustiveScan(
+        targetZoneRecordCount _: Int
+    ) -> Bool {
+        false
+    }
+
     private static let singleGraphReferenceKeys = [
         "householdId",
         "assigneeId",
@@ -1345,6 +1544,30 @@ actor CloudKitManager {
         )
     }
 
+    private func queryOwnerPrivateRecordsInTargetZone(
+        _ queryFactory: ZoneScopedQueryFactory,
+        targetZoneID: CKRecordZone.ID
+    ) async throws -> [CKRecord]? {
+        let db = await privateDatabase
+        let baselineQuery = queryFactory(targetZoneID)
+        let query = CKQuery(
+            recordType: baselineQuery.recordType,
+            predicate: NSPredicate(value: true)
+        )
+        query.sortDescriptors = baselineQuery.sortDescriptors
+
+        do {
+            return try await queryRecordsPaginated(
+                query,
+                database: db,
+                zoneID: targetZoneID
+            )
+        } catch {
+            guard Self.isMissingRecordTypeError(error) else { throw error }
+            return nil
+        }
+    }
+
     private func deleteLegacyOwnerPrivateRecordsIfNeeded(_ recordIDs: [CKRecord.ID]) async throws {
         guard !recordIDs.isEmpty else { return }
         let db = await privateDatabase
@@ -1384,6 +1607,10 @@ actor CloudKitManager {
     }
 
     private func isRetryableZoneResolutionError(_ error: Error) -> Bool {
+        if Self.isRetryableParticipantSharedZoneBootstrapError(error) {
+            return true
+        }
+
         guard let ckError = error as? CKError else { return false }
 
         switch ckError.code {
@@ -1516,19 +1743,46 @@ actor CloudKitManager {
 
             operation.resultsLimit = max(1, resultsLimit)
             operation.qualityOfService = .userInitiated
+            let resumeLock = NSLock()
+            var hasResumed = false
+            let timeoutDescription = [
+                "recordType=\(query?.recordType ?? "cursor")",
+                "zone=\(zoneID?.zoneName ?? "all")",
+            ].joined(separator: " ")
 
             var pageRecords: [CKRecord] = []
+            func resumeOnce(with result: Result<([CKRecord], CKQueryOperation.Cursor?), Error>) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(with: result)
+            }
+
+            let timeoutTask = _Concurrency.Task {
+                try? await _Concurrency.Task.sleep(nanoseconds: Self.queryPageTimeoutNanoseconds)
+                operation.cancel()
+                resumeOnce(
+                    with: .failure(
+                        CloudKitManagerError.queryTimedOut(
+                            "CloudKit query timed out \(timeoutDescription)"
+                        )
+                    )
+                )
+            }
+
             operation.recordMatchedBlock = { _, result in
                 guard case let .success(record) = result else { return }
                 pageRecords.append(record)
             }
 
             operation.queryResultBlock = { result in
+                timeoutTask.cancel()
                 switch result {
                 case let .success(nextCursor):
-                    continuation.resume(returning: (pageRecords, nextCursor))
+                    resumeOnce(with: .success((pageRecords, nextCursor)))
                 case let .failure(error):
-                    continuation.resume(throwing: error)
+                    resumeOnce(with: .failure(error))
                 }
             }
 
@@ -1562,6 +1816,166 @@ actor CloudKitManager {
         return allRecords
     }
 
+    private struct HouseholdZoneDeltaPage {
+        let changedRecordTypes: Set<String>
+        let changedRecordCount: Int
+        let deletedRecordCount: Int
+        let serverChangeToken: CKServerChangeToken?
+        let moreComing: Bool
+        let fallbackReason: String?
+    }
+
+    private func fetchZoneDeltaPage(
+        database: CKDatabase,
+        zoneID: CKRecordZone.ID,
+        previousToken: CKServerChangeToken?
+    ) async throws -> HouseholdZoneDeltaPage {
+        try await withCheckedThrowingContinuation { continuation in
+            let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+            configuration.previousServerChangeToken = previousToken
+            configuration.resultsLimit = Self.defaultQueryPageSize
+            let operation = CKFetchRecordZoneChangesOperation(
+                recordZoneIDs: [zoneID],
+                configurationsByRecordZoneID: [zoneID: configuration]
+            )
+            operation.qualityOfService = .userInitiated
+
+            let resumeLock = NSLock()
+            var hasResumed = false
+            var changedRecordTypes: Set<String> = []
+            var changedRecordCount = 0
+            var deletedRecordCount = 0
+            var latestServerToken = previousToken
+
+            func resumeOnce(with result: Result<HouseholdZoneDeltaPage, Error>) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(with: result)
+            }
+
+            operation.recordWasChangedBlock = { _, result in
+                switch result {
+                case let .success(record):
+                    changedRecordTypes.insert(record.recordType)
+                    changedRecordCount += 1
+                case let .failure(error):
+                    resumeOnce(with: .failure(error))
+                }
+            }
+
+            operation.recordWithIDWasDeletedBlock = { _, recordType in
+                changedRecordTypes.insert(recordType)
+                deletedRecordCount += 1
+            }
+
+            operation.recordZoneChangeTokensUpdatedBlock = { _, serverChangeToken, _ in
+                latestServerToken = serverChangeToken
+            }
+
+            operation.recordZoneFetchResultBlock = { _, result in
+                switch result {
+                case let .success(zoneResult):
+                    latestServerToken = zoneResult.serverChangeToken
+                    resumeOnce(
+                        with: .success(
+                            HouseholdZoneDeltaPage(
+                                changedRecordTypes: changedRecordTypes,
+                                changedRecordCount: changedRecordCount,
+                                deletedRecordCount: deletedRecordCount,
+                                serverChangeToken: latestServerToken,
+                                moreComing: zoneResult.moreComing,
+                                fallbackReason: nil
+                            )
+                        )
+                    )
+                case let .failure(error):
+                    if let ckError = error as? CKError, ckError.code == .changeTokenExpired {
+                        resumeOnce(
+                            with: .success(
+                                HouseholdZoneDeltaPage(
+                                    changedRecordTypes: changedRecordTypes,
+                                    changedRecordCount: changedRecordCount,
+                                    deletedRecordCount: deletedRecordCount,
+                                    serverChangeToken: nil,
+                                    moreComing: false,
+                                    fallbackReason: "changeTokenExpired"
+                                )
+                            )
+                        )
+                        return
+                    }
+
+                    resumeOnce(with: .failure(error))
+                }
+            }
+
+            operation.fetchRecordZoneChangesResultBlock = { result in
+                if case let .failure(error) = result {
+                    resumeOnce(with: .failure(error))
+                }
+            }
+
+            database.add(operation)
+        }
+    }
+
+    static func classifyHouseholdDeltaRecordTypes(
+        _ recordTypes: Set<String>
+    ) -> HouseholdDeltaClassification {
+        var domains: Set<HouseholdCloudDeltaDomain> = []
+        var ignoredRecordTypes: Set<String> = []
+        var unknownRecordTypes: Set<String> = []
+
+        for recordType in recordTypes {
+            switch recordType {
+            case "Household":
+                domains.insert(.householdMetadata)
+            case "Member":
+                domains.insert(.members)
+            case "ShoppingItem":
+                domains.insert(.shoppingItems)
+            case "ShoppingBundle":
+                domains.insert(.shoppingBundles)
+            case "Task":
+                domains.insert(.tasks)
+            case "WorkItem":
+                domains.insert(.workItems)
+            case "BacklogCategory":
+                domains.insert(.backlogCategories)
+            case "BacklogItem":
+                domains.insert(.backlogItems)
+            case _ where ignorableHouseholdDeltaRecordTypes.contains(recordType):
+                ignoredRecordTypes.insert(recordType)
+            default:
+                unknownRecordTypes.insert(recordType)
+            }
+        }
+
+        return HouseholdDeltaClassification(
+            changedDomains: domains,
+            observedRecordTypes: recordTypes,
+            ignoredRecordTypes: ignoredRecordTypes,
+            unknownRecordTypes: unknownRecordTypes
+        )
+    }
+
+    private func recordDeltaProgress(_ operation: String) async {
+        await MainActor.run {
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+        }
+    }
+
+    private func scopeLabel(_ scope: HouseholdDatabaseScope) -> String {
+        switch scope {
+        case .ownerPrivate:
+            "ownerPrivate"
+        case .participantShared:
+            "participantShared"
+        }
+    }
+
     // swiftlint:disable cyclomatic_complexity function_body_length
     private func queryRecords(
         householdId: UUID? = nil,
@@ -1575,9 +1989,81 @@ actor CloudKitManager {
         case .ownerPrivate:
             print("CloudKitScope: query ownerPrivate \(queryFactory(nil).recordType)")
             if let householdId {
-                let scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
-                    queryFactory,
-                    householdId: householdId
+                let recordType = queryFactory(nil).recordType
+                if Self.shouldUseOwnerZoneBoundQuery(recordType: recordType) {
+                    let targetZoneID = try await ensureHouseholdOwnerZone(householdId: householdId)
+                    recordCloudKitProgress(
+                        "ownerQuery.targetZone.started recordType=\(recordType) zone=\(targetZoneID.zoneName)|\(targetZoneID.ownerName)"
+                    )
+                    do {
+                        if let targetZoneRecords = try await queryOwnerPrivateRecordsInTargetZone(
+                            queryFactory,
+                            targetZoneID: targetZoneID
+                        ) {
+                            recordCloudKitProgress(
+                                "ownerQuery.targetZone.completed recordType=\(recordType) count=\(targetZoneRecords.count)"
+                            )
+                            if !Self.shouldFallbackToOwnerPrivateExhaustiveScan(
+                                targetZoneRecordCount: targetZoneRecords.count
+                            ) {
+                                print(
+                                    "CloudKitScope: query ownerPrivate \(recordType) using household target zone \(targetZoneID.zoneName)"
+                                )
+                                let sortedRecords = Self.sortRecords(
+                                    targetZoneRecords,
+                                    using: baselineSortDescriptors
+                                )
+                                for sortedRecord in sortedRecords {
+                                    rememberRecordZone(
+                                        sortedRecord,
+                                        explicitHouseholdId: householdId,
+                                        scope: scope
+                                    )
+                                }
+                                return sortedRecords
+                            }
+                        } else {
+                            recordCloudKitProgress(
+                                "ownerQuery.targetZone.completed recordType=\(recordType) count=missingRecordType"
+                            )
+                        }
+                    } catch {
+                        recordCloudKitProgress(
+                            ownerQueryFailureOperation(
+                                stage: "targetZone",
+                                recordType: recordType,
+                                error: error
+                            )
+                        )
+                        throw error
+                    }
+
+                    print(
+                        "CloudKitScope: ownerPrivate target-zone query for \(recordType) yielded an empty result, falling back to exhaustive scan"
+                    )
+                }
+
+                recordCloudKitProgress(
+                    "ownerQuery.fallbackScan.started recordType=\(recordType)"
+                )
+                let scanResult: OwnerPrivateScanResult
+                do {
+                    scanResult = try await queryOwnerPrivateRecordsAcrossAllZones(
+                        queryFactory,
+                        householdId: householdId
+                    )
+                } catch {
+                    recordCloudKitProgress(
+                        ownerQueryFailureOperation(
+                            stage: "fallbackScan",
+                            recordType: recordType,
+                            error: error
+                        )
+                    )
+                    throw error
+                }
+                recordCloudKitProgress(
+                    "ownerQuery.fallbackScan.completed recordType=\(recordType) authoritativeCount=\(scanResult.authoritativeRecords.count) zoneCount=\(Set(scanResult.authoritativeRecords.map { "\($0.recordID.zoneID.zoneName)|\($0.recordID.zoneID.ownerName)" }).count)"
                 )
                 for authoritativeRecord in scanResult.authoritativeRecords {
                     rememberRecordZone(authoritativeRecord, explicitHouseholdId: householdId, scope: scope)
@@ -1690,6 +2176,31 @@ actor CloudKitManager {
         scope: HouseholdDatabaseScope
     ) async throws -> [CKRecord] {
         try await queryRecords(query, householdId: nil, scope: scope)
+    }
+
+    private func ownerQueryFailureOperation(
+        stage: String,
+        recordType: String,
+        error: Error
+    ) -> String {
+        let suffix = isQueryTimeoutError(error) ? "timedOut" : "failed"
+        return "ownerQuery.\(stage).\(suffix) recordType=\(recordType) error=\(String(describing: error))"
+    }
+
+    private func isQueryTimeoutError(_ error: Error) -> Bool {
+        if let managerError = error as? CloudKitManagerError,
+           case .queryTimedOut = managerError
+        {
+            return true
+        }
+
+        if let managerError = error as? CloudKitManagerError,
+           case let .unknownError(underlying) = managerError
+        {
+            return isQueryTimeoutError(underlying)
+        }
+
+        return false
     }
 
     // swiftlint:enable cyclomatic_complexity function_body_length
@@ -2328,6 +2839,7 @@ actor CloudKitManager {
         case notAuthenticated
         case quotaExceeded
         case serverRecordChanged
+        case queryTimedOut(String)
         case unknownError(Error)
 
         var errorDescription: String? {
@@ -2369,6 +2881,8 @@ actor CloudKitManager {
                 "iCloud storage is full. Please free up space."
             case .serverRecordChanged:
                 "This item was modified elsewhere. Refreshing..."
+            case let .queryTimedOut(message):
+                message
             case let .unknownError(error):
                 "An error occurred: \(error.localizedDescription)"
             }
@@ -3554,9 +4068,37 @@ actor CloudKitManager {
             zoneID: ownerZoneID(for: householdId)
         )
         let db = await privateDatabase
-        let record = try await db.record(for: rootRecordID)
-        rememberRecordZone(record, explicitHouseholdId: householdId)
-        return record
+        let backoffDelays: [UInt64] = [
+            250_000_000,
+            700_000_000,
+        ]
+
+        var lastError: Error?
+        for attempt in 0 ..< backoffDelays.count {
+            do {
+                let record = try await db.record(for: rootRecordID)
+                rememberRecordZone(record, explicitHouseholdId: householdId)
+                return record
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                lastError = ckError
+                if attempt < backoffDelays.count - 1 {
+                    try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
+                }
+            } catch {
+                lastError = error
+                break
+            }
+        }
+
+        do {
+            return try await fetchRecord(
+                id: householdId,
+                householdId: householdId,
+                scope: .ownerPrivate
+            )
+        } catch {
+            throw lastError ?? error
+        }
     }
 
     private func fetchShareRecord(
@@ -3765,13 +4307,15 @@ actor CloudKitManager {
             markStage(.ensureZone)
             _ = try await ensureHouseholdOwnerZone(householdId: household.id)
 
-            markStage(.migrate)
+            markStage(.migrateRoot)
             try await migrateOwnerHouseholdToCustomZoneIfNeeded(householdId: household.id)
-            try await repairSharedOwnerHouseholdGraphIfNeeded(
-                householdId: household.id,
-                force: false,
-                mode: .interactivePrimaryZones
-            )
+            if Self.createShareBlocksOnInteractiveRepair {
+                try await repairSharedOwnerHouseholdGraphIfNeeded(
+                    householdId: household.id,
+                    force: false,
+                    mode: .interactivePrimaryZones
+                )
+            }
 
             markStage(.fetchRoot)
             let db = await privateDatabase
@@ -4175,6 +4719,16 @@ actor CloudKitManager {
         return try inviteToken(from: record)
     }
 
+    func resolveInviteTargetHouseholdId(from input: NormalizedInviteInput) async throws -> UUID? {
+        if let code = InviteInputNormalizer.normalizeInviteCodeToken(input.inviteCode) {
+            return try await fetchInviteToken(code: code).householdId
+        }
+
+        let shareURL = try InviteInputNormalizer.normalizedURL(from: input.inviteCode)
+        let metadata = try await resolveJoinShareMetadata(for: shareURL)
+        return UUID(uuidString: metadata.rootRecordID.recordName)
+    }
+
     func deleteInviteTokens(for householdId: UUID) async throws {
         try await checkAvailability()
 
@@ -4460,7 +5014,7 @@ actor CloudKitManager {
 
             setHouseholdScope(.participantShared)
             if let householdId {
-                setSharedZoneContext(householdId: householdId, zoneID: zoneID)
+                resetParticipantSharedZoneResolution(for: householdId)
             }
 
             stage = .fetchRoot
@@ -4473,7 +5027,11 @@ actor CloudKitManager {
             )
             let record: CKRecord
             do {
-                record = try await fetchAcceptedRootRecord(metadata: metadata, database: db)
+                record = try await fetchAcceptedRootRecord(
+                    metadata: metadata,
+                    householdId: householdId,
+                    database: db
+                )
             } catch {
                 throw CloudKitManagerError.sharedHouseholdFetchFailed(
                     "Shared household fetch failed: \(debugErrorDescription(error))"
@@ -4530,25 +5088,41 @@ actor CloudKitManager {
 
     private func fetchAcceptedRootRecord(
         metadata: CKShare.Metadata,
+        householdId: UUID?,
         database: CKDatabase
     ) async throws -> CKRecord {
-        let backoffDelays: [UInt64] = [
-            300_000_000,
-            800_000_000,
-            1_500_000_000,
-        ]
+        let backoffDelays = Self.acceptedRootFetchBackoffDelaysNanoseconds
 
         var lastError: Error?
-        for attempt in 0 ..< backoffDelays.count {
+        await refreshParticipantSharedJoinBootstrap(householdId: householdId)
+        for attempt in 0 ... backoffDelays.count {
+            if attempt > 0 {
+                await refreshParticipantSharedJoinBootstrap(householdId: householdId)
+            }
             do {
+                if let householdId {
+                    return try await fetchRecord(
+                        id: householdId,
+                        householdId: householdId,
+                        scope: .participantShared
+                    )
+                }
                 return try await database.record(for: metadata.rootRecordID)
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 lastError = ckError
-                guard attempt < backoffDelays.count - 1 else {
+                guard attempt < backoffDelays.count else {
                     break
                 }
                 try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
             } catch {
+                if isRetryableZoneResolutionError(error) {
+                    lastError = error
+                    guard attempt < backoffDelays.count else {
+                        break
+                    }
+                    try await _Concurrency.Task.sleep(nanoseconds: backoffDelays[attempt])
+                    continue
+                }
                 throw error
             }
         }

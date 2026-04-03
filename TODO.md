@@ -14,6 +14,7 @@
 - Retro Dark, Retro Light, and Paper theme support has been rolled out broadly; new UI is expected to wire theme fonts from day one.
 - Smart notifications are live outside the original master-plan sequence: optional due-time reminders, `Default reminder time`, and a non-spammy digest that only fires when tasks are due.
 - Multi-user sync is partially hardened, but still not considered fully closed until real-device owner/participant behavior is consistent and predictable.
+- Latest blocker inside multi-user sync: `participant -> owner` still appears to fail at the owner push-trigger / follow-up-retry layer, especially when owner receives `record-zone` notifications without an inferred private-db scope.
 - Remote-update UI has partially shipped (`Tasks`/`Shopping` inline feedback + shopping banner), but it still needs a dedicated polish pass after sync reliability is acceptable.
 - Immediate roadmap focus has changed: sync reliability, update UX cleanup, notification-permission timing, onboarding refresh, and invite flow polish now take precedence over previously planned polish-only work.
 
@@ -147,6 +148,14 @@ Acceptance Criteria: Change the text string from `(+) New category` to just `New
 - [x] **Fix Invite Token wipe on Dev Deploy**
 Description: Every time we deploy to the dev environment, the Invite Token gets deleted/wiped. This was supposed to be fixed but is still breaking.
 Acceptance Criteria: Investigate the token storage/generation or deployment scripts and ensure the Invite Token persists across deployments.
+
+- [ ] **Bundle keyboard matches shopping input**
+Description: The keyboard flickers when adding items to a bundle; mimic the more stable shopping list composer so the keyboard stays pinned during entry.
+Acceptance Criteria: Bundle composer uses the same padding/focus management as shopping additions so the keyboard never jumps when a new item is being typed.
+
+- [ ] **Add action affordance to each bundle**
+Description: Provide an immediate CTA next to every bundle (e.g., `Add`, `Send to Shopping List`, or a `+` icon) to make it obvious how to add items without navigating away.
+Acceptance Criteria: Each bundle row includes a clear affordance that matches the chosen label and icon guidance; the action feels consistent with shopping list copy.
 
 ## Phase 1: Data Integrity & CloudKit (High Priority)
 
@@ -283,3 +292,8 @@ Regression Risk: Startup/access regressions on locked device states.
 Description: Close remaining UX quality gaps across empty states, haptics, and dark-mode readability.
 Acceptance Criteria: Every empty tab has polished icon + encouraging copy, key actions emit consistent haptics (success/light/rigid), and tags/categories keep readable contrast in dark mode and custom themes.
 Regression Risk: Theme-specific regressions and inconsistent tactile feedback; run cross-tab, cross-theme smoke validation.
+
+- [ ] **P3.7 Post-MVP Household Sync Hardening** ([Details](TODO_DETAILS.md#p37))
+Description: Preserve the current MVP-stable sync behavior, then finish the remaining owner/participant CloudKit work: owner trigger audit, delta-only hot paths, and startup/join reliability diagnostics.
+Acceptance Criteria: Remaining sync work is implemented only after MVP, with owner/participant trigger paths, delta fallbacks, and startup recovery explicitly validated on two real devices / Apple IDs.
+Regression Risk: Over-tuning sync after MVP could reintroduce latency, missed updates, or household bootstrap regressions; any follow-up must be staged and measured on-device.

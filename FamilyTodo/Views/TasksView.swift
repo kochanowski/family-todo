@@ -112,6 +112,7 @@ private struct TasksContent: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
@@ -184,7 +185,7 @@ private struct TasksContent: View {
                     .padding(.bottom, listBottomInset)
                     .environment(\.editMode, $editMode)
                     .refreshable {
-                        await refreshData()
+                        await performManualRefresh()
                         markTasksTutorialAsSeenIfNeeded()
                     }
                 }
@@ -194,6 +195,10 @@ private struct TasksContent: View {
                     .padding(.top, 40)
             }
         }
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularContentMaxWidth,
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             guard !hasStartedInitialLoad else { return }
@@ -248,9 +253,22 @@ private struct TasksContent: View {
             if isLocalStoreNotification(notification) {
                 store.rehydrateVisibleSnapshotFromCache()
                 markTasksTutorialAsSeenIfNeeded()
-            } else if selectedTab == .tasks {
-                handleRemoteTaskBoardChange(notification)
             } else {
+                store.replayPendingMutationsIfNeeded()
+            }
+        }
+        .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
+            guard let batch = syncCoordinator.latestBatch,
+                  !batch.domains.isDisjoint(with: [.tasks, .members, .backlog, .ideas])
+            else {
+                return
+            }
+
+            store.markLocalSnapshotStale()
+            if selectedTab == .tasks {
+                handleRemoteTaskSyncBatch(batch)
+            } else {
+                store.rehydrateVisibleSnapshotFromCache()
                 store.replayPendingMutationsIfNeeded()
             }
         }
@@ -1059,11 +1077,18 @@ private struct TasksContent: View {
         normalizeAssigneeFilterSelection()
     }
 
+    private func performManualRefresh() async {
+        if userSession.syncMode == .cloud {
+            await syncCoordinator.performInteractiveManualRefresh()
+        }
+        await refreshData()
+    }
+
     private func updateStoreCloudContext() {
-        let ownerId = householdStore.currentHousehold?.ownerId
-        store.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        memberStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
-        backlogStore.setCloudContext(currentUserId: userSession.userId, householdOwnerId: ownerId)
+        let syncContext = householdStore.currentSyncContext(userId: userSession.userId)
+        store.setCloudContext(syncContext)
+        memberStore.setCloudContext(syncContext)
+        backlogStore.setCloudContext(syncContext)
     }
 
     private func markTasksTutorialAsSeenIfNeeded() {
@@ -1161,6 +1186,51 @@ private struct TasksContent: View {
             let delta = await refreshTask.run()
             remoteHighlightedTaskIDs = delta.highlightedIDs
             logRemoteSyncVisibleRefreshLatency(screen: "Tasks", payload: payload)
+            scheduleRemoteSyncAnimationReset()
+            markTasksTutorialAsSeenIfNeeded()
+        }
+    }
+
+    private func handleRemoteTaskSyncBatch(_ batch: HouseholdSyncBatch) {
+        if batch.classification == .bootstrap {
+            cancelRemoteSyncAnimationReset()
+            _ = _Concurrency.Task { @MainActor in
+                store.rehydrateVisibleSnapshotFromCache()
+                memberStore.markLocalSnapshotStale()
+                memberStore.rehydrateVisibleSnapshotFromCache()
+                backlogStore.markLocalSnapshotStale()
+                backlogStore.rehydrateVisibleSnapshotFromCache()
+                normalizeAssigneeFilterSelection()
+                markTasksTutorialAsSeenIfNeeded()
+            }
+            return
+        }
+
+        let changedIDs = batch.taskChangedIDs
+
+        cancelRemoteSyncAnimationReset()
+        isApplyingRemoteSyncAnimation = true
+
+        _ = _Concurrency.Task { @MainActor in
+            let refreshTask = RemoteVisibleRefreshTask(
+                changedIDs: changedIDs,
+                captureVisibleLocations: visibleTaskLocations,
+                rehydratePrimaryStore: {
+                    withAnimation(WowAnimation.spring) {
+                        store.rehydrateVisibleSnapshotFromCache()
+                    }
+                },
+                refreshDependentStores: {
+                    memberStore.markLocalSnapshotStale()
+                    memberStore.rehydrateVisibleSnapshotFromCache()
+                    backlogStore.markLocalSnapshotStale()
+                    backlogStore.rehydrateVisibleSnapshotFromCache()
+                    normalizeAssigneeFilterSelection()
+                }
+            )
+
+            let delta = await refreshTask.run()
+            remoteHighlightedTaskIDs = delta.highlightedIDs
             scheduleRemoteSyncAnimationReset()
             markTasksTutorialAsSeenIfNeeded()
         }

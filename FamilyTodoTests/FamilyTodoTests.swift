@@ -558,9 +558,26 @@ final class AuthenticationServiceDiagnosticsTests: XCTestCase {
 
 @MainActor
 final class CloudKitDiagnosticsStateTests: XCTestCase {
+    private var diagnosticsDefaults: UserDefaults!
+    private var diagnosticsSuiteName: String!
+
     override func setUp() async throws {
         try await super.setUp()
+        diagnosticsSuiteName = "CloudKitDiagnosticsStateTests-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: diagnosticsSuiteName) else {
+            XCTFail("Failed to create diagnostics defaults suite")
+            return
+        }
+        defaults.removePersistentDomain(forName: diagnosticsSuiteName)
+        diagnosticsDefaults = defaults
         CloudKitDiagnosticsState.shared.clear()
+    }
+
+    override func tearDown() async throws {
+        diagnosticsDefaults?.removePersistentDomain(forName: diagnosticsSuiteName)
+        diagnosticsDefaults = nil
+        diagnosticsSuiteName = nil
+        try await super.tearDown()
     }
 
     func testRecordFormatsFullCloudKitPayload() {
@@ -584,12 +601,16 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
     func testClearRemovesDiagnosticsPayload() {
         let error = NSError(domain: "CKErrorDomain", code: 1, userInfo: nil)
         CloudKitDiagnosticsState.shared.record(error: error, operation: "saveHousehold")
+        CloudKitDiagnosticsState.shared.recordProgress(operation: "remotePush type=recordZone")
 
         CloudKitDiagnosticsState.shared.clear()
 
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitError)
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitOperation)
         XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitErrorTimestampISO8601)
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitProgressOperation)
+        XCTAssertNil(CloudKitDiagnosticsState.shared.lastCloudKitProgressTimestampISO8601)
+        XCTAssertTrue(CloudKitDiagnosticsState.shared.entries.isEmpty)
     }
 
     func testRecordKeepsCreateShareStageOperationName() {
@@ -603,6 +624,130 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertTrue(payload?.contains("operation=createShare.final") == true)
         XCTAssertTrue(payload?.contains("Failed to create share") == true)
         XCTAssertEqual(CloudKitDiagnosticsState.shared.lastCloudKitOperation, "createShare.final")
+    }
+
+    func testRecordProgressAppendsDiagnosticsHistoryEntry() {
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "remoteSync stage=followUpPlan direction=participantToOwner"
+        )
+
+        XCTAssertEqual(
+            CloudKitDiagnosticsState.shared.lastCloudKitProgressOperation,
+            "remoteSync stage=followUpPlan direction=participantToOwner"
+        )
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.count, 1)
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.first?.kind, .progress)
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.diagnosticsReport.contains(
+                "remoteSync stage=followUpPlan direction=participantToOwner"
+            )
+        )
+    }
+
+    func testRecordErrorAppendsErrorHistoryEntry() {
+        let error = NSError(domain: "CKErrorDomain", code: 13, userInfo: [
+            NSLocalizedDescriptionKey: "Permission denied.",
+        ])
+
+        CloudKitDiagnosticsState.shared.record(error: error, operation: "createZoneSubscription")
+
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.count, 1)
+        XCTAssertEqual(CloudKitDiagnosticsState.shared.entries.first?.kind, .error)
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.diagnosticsReport.contains(
+                "operation=createZoneSubscription"
+            )
+        )
+    }
+
+    func testDiagnosticsEntriesPersistAcrossFreshStateInitialization() {
+        let firstState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        firstState.recordProgress(operation: "push.received type=recordZone")
+        firstState.record(error: NSError(domain: "CKErrorDomain", code: 7), operation: "saveRecord")
+
+        let restoredState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        XCTAssertEqual(restoredState.entries.count, 2)
+        XCTAssertEqual(restoredState.entries.first?.kind, .progress)
+        XCTAssertEqual(restoredState.entries.last?.kind, .error)
+        XCTAssertTrue(restoredState.hasVisibleDiagnostics)
+        XCTAssertTrue(restoredState.diagnosticsReport.contains("push.received type=recordZone"))
+        XCTAssertTrue(restoredState.diagnosticsReport.contains("operation=saveRecord"))
+    }
+
+    func testClearRemovesPersistedDiagnosticsEntries() {
+        let firstState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        firstState.recordProgress(operation: "snapshot.load.started")
+        XCTAssertEqual(firstState.entries.count, 1)
+
+        firstState.clear()
+
+        let restoredState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        XCTAssertTrue(restoredState.entries.isEmpty)
+        XCTAssertFalse(restoredState.hasVisibleDiagnostics)
+    }
+
+    func testTriggerSummaryTracksSubscriptionAndPushHealth() {
+        let diagnostics = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        diagnostics.recordProgress(
+            operation: "subscription.configure.request source=taskKey role=owner scope=ownerPrivate householdId=household-1"
+        )
+        diagnostics.recordProgress(
+            operation: "subscription.plan householdId=household-1 scope=ownerPrivate databaseIds=private-database-changes zoneId=household-zone-ownerPrivate-household-1"
+        )
+        diagnostics.recordProgress(operation: "push.registration.succeeded tokenLength=64")
+        diagnostics.recordProgress(operation: "push.received type=database")
+        diagnostics.recordProgress(
+            operation: "remotePush type=4 declaredScope=private effectiveScope=private currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=false willInvokeHandler=true role=owner householdId=household-1 appState=active scopeResolution=declared"
+        )
+        diagnostics.recordProgress(
+            operation: "sync.scheduler.started reason=appBecameActive ownerFallback=true intervalNs=15000000000 maxPasses=40"
+        )
+        diagnostics.recordProgress(
+            operation: "sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1"
+        )
+
+        XCTAssertEqual(diagnostics.triggerSummary.syncRole, "owner")
+        XCTAssertEqual(diagnostics.triggerSummary.syncScope, "ownerPrivate")
+        XCTAssertEqual(diagnostics.triggerSummary.subscriptionRequestSource, "taskKey")
+        XCTAssertEqual(diagnostics.triggerSummary.subscriptionConfigurationStatus, "requested")
+        XCTAssertEqual(
+            diagnostics.triggerSummary.subscriptionPlanDatabaseIDs,
+            ["private-database-changes"]
+        )
+        XCTAssertEqual(
+            diagnostics.triggerSummary.subscriptionPlanZoneID,
+            "household-zone-ownerPrivate-household-1"
+        )
+        XCTAssertEqual(diagnostics.triggerSummary.pushRegistrationStatus, "succeeded")
+        XCTAssertEqual(diagnostics.triggerSummary.pushReceivedCount, 1)
+        XCTAssertEqual(diagnostics.triggerSummary.remotePushCount, 1)
+        XCTAssertEqual(diagnostics.triggerSummary.remoteHandlerInvocationCount, 1)
+        XCTAssertEqual(diagnostics.triggerSummary.lastOwnerFallbackReason, "appBecameActive")
+        XCTAssertEqual(diagnostics.triggerSummary.lastFetchResult, "newData")
+    }
+
+    func testTriggerSummaryRestoresFromPersistedEntries() {
+        let firstState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        firstState.recordProgress(
+            operation: "subscription.configure.completed source=taskKey role=participant scope=participantShared householdId=household-2"
+        )
+        firstState.recordProgress(operation: "push.registration.failed description=network_error")
+        firstState.recordProgress(
+            operation: "sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=appBecameActive activeMembers=2 appState=active"
+        )
+        firstState.recordProgress(
+            operation: "sync.pass.completed reason=appBecameActive triggerSource=foregroundRepair fetchResult=noData direction=unknown eventCount=0"
+        )
+
+        let restoredState = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        XCTAssertEqual(restoredState.triggerSummary.syncRole, "participant")
+        XCTAssertEqual(restoredState.triggerSummary.syncScope, "participantShared")
+        XCTAssertEqual(restoredState.triggerSummary.subscriptionConfigurationStatus, "configured")
+        XCTAssertEqual(restoredState.triggerSummary.pushRegistrationStatus, "failed")
+        XCTAssertEqual(restoredState.triggerSummary.lastFetchResult, "noData")
     }
 }
 

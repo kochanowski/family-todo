@@ -288,6 +288,11 @@ enum WorkItemCacheStoreSupport {
         if candidatePriority != currentPriority {
             return candidatePriority > currentPriority
         }
+        let candidateStatusPriority = workItemStatusPriority(rawValue: candidate.statusRaw)
+        let currentStatusPriority = workItemStatusPriority(rawValue: current.statusRaw)
+        if candidateStatusPriority != currentStatusPriority {
+            return candidateStatusPriority > currentStatusPriority
+        }
         if candidate.updatedAt != current.updatedAt {
             return candidate.updatedAt > current.updatedAt
         }
@@ -298,6 +303,11 @@ enum WorkItemCacheStoreSupport {
     }
 
     private static func shouldPreferCloudWorkItem(_ candidate: WorkItem, over current: WorkItem) -> Bool {
+        let candidateStatusPriority = workItemStatusPriority(status: candidate.status)
+        let currentStatusPriority = workItemStatusPriority(status: current.status)
+        if candidateStatusPriority != currentStatusPriority {
+            return candidateStatusPriority > currentStatusPriority
+        }
         if candidate.updatedAt != current.updatedAt {
             return candidate.updatedAt > current.updatedAt
         }
@@ -317,6 +327,23 @@ enum WorkItemCacheStoreSupport {
             0
         default:
             1
+        }
+    }
+
+    private static func workItemStatusPriority(rawValue: String) -> Int {
+        workItemStatusPriority(status: WorkItem.Status(rawValue: rawValue) ?? .idea)
+    }
+
+    private static func workItemStatusPriority(status: WorkItem.Status) -> Int {
+        switch status {
+        case .done:
+            3
+        case .next:
+            2
+        case .backlog:
+            1
+        case .idea:
+            0
         }
     }
 

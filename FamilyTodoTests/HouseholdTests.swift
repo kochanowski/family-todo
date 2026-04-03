@@ -3,6 +3,7 @@ import CloudKit
 import SwiftData
 import XCTest
 
+// swiftlint:disable file_length
 final class HouseholdTests: XCTestCase {
     // MARK: - Initialization Tests
 
@@ -493,6 +494,34 @@ final class HouseholdStoreTests: XCTestCase {
 
         XCTAssertNil(restored)
         XCTAssertNil(localStore.currentHousehold)
+    }
+
+    func testResolveStartupHouseholdLocallyProvisionallyRestoresCachedHouseholdWithoutCachedMembership()
+        throws
+    {
+        let container = try requireContainer()
+        let localStore = HouseholdStore(modelContext: container.mainContext)
+        localStore.setSyncMode(SyncMode.cloud)
+
+        let household = Household(
+            name: "Startup Recovery Home",
+            ownerId: "owner-user"
+        )
+
+        container.mainContext.insert(CachedHousehold(from: household))
+        try container.mainContext.save()
+
+        let restored = localStore.resolveStartupHouseholdLocally(
+            userId: "owner-user",
+            preferredHouseholdId: household.id
+        )
+
+        XCTAssertEqual(restored?.id, household.id)
+        XCTAssertEqual(localStore.currentHousehold?.id, household.id)
+        XCTAssertEqual(
+            try container.mainContext.fetch(FetchDescriptor<CachedHousehold>()).map(\.id),
+            [household.id]
+        )
     }
 
     func testResolveMembershipDisplayNameLocallyReturnsCachedActiveMemberName() throws {
@@ -1135,6 +1164,22 @@ final class CloudKitManagerScopeTests: XCTestCase {
         XCTAssertEqual(
             result.authoritativeRecords.map(\.recordID.recordName),
             [first.recordID.recordName, second.recordID.recordName]
+        )
+    }
+
+    func testOwnerPrivateEmptyTargetZoneResultRequiresFallbackScan() {
+        XCTAssertTrue(
+            CloudKitManager.shouldFallbackToOwnerPrivateExhaustiveScan(
+                targetZoneRecordCount: 0
+            )
+        )
+    }
+
+    func testOwnerPrivateNonEmptyTargetZoneResultSkipsFallbackScan() {
+        XCTAssertFalse(
+            CloudKitManager.shouldFallbackToOwnerPrivateExhaustiveScan(
+                targetZoneRecordCount: 2
+            )
         )
     }
 

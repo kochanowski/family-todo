@@ -193,6 +193,27 @@ final class ShoppingListStoreTests: XCTestCase {
         XCTAssertEqual(merged.first?.sortOrder, 1)
     }
 
+    func testMergeCloudSnapshotDropsExpiredAwaitingCloudEchoWhenCloudNoLongerContainsItem() throws {
+        let localItem = ShoppingItem(
+            householdId: householdId,
+            title: "Tomatoes",
+            isBought: false,
+            updatedAt: Date(timeIntervalSince1970: 1_736_910_000)
+        )
+
+        let cached = CachedShoppingItem(from: localItem)
+        cached.syncStatusRaw = "awaitingCloudEcho"
+        cached.lastSyncedAt = Date(timeIntervalSince1970: 1_736_900_000)
+        modelContainer.mainContext.insert(cached)
+        try modelContainer.mainContext.save()
+
+        let descriptor = FetchDescriptor<CachedShoppingItem>()
+        let snapshot = try store.pendingSyncSnapshot(from: modelContainer.mainContext.fetch(descriptor))
+        let merged = store.mergeCloudSnapshot([], with: snapshot)
+
+        XCTAssertTrue(merged.isEmpty)
+    }
+
     func testUpdateItem_UpsertsCacheWhenRowMissing() async throws {
         let item = ShoppingItem(
             householdId: householdId,

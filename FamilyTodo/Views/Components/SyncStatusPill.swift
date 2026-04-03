@@ -37,8 +37,23 @@ struct SyncStatusPill: View {
     }
 }
 
+struct SyncStatusIcon: View {
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    var body: some View {
+        Image(systemName: "arrow.triangle.2.circlepath")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(themeStore.accentTabColor)
+            .frame(width: 18, height: 18)
+            .accessibilityLabel("Syncing")
+    }
+}
+
 #Preview {
-    SyncStatusPill(text: "Shopping updated")
-        .environmentObject(ThemeStore())
-        .padding()
+    VStack(spacing: 16) {
+        SyncStatusPill(text: "Shopping updated")
+        SyncStatusIcon()
+    }
+    .environmentObject(ThemeStore())
+    .padding()
 }

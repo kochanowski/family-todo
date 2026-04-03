@@ -26,10 +26,25 @@ struct InlineRemoteSyncFeedback: Identifiable, Equatable {
     let text: String
 }
 
+struct InlineRemoteSyncIndicator: Identifiable, Equatable {
+    let id = UUID()
+}
+
+struct CloudKitSubscriptionPlan: Equatable {
+    let databaseSubscriptionIDs: [String]
+    let zoneSubscriptionID: String?
+
+    var requiresOwnerZoneSubscription: Bool {
+        zoneSubscriptionID != nil
+    }
+}
+
 /// Manages CloudKit subscriptions for real-time change notifications
 @MainActor
 final class CloudKitSubscriptionManager: ObservableObject {
     static let shared = CloudKitSubscriptionManager()
+    static let sharedDatabaseSubscriptionID = "shared-database-changes"
+    static let privateDatabaseSubscriptionID = "private-database-changes"
 
     // MARK: - Published State
 
@@ -39,6 +54,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     @Published var newItemsCount = 0
     @Published private(set) var activeTab: AppTab = .shopping
     @Published private(set) var shoppingInlineFeedback: InlineRemoteSyncFeedback?
+    @Published private(set) var shoppingInlineIndicator: InlineRemoteSyncIndicator?
     @Published private(set) var tasksInlineFeedback: InlineRemoteSyncFeedback?
 
     // MARK: - Private State
@@ -51,7 +67,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private var configuredHouseholdId: UUID?
     private var configuredScope: CloudKitManager.HouseholdDatabaseScope?
     private var recentLocalMutationByRecordName: [String: Date] = [:]
-    private var lastLocalMutationAt: Date?
     private var shoppingInlineDismissTask: _Concurrency.Task<Void, Never>?
     private var tasksInlineDismissTask: _Concurrency.Task<Void, Never>?
 
@@ -68,7 +83,43 @@ final class CloudKitSubscriptionManager: ObservableObject {
         scope == .ownerPrivate
     }
 
+    static func makeSubscriptionPlan(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope?
+    ) -> CloudKitSubscriptionPlan {
+        let zoneSubscriptionID: String?
+        if let scope, shouldCreateZoneSubscription(for: scope) {
+            let scopeName = scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
+            zoneSubscriptionID = "household-zone-\(scopeName)-\(householdId.uuidString)"
+        } else {
+            zoneSubscriptionID = nil
+        }
+
+        let databaseSubscriptionIDs: [String] = switch scope {
+        case .participantShared:
+            [sharedDatabaseSubscriptionID]
+        case .ownerPrivate, nil:
+            [privateDatabaseSubscriptionID]
+        }
+
+        return CloudKitSubscriptionPlan(
+            databaseSubscriptionIDs: databaseSubscriptionIDs,
+            zoneSubscriptionID: zoneSubscriptionID
+        )
+    }
+
     // MARK: - Setup
+
+    func configure(
+        syncContext: HouseholdSyncContext?
+    ) {
+        guard let syncContext else { return }
+        configure(
+            userId: syncContext.currentUserId,
+            householdId: syncContext.householdId,
+            scope: syncContext.scope
+        )
+    }
 
     func configure(
         userId: String,
@@ -85,6 +136,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         configuredHouseholdId = householdId
         configuredScope = scope
         resetTransientPresentationState()
+        recordSubscriptionProgress(
+            "subscription.configure userId=\(userId) householdId=\(householdId.uuidString) scope=\(scopeLabel(scope))"
+        )
 
         _Concurrency.Task {
             await setupSubscriptions(householdId: householdId, scope: scope)
@@ -104,15 +158,28 @@ final class CloudKitSubscriptionManager: ObservableObject {
         let container = await cloudKit.getContainer()
         let sharedDatabase = container.sharedCloudDatabase
         let privateDatabase = container.privateCloudDatabase
+        let subscriptionPlan = Self.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: scope
+        )
 
-        await createDatabaseSubscription(
-            subscriptionId: "shared-database-changes",
-            database: sharedDatabase
+        recordSubscriptionProgress(
+            "subscription.plan householdId=\(householdId.uuidString) scope=\(scopeLabel(scope)) databaseIds=\(subscriptionPlan.databaseSubscriptionIDs.joined(separator: ",")) zoneId=\(subscriptionPlan.zoneSubscriptionID ?? "none")"
         )
-        await createDatabaseSubscription(
-            subscriptionId: "private-database-changes",
-            database: privateDatabase
-        )
+
+        for subscriptionId in subscriptionPlan.databaseSubscriptionIDs {
+            let database: CKDatabase = switch subscriptionId {
+            case Self.privateDatabaseSubscriptionID:
+                privateDatabase
+            default:
+                sharedDatabase
+            }
+
+            await createDatabaseSubscription(
+                subscriptionId: subscriptionId,
+                database: database
+            )
+        }
 
         await syncHouseholdZoneSubscriptions(
             householdId: householdId,
@@ -129,6 +196,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             let existingSubscription = try await database.subscription(for: subscriptionId)
             databaseSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.database.reused id=\(subscriptionId) type=\(type(of: existingSubscription))"
+            )
             print(
                 "[CloudKitSubscription] Reusing database subscription id=\(subscriptionId) type=\(type(of: existingSubscription))"
             )
@@ -146,6 +216,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
             _ = try await database.save(subscription)
             let confirmedSubscription = try await database.subscription(for: subscriptionId)
             databaseSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.database.created id=\(subscriptionId) type=\(type(of: confirmedSubscription))"
+            )
             print(
                 "✅ Created database subscription id=\(subscriptionId) confirmedType=\(type(of: confirmedSubscription))"
             )
@@ -163,7 +236,11 @@ final class CloudKitSubscriptionManager: ObservableObject {
         sharedDatabase: CKDatabase,
         privateDatabase: CKDatabase
     ) async {
-        let requiredSubscriptionIds = Set(zoneSubscriptionIDs(for: householdId, scope: scope))
+        let subscriptionPlan = Self.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: scope
+        )
+        let requiredSubscriptionIds = Set(subscriptionPlan.zoneSubscriptionID.map { [$0] } ?? [])
         let obsoleteSubscriptionIds = householdZoneSubscriptionIds.subtracting(requiredSubscriptionIds)
 
         for subscriptionId in obsoleteSubscriptionIds {
@@ -210,6 +287,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
         do {
             let existingSubscription = try await database.subscription(for: subscriptionId)
             householdZoneSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.zone.reused id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: existingSubscription))"
+            )
             print(
                 "[CloudKitSubscription] Reusing zone subscription id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: existingSubscription))"
             )
@@ -232,6 +312,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
             _ = try await database.save(subscription)
             let confirmedSubscription = try await database.subscription(for: subscriptionId)
             householdZoneSubscriptionIds.insert(subscriptionId)
+            recordSubscriptionProgress(
+                "subscription.zone.created id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) type=\(type(of: confirmedSubscription))"
+            )
             print(
                 "✅ Created zone subscription id=\(subscriptionId) zone=\(zoneID.zoneName)|\(zoneID.ownerName) confirmedType=\(type(of: confirmedSubscription))"
             )
@@ -250,6 +333,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         for database in databases {
             do {
                 try await database.deleteSubscription(withID: subscriptionId)
+                recordSubscriptionProgress("subscription.deleted id=\(subscriptionId)")
                 print("🗑️ Removed subscription: \(subscriptionId)")
             } catch let ckError as CKError where ckError.code == .unknownItem {
                 continue
@@ -274,14 +358,20 @@ final class CloudKitSubscriptionManager: ObservableObject {
         for householdId: UUID,
         scope: CloudKitManager.HouseholdDatabaseScope?
     ) -> [String] {
-        guard let scope, Self.shouldCreateZoneSubscription(for: scope) else { return [] }
-        return [zoneSubscriptionID(householdId: householdId, scope: scope)]
+        guard let zoneSubscriptionID = Self.makeSubscriptionPlan(
+            householdId: householdId,
+            scope: scope
+        ).zoneSubscriptionID else {
+            return []
+        }
+        return [zoneSubscriptionID]
     }
 
     // MARK: - Push Notification Registration
 
     private func registerForRemoteNotifications() async {
         #if !CI
+            recordSubscriptionProgress("push.registration.requested")
             await MainActor.run {
                 UIApplication.shared.registerForRemoteNotifications()
             }
@@ -297,13 +387,16 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
 
         if let dbNotification = notification as? CKDatabaseNotification {
+            recordSubscriptionProgress("push.received type=database")
             print("[CloudKitSubscription] Received database notification.")
             handleDatabaseNotification(dbNotification)
         } else if let zoneNotification = notification as? CKRecordZoneNotification {
+            recordSubscriptionProgress("push.received type=recordZone")
             print("[CloudKitSubscription] Received record-zone notification.")
             handleRecordZoneNotification(zoneNotification)
         } else if let queryNotification = notification as? CKQueryNotification {
             let recordType = (queryNotification.recordFields?["recordType"] as? String) ?? "unknown"
+            recordSubscriptionProgress("push.received type=query recordType=\(recordType)")
             print("[CloudKitSubscription] Received query notification for recordType=\(recordType).")
             handleQueryNotification(queryNotification)
         } else {
@@ -313,7 +406,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func registerLocalMutation(recordName: String?) {
         let now = Date()
-        lastLocalMutationAt = now
         if let recordName {
             recentLocalMutationByRecordName[recordName] = now
         }
@@ -324,9 +416,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
         recentLocalMutationByRecordName = recentLocalMutationByRecordName.filter { _, timestamp in
             now.timeIntervalSince(timestamp) <= selfNoiseWindow
         }
-        if let lastLocalMutationAt, now.timeIntervalSince(lastLocalMutationAt) > selfNoiseWindow {
-            self.lastLocalMutationAt = nil
-        }
     }
 
     private func isLikelySelfNoise(recordName: String?) -> Bool {
@@ -336,12 +425,6 @@ final class CloudKitSubscriptionManager: ObservableObject {
         if let recordName,
            let timestamp = recentLocalMutationByRecordName[recordName],
            now.timeIntervalSince(timestamp) <= selfNoiseWindow
-        {
-            return true
-        }
-
-        if let lastLocalMutationAt,
-           now.timeIntervalSince(lastLocalMutationAt) <= selfNoiseWindow
         {
             return true
         }
@@ -400,9 +483,10 @@ final class CloudKitSubscriptionManager: ObservableObject {
 
     func publishRemoteSyncPresentation(
         _ presentation: RemoteSyncPresentation,
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) {
-        guard applicationState == .active else { return }
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        guard resolvedApplicationState == .active else { return }
 
         switch presentation.domain {
         case .shopping:
@@ -412,16 +496,107 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
+    func consumeSyncBatch(
+        _ batch: HouseholdSyncBatch,
+        applicationState: UIApplication.State? = nil
+    ) {
+        guard batch.classification != .bootstrap else { return }
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        for event in batch.events {
+            switch event.kind {
+            case let .shoppingAdded(ids, titles):
+                guard let additionPayload = filteredShoppingAdditionPayload(
+                    ids: ids,
+                    titles: titles
+                ) else {
+                    continue
+                }
+                publishRemoteSyncPresentation(
+                    RemoteSyncPresentation(
+                        domain: .shopping,
+                        kind: .additions,
+                        changeCount: additionPayload.ids.count,
+                        titles: additionPayload.titles
+                    ),
+                    applicationState: resolvedApplicationState
+                )
+            case let .shoppingUpdated(itemIDs, bundleIDs):
+                guard !shouldSuppressShoppingMutationPresentation(
+                    itemIDs: itemIDs,
+                    bundleIDs: bundleIDs
+                ) else {
+                    continue
+                }
+                let changeCount = itemIDs.count + bundleIDs.count
+                guard changeCount > 0 else { continue }
+                publishRemoteSyncPresentation(
+                    RemoteSyncPresentation(
+                        domain: .shopping,
+                        kind: .updates,
+                        changeCount: changeCount,
+                        titles: []
+                    ),
+                    applicationState: resolvedApplicationState
+                )
+            case let .shoppingRemoved(itemIDs, bundleIDs):
+                guard !shouldSuppressShoppingMutationPresentation(
+                    itemIDs: itemIDs,
+                    bundleIDs: bundleIDs
+                ) else {
+                    continue
+                }
+                let changeCount = itemIDs.count + bundleIDs.count
+                guard changeCount > 0 else { continue }
+                publishRemoteSyncPresentation(
+                    RemoteSyncPresentation(
+                        domain: .shopping,
+                        kind: .updates,
+                        changeCount: changeCount,
+                        titles: []
+                    ),
+                    applicationState: resolvedApplicationState
+                )
+            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+                let updateCount = changedIDs.count + removedIDs.count
+                if !addedIDs.isEmpty {
+                    publishRemoteSyncPresentation(
+                        RemoteSyncPresentation(
+                            domain: .tasks,
+                            kind: .additions,
+                            changeCount: addedIDs.count,
+                            titles: []
+                        ),
+                        applicationState: resolvedApplicationState
+                    )
+                } else if updateCount > 0 {
+                    publishRemoteSyncPresentation(
+                        RemoteSyncPresentation(
+                            domain: .tasks,
+                            kind: .updates,
+                            changeCount: updateCount,
+                            titles: []
+                        ),
+                        applicationState: resolvedApplicationState
+                    )
+                }
+            default:
+                continue
+            }
+        }
+    }
+
     func shouldSuppressSharedShoppingAlert(
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) -> Bool {
-        applicationState == .active && activeTab == .shopping
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        return resolvedApplicationState == .active && activeTab == .shopping
     }
 
     func shouldSuppressHouseholdCelebrationAlert(
-        applicationState: UIApplication.State = UIApplication.shared.applicationState
+        applicationState: UIApplication.State? = nil
     ) -> Bool {
-        applicationState == .active && activeTab == .tasks
+        let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+        return resolvedApplicationState == .active && activeTab == .tasks
     }
 
     func dismissBanner() {
@@ -438,6 +613,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         shoppingInlineDismissTask?.cancel()
         shoppingInlineDismissTask = nil
         shoppingInlineFeedback = nil
+        shoppingInlineIndicator = nil
         tasksInlineDismissTask?.cancel()
         tasksInlineDismissTask = nil
         tasksInlineFeedback = nil
@@ -448,10 +624,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         case .additions:
             guard presentation.changeCount > 0 else { return }
             if activeTab == .shopping {
-                publishInlineFeedback(
-                    text: shoppingInlineText(for: presentation),
-                    domain: .shopping
-                )
+                publishShoppingInlineIndicator()
                 dismissBanner()
             } else {
                 let shouldAnimateBanner = !showNewItemsBanner
@@ -465,10 +638,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
             }
         case .updates:
             guard activeTab == .shopping else { return }
-            publishInlineFeedback(
-                text: shoppingInlineText(for: presentation),
-                domain: .shopping
-            )
+            publishShoppingInlineIndicator()
         }
     }
 
@@ -502,25 +672,40 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
+    private func publishShoppingInlineIndicator() {
+        let indicator = InlineRemoteSyncIndicator()
+        shoppingInlineDismissTask?.cancel()
+        withAnimation(WowAnimation.spring) {
+            shoppingInlineIndicator = indicator
+            shoppingInlineFeedback = nil
+        }
+        shoppingInlineDismissTask = scheduleInlineDismiss(
+            for: .shopping,
+            feedbackId: indicator.id
+        )
+    }
+
     private func scheduleInlineDismiss(
         for domain: RemoteSyncPresentationDomain,
         feedbackId: UUID
     ) -> _Concurrency.Task<Void, Never> {
         _Concurrency.Task { @MainActor [weak self] in
+            guard let self else { return }
             try? await _Concurrency.Task.sleep(nanoseconds: inlineFeedbackDurationNanoseconds)
-            guard !_Concurrency.Task.isCancelled, let self else { return }
+            guard !_Concurrency.Task.isCancelled else { return }
 
             switch domain {
             case .shopping:
-                guard shoppingInlineFeedback?.id == feedbackId else { return }
+                guard shoppingInlineIndicator?.id == feedbackId else { return }
                 withAnimation(WowAnimation.easeOut) {
-                    shoppingInlineFeedback = nil
+                    self.shoppingInlineIndicator = nil
+                    self.shoppingInlineFeedback = nil
                 }
                 shoppingInlineDismissTask = nil
             case .tasks:
                 guard tasksInlineFeedback?.id == feedbackId else { return }
                 withAnimation(WowAnimation.easeOut) {
-                    tasksInlineFeedback = nil
+                    self.tasksInlineFeedback = nil
                 }
                 tasksInlineDismissTask = nil
             }
@@ -549,9 +734,42 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
+    func filteredShoppingAdditionPayload(
+        ids: Set<UUID>,
+        titles: [String]
+    ) -> (ids: Set<UUID>, titles: [String])? {
+        guard !ids.isEmpty else { return nil }
+        let nonLocalIDs = ids.filter { !isLikelySelfNoise(recordName: $0.uuidString) }
+        guard !nonLocalIDs.isEmpty else { return nil }
+        return (Set(nonLocalIDs), titles)
+    }
+
+    func shouldSuppressShoppingMutationPresentation(
+        itemIDs: Set<UUID>,
+        bundleIDs: Set<UUID>
+    ) -> Bool {
+        let recordNames = itemIDs.map(\.uuidString) + bundleIDs.map(\.uuidString)
+        guard !recordNames.isEmpty else { return true }
+        return recordNames.allSatisfy { isLikelySelfNoise(recordName: $0) }
+    }
+
     private func reportSubscriptionFailure(_ error: Error, context: String) {
         print("[CloudKitSubscription] \(context) failed: \(error.localizedDescription)")
         CloudKitDiagnosticsState.shared.record(error: error, operation: context)
+    }
+
+    private func recordSubscriptionProgress(_ operation: String) {
+        CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+    }
+
+    private func scopeLabel(_ scope: CloudKitManager.HouseholdDatabaseScope?) -> String {
+        guard let scope else { return "nil" }
+        return switch scope {
+        case .ownerPrivate:
+            "ownerPrivate"
+        case .participantShared:
+            "participantShared"
+        }
     }
 
     // MARK: - Cleanup

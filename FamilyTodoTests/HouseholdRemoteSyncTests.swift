@@ -4,6 +4,7 @@ import SwiftData
 import UIKit
 import XCTest
 
+// swiftlint:disable file_length type_body_length
 @MainActor
 final class HouseholdRemoteSyncTests: XCTestCase {
     private var modelContainer: ModelContainer!
@@ -30,6 +31,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
     private func makeStore(
         cloud: FakeHouseholdCloud,
+        remoteSyncDiagnosticsRecorder: @escaping @MainActor (HouseholdRemoteSyncDiagnostic) -> Void = { _ in },
         joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration = .default
     ) -> HouseholdStore {
         HouseholdStore(
@@ -37,6 +39,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             cloudKit: cloud,
             userDefaults: defaults,
             recoverySuppressionDuration: 300,
+            remoteSyncDiagnosticsRecorder: remoteSyncDiagnosticsRecorder,
             joinHydrationConfiguration: joinHydrationConfiguration
         )
     }
@@ -44,6 +47,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
     private func makeStore(
         cloud: FakeHouseholdCloud,
         joinedHouseholdPrewarmOverride: @escaping (Household, String, ModelContext?) async throws -> Void,
+        remoteSyncDiagnosticsRecorder: @escaping @MainActor (HouseholdRemoteSyncDiagnostic) -> Void = { _ in },
         joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration = .default
     ) -> HouseholdStore {
         HouseholdStore(
@@ -52,6 +56,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             joinedHouseholdPrewarmOverride: joinedHouseholdPrewarmOverride,
             userDefaults: defaults,
             recoverySuppressionDuration: 300,
+            remoteSyncDiagnosticsRecorder: remoteSyncDiagnosticsRecorder,
             joinHydrationConfiguration: joinHydrationConfiguration
         )
     }
@@ -97,6 +102,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
     }
 
     func testHandleRemoteCloudChangeRefreshesSharedCachesAndReturnsNewData() async throws {
+        CloudKitDiagnosticsState.shared.clear()
         let userId = "joined-user"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
         let membership = TestCacheFixtures.member(
@@ -171,7 +177,10 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
         let operations = await cloud.operationEventsSnapshot()
         XCTAssertTrue(operations.contains {
-            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
             $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
@@ -179,6 +188,97 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertTrue(operations.contains {
             $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("snapshot.cacheApplied householdId=\(household.id.uuidString)")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("snapshot.uiPublished source=remotePush")
+            }
+        )
+    }
+
+    func testHandleRemoteCloudChangeUsesSharedDeltaRefreshForShoppingOnlyChanges() async throws {
+        CloudKitDiagnosticsState.shared.clear()
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            shoppingItems: [shoppingItem],
+            acceptedSharedHouseholdIDs: [household.id],
+            participantSharedDeltasByHouseholdId: [
+                household.id: HouseholdCloudDelta(
+                    householdId: household.id,
+                    scope: .participantShared,
+                    changedDomains: [.shoppingItems]
+                ),
+            ]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let shoppingExpectation = expectation(
+            forNotification: .shoppingListDataDidChange,
+            object: nil,
+            handler: nil
+        )
+
+        let result = await store.handleRemoteCloudChange(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date(timeIntervalSince1970: 200)
+            )
+        )
+
+        await fulfillment(of: [shoppingExpectation], timeout: 1.0)
+
+        XCTAssertEqual(result, .newData)
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchHouseholdDelta" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("delta.impact scope=participantShared householdId=\(household.id.uuidString) domains=shoppingItems")
+                    && $0.operation.contains("unknownRecordTypes=")
+                    && $0.operation.contains("fallbackRequired=false")
+            }
+        )
     }
 
     func testHandleRemoteCloudChangeReturnsNoDataWhenCachesAreAlreadyCurrent() async throws {
@@ -226,6 +326,167 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
         XCTAssertEqual(firstResult, .newData)
         XCTAssertEqual(secondResult, .noData)
+    }
+
+    func testRemotePushSharedFollowUpUsesDeltaRefreshInsteadOfHydrationSnapshot() async throws {
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        var diagnostics: [HouseholdRemoteSyncDiagnostic] = []
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            shoppingItems: [shoppingItem],
+            acceptedSharedHouseholdIDs: [household.id],
+            participantSharedDeltasByHouseholdId: [
+                household.id: HouseholdCloudDelta(
+                    householdId: household.id,
+                    scope: .participantShared,
+                    changedDomains: [.shoppingItems]
+                ),
+            ]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            remoteSyncDiagnosticsRecorder: { diagnostics.append($0) }
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .sharedDatabase),
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertGreaterThanOrEqual(
+            operations.filter {
+                $0.name == "fetchHouseholdDelta" &&
+                    $0.scope == .participantShared &&
+                    $0.householdId == household.id
+            }.count,
+            2
+        )
+        XCTAssertGreaterThanOrEqual(
+            operations.filter {
+                $0.name == "fetchShoppingItems" &&
+                    $0.scope == .participantShared &&
+                    $0.householdId == household.id
+            }.count,
+            2
+        )
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+
+        let followUpCompletion = try XCTUnwrap(diagnostics.first {
+            $0.stage == .followUpPassCompleted
+        })
+        XCTAssertEqual(followUpCompletion.direction, .ownerToParticipant)
+        XCTAssertEqual(followUpCompletion.note, "refreshPath=delta")
+    }
+
+    func testRunRemoteSyncPassUsesOwnerPrivateDeltaRefreshForForegroundRepairShoppingChanges() async throws {
+        CloudKitDiagnosticsState.shared.clear()
+        let userId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: userId)
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .owner
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Bread"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [membership],
+            shoppingItems: [shoppingItem],
+            ownerZoneIDsByHouseholdId: [
+                household.id: CKRecordZone.ID(
+                    zoneName: "HouseholdZone-\(household.id.uuidString)",
+                    ownerName: CKCurrentUserDefaultName
+                ),
+            ],
+            ownerPrivateDeltasByHouseholdId: [
+                household.id: HouseholdCloudDelta(
+                    householdId: household.id,
+                    scope: .ownerPrivate,
+                    changedDomains: [.shoppingItems]
+                ),
+            ]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .foregroundRepairWindow
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchHouseholdDelta" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchShoppingItems" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchBacklogItems" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("delta.impact scope=ownerPrivate householdId=\(household.id.uuidString) domains=shoppingItems")
+                    && $0.operation.contains("unknownRecordTypes=")
+                    && $0.operation.contains("fallbackRequired=false")
+            }
+        )
     }
 
     func testHandleRemoteCloudChangeReturnsNewDataWhenHouseholdMetadataChanges() async throws {
@@ -342,7 +603,10 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             $0.name == "fetchMembers" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
-            $0.name == "fetchUnifiedWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
         })
         XCTAssertTrue(operations.contains {
             $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
@@ -585,7 +849,7 @@ final class HouseholdRemoteSyncTests: XCTestCase {
             userId: ownerUserId,
             preferredHouseholdId: household.id,
             context: RemoteCloudChangeContext(
-                databaseScope: .shared,
+                databaseScope: .private,
                 notificationType: .database,
                 receivedAt: Date()
             )
@@ -596,264 +860,534 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
         XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
     }
-}
 
-final class CloudKitSubscriptionManagerTests: XCTestCase {
-    @MainActor
-    private func makeManager() -> CloudKitSubscriptionManager {
-        let manager = CloudKitSubscriptionManager()
-        manager.resetTransientPresentationState()
-        return manager
-    }
-
-    @MainActor
-    func testParticipantSharedSkipsZoneSubscriptions() {
-        XCTAssertFalse(
-            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
-        )
-        XCTAssertTrue(
-            CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .ownerPrivate)
-        )
-    }
-
-    func testCloudKitSchemaKeepsHouseholdMemberRecordIndexesAndInviteTokenRoles() throws {
-        let schemaURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("cloudkit")
-            .appendingPathComponent("schema")
-            .appendingPathComponent("housepulse-schema.json")
-        let data = try Data(contentsOf: schemaURL)
-        let object = try JSONSerialization.jsonObject(with: data)
-        let schema = try XCTUnwrap(object as? [String: Any])
-        let recordTypes = try XCTUnwrap(schema["recordTypes"] as? [[String: Any]])
-
-        let household = try XCTUnwrap(recordTypes.first { $0["name"] as? String == "Household" })
-        let householdIndexes = try XCTUnwrap(household["indexes"] as? [String: Any])
-        XCTAssertTrue(((householdIndexes["query"] as? [String]) ?? []).contains("___recordID"))
-
-        let member = try XCTUnwrap(recordTypes.first { $0["name"] as? String == "Member" })
-        let memberIndexes = try XCTUnwrap(member["indexes"] as? [String: Any])
-        XCTAssertTrue(((memberIndexes["query"] as? [String]) ?? []).contains("___recordID"))
-
-        let securityRoles = try XCTUnwrap(schema["securityRoles"] as? [[String: Any]])
-        let inviteRolePermissions = securityRoles.flatMap { role -> [String] in
-            let roleName = role["name"] as? String ?? ""
-            let recordPermissions = (role["recordTypePermissions"] as? [[String: Any]]) ?? []
-            return recordPermissions.compactMap { permission -> [String]? in
-                guard permission["recordType"] as? String == "InviteToken" else { return nil }
-                let actions = [
-                    (permission["create"] as? Bool == true) ? "create" : nil,
-                    (permission["read"] as? Bool == true) ? "read" : nil,
-                    (permission["write"] as? Bool == true) ? "write" : nil,
-                ].compactMap { $0 }
-                return actions.map { "\(roleName):\($0)" }
-            }.flatMap { $0 }
+    func testOwnerRecordZoneRemoteChangeWithoutDeclaredScopeStillKeepsHydratingUntilDelayedTaskArrives() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
         }
 
-        XCTAssertTrue(inviteRolePermissions.contains("_world:read"))
-        XCTAssertTrue(inviteRolePermissions.contains("_icloud:create"))
-        XCTAssertTrue(inviteRolePermissions.contains("_icloud:read"))
-        XCTAssertTrue(inviteRolePermissions.contains("_creator:read"))
-        XCTAssertTrue(inviteRolePermissions.contains("_creator:write"))
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let delayedTask = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash"
+        )
+        let immediateShoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let hydrationPassCount = Counter()
+        let joinHydrationConfiguration = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 5_000_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [0]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+
+                if pass == 1 {
+                    context.insert(CachedShoppingItem(from: immediateShoppingItem))
+                } else {
+                    context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(task: delayedTask)))
+                }
+                try context.save()
+            },
+            joinHydrationConfiguration: joinHydrationConfiguration
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .unknown),
+            context: RemoteCloudChangeContext(
+                databaseScope: nil,
+                notificationType: .recordZone,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+        XCTAssertEqual(result.diagnostics.direction, .participantToOwner)
+        XCTAssertGreaterThanOrEqual(hydrationPassCount.value, 2)
+        XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
+        XCTAssertEqual(try cachedWorkItems(for: household.id).count, 1)
     }
 
-    @MainActor
-    func testShoppingAdditionOnShoppingTabPublishesInlineFeedbackWithoutBanner() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.shopping)
+    func testOwnerRecordZoneRemoteChangeWithoutDeclaredScopeHydratesShoppingTasksIdeasAndCategories() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
 
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .additions,
-                changeCount: 3,
-                titles: ["Milk", "Bread", "Eggs"]
-            ),
-            applicationState: .active
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let delayedCategory = TestCacheFixtures.category(
+            householdId: household.id,
+            title: "Planning"
+        )
+        let delayedTask = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash",
+            backlogCategoryId: delayedCategory.id
+        )
+        let delayedIdea = TestCacheFixtures.idea(
+            categoryId: delayedCategory.id,
+            householdId: household.id,
+            title: "Plan spring cleaning"
+        )
+        let immediateShoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
         )
 
-        XCTAssertEqual(manager.shoppingInlineFeedback?.text, "3 items added")
-        XCTAssertFalse(manager.showNewItemsBanner)
-        XCTAssertEqual(manager.newItemsCount, 0)
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let hydrationPassCount = Counter()
+        let joinHydrationConfiguration = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 5_000_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [0]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+
+                if pass == 1 {
+                    context.insert(CachedShoppingItem(from: immediateShoppingItem))
+                } else {
+                    context.insert(CachedBacklogCategory(from: delayedCategory))
+                    context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(task: delayedTask)))
+                    context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(idea: delayedIdea)))
+                }
+                try context.save()
+            },
+            joinHydrationConfiguration: joinHydrationConfiguration
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .unknown),
+            context: RemoteCloudChangeContext(
+                databaseScope: nil,
+                notificationType: .recordZone,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+        XCTAssertEqual(result.diagnostics.direction, .participantToOwner)
+        XCTAssertGreaterThanOrEqual(hydrationPassCount.value, 2)
+        XCTAssertEqual(result.diagnostics.changedDomains, Set([.shopping, .tasks, .ideas, .backlog]))
+        XCTAssertEqual(try cachedShoppingItems(for: household.id).count, 1)
+        XCTAssertEqual(try cachedWorkItems(for: household.id).count, 2)
+        XCTAssertEqual(try cachedBacklogCategories(for: household.id).count, 1)
     }
 
-    @MainActor
-    func testShoppingAdditionOffShoppingTabShowsBannerWithoutInlineFeedback() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.tasks)
+    func testOwnerRecordZoneRemoteChangeRecordsFollowUpDiagnosticsForMissingScopePush() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
 
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .additions,
-                changeCount: 2,
-                titles: ["Milk", "Bread"]
-            ),
-            applicationState: .active
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let delayedTask = TestCacheFixtures.task(
+            householdId: household.id,
+            title: "Take out trash"
+        )
+        let immediateShoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        var diagnostics: [HouseholdRemoteSyncDiagnostic] = []
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let hydrationPassCount = Counter()
+        let joinHydrationConfiguration = HouseholdStore.JoinHydrationConfiguration(
+            initialHydrationBudgetNanoseconds: 5_000_000_000,
+            initialRetryDelaysNanoseconds: [0],
+            backgroundRetryDelaysNanoseconds: [],
+            pendingJoinGraceDuration: 30,
+            ownerSharedFollowUpRetryDelaysNanoseconds: [0]
         )
 
-        XCTAssertTrue(manager.showNewItemsBanner)
-        XCTAssertEqual(manager.newItemsCount, 2)
-        XCTAssertNil(manager.shoppingInlineFeedback)
-        XCTAssertNil(manager.tasksInlineFeedback)
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+
+                if pass == 1 {
+                    context.insert(CachedShoppingItem(from: immediateShoppingItem))
+                } else {
+                    context.insert(TestCacheFixtures.cachedWorkItem(from: WorkItem(task: delayedTask)))
+                }
+                try context.save()
+            },
+            remoteSyncDiagnosticsRecorder: { diagnostics.append($0) },
+            joinHydrationConfiguration: joinHydrationConfiguration
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        _ = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .unknown),
+            context: RemoteCloudChangeContext(
+                databaseScope: nil,
+                notificationType: .recordZone,
+                receivedAt: Date()
+            )
+        )
+
+        let followUpPlan = try XCTUnwrap(diagnostics.first {
+            $0.stage == .followUpPlan
+        })
+        XCTAssertEqual(followUpPlan.householdId, household.id)
+        XCTAssertEqual(followUpPlan.userId, ownerUserId)
+        XCTAssertEqual(followUpPlan.notificationType, .recordZone)
+        XCTAssertNil(followUpPlan.declaredDatabaseScope)
+        XCTAssertEqual(followUpPlan.effectiveDatabaseScope, .private)
+        XCTAssertEqual(followUpPlan.direction, .participantToOwner)
+        XCTAssertEqual(followUpPlan.retryDelaysNanoseconds, [0])
+
+        XCTAssertTrue(diagnostics.contains {
+            $0.stage == .followUpPassStarted && $0.direction == .participantToOwner
+        })
+        XCTAssertTrue(diagnostics.contains {
+            $0.stage == .followUpPassCompleted && $0.didCaptureAdditionalChanges == true
+        })
     }
 
-    @MainActor
-    func testTaskUpdateOnTasksTabPublishesInlineFeedbackWithoutBanner() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.tasks)
+    func testOwnerSharedDatabaseRemoteChangeStillUsesParticipantToOwnerFollowUp() async throws {
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        var diagnostics: [HouseholdRemoteSyncDiagnostic] = []
 
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .tasks,
-                kind: .updates,
-                changeCount: 1,
-                titles: []
-            ),
-            applicationState: .active
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                context.insert(CachedShoppingItem(from: shoppingItem))
+                try context.save()
+            },
+            remoteSyncDiagnosticsRecorder: { diagnostics.append($0) },
+            joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration(
+                initialHydrationBudgetNanoseconds: 5_000_000_000,
+                initialRetryDelaysNanoseconds: [0],
+                backgroundRetryDelaysNanoseconds: [],
+                pendingJoinGraceDuration: 30,
+                ownerSharedFollowUpRetryDelaysNanoseconds: [0]
+            )
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .sharedDatabase),
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date()
+            )
         )
 
-        XCTAssertEqual(manager.tasksInlineFeedback?.text, "Tasks updated")
-        XCTAssertFalse(manager.showNewItemsBanner)
-        XCTAssertNil(manager.shoppingInlineFeedback)
+        XCTAssertEqual(result.fetchResult, .newData)
+        XCTAssertEqual(result.diagnostics.direction, .participantToOwner)
+
+        let followUpPlan = try XCTUnwrap(diagnostics.first { $0.stage == .followUpPlan })
+        XCTAssertEqual(followUpPlan.effectiveDatabaseScope, .shared)
+        XCTAssertEqual(followUpPlan.direction, .participantToOwner)
+        XCTAssertEqual(followUpPlan.retryDelaysNanoseconds, [0])
     }
 
-    @MainActor
-    func testTaskAdditionOffTasksTabDoesNotShowGlobalBannerOrInlineFeedback() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.shopping)
+    func testRemoteVisibleContentFollowUpStopsAfterFirstNoChangePass() async throws {
+        final class Counter {
+            private(set) var value = 0
 
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .tasks,
-                kind: .additions,
-                changeCount: 1,
-                titles: ["Take out trash"]
-            ),
-            applicationState: .active
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
+
+        let ownerUserId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: ownerUserId)
+        let ownerMember = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: ownerUserId,
+            displayName: "Wojtek",
+            role: .owner
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        let hydrationPassCount = Counter()
+        var diagnostics: [HouseholdRemoteSyncDiagnostic] = []
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [ownerMember]
+        )
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+
+                if pass == 1 {
+                    context.insert(CachedShoppingItem(from: shoppingItem))
+                    try context.save()
+                }
+            },
+            remoteSyncDiagnosticsRecorder: { diagnostics.append($0) },
+            joinHydrationConfiguration: HouseholdStore.JoinHydrationConfiguration(
+                initialHydrationBudgetNanoseconds: 5_000_000_000,
+                initialRetryDelaysNanoseconds: [0],
+                backgroundRetryDelaysNanoseconds: [],
+                pendingJoinGraceDuration: 30,
+                ownerSharedFollowUpRetryDelaysNanoseconds: [0, 0, 0]
+            )
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: ownerMember))
+        try modelContainer.mainContext.save()
+
+        _ = await store.runRemoteSyncPass(
+            userId: ownerUserId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .unknown),
+            context: RemoteCloudChangeContext(
+                databaseScope: nil,
+                notificationType: .recordZone,
+                receivedAt: Date()
+            )
         )
 
-        XCTAssertFalse(manager.showNewItemsBanner)
-        XCTAssertNil(manager.tasksInlineFeedback)
-        XCTAssertNil(manager.shoppingInlineFeedback)
+        let startedPassIndices = diagnostics
+            .filter { $0.stage == .followUpPassStarted }
+            .compactMap(\.followUpPassIndex)
+        let completedDiagnostics = diagnostics.filter { $0.stage == .followUpPassCompleted }
+
+        XCTAssertEqual(startedPassIndices, [1, 2])
+        XCTAssertEqual(completedDiagnostics.count, 2)
+        XCTAssertEqual(completedDiagnostics.last?.didCaptureAdditionalChanges, false)
     }
 
-    @MainActor
-    func testSharedShoppingAlertsAreSuppressedOnlyWhenShoppingTabIsVisible() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
+    func testRunRemoteSyncPassDoesNotTreatLocalPendingShoppingInsertAsRemoteAddition() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
 
-        manager.updateActiveTab(.shopping)
-        XCTAssertTrue(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let pendingLocalItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        let hydrationPassCount = Counter()
 
-        manager.updateActiveTab(.tasks)
-        XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
-        XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .background))
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            acceptedSharedHouseholdIDs: [household.id]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, context in
+                guard let context else { return }
+                let pass = hydrationPassCount.increment()
+                guard pass == 2 else { return }
+
+                let cached = CachedShoppingItem(from: pendingLocalItem)
+                cached.syncStatusRaw = "pendingUpload"
+                context.insert(cached)
+                try context.save()
+            }
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        _ = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .appBecameActive
+        )
+
+        let secondResult = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .appBecameActive
+        )
+
+        XCTAssertFalse(secondResult.events.contains { event in
+            if case .shoppingAdded = event.kind {
+                return true
+            }
+            return false
+        })
+        XCTAssertFalse(secondResult.diagnostics.changedDomains.contains(.shopping))
     }
 
-    @MainActor
-    func testCelebrationAlertsAreSuppressedOnlyWhenTasksTabIsVisible() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
+    func testRunRemoteSyncPassReusesInFlightJoinedHouseholdHydration() async throws {
+        final class Counter {
+            var value = 0
+            func increment() -> Int {
+                value += 1
+                return value
+            }
+        }
 
-        manager.updateActiveTab(.tasks)
-        XCTAssertTrue(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
-
-        manager.updateActiveTab(.shopping)
-        XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
-        XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .background))
-    }
-
-    @MainActor
-    func testShoppingAdditionOffShoppingTabAccumulatesExistingBannerCount() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.tasks)
-
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .additions,
-                changeCount: 2,
-                titles: ["Milk", "Bread"]
-            ),
-            applicationState: .active
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
         )
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .additions,
-                changeCount: 3,
-                titles: ["Eggs", "Butter", "Cheese"]
-            ),
-            applicationState: .active
+        let invocationCount = Counter()
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            acceptedSharedHouseholdIDs: [household.id]
         )
 
-        XCTAssertTrue(manager.showNewItemsBanner)
-        XCTAssertEqual(manager.newItemsCount, 5)
-    }
-
-    @MainActor
-    func testTaskPresentationDoesNotClearExistingShoppingBanner() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.more)
-
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .additions,
-                changeCount: 2,
-                titles: ["Milk", "Bread"]
-            ),
-            applicationState: .active
+        let store = makeStore(
+            cloud: cloud,
+            joinedHouseholdPrewarmOverride: { _, _, _ in
+                _ = invocationCount.increment()
+                try await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
+            }
         )
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .tasks,
-                kind: .updates,
-                changeCount: 1,
-                titles: []
-            ),
-            applicationState: .active
+        store.setSyncMode(SyncMode.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        async let firstPass = store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: HouseholdSyncReason.appBecameActive
+        )
+        async let secondPass = store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: HouseholdSyncReason.appBecameActive
         )
 
-        XCTAssertTrue(manager.showNewItemsBanner)
-        XCTAssertEqual(manager.newItemsCount, 2)
-    }
+        _ = await (firstPass, secondPass)
 
-    @MainActor
-    func testShoppingUpdatesOffShoppingTabDoNotClearExistingBanner() {
-        let manager = makeManager()
-        defer { manager.resetTransientPresentationState() }
-        manager.updateActiveTab(.tasks)
-
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .additions,
-                changeCount: 2,
-                titles: ["Milk", "Bread"]
-            ),
-            applicationState: .active
-        )
-        manager.publishRemoteSyncPresentation(
-            RemoteSyncPresentation(
-                domain: .shopping,
-                kind: .updates,
-                changeCount: 1,
-                titles: []
-            ),
-            applicationState: .active
-        )
-
-        XCTAssertTrue(manager.showNewItemsBanner)
-        XCTAssertEqual(manager.newItemsCount, 2)
+        XCTAssertEqual(invocationCount.value, 1)
     }
 }
 

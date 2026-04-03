@@ -13,6 +13,7 @@ struct FamilyTodoApp: App {
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
+    @StateObject private var syncCoordinator: HouseholdSyncCoordinator
     @State private var startupRecoveryMessage: String?
     @State private var startupBootstrapState: StartupBootstrapState
     @State private var startupDiagnostics: BootstrapDiagnostics?
@@ -54,8 +55,16 @@ struct FamilyTodoApp: App {
         #endif
 
         sharedModelContainer = bootstrapResult.container
-        _householdStore = StateObject(
-            wrappedValue: HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
+        let householdStore = HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
+        _householdStore = StateObject(wrappedValue: householdStore)
+        _syncCoordinator = StateObject(
+            wrappedValue: HouseholdSyncCoordinator(
+                engine: HouseholdStoreSyncEngine(
+                    store: householdStore,
+                    userIdProvider: { UserSession.shared.userId },
+                    preferredHouseholdIdProvider: { UserSession.shared.currentHouseholdID }
+                )
+            )
         )
         _startupRecoveryMessage = State(initialValue: bootstrapResult.diagnosticMessage)
         _startupBootstrapState = State(initialValue: bootstrapResult.bootstrapState)
@@ -70,21 +79,6 @@ struct FamilyTodoApp: App {
         _ = _Concurrency.Task(priority: .utility) {
             #if !CI
                 await userSession.checkAuthenticationStatus()
-                if userSession.syncMode == .cloud,
-                   let userId = userSession.userId,
-                   let householdId = userSession.currentHouseholdID
-                {
-                    let subscriptionScope = await MainActor.run {
-                        activeHouseholdSubscriptionScope(userId: userId)
-                    }
-                    await MainActor.run {
-                        subscriptionManager.configure(
-                            userId: userId,
-                            householdId: householdId,
-                            scope: subscriptionScope
-                        )
-                    }
-                }
             #endif
 
             await shareAcceptanceCoordinator.processPendingIfPossible(
@@ -103,15 +97,6 @@ struct FamilyTodoApp: App {
                 )
             #endif
         }
-    }
-
-    private func activeHouseholdSubscriptionScope(
-        userId: String
-    ) -> CloudKitManager.HouseholdDatabaseScope? {
-        guard let ownerId = householdStore.currentHousehold?.ownerId else {
-            return nil
-        }
-        return ownerId == userId ? .ownerPrivate : .participantShared
     }
 
     var body: some Scene {
@@ -137,6 +122,7 @@ struct FamilyTodoApp: App {
                             .environmentObject(celebrationManager)
                             .environmentObject(shareAcceptanceCoordinator)
                             .environmentObject(cloudKitDiagnostics)
+                            .environmentObject(syncCoordinator)
                             .modelContainer(sharedModelContainer)
                             .overlay {
                                 if onboardingState.currentState == .mainApp {
@@ -165,15 +151,21 @@ struct FamilyTodoApp: App {
                                 #if !CI
                                     appDelegate.installNotificationCenterDelegate()
                                 #endif
-                                appDelegate.remoteCloudChangeHandler = { [weak householdStore, weak userSession] context in
-                                    guard let householdStore, let userSession else {
+                                appDelegate.currentSyncContextProvider = {
+                                    guard let userId = userSession.userId else {
+                                        return nil
+                                    }
+                                    return householdStore.currentSyncContext(userId: userId)
+                                }
+                                appDelegate.remoteCloudChangeHandler = { [weak syncCoordinator] context in
+                                    guard let syncCoordinator else {
                                         return .noData
                                     }
 
-                                    return await householdStore.handleRemoteCloudChange(
-                                        userId: userSession.userId,
-                                        preferredHouseholdId: userSession.currentHouseholdID,
-                                        context: context
+                                    return await syncCoordinator.performSync(
+                                        reason: .remotePush(
+                                            context: HouseholdSyncRemoteContext(from: context)
+                                        )
                                     )
                                 }
                                 appDelegate.flushPendingInviteIfNeeded()
@@ -185,21 +177,6 @@ struct FamilyTodoApp: App {
 
                                 // Configure for UI Testing if needed
                                 UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
-
-                                #if !CI
-                                    if userSession.syncMode == .cloud,
-                                       let userId = userSession.userId,
-                                       let householdId = userSession.currentHouseholdID
-                                    {
-                                        subscriptionManager.configure(
-                                            userId: userId,
-                                            householdId: householdId,
-                                            scope: activeHouseholdSubscriptionScope(
-                                                userId: userId
-                                            )
-                                        )
-                                    }
-                                #endif
                                 scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
                             }
                             .onOpenURL { url in
@@ -258,6 +235,8 @@ struct RootView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -319,6 +298,19 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
             _ = _Concurrency.Task {
                 await handleHouseholdDataDidChange()
+            }
+        }
+        .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
+            guard batchID != nil else { return }
+            _ = _Concurrency.Task {
+                await handleHouseholdDataDidChange()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
+            _ = _Concurrency.Task {
+                _ = await syncCoordinator.performSync(reason: .appBecameActive)
             }
         }
         .task(id: pendingProcessingKey) {
@@ -516,28 +508,44 @@ struct RootView: View {
     }
 
     private func configureSubscriptionsIfNeeded() {
-        guard onboardingState.currentState == .mainApp else { return }
-        guard userSession.syncMode == .cloud else { return }
+        guard onboardingState.currentState == .mainApp else {
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "subscription.configure.skipped source=taskKey reason=notMainApp"
+            )
+            return
+        }
+        guard userSession.syncMode == .cloud else {
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "subscription.configure.skipped source=taskKey reason=localSyncMode"
+            )
+            return
+        }
         guard let userId = userSession.userId,
-              let householdId = userSession.currentHouseholdID
+              let syncContext = householdStore.currentSyncContext(userId: userId),
+              userSession.currentHouseholdID == syncContext.householdId
         else {
+            let reason = if userSession.userId == nil {
+                "missingUserId"
+            } else if userSession.currentHouseholdID == nil {
+                "missingCurrentHouseholdId"
+            } else if householdStore.currentSyncContext(userId: userSession.userId) == nil {
+                "missingSyncContext"
+            } else {
+                "householdMismatch"
+            }
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "subscription.configure.skipped source=taskKey reason=\(reason)"
+            )
             return
         }
 
-        subscriptionManager.configure(
-            userId: userId,
-            householdId: householdId,
-            scope: activeHouseholdSubscriptionScope(userId: userId)
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "subscription.configure.request source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
         )
-    }
-
-    private func activeHouseholdSubscriptionScope(
-        userId: String
-    ) -> CloudKitManager.HouseholdDatabaseScope? {
-        guard let ownerId = householdStore.currentHousehold?.ownerId else {
-            return nil
-        }
-        return ownerId == userId ? .ownerPrivate : .participantShared
+        subscriptionManager.configure(syncContext: syncContext)
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "subscription.configure.completed source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
+        )
     }
 
     private var shouldShowCreateHouseholdView: Bool {
