@@ -66,6 +66,7 @@
 		F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */; };
 		FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A73F3BC9DD4B4A97890EEC /* UserSession.swift */; };
 		D1C0D1A1A1A1A1A1A1A1A1A1 /* CloudKitDiagnosticsState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */; };
+		CKTOKENBUILD0000000001 /* CloudKitChangeTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CKTOKENFILE0000000001 /* CloudKitChangeTokenStore.swift */; };
 		1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D1A7F2E84B45DFA676530A /* SignInView.swift */; };
 			4DA9D3C5F4374DA7AFB7DDA9 /* CachedTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E3027B463A4CCB87FDC1F0 /* CachedTask.swift */; };
 			6207537B0D154DF5A03B56DB /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C87AA7BEEF4361BA6DD03D /* TaskStore.swift */; };
@@ -205,6 +206,7 @@
 		F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
 		36A73F3BC9DD4B4A97890EEC /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 		D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitDiagnosticsState.swift; sourceTree = "<group>"; };
+		CKTOKENFILE0000000001 /* CloudKitChangeTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitChangeTokenStore.swift; sourceTree = "<group>"; };
 		F0A100000000000000000002 /* ShareAcceptanceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareAcceptanceCoordinator.swift; sourceTree = "<group>"; };
 		F0A100000000000000000003 /* AppDelegateBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateBridge.swift; sourceTree = "<group>"; };
 		HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinator.swift; sourceTree = "<group>"; };
@@ -473,6 +475,7 @@
 				F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */,
 				36A73F3BC9DD4B4A97890EEC /* UserSession.swift */,
 				D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */,
+				CKTOKENFILE0000000001 /* CloudKitChangeTokenStore.swift */,
 				HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */,
 				HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */,
 				HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */,
@@ -722,6 +725,7 @@
 				F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */,
 				FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */,
 				D1C0D1A1A1A1A1A1A1A1A1A1 /* CloudKitDiagnosticsState.swift in Sources */,
+				CKTOKENBUILD0000000001 /* CloudKitChangeTokenStore.swift in Sources */,
 				1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B9B /* CloudKitManager.swift in Sources */,
 				A1B2C3D4E5F60718293A4B9D1 /* CloudKitManager+Mapping.swift in Sources */,
