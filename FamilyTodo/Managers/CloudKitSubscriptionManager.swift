@@ -80,7 +80,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     static func shouldCreateZoneSubscription(
         for scope: CloudKitManager.HouseholdDatabaseScope
     ) -> Bool {
-        scope == .ownerPrivate || scope == .participantShared
+        scope == .ownerPrivate
     }
 
     static func makeSubscriptionPlan(
@@ -99,7 +99,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
         case .participantShared:
             [sharedDatabaseSubscriptionID]
         case .ownerPrivate, nil:
-            [sharedDatabaseSubscriptionID, privateDatabaseSubscriptionID]
+            [privateDatabaseSubscriptionID]
         }
 
         return CloudKitSubscriptionPlan(

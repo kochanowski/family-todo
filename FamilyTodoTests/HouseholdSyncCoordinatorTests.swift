@@ -330,6 +330,76 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .remotePush(context: .sharedDatabase))
     }
 
+    func testRemotePushSharedCancelsPendingForegroundRepairWindow() async {
+        CloudKitDiagnosticsState.shared.clear()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .appBecameActive,
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .remotePush(context: .sharedDatabase),
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 102),
+                        syncStartedAt: Date(timeIntervalSince1970: 103),
+                        syncFinishedAt: Date(timeIntervalSince1970: 104),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [.shopping: Set([UUID()])],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 200_000_000,
+                burstMaxPassCount: 4,
+                maxConsecutiveNoDataBurstPasses: 2,
+                steadyIntervalNanoseconds: 200_000_000,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        _ = await coordinator.performSync(reason: .appBecameActive)
+        _ = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
+        try? await _Concurrency.Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .appBecameActive,
+                .remotePush(context: .sharedDatabase),
+            ]
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.cancelled kind=foregroundRepair reason=remotePushPriority")
+            }
+        )
+    }
+
     func testForegroundRepairWindowWithNewDataDoesNotRestartBurstWindow() async {
         let engine = FakeHouseholdSyncEngine(
             results: [

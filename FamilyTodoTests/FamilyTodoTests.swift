@@ -694,7 +694,7 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
             operation: "subscription.configure.request source=taskKey role=owner scope=ownerPrivate householdId=household-1"
         )
         diagnostics.recordProgress(
-            operation: "subscription.plan householdId=household-1 scope=ownerPrivate databaseIds=shared-database-changes,private-database-changes zoneId=household-zone-ownerPrivate-household-1"
+            operation: "subscription.plan householdId=household-1 scope=ownerPrivate databaseIds=private-database-changes zoneId=household-zone-ownerPrivate-household-1"
         )
         diagnostics.recordProgress(operation: "push.registration.succeeded tokenLength=64")
         diagnostics.recordProgress(operation: "push.received type=database")
@@ -714,7 +714,7 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertEqual(diagnostics.triggerSummary.subscriptionConfigurationStatus, "requested")
         XCTAssertEqual(
             diagnostics.triggerSummary.subscriptionPlanDatabaseIDs,
-            ["shared-database-changes", "private-database-changes"]
+            ["private-database-changes"]
         )
         XCTAssertEqual(
             diagnostics.triggerSummary.subscriptionPlanZoneID,

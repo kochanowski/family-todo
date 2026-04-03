@@ -12,8 +12,8 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testParticipantSharedCreatesZoneSubscriptions() {
-        XCTAssertTrue(
+    func testOnlyOwnerPrivateCreatesZoneSubscriptions() {
+        XCTAssertFalse(
             CloudKitSubscriptionManager.shouldCreateZoneSubscription(for: .participantShared)
         )
         XCTAssertTrue(
@@ -22,7 +22,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testOwnerPrivateSubscriptionPlanIncludesDatabaseAndOwnerZoneSubscriptions() {
+    func testOwnerPrivateSubscriptionPlanIncludesPrivateDatabaseAndOwnerZoneSubscription() {
         let householdId = UUID()
 
         let plan = CloudKitSubscriptionManager.makeSubscriptionPlan(
@@ -32,7 +32,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
 
         XCTAssertEqual(
             Set(plan.databaseSubscriptionIDs),
-            Set(["shared-database-changes", "private-database-changes"])
+            Set(["private-database-changes"])
         )
         XCTAssertEqual(
             plan.zoneSubscriptionID,
@@ -42,7 +42,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testParticipantSharedSubscriptionPlanKeepsOnlyDatabaseSubscriptions() {
+    func testParticipantSharedSubscriptionPlanKeepsOnlySharedDatabaseSubscription() {
         let householdId = UUID()
 
         let plan = CloudKitSubscriptionManager.makeSubscriptionPlan(
@@ -54,11 +54,8 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
             Set(plan.databaseSubscriptionIDs),
             Set(["shared-database-changes"])
         )
-        XCTAssertEqual(
-            plan.zoneSubscriptionID,
-            "household-zone-participantShared-\(householdId.uuidString)"
-        )
-        XCTAssertTrue(plan.requiresOwnerZoneSubscription)
+        XCTAssertNil(plan.zoneSubscriptionID)
+        XCTAssertFalse(plan.requiresOwnerZoneSubscription)
     }
 
     func testCloudKitSchemaKeepsHouseholdMemberRecordIndexesAndInviteTokenRoles() throws {

@@ -413,6 +413,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
     }
 
     func performSync(reason: HouseholdSyncReason) async -> UIBackgroundFetchResult {
+        prioritizeRemotePushIfNeeded(reason)
         pendingReason = pendingReason?.merged(with: reason) ?? reason
         recordSchedulerProgress(
             "sync.pass.enqueued requestedReason=\(schedulerReasonLabel(reason)) effectivePendingReason=\(schedulerReasonLabel(pendingReason ?? reason)) activeTask=\(activeSyncTask != nil)"
@@ -518,6 +519,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
         switch batch.diagnostics.reason {
         case .remotePush:
             guard batch.diagnostics.direction != .ownerToParticipant else {
+                cancelForegroundRepair(reason: "remotePushPriority")
                 recordSchedulerProgress(
                     "sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=\(batch.diagnostics.direction.rawValue)"
                 )
@@ -659,6 +661,11 @@ final class HouseholdSyncCoordinator: ObservableObject {
         CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
     }
 
+    private func prioritizeRemotePushIfNeeded(_ reason: HouseholdSyncReason) {
+        guard case .remotePush(context: .sharedDatabase) = reason else { return }
+        cancelForegroundRepair(reason: "remotePushPriority")
+    }
+
     private func schedulerReasonLabel(_ reason: HouseholdSyncReason) -> String {
         switch reason {
         case let .remotePush(context):
@@ -785,13 +792,23 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
     }
 
-    private func cancelForegroundRepair() {
+    private func cancelForegroundRepair(reason: String? = nil) {
+        let hadScheduledPass = scheduledForegroundRepairTask != nil
+        let hadRemainingPasses =
+            remainingForegroundRepairBurstPasses > 0 ||
+            remainingForegroundRepairSteadyPasses > 0 ||
+            consecutiveForegroundRepairNoDataPasses > 0
         scheduledForegroundRepairTask?.cancel()
         scheduledForegroundRepairTask = nil
         currentForegroundRepairMode = .burst
         remainingForegroundRepairBurstPasses = 0
         remainingForegroundRepairSteadyPasses = 0
         consecutiveForegroundRepairNoDataPasses = 0
+
+        guard let reason, hadScheduledPass || hadRemainingPasses else { return }
+        recordSchedulerProgress(
+            "sync.scheduler.cancelled kind=foregroundRepair reason=\(reason)"
+        )
     }
 
     private func cancelOwnerFallback() {
