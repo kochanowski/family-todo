@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftData
+import UIKit
 
 enum AppNotificationCategory {
     static let taskReminder = "TASK_REMINDER"
