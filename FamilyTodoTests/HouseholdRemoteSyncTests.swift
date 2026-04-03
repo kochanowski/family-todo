@@ -328,6 +328,93 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         XCTAssertEqual(secondResult, .noData)
     }
 
+    func testRemotePushSharedFollowUpUsesDeltaRefreshInsteadOfHydrationSnapshot() async throws {
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+        var diagnostics: [HouseholdRemoteSyncDiagnostic] = []
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            shoppingItems: [shoppingItem],
+            acceptedSharedHouseholdIDs: [household.id],
+            participantSharedDeltasByHouseholdId: [
+                household.id: HouseholdCloudDelta(
+                    householdId: household.id,
+                    scope: .participantShared,
+                    changedDomains: [.shoppingItems]
+                ),
+            ]
+        )
+
+        let store = makeStore(
+            cloud: cloud,
+            remoteSyncDiagnosticsRecorder: { diagnostics.append($0) }
+        )
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .remotePush(context: .sharedDatabase),
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date()
+            )
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertGreaterThanOrEqual(
+            operations.filter {
+                $0.name == "fetchHouseholdDelta" &&
+                    $0.scope == .participantShared &&
+                    $0.householdId == household.id
+            }.count,
+            2
+        )
+        XCTAssertGreaterThanOrEqual(
+            operations.filter {
+                $0.name == "fetchShoppingItems" &&
+                    $0.scope == .participantShared &&
+                    $0.householdId == household.id
+            }.count,
+            2
+        )
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+
+        let followUpCompletion = try XCTUnwrap(diagnostics.first {
+            $0.stage == .followUpPassCompleted
+        })
+        XCTAssertEqual(followUpCompletion.direction, .ownerToParticipant)
+        XCTAssertEqual(followUpCompletion.note, "refreshPath=delta")
+    }
+
     func testRunRemoteSyncPassUsesOwnerPrivateDeltaRefreshForForegroundRepairShoppingChanges() async throws {
         CloudKitDiagnosticsState.shared.clear()
         let userId = "owner-1"

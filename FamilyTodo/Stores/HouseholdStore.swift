@@ -4185,16 +4185,33 @@ class HouseholdStore: ObservableObject {
         if pass.delayNanoseconds > 0 {
             try? await _Concurrency.Task.sleep(nanoseconds: pass.delayNanoseconds)
         }
-        if let retryHydrationSnapshot = try? await runJoinedHouseholdHydrationPass(
+        let refreshPath: String
+        if let retryHydrationSnapshot = try? await refreshCurrentHouseholdFromDeltaIfPossible(
             household: followUpContext.household,
-            userId: followUpContext.userId
+            userId: followUpContext.userId,
+            reason: remotePushReason(for: followUpContext.effectiveDatabaseScope),
+            context: followUpContext.context
         ) {
+            refreshPath = "delta"
             applyPendingJoinHydrationSnapshot(
                 retryHydrationSnapshot,
                 householdId: followUpContext.household.id,
                 userId: followUpContext.userId,
                 publishVisibleContentNotifications: false
             )
+        } else if let retryHydrationSnapshot = try? await runJoinedHouseholdHydrationPass(
+            household: followUpContext.household,
+            userId: followUpContext.userId
+        ) {
+            refreshPath = "snapshot"
+            applyPendingJoinHydrationSnapshot(
+                retryHydrationSnapshot,
+                householdId: followUpContext.household.id,
+                userId: followUpContext.userId,
+                publishVisibleContentNotifications: false
+            )
+        } else {
+            refreshPath = "none"
         }
 
         let candidateSnapshot = remoteVisibleContentSnapshot(
@@ -4214,11 +4231,28 @@ class HouseholdStore: ObservableObject {
                 retryDelaysNanoseconds: followUpContext.retryDelaysNanoseconds,
                 followUpPassIndex: pass.index,
                 didCaptureAdditionalChanges: didCaptureAdditionalChanges,
-                note: nil
+                note: "refreshPath=\(refreshPath)"
             )
         )
 
         return (candidateSnapshot, diff, didCaptureAdditionalChanges)
+    }
+
+    private func remotePushReason(
+        for effectiveDatabaseScope: CKDatabase.Scope?
+    ) -> HouseholdSyncReason {
+        let remoteContext: HouseholdSyncRemoteContext = switch effectiveDatabaseScope {
+        case .shared:
+            .sharedDatabase
+        case .private:
+            .privateDatabase
+        case .none, .public:
+            .unknown
+        @unknown default:
+            .unknown
+        }
+
+        return .remotePush(context: remoteContext)
     }
 
     func emptyHouseholdSyncPassResult(
