@@ -4,7 +4,7 @@ import SwiftData
 import UIKit
 import XCTest
 
-// swiftlint:disable file_length
+// swiftlint:disable file_length type_body_length
 @MainActor
 final class HouseholdRemoteSyncTests: XCTestCase {
     private var modelContainer: ModelContainer!
