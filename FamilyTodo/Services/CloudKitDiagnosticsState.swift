@@ -296,7 +296,8 @@ final class CloudKitDiagnosticsState: ObservableObject {
             .reduce(into: [String: String]()) { result, token in
                 guard let separator = token.firstIndex(of: "=") else { return }
                 let key = String(token[..<separator])
-                let value = String(token[token.index(after: separator)...])
+                let valueStart = token.index(separator, offsetBy: 1)
+                let value = String(token[valueStart...])
                 result[key] = value
             }
     }
