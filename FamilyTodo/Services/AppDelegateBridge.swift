@@ -297,7 +297,7 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         )
     }
 
-    func foregroundPresentationOptions(
+    nonisolated func foregroundPresentationOptions(
         categoryIdentifier: String,
         hasSound: Bool
     ) -> UNNotificationPresentationOptions {
