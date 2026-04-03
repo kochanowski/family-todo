@@ -1805,8 +1805,6 @@ actor CloudKitManager {
             let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
             configuration.previousServerChangeToken = previousToken
             configuration.resultsLimit = Self.defaultQueryPageSize
-            configuration.fetchAllChanges = false
-
             let operation = CKFetchRecordZoneChangesOperation(
                 recordZoneIDs: [zoneID],
                 configurationsByRecordZoneID: [zoneID: configuration]
