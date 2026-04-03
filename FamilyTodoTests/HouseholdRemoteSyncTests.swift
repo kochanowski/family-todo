@@ -274,7 +274,9 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         })
         XCTAssertTrue(
             CloudKitDiagnosticsState.shared.entries.contains {
-                $0.operation.contains("delta.impact scope=participantShared householdId=\(household.id.uuidString) domains=shoppingItems fallbackRequired=false")
+                $0.operation.contains("delta.impact scope=participantShared householdId=\(household.id.uuidString) domains=shoppingItems")
+                    && $0.operation.contains("unknownRecordTypes=")
+                    && $0.operation.contains("fallbackRequired=false")
             }
         )
     }
@@ -393,7 +395,9 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         })
         XCTAssertTrue(
             CloudKitDiagnosticsState.shared.entries.contains {
-                $0.operation.contains("delta.impact scope=ownerPrivate householdId=\(household.id.uuidString) domains=shoppingItems fallbackRequired=false")
+                $0.operation.contains("delta.impact scope=ownerPrivate householdId=\(household.id.uuidString) domains=shoppingItems")
+                    && $0.operation.contains("unknownRecordTypes=")
+                    && $0.operation.contains("fallbackRequired=false")
             }
         )
     }

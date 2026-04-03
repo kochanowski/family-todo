@@ -68,4 +68,29 @@ final class CloudKitManagerJoinBootstrapTests: XCTestCase {
             CloudKitManager.isRetryableParticipantSharedZoneBootstrapError(error)
         )
     }
+
+    func testHouseholdDeltaClassificationIgnoresLegacyAreaAndRecurringChore() {
+        let classification = CloudKitManager.classifyHouseholdDeltaRecordTypes([
+            "ShoppingItem",
+            "Area",
+            "RecurringChore",
+        ])
+
+        XCTAssertEqual(classification.changedDomains, [.shoppingItems])
+        XCTAssertEqual(classification.ignoredRecordTypes, ["Area", "RecurringChore"])
+        XCTAssertTrue(classification.unknownRecordTypes.isEmpty)
+        XCTAssertEqual(classification.fallbackReason, nil)
+    }
+
+    func testHouseholdDeltaClassificationStillFlagsUnexpectedRecordTypes() {
+        let classification = CloudKitManager.classifyHouseholdDeltaRecordTypes([
+            "ShoppingItem",
+            "UnexpectedLegacyThing",
+        ])
+
+        XCTAssertEqual(classification.changedDomains, [.shoppingItems])
+        XCTAssertTrue(classification.ignoredRecordTypes.isEmpty)
+        XCTAssertEqual(classification.unknownRecordTypes, ["UnexpectedLegacyThing"])
+        XCTAssertEqual(classification.fallbackReason, "unknownRecordType")
+    }
 }

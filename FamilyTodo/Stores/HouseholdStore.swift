@@ -518,22 +518,31 @@ struct HouseholdCloudDelta: Equatable {
     let householdId: UUID
     let scope: CloudKitManager.HouseholdDatabaseScope
     let changedDomains: Set<HouseholdCloudDeltaDomain>
+    let observedRecordTypes: Set<String>
+    let ignoredRecordTypes: Set<String>
+    let unknownRecordTypes: Set<String>
     let fallbackReason: String?
 
     init(
         householdId: UUID,
         scope: CloudKitManager.HouseholdDatabaseScope,
         changedDomains: Set<HouseholdCloudDeltaDomain>,
+        observedRecordTypes: Set<String> = [],
+        ignoredRecordTypes: Set<String> = [],
+        unknownRecordTypes: Set<String> = [],
         fallbackReason: String? = nil
     ) {
         self.householdId = householdId
         self.scope = scope
         self.changedDomains = changedDomains
+        self.observedRecordTypes = observedRecordTypes
+        self.ignoredRecordTypes = ignoredRecordTypes
+        self.unknownRecordTypes = unknownRecordTypes
         self.fallbackReason = fallbackReason
     }
 
     var requiresFullSnapshot: Bool {
-        fallbackReason != nil
+        fallbackReason != nil || !unknownRecordTypes.isEmpty
     }
 }
 
@@ -3740,18 +3749,21 @@ class HouseholdStore: ObservableObject {
             householdId: household.id,
             scope: syncContext.scope
         )
+        let scopeLabel = syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared"
         let domainLabels = delta.changedDomains
             .map(\.rawValue)
             .sorted()
             .joined(separator: ",")
+        let ignoredRecordTypes = delta.ignoredRecordTypes.sorted().joined(separator: ",")
+        let unknownRecordTypes = delta.unknownRecordTypes.sorted().joined(separator: ",")
         CloudKitDiagnosticsState.shared.recordProgress(
-            operation: "delta.impact scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(household.id.uuidString) domains=\(domainLabels) fallbackRequired=\(delta.requiresFullSnapshot)"
+            operation: "delta.impact scope=\(scopeLabel) householdId=\(household.id.uuidString) domains=\(domainLabels) ignoredRecordTypes=\(ignoredRecordTypes) unknownRecordTypes=\(unknownRecordTypes) fallbackRequired=\(delta.requiresFullSnapshot)"
         )
 
         guard !delta.requiresFullSnapshot else {
             if let fallbackReason = delta.fallbackReason {
                 CloudKitDiagnosticsState.shared.recordProgress(
-                    operation: "delta.fallbackToSnapshot scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(household.id.uuidString) reason=\(fallbackReason)"
+                    operation: "delta.fallbackToSnapshot scope=\(scopeLabel) householdId=\(household.id.uuidString) reason=\(fallbackReason) unknownRecordTypes=\(unknownRecordTypes)"
                 )
             }
             return nil

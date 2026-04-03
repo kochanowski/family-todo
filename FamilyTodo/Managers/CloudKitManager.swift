@@ -5,6 +5,17 @@ import Foundation
 actor CloudKitManager {
     static let shared = CloudKitManager()
 
+    struct HouseholdDeltaClassification: Equatable {
+        let changedDomains: Set<HouseholdCloudDeltaDomain>
+        let observedRecordTypes: Set<String>
+        let ignoredRecordTypes: Set<String>
+        let unknownRecordTypes: Set<String>
+
+        var fallbackReason: String? {
+            unknownRecordTypes.isEmpty ? nil : "unknownRecordType"
+        }
+    }
+
     enum HouseholdDatabaseScope {
         case ownerPrivate
         case participantShared
@@ -75,6 +86,10 @@ actor CloudKitManager {
     private static let exhaustiveSharedGraphRepairDefaultsKey =
         "CloudKit.sharedGraphRepairCompletedHouseholds.exhaustive.v1"
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
+    private static let ignorableHouseholdDeltaRecordTypes: Set<String> = [
+        "Area",
+        "RecurringChore",
+    ]
     private static let defaultQueryPageSize = 200
     private static let queryPageTimeoutNanoseconds: UInt64 = 12_000_000_000
     private static let inviteCodeAlphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
@@ -268,12 +283,23 @@ actor CloudKitManager {
             "delta.token.updated scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName)"
         )
 
-        guard let changedDomains = householdDeltaDomains(for: changedRecordTypes) else {
+        let classification = Self.classifyHouseholdDeltaRecordTypes(changedRecordTypes)
+        let observedRecordLabels = classification.observedRecordTypes.sorted().joined(separator: ",")
+        let ignoredRecordLabels = classification.ignoredRecordTypes.sorted().joined(separator: ",")
+        let unknownRecordLabels = classification.unknownRecordTypes.sorted().joined(separator: ",")
+        await recordDeltaProgress(
+            "delta.recordTypes scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName) observed=\(observedRecordLabels) ignored=\(ignoredRecordLabels) unknown=\(unknownRecordLabels)"
+        )
+
+        if let fallbackReason = classification.fallbackReason {
             return HouseholdCloudDelta(
                 householdId: householdId,
                 scope: scope,
-                changedDomains: [],
-                fallbackReason: "unknownRecordType"
+                changedDomains: classification.changedDomains,
+                observedRecordTypes: classification.observedRecordTypes,
+                ignoredRecordTypes: classification.ignoredRecordTypes,
+                unknownRecordTypes: classification.unknownRecordTypes,
+                fallbackReason: fallbackReason
             )
         }
 
@@ -284,7 +310,10 @@ actor CloudKitManager {
         return HouseholdCloudDelta(
             householdId: householdId,
             scope: scope,
-            changedDomains: changedDomains
+            changedDomains: classification.changedDomains,
+            observedRecordTypes: classification.observedRecordTypes,
+            ignoredRecordTypes: classification.ignoredRecordTypes,
+            unknownRecordTypes: classification.unknownRecordTypes
         )
     }
 
@@ -1892,10 +1921,12 @@ actor CloudKitManager {
         }
     }
 
-    private func householdDeltaDomains(
-        for recordTypes: Set<String>
-    ) -> Set<HouseholdCloudDeltaDomain>? {
+    static func classifyHouseholdDeltaRecordTypes(
+        _ recordTypes: Set<String>
+    ) -> HouseholdDeltaClassification {
         var domains: Set<HouseholdCloudDeltaDomain> = []
+        var ignoredRecordTypes: Set<String> = []
+        var unknownRecordTypes: Set<String> = []
 
         for recordType in recordTypes {
             switch recordType {
@@ -1915,12 +1946,19 @@ actor CloudKitManager {
                 domains.insert(.backlogCategories)
             case "BacklogItem":
                 domains.insert(.backlogItems)
+            case _ where ignorableHouseholdDeltaRecordTypes.contains(recordType):
+                ignoredRecordTypes.insert(recordType)
             default:
-                return nil
+                unknownRecordTypes.insert(recordType)
             }
         }
 
-        return domains
+        return HouseholdDeltaClassification(
+            changedDomains: domains,
+            observedRecordTypes: recordTypes,
+            ignoredRecordTypes: ignoredRecordTypes,
+            unknownRecordTypes: unknownRecordTypes
+        )
     }
 
     private func recordDeltaProgress(_ operation: String) async {
