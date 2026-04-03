@@ -294,10 +294,14 @@ final class CloudKitDiagnosticsState: ObservableObject {
         operation
             .split(separator: " ")
             .reduce(into: [String: String]()) { result, token in
-                guard let separator = token.firstIndex(of: "=") else { return }
-                let key = String(token[..<separator])
-                let valueStart = token.index(separator, offsetBy: 1)
-                let value = String(token[valueStart...])
+                let components = token.split(
+                    separator: "=",
+                    maxSplits: 1,
+                    omittingEmptySubsequences: false
+                )
+                guard let keyComponent = components.first, components.count == 2 else { return }
+                let key = String(keyComponent)
+                let value = String(components[1])
                 result[key] = value
             }
     }
