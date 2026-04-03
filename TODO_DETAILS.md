@@ -878,3 +878,54 @@ Use it together with the one-task-at-a-time workflow.
   - Empty states are visually complete across Shopping/Tasks/Ideas/Activity Log surfaces.
   - Haptic mapping is consistent across repeated interactions.
   - Dark mode and alternate themes pass readability checks for chips/tags/categories.
+
+## <a id="p37"></a>P3.7 Post-MVP Household Sync Hardening
+- Objective: keep the current MVP-acceptable sync behavior stable, then finish the remaining CloudKit sync hardening without reopening the large regressions already fixed.
+- Current known state to preserve:
+  - `owner -> participant` is healthy on the hot path and now runs `delta-first` after push.
+  - `participant -> owner` is acceptable for MVP, but still effectively depends on owner-side fallback cadence because owner runtime logs still do not prove a reliable push-triggered path.
+  - full household snapshots are no longer the preferred hot path for shopping-only changes and should remain a safety net, not the default.
+- In scope after MVP:
+  - Complete the owner push / subscription / remote notification audit using code + runtime logs only:
+    - confirm whether owner should ever receive participant-originated remote notifications in the current sharing architecture,
+    - verify exact subscription types and target databases/zones per role,
+    - verify AppDelegate intake and scope inference for owner-side CloudKit notifications.
+  - Finish the delta-first transport architecture:
+    - add proper token persistence / reset handling for shared DB and owner private zone change streams,
+    - move participant shared path from zone-only delta toward Apple-style shared database changes -> changed zones -> zone changes,
+    - keep full snapshot only for bootstrap, token expiration, unresolved zones, explicit repair, or manual debug refresh.
+  - Reduce remaining trigger asymmetry:
+    - if owner push proves dependable, prefer push-triggered owner refresh,
+    - if owner push remains unreliable, formalize owner fallback as a repair mechanism only and tune cadence conservatively.
+  - Tighten participant-side follow-up behavior after delta:
+    - ensure repeated push bursts do not queue unnecessary extra passes,
+    - keep follow-up retries only when they capture real additional changes.
+  - Add final observability needed for future sync debugging:
+    - clear trigger provenance (`push`, `ownerFallback`, `foregroundRepair`, `appBecameActive`, `manual`),
+    - delta token state updates / resets,
+    - explicit owner push health indicators in diagnostics UI,
+    - startup/join diagnostics that explain `No Household Active` / long `Loading household...` cases.
+  - Revisit participant startup / existing-household recovery:
+    - prevent transient routing to empty/setup when a trusted local household or pending-join context exists,
+    - make join hydration and startup recovery stages diagnosable without reading raw logs.
+- Likely files:
+  - `FamilyTodo/Managers/CloudKitManager.swift`
+  - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - `FamilyTodo/Services/AppDelegateBridge.swift`
+  - `FamilyTodo/Services/CloudKitChangeTokenStore.swift`
+  - `FamilyTodo/Services/HouseholdStoreSyncEngine.swift`
+  - `FamilyTodo/Services/HouseholdSyncCoordinator.swift`
+  - `FamilyTodo/Stores/HouseholdStore.swift`
+  - `FamilyTodo/Services/CloudKitDiagnosticsState.swift`
+  - `FamilyTodo/Views/Components/CloudKitDiagnosticsBanner.swift`
+- Out of scope for MVP:
+  - re-architecting collaboration away from CloudKit sharing,
+  - aggressive polling as a permanent primary sync design,
+  - broad UI rewrites unrelated to trigger/fetch/cache correctness.
+- Validation:
+  - two real devices, two Apple IDs, existing collaborative household,
+  - `shopping items`, `shopping bundles`, `ideas`, and promotion to `tasks` validated in both directions,
+  - logs prove whether each sync pass was push-driven or fallback-driven,
+  - no routine `delta.fallbackToSnapshot` on shopping-only edits,
+  - no return of multi-minute sync tails caused by full hydration snapshots on hot paths,
+  - participant startup/update no longer intermittently shows `No Household Active` without a diagnostic explanation.

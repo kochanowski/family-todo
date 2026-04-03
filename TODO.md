@@ -292,3 +292,8 @@ Regression Risk: Startup/access regressions on locked device states.
 Description: Close remaining UX quality gaps across empty states, haptics, and dark-mode readability.
 Acceptance Criteria: Every empty tab has polished icon + encouraging copy, key actions emit consistent haptics (success/light/rigid), and tags/categories keep readable contrast in dark mode and custom themes.
 Regression Risk: Theme-specific regressions and inconsistent tactile feedback; run cross-tab, cross-theme smoke validation.
+
+- [ ] **P3.7 Post-MVP Household Sync Hardening** ([Details](TODO_DETAILS.md#p37))
+Description: Preserve the current MVP-stable sync behavior, then finish the remaining owner/participant CloudKit work: owner trigger audit, delta-only hot paths, and startup/join reliability diagnostics.
+Acceptance Criteria: Remaining sync work is implemented only after MVP, with owner/participant trigger paths, delta fallbacks, and startup recovery explicitly validated on two real devices / Apple IDs.
+Regression Risk: Over-tuning sync after MVP could reintroduce latency, missed updates, or household bootstrap regressions; any follow-up must be staged and measured on-device.
