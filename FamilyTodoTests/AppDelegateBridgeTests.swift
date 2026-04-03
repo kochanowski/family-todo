@@ -1,5 +1,6 @@
 import CloudKit
 @testable import HousePulse
+import UserNotifications
 import XCTest
 
 @MainActor
@@ -64,5 +65,40 @@ final class AppDelegateBridgeTests: XCTestCase {
         XCTAssertTrue(diagnostic.willInvokeRemoteCloudChangeHandler)
         XCTAssertNil(diagnostic.syncRole)
         XCTAssertNil(diagnostic.syncHouseholdId)
+    }
+
+    func testForegroundPresentationKeepsReminderBanner() {
+        let bridge = AppDelegateBridge()
+
+        let options = bridge.foregroundPresentationOptions(
+            categoryIdentifier: "TASK_REMINDER",
+            hasSound: true
+        )
+
+        XCTAssertTrue(options.contains(.banner))
+        XCTAssertTrue(options.contains(.list))
+        XCTAssertTrue(options.contains(.sound))
+    }
+
+    func testForegroundPresentationSuppressesSharedShoppingAlerts() {
+        let bridge = AppDelegateBridge()
+
+        let options = bridge.foregroundPresentationOptions(
+            categoryIdentifier: "SHARED_SHOPPING_UPDATE",
+            hasSound: true
+        )
+
+        XCTAssertEqual(options, [])
+    }
+
+    func testForegroundPresentationSuppressesCelebrationAlerts() {
+        let bridge = AppDelegateBridge()
+
+        let options = bridge.foregroundPresentationOptions(
+            categoryIdentifier: "CELEBRATION",
+            hasSound: true
+        )
+
+        XCTAssertEqual(options, [])
     }
 }

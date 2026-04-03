@@ -289,11 +289,25 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        if notification.request.content.sound != nil {
-            completionHandler([.banner, .list, .sound])
-        } else {
-            completionHandler([.banner, .list])
+        completionHandler(
+            foregroundPresentationOptions(
+                categoryIdentifier: notification.request.content.categoryIdentifier,
+                hasSound: notification.request.content.sound != nil
+            )
+        )
+    }
+
+    func foregroundPresentationOptions(
+        categoryIdentifier: String,
+        hasSound: Bool
+    ) -> UNNotificationPresentationOptions {
+        if AppNotificationCategory.foregroundSuppressedCollaborationCategories.contains(
+            categoryIdentifier
+        ) {
+            return []
         }
+
+        return hasSound ? [.banner, .list, .sound] : [.banner, .list]
     }
 
     private func notificationTypeLabel(_ notification: CKNotification) -> String {

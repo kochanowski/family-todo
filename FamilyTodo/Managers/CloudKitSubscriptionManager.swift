@@ -7,6 +7,7 @@ import UIKit
 enum RemoteSyncPresentationDomain: Equatable {
     case shopping
     case tasks
+    case ideas
 }
 
 enum RemoteSyncPresentationKind: Equatable {
@@ -55,7 +56,9 @@ final class CloudKitSubscriptionManager: ObservableObject {
     @Published private(set) var activeTab: AppTab = .shopping
     @Published private(set) var shoppingInlineFeedback: InlineRemoteSyncFeedback?
     @Published private(set) var shoppingInlineIndicator: InlineRemoteSyncIndicator?
+    @Published private(set) var tasksInlineIndicator: InlineRemoteSyncIndicator?
     @Published private(set) var tasksInlineFeedback: InlineRemoteSyncFeedback?
+    @Published private(set) var ideasInlineIndicator: InlineRemoteSyncIndicator?
 
     // MARK: - Private State
 
@@ -69,6 +72,7 @@ final class CloudKitSubscriptionManager: ObservableObject {
     private var recentLocalMutationByRecordName: [String: Date] = [:]
     private var shoppingInlineDismissTask: _Concurrency.Task<Void, Never>?
     private var tasksInlineDismissTask: _Concurrency.Task<Void, Never>?
+    private var ideasInlineDismissTask: _Concurrency.Task<Void, Never>?
 
     private let selfNoiseWindow: TimeInterval = 8
     private let inlineFeedbackDurationNanoseconds: UInt64 = 2_500_000_000
@@ -493,6 +497,8 @@ final class CloudKitSubscriptionManager: ObservableObject {
             publishShoppingPresentation(presentation)
         case .tasks:
             publishTasksPresentation(presentation)
+        case .ideas:
+            publishIdeasPresentation(presentation)
         }
     }
 
@@ -500,103 +506,137 @@ final class CloudKitSubscriptionManager: ObservableObject {
         _ batch: HouseholdSyncBatch,
         applicationState: UIApplication.State? = nil
     ) {
-        guard batch.classification != .bootstrap else { return }
+        guard batch.classification == .steadyStateRemote else { return }
         let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
+
         for event in batch.events {
-            switch event.kind {
-            case let .shoppingAdded(ids, titles):
-                guard let additionPayload = filteredShoppingAdditionPayload(
-                    ids: ids,
-                    titles: titles
-                ) else {
-                    continue
-                }
-                publishRemoteSyncPresentation(
-                    RemoteSyncPresentation(
-                        domain: .shopping,
-                        kind: .additions,
-                        changeCount: additionPayload.ids.count,
-                        titles: additionPayload.titles
-                    ),
-                    applicationState: resolvedApplicationState
-                )
-            case let .shoppingUpdated(itemIDs, bundleIDs):
-                guard !shouldSuppressShoppingMutationPresentation(
-                    itemIDs: itemIDs,
-                    bundleIDs: bundleIDs
-                ) else {
-                    continue
-                }
-                let changeCount = itemIDs.count + bundleIDs.count
-                guard changeCount > 0 else { continue }
-                publishRemoteSyncPresentation(
-                    RemoteSyncPresentation(
-                        domain: .shopping,
-                        kind: .updates,
-                        changeCount: changeCount,
-                        titles: []
-                    ),
-                    applicationState: resolvedApplicationState
-                )
-            case let .shoppingRemoved(itemIDs, bundleIDs):
-                guard !shouldSuppressShoppingMutationPresentation(
-                    itemIDs: itemIDs,
-                    bundleIDs: bundleIDs
-                ) else {
-                    continue
-                }
-                let changeCount = itemIDs.count + bundleIDs.count
-                guard changeCount > 0 else { continue }
-                publishRemoteSyncPresentation(
-                    RemoteSyncPresentation(
-                        domain: .shopping,
-                        kind: .updates,
-                        changeCount: changeCount,
-                        titles: []
-                    ),
-                    applicationState: resolvedApplicationState
-                )
-            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
-                let updateCount = changedIDs.count + removedIDs.count
-                if !addedIDs.isEmpty {
-                    publishRemoteSyncPresentation(
-                        RemoteSyncPresentation(
-                            domain: .tasks,
-                            kind: .additions,
-                            changeCount: addedIDs.count,
-                            titles: []
-                        ),
-                        applicationState: resolvedApplicationState
-                    )
-                } else if updateCount > 0 {
-                    publishRemoteSyncPresentation(
-                        RemoteSyncPresentation(
-                            domain: .tasks,
-                            kind: .updates,
-                            changeCount: updateCount,
-                            titles: []
-                        ),
-                        applicationState: resolvedApplicationState
-                    )
-                }
-            default:
-                continue
-            }
+            guard event.source == .remote else { continue }
+            guard let presentation = presentation(for: event) else { continue }
+            publishRemoteSyncPresentation(
+                presentation,
+                applicationState: resolvedApplicationState
+            )
         }
+    }
+
+    private func presentation(for event: HouseholdSyncEvent) -> RemoteSyncPresentation? {
+        switch event.kind {
+        case let .shoppingAdded(ids, titles):
+            guard let additionPayload = filteredShoppingAdditionPayload(
+                ids: ids,
+                titles: titles
+            ) else {
+                return nil
+            }
+            return RemoteSyncPresentation(
+                domain: .shopping,
+                kind: .additions,
+                changeCount: additionPayload.ids.count,
+                titles: additionPayload.titles
+            )
+        case let .shoppingUpdated(itemIDs, bundleIDs),
+             let .shoppingRemoved(itemIDs, bundleIDs):
+            return shoppingMutationPresentation(itemIDs: itemIDs, bundleIDs: bundleIDs)
+        case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+            return boardPresentation(
+                domain: .tasks,
+                addedIDs: addedIDs,
+                changedIDs: changedIDs,
+                removedIDs: removedIDs
+            )
+        case let .ideasChanged(addedIDs, changedIDs, removedIDs):
+            return boardPresentation(
+                domain: .ideas,
+                addedIDs: addedIDs,
+                changedIDs: changedIDs,
+                removedIDs: removedIDs
+            )
+        case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
+            let changeCount =
+                filteredNonLocalIDs(addedIDs).count +
+                filteredNonLocalIDs(changedIDs).count +
+                filteredNonLocalIDs(removedIDs).count
+            guard changeCount > 0 else { return nil }
+            return RemoteSyncPresentation(
+                domain: .ideas,
+                kind: .updates,
+                changeCount: changeCount,
+                titles: []
+            )
+        default:
+            return nil
+        }
+    }
+
+    private func shoppingMutationPresentation(
+        itemIDs: Set<UUID>,
+        bundleIDs: Set<UUID>
+    ) -> RemoteSyncPresentation? {
+        guard !shouldSuppressShoppingMutationPresentation(
+            itemIDs: itemIDs,
+            bundleIDs: bundleIDs
+        ) else {
+            return nil
+        }
+
+        let changeCount = itemIDs.count + bundleIDs.count
+        guard changeCount > 0 else { return nil }
+
+        return RemoteSyncPresentation(
+            domain: .shopping,
+            kind: .updates,
+            changeCount: changeCount,
+            titles: []
+        )
+    }
+
+    private func boardPresentation(
+        domain: RemoteSyncPresentationDomain,
+        addedIDs: Set<UUID>,
+        changedIDs: Set<UUID>,
+        removedIDs: Set<UUID>
+    ) -> RemoteSyncPresentation? {
+        let nonLocalAddedIDs = filteredNonLocalIDs(addedIDs)
+        let nonLocalChangedIDs = filteredNonLocalIDs(changedIDs)
+        let nonLocalRemovedIDs = filteredNonLocalIDs(removedIDs)
+        let updateCount = nonLocalChangedIDs.count + nonLocalRemovedIDs.count
+
+        if !nonLocalAddedIDs.isEmpty {
+            return RemoteSyncPresentation(
+                domain: domain,
+                kind: .additions,
+                changeCount: nonLocalAddedIDs.count,
+                titles: []
+            )
+        }
+
+        guard updateCount > 0 else { return nil }
+        return RemoteSyncPresentation(
+            domain: domain,
+            kind: .updates,
+            changeCount: updateCount,
+            titles: []
+        )
     }
 
     func shouldSuppressSharedShoppingAlert(
         applicationState: UIApplication.State? = nil
     ) -> Bool {
+        shouldSuppressPassiveSharedActivityAlert(applicationState: applicationState)
+    }
+
+    func shouldSuppressPassiveSharedActivityAlert(
+        applicationState: UIApplication.State? = nil
+    ) -> Bool {
         let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
-        return resolvedApplicationState == .active && activeTab == .shopping
+        return resolvedApplicationState == .active
     }
 
     func shouldSuppressHouseholdCelebrationAlert(
         applicationState: UIApplication.State? = nil
     ) -> Bool {
         let resolvedApplicationState = applicationState ?? UIApplication.shared.applicationState
-        return resolvedApplicationState == .active && activeTab == .tasks
+        return resolvedApplicationState == .active
     }
 
     func dismissBanner() {
@@ -616,7 +656,11 @@ final class CloudKitSubscriptionManager: ObservableObject {
         shoppingInlineIndicator = nil
         tasksInlineDismissTask?.cancel()
         tasksInlineDismissTask = nil
+        tasksInlineIndicator = nil
         tasksInlineFeedback = nil
+        ideasInlineDismissTask?.cancel()
+        ideasInlineDismissTask = nil
+        ideasInlineIndicator = nil
     }
 
     private func publishShoppingPresentation(_ presentation: RemoteSyncPresentation) {
@@ -642,47 +686,54 @@ final class CloudKitSubscriptionManager: ObservableObject {
         }
     }
 
-    private func publishTasksPresentation(_ presentation: RemoteSyncPresentation) {
+    private func publishTasksPresentation(_: RemoteSyncPresentation) {
         guard activeTab == .tasks else { return }
-        publishInlineFeedback(
-            text: tasksInlineText(for: presentation),
-            domain: .tasks
-        )
+        publishInlineIndicator(for: .tasks)
     }
 
-    private func publishInlineFeedback(
-        text: String,
-        domain: RemoteSyncPresentationDomain
-    ) {
-        let feedback = InlineRemoteSyncFeedback(text: text)
+    private func publishIdeasPresentation(_: RemoteSyncPresentation) {
+        guard activeTab == .backlog else { return }
+        publishInlineIndicator(for: .ideas)
+    }
+
+    private func publishInlineIndicator(for domain: RemoteSyncPresentationDomain) {
+        let indicator = InlineRemoteSyncIndicator()
 
         switch domain {
         case .shopping:
             shoppingInlineDismissTask?.cancel()
             withAnimation(WowAnimation.spring) {
-                shoppingInlineFeedback = feedback
+                shoppingInlineIndicator = indicator
+                shoppingInlineFeedback = nil
             }
-            shoppingInlineDismissTask = scheduleInlineDismiss(for: domain, feedbackId: feedback.id)
+            shoppingInlineDismissTask = scheduleInlineDismiss(
+                for: .shopping,
+                feedbackId: indicator.id
+            )
         case .tasks:
             tasksInlineDismissTask?.cancel()
             withAnimation(WowAnimation.spring) {
-                tasksInlineFeedback = feedback
+                tasksInlineIndicator = indicator
+                tasksInlineFeedback = nil
             }
-            tasksInlineDismissTask = scheduleInlineDismiss(for: domain, feedbackId: feedback.id)
+            tasksInlineDismissTask = scheduleInlineDismiss(
+                for: .tasks,
+                feedbackId: indicator.id
+            )
+        case .ideas:
+            ideasInlineDismissTask?.cancel()
+            withAnimation(WowAnimation.spring) {
+                ideasInlineIndicator = indicator
+            }
+            ideasInlineDismissTask = scheduleInlineDismiss(
+                for: .ideas,
+                feedbackId: indicator.id
+            )
         }
     }
 
     private func publishShoppingInlineIndicator() {
-        let indicator = InlineRemoteSyncIndicator()
-        shoppingInlineDismissTask?.cancel()
-        withAnimation(WowAnimation.spring) {
-            shoppingInlineIndicator = indicator
-            shoppingInlineFeedback = nil
-        }
-        shoppingInlineDismissTask = scheduleInlineDismiss(
-            for: .shopping,
-            feedbackId: indicator.id
-        )
+        publishInlineIndicator(for: .shopping)
     }
 
     private func scheduleInlineDismiss(
@@ -703,34 +754,19 @@ final class CloudKitSubscriptionManager: ObservableObject {
                 }
                 shoppingInlineDismissTask = nil
             case .tasks:
-                guard tasksInlineFeedback?.id == feedbackId else { return }
+                guard tasksInlineIndicator?.id == feedbackId else { return }
                 withAnimation(WowAnimation.easeOut) {
+                    self.tasksInlineIndicator = nil
                     self.tasksInlineFeedback = nil
                 }
                 tasksInlineDismissTask = nil
+            case .ideas:
+                guard ideasInlineIndicator?.id == feedbackId else { return }
+                withAnimation(WowAnimation.easeOut) {
+                    self.ideasInlineIndicator = nil
+                }
+                ideasInlineDismissTask = nil
             }
-        }
-    }
-
-    private func shoppingInlineText(for presentation: RemoteSyncPresentation) -> String {
-        switch presentation.kind {
-        case .additions:
-            presentation.changeCount == 1
-                ? "1 item added"
-                : "\(presentation.changeCount) items added"
-        case .updates:
-            "Shopping updated"
-        }
-    }
-
-    private func tasksInlineText(for presentation: RemoteSyncPresentation) -> String {
-        switch presentation.kind {
-        case .additions:
-            presentation.changeCount == 1
-                ? "1 task added"
-                : "\(presentation.changeCount) tasks added"
-        case .updates:
-            "Tasks updated"
         }
     }
 
@@ -739,9 +775,13 @@ final class CloudKitSubscriptionManager: ObservableObject {
         titles: [String]
     ) -> (ids: Set<UUID>, titles: [String])? {
         guard !ids.isEmpty else { return nil }
-        let nonLocalIDs = ids.filter { !isLikelySelfNoise(recordName: $0.uuidString) }
+        let nonLocalIDs = filteredNonLocalIDs(ids)
         guard !nonLocalIDs.isEmpty else { return nil }
         return (Set(nonLocalIDs), titles)
+    }
+
+    func filteredNonLocalIDs(_ ids: Set<UUID>) -> Set<UUID> {
+        ids.filter { !isLikelySelfNoise(recordName: $0.uuidString) }
     }
 
     func shouldSuppressShoppingMutationPresentation(

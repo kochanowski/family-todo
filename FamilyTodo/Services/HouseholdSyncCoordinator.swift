@@ -358,6 +358,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private let foregroundRepairConfiguration: ForegroundRepairConfiguration
     private let interactiveManualRefreshBudgetNanoseconds: UInt64
     private let sharedShoppingAlertDelivery: @MainActor ([String], UUID, String?) async -> Void
+    private let passiveSharedActivityAlertDelivery: @MainActor (PassiveSharedActivityAlertDescriptor) async -> Void
     private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
     private var scheduledForegroundRepairTask: _Concurrency.Task<Void, Never>?
@@ -382,13 +383,30 @@ final class HouseholdSyncCoordinator: ObservableObject {
                 householdId: householdId,
                 householdName: householdName
             )
-        }
+        },
+        passiveSharedActivityAlertDelivery: (@MainActor (PassiveSharedActivityAlertDescriptor) async -> Void)? = nil
     ) {
+        let resolvedPassiveSharedActivityAlertDelivery =
+            passiveSharedActivityAlertDelivery ?? { descriptor in
+                if descriptor.domain == .shopping,
+                   descriptor.preservesShoppingTitles,
+                   descriptor.changeCount == descriptor.shoppingTitles.count
+                {
+                    await sharedShoppingAlertDelivery(
+                        descriptor.shoppingTitles,
+                        descriptor.householdId,
+                        descriptor.householdName
+                    )
+                } else {
+                    await NotificationService.shared.deliverPassiveSharedActivityAlert(descriptor)
+                }
+            }
         self.engine = engine
         self.applicationStateProvider = applicationStateProvider
         self.foregroundRepairConfiguration = foregroundRepairConfiguration
         self.interactiveManualRefreshBudgetNanoseconds = interactiveManualRefreshBudgetNanoseconds
         self.sharedShoppingAlertDelivery = sharedShoppingAlertDelivery
+        self.passiveSharedActivityAlertDelivery = resolvedPassiveSharedActivityAlertDelivery
     }
 
     func performInteractiveManualRefresh() async {
@@ -483,22 +501,102 @@ final class HouseholdSyncCoordinator: ObservableObject {
     }
 
     private func deliverSystemAlerts(for batch: HouseholdSyncBatch) async {
-        guard batch.classification != .bootstrap else { return }
+        guard batch.classification == .steadyStateRemote else { return }
+
+        for descriptor in passiveSharedActivityDescriptors(for: batch) {
+            await passiveSharedActivityAlertDelivery(descriptor)
+        }
+    }
+
+    private func passiveSharedActivityDescriptors(
+        for batch: HouseholdSyncBatch
+    ) -> [PassiveSharedActivityAlertDescriptor] {
+        var shoppingCount = 0
+        var shoppingTitles: [String] = []
+        var shoppingPreservesTitles = true
+        var taskIDs = Set<UUID>()
+        var ideaIDs = Set<UUID>()
+
         for event in batch.events {
+            guard event.source == .remote else { continue }
+
             switch event.kind {
             case let .shoppingAdded(ids, titles):
-                guard let payload = CloudKitSubscriptionManager.shared.filteredShoppingAdditionPayload(
-                    ids: ids,
-                    titles: titles
-                ) else {
-                    continue
+                let nonLocalIDs = CloudKitSubscriptionManager.shared.filteredNonLocalIDs(ids)
+                guard !nonLocalIDs.isEmpty else { continue }
+                shoppingCount += nonLocalIDs.count
+
+                if shoppingPreservesTitles, nonLocalIDs.count == ids.count {
+                    shoppingTitles.append(contentsOf: titles)
+                } else {
+                    shoppingPreservesTitles = false
+                    shoppingTitles.removeAll()
                 }
-                guard !payload.titles.isEmpty else { continue }
-                await sharedShoppingAlertDelivery(payload.titles, event.householdId, nil)
-            default:
+            case let .shoppingUpdated(itemIDs, bundleIDs),
+                 let .shoppingRemoved(itemIDs, bundleIDs):
+                let itemCount = CloudKitSubscriptionManager.shared.filteredNonLocalIDs(itemIDs).count
+                let bundleCount = CloudKitSubscriptionManager.shared.filteredNonLocalIDs(bundleIDs).count
+                let nonLocalCount = itemCount + bundleCount
+                guard nonLocalCount > 0 else { continue }
+                shoppingCount += nonLocalCount
+                shoppingPreservesTitles = false
+                shoppingTitles.removeAll()
+            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+                taskIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(addedIDs))
+                taskIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(changedIDs))
+                taskIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(removedIDs))
+            case let .ideasChanged(addedIDs, changedIDs, removedIDs):
+                ideaIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(addedIDs))
+                ideaIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(changedIDs))
+                ideaIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(removedIDs))
+            case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
+                ideaIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(addedIDs))
+                ideaIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(changedIDs))
+                ideaIDs.formUnion(CloudKitSubscriptionManager.shared.filteredNonLocalIDs(removedIDs))
+            case .householdMetadataChanged, .membersChanged:
                 continue
             }
         }
+
+        guard let householdId = batch.events.first?.householdId else { return [] }
+        var descriptors: [PassiveSharedActivityAlertDescriptor] = []
+
+        if shoppingCount > 0 {
+            descriptors.append(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: nil,
+                    domain: .shopping,
+                    changeCount: shoppingCount,
+                    shoppingTitles: shoppingTitles,
+                    preservesShoppingTitles: shoppingPreservesTitles && !shoppingTitles.isEmpty
+                )
+            )
+        }
+
+        if !taskIDs.isEmpty {
+            descriptors.append(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: nil,
+                    domain: .tasks,
+                    changeCount: taskIDs.count
+                )
+            )
+        }
+
+        if !ideaIDs.isEmpty {
+            descriptors.append(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: nil,
+                    domain: .ideas,
+                    changeCount: ideaIDs.count
+                )
+            )
+        }
+
+        return descriptors
     }
 
     private func scheduleForegroundRepairIfNeeded(

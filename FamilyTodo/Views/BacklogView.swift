@@ -58,6 +58,7 @@ private struct BacklogContent: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
+    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -565,10 +566,19 @@ private struct BacklogContent: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text("Ideas")
-                .font(themeStore.font(for: .screenHeader))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                Text("Ideas")
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+
+                if subscriptionManager.ideasInlineIndicator != nil,
+                   selectedTab == .backlog
+                {
+                    SyncStatusIcon()
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 newCategoryColorHex = MemberColorToken.randomHex()

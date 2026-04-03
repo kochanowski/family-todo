@@ -16,6 +16,10 @@ final class FamilyTodoTests: XCTestCase {
         // Verify the app module can be imported
         XCTAssertTrue(true, "HousePulse module imported successfully")
     }
+
+    func testShoppingTabTitleIsShortenedToShop() {
+        XCTAssertEqual(AppTab.shopping.title, "Shop")
+    }
 }
 
 @MainActor

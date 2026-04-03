@@ -1450,6 +1450,128 @@ final class SharedShoppingNotificationAccumulatorTests: XCTestCase {
         XCTAssertEqual(trailingBatch.count, 1)
         XCTAssertEqual(trailingBatch.first?.itemTitles, ["Bread"])
     }
+
+    func testAccumulatorCoalescesBurstyShoppingEditsIntoSingleAlertWindow() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = SharedShoppingNotificationAccumulator(window: 8)
+
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: "Dom",
+                itemTitles: ["Milk", "Bread"],
+                at: start
+            )
+        )
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: "Dom",
+                itemTitles: ["Eggs"],
+                at: start.addingTimeInterval(4)
+            )
+        )
+
+        let batch = accumulator.flushReady(at: start.addingTimeInterval(8.1))
+
+        XCTAssertEqual(batch.count, 1)
+        XCTAssertEqual(batch.first?.itemTitles, ["Bread", "Eggs", "Milk"])
+    }
+}
+
+final class PassiveSharedActivityAlertAccumulatorTests: XCTestCase {
+    func testAccumulatorBatchesTaskChangesPerDomainWithinWindow() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = PassiveSharedActivityAlertAccumulator(window: 8)
+
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .tasks,
+                    changeCount: 2
+                ),
+                at: start
+            ).isEmpty
+        )
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .tasks,
+                    changeCount: 3
+                ),
+                at: start.addingTimeInterval(4)
+            ).isEmpty
+        )
+
+        let readyBatches = accumulator.flushReady(at: start.addingTimeInterval(8.1))
+
+        XCTAssertEqual(
+            readyBatches,
+            [
+                PassiveSharedActivityAlertBatch(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .tasks,
+                    changeCount: 5,
+                    shoppingTitles: [],
+                    preservesShoppingTitles: false
+                ),
+            ]
+        )
+    }
+
+    func testAccumulatorDropsShoppingTitlesWhenWindowContainsMixedShoppingChanges() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = PassiveSharedActivityAlertAccumulator(window: 8)
+
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .shopping,
+                    changeCount: 2,
+                    shoppingTitles: ["Milk", "Bread"],
+                    preservesShoppingTitles: true
+                ),
+                at: start
+            ).isEmpty
+        )
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .shopping,
+                    changeCount: 1
+                ),
+                at: start.addingTimeInterval(3)
+            ).isEmpty
+        )
+
+        let readyBatches = accumulator.flushReady(at: start.addingTimeInterval(8.1))
+
+        XCTAssertEqual(
+            readyBatches,
+            [
+                PassiveSharedActivityAlertBatch(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .shopping,
+                    changeCount: 3,
+                    shoppingTitles: [],
+                    preservesShoppingTitles: false
+                ),
+            ]
+        )
+    }
 }
 
 final class RemoteSyncAnimationSupportTests: XCTestCase {

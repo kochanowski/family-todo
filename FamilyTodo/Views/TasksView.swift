@@ -618,10 +618,10 @@ private struct TasksContent: View {
                     .accessibilityHint("Shows information about the recommended task limit")
                 }
 
-                if let feedback = subscriptionManager.tasksInlineFeedback,
+                if subscriptionManager.tasksInlineIndicator != nil,
                    selectedTab == .tasks
                 {
-                    SyncStatusPill(text: feedback.text)
+                    SyncStatusIcon()
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }

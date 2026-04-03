@@ -140,11 +140,12 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(manager.showNewItemsBanner)
         XCTAssertEqual(manager.newItemsCount, 2)
         XCTAssertNil(manager.shoppingInlineFeedback)
-        XCTAssertNil(manager.tasksInlineFeedback)
+        XCTAssertNil(manager.tasksInlineIndicator)
+        XCTAssertNil(manager.ideasInlineIndicator)
     }
 
     @MainActor
-    func testTaskUpdateOnTasksTabPublishesInlineFeedbackWithoutBanner() {
+    func testTaskUpdateOnTasksTabPublishesInlineIndicatorWithoutBanner() {
         let manager = makeManager()
         defer { manager.resetTransientPresentationState() }
         manager.updateActiveTab(.tasks)
@@ -159,13 +160,13 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
             applicationState: .active
         )
 
-        XCTAssertEqual(manager.tasksInlineFeedback?.text, "Tasks updated")
+        XCTAssertNotNil(manager.tasksInlineIndicator)
         XCTAssertFalse(manager.showNewItemsBanner)
         XCTAssertNil(manager.shoppingInlineFeedback)
     }
 
     @MainActor
-    func testTaskAdditionOffTasksTabDoesNotShowGlobalBannerOrInlineFeedback() {
+    func testTaskAdditionOffTasksTabDoesNotShowGlobalBannerOrInlineIndicator() {
         let manager = makeManager()
         defer { manager.resetTransientPresentationState() }
         manager.updateActiveTab(.shopping)
@@ -181,8 +182,29 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         )
 
         XCTAssertFalse(manager.showNewItemsBanner)
-        XCTAssertNil(manager.tasksInlineFeedback)
+        XCTAssertNil(manager.tasksInlineIndicator)
         XCTAssertNil(manager.shoppingInlineFeedback)
+    }
+
+    @MainActor
+    func testIdeasUpdateOnIdeasTabPublishesInlineIndicatorWithoutBanner() {
+        let manager = makeManager()
+        defer { manager.resetTransientPresentationState() }
+        manager.updateActiveTab(.backlog)
+
+        manager.publishRemoteSyncPresentation(
+            RemoteSyncPresentation(
+                domain: .ideas,
+                kind: .updates,
+                changeCount: 1,
+                titles: []
+            ),
+            applicationState: .active
+        )
+
+        XCTAssertNotNil(manager.ideasInlineIndicator)
+        XCTAssertFalse(manager.showNewItemsBanner)
+        XCTAssertNil(manager.tasksInlineIndicator)
     }
 
     @MainActor
@@ -194,7 +216,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
 
         manager.updateActiveTab(.tasks)
-        XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
+        XCTAssertTrue(manager.shouldSuppressSharedShoppingAlert(applicationState: .active))
         XCTAssertFalse(manager.shouldSuppressSharedShoppingAlert(applicationState: .background))
     }
 
@@ -207,7 +229,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
 
         manager.updateActiveTab(.shopping)
-        XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
+        XCTAssertTrue(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .active))
         XCTAssertFalse(manager.shouldSuppressHouseholdCelebrationAlert(applicationState: .background))
     }
 
@@ -344,7 +366,8 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertFalse(manager.showNewItemsBanner)
         XCTAssertEqual(manager.newItemsCount, 0)
         XCTAssertNil(manager.shoppingInlineFeedback)
-        XCTAssertNil(manager.tasksInlineFeedback)
+        XCTAssertNil(manager.tasksInlineIndicator)
+        XCTAssertNil(manager.ideasInlineIndicator)
     }
 
     @MainActor
@@ -386,6 +409,7 @@ final class CloudKitSubscriptionManagerTests: XCTestCase {
         XCTAssertFalse(manager.showNewItemsBanner)
         XCTAssertEqual(manager.newItemsCount, 0)
         XCTAssertNil(manager.shoppingInlineFeedback)
+        XCTAssertNil(manager.tasksInlineIndicator)
     }
 
     @MainActor

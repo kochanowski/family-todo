@@ -357,6 +357,7 @@ class NotificationSettingsStore: ObservableObject {
     @AppStorage("notifications.enabled") var isEnabled = true
     @AppStorage("notifications.taskReminders") var taskRemindersEnabled = true
     @AppStorage("notifications.dailyDigest") var dailyDigestEnabled = true
+    @AppStorage("notifications.sharedActivity") var sharedActivityEnabled = true
     @AppStorage("notifications.sound") var soundEnabled = true
     @AppStorage("notifications.reminderHour") private var reminderHour = 8
     @AppStorage("notifications.reminderMinute") private var reminderMinute = 0

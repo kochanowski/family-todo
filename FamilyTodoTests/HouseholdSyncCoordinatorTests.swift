@@ -285,6 +285,66 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(deliveries.isEmpty)
     }
 
+    func testPerformSyncDoesNotDeliverSharedShoppingAlertForLifecycleRefresh() async {
+        let householdId = UUID()
+        let batchID = UUID()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [
+                        HouseholdSyncEvent(
+                            householdId: householdId,
+                            batchID: batchID,
+                            source: .foregroundRepair,
+                            reason: .appBecameActive,
+                            timestamp: Date(timeIntervalSince1970: 100),
+                            direction: .ownerToParticipant,
+                            kind: .shoppingAdded(ids: Set([UUID()]), titles: ["Milk"])
+                        ),
+                    ],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: batchID,
+                        reason: .appBecameActive,
+                        direction: .ownerToParticipant,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                        syncStartedAt: Date(timeIntervalSince1970: 100),
+                        syncFinishedAt: Date(timeIntervalSince1970: 101),
+                        changedDomains: Set([.shopping]),
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let alertRecorder = SharedShoppingAlertRecorder()
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .background },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { titles, householdId, householdName in
+                await alertRecorder.record(
+                    titles: titles,
+                    householdId: householdId,
+                    householdName: householdName
+                )
+            }
+        )
+
+        _ = await coordinator.performSync(reason: .appBecameActive)
+
+        XCTAssertTrue(alertRecorder.deliveries.isEmpty)
+    }
+
     func testPerformSyncDoesNotScheduleForegroundRepairWindowForRemotePush() async {
         let engine = FakeHouseholdSyncEngine(
             results: [
