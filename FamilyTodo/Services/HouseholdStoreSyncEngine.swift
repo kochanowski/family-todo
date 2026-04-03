@@ -22,7 +22,9 @@ protocol HouseholdRemoteSyncDataSource: AnyObject {
     ) -> RemoteSyncBaseline
     func refreshCurrentHouseholdForRemoteCloudChange(
         userId: String,
-        preferredHouseholdId: UUID?
+        preferredHouseholdId: UUID?,
+        reason: HouseholdSyncReason,
+        context: RemoteCloudChangeContext
     ) async throws -> HouseholdStore.JoinedHouseholdHydrationSnapshot?
     func processRemoteVisibleContentChangeIfNeeded(
         beforeSnapshot: HouseholdStore.RemoteCloudRefreshSnapshot,
@@ -94,7 +96,9 @@ struct HouseholdRemoteSyncExecutor {
         do {
             refreshedHydrationSnapshot = try await dataSource.refreshCurrentHouseholdForRemoteCloudChange(
                 userId: userId,
-                preferredHouseholdId: preferredHouseholdId
+                preferredHouseholdId: preferredHouseholdId,
+                reason: reason,
+                context: context
             ) ?? syncBaseline.beforeSnapshot.hydrationSnapshot
         } catch {
             dataSource.recordRemoteSyncError(error)

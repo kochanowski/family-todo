@@ -200,6 +200,85 @@ final class HouseholdRemoteSyncTests: XCTestCase {
         )
     }
 
+    func testHandleRemoteCloudChangeUsesSharedDeltaRefreshForShoppingOnlyChanges() async throws {
+        CloudKitDiagnosticsState.shared.clear()
+        let userId = "joined-user"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .member
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Milk"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            participantMembers: [membership],
+            shoppingItems: [shoppingItem],
+            acceptedSharedHouseholdIDs: [household.id],
+            participantSharedDeltasByHouseholdId: [
+                household.id: HouseholdCloudDelta(
+                    householdId: household.id,
+                    scope: .participantShared,
+                    changedDomains: [.shoppingItems]
+                ),
+            ]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let shoppingExpectation = expectation(
+            forNotification: .shoppingListDataDidChange,
+            object: nil,
+            handler: nil
+        )
+
+        let result = await store.handleRemoteCloudChange(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            context: RemoteCloudChangeContext(
+                databaseScope: .shared,
+                notificationType: .database,
+                receivedAt: Date(timeIntervalSince1970: 200)
+            )
+        )
+
+        await fulfillment(of: [shoppingExpectation], timeout: 1.0)
+
+        XCTAssertEqual(result, .newData)
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchHouseholdDelta" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchShoppingItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchBacklogItems" && $0.scope == .participantShared && $0.householdId == household.id
+        })
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("delta.impact scope=participantShared householdId=\(household.id.uuidString) domains=shoppingItems fallbackRequired=false")
+            }
+        )
+    }
+
     func testHandleRemoteCloudChangeReturnsNoDataWhenCachesAreAlreadyCurrent() async throws {
         let userId = "joined-user"
         let household = TestCacheFixtures.household(name: "Domownicy", ownerId: "owner-1")
@@ -245,6 +324,78 @@ final class HouseholdRemoteSyncTests: XCTestCase {
 
         XCTAssertEqual(firstResult, .newData)
         XCTAssertEqual(secondResult, .noData)
+    }
+
+    func testRunRemoteSyncPassUsesOwnerPrivateDeltaRefreshForForegroundRepairShoppingChanges() async throws {
+        CloudKitDiagnosticsState.shared.clear()
+        let userId = "owner-1"
+        let household = TestCacheFixtures.household(name: "Domownicy", ownerId: userId)
+        let membership = TestCacheFixtures.member(
+            householdId: household.id,
+            userId: userId,
+            displayName: "Taylor",
+            role: .owner
+        )
+        let shoppingItem = TestCacheFixtures.shoppingItem(
+            householdId: household.id,
+            title: "Bread"
+        )
+
+        let cloud = FakeHouseholdCloud(
+            households: [household],
+            ownerMembers: [membership],
+            shoppingItems: [shoppingItem],
+            ownerZoneIDsByHouseholdId: [
+                household.id: CKRecordZone.ID(
+                    zoneName: "HouseholdZone-\(household.id.uuidString)",
+                    ownerName: CKCurrentUserDefaultName
+                ),
+            ],
+            ownerPrivateDeltasByHouseholdId: [
+                household.id: HouseholdCloudDelta(
+                    householdId: household.id,
+                    scope: .ownerPrivate,
+                    changedDomains: [.shoppingItems]
+                ),
+            ]
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+        store.currentHousehold = household
+
+        modelContainer.mainContext.insert(CachedHousehold(from: household))
+        modelContainer.mainContext.insert(CachedMember(from: membership))
+        try modelContainer.mainContext.save()
+
+        let result = await store.runRemoteSyncPass(
+            userId: userId,
+            preferredHouseholdId: household.id,
+            reason: .foregroundRepairWindow
+        )
+
+        XCTAssertEqual(result.fetchResult, .newData)
+        let operations = await cloud.operationEventsSnapshot()
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchHouseholdDelta" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertTrue(operations.contains {
+            $0.name == "fetchShoppingItems" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchTasks" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchWorkItems" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertFalse(operations.contains {
+            $0.name == "fetchBacklogItems" && $0.scope == .ownerPrivate && $0.householdId == household.id
+        })
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("delta.impact scope=ownerPrivate householdId=\(household.id.uuidString) domains=shoppingItems fallbackRequired=false")
+            }
+        )
     }
 
     func testHandleRemoteCloudChangeReturnsNewDataWhenHouseholdMetadataChanges() async throws {

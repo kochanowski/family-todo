@@ -66,6 +66,7 @@ actor CloudKitManager {
     private var migratedMemberColorHouseholds: Set<UUID>
     private var backgroundSharedGraphRepairsInFlight: Set<UUID> = []
     private var recentInviteRedeemAttempts: [Date] = []
+    private let changeTokenStore = CloudKitChangeTokenStore()
 
     private static let ownerZoneContextDefaultsKey = "CloudKit.ownerZoneByHouseholdId"
     private static let sharedZoneContextDefaultsKey = "CloudKit.sharedZoneByHouseholdId"
@@ -200,6 +201,91 @@ actor CloudKitManager {
         get async {
             await activeHouseholdDatabase(for: householdScope)
         }
+    }
+
+    func fetchHouseholdDelta(
+        householdId: UUID,
+        scope explicitScope: HouseholdDatabaseScope? = nil
+    ) async throws -> HouseholdCloudDelta {
+        let scope = resolvedScope(explicitScope)
+        await ensureReady()
+
+        guard let zoneID = try await resolveSubscriptionZone(
+            householdId: householdId,
+            scope: scope
+        ) else {
+            return HouseholdCloudDelta(
+                householdId: householdId,
+                scope: scope,
+                changedDomains: [],
+                fallbackReason: "missingZone"
+            )
+        }
+
+        let database = await activeHouseholdDatabase(for: scope)
+        await recordDeltaProgress(
+            "delta.zone.started scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName)"
+        )
+
+        var previousToken = await changeTokenStore.zoneToken(
+            scope: scope,
+            zoneID: zoneID
+        )
+        var changedRecordTypes: Set<String> = []
+        var totalChangedRecordCount = 0
+        var totalDeletedRecordCount = 0
+        var moreComing = true
+
+        while moreComing {
+            let page = try await fetchZoneDeltaPage(
+                database: database,
+                zoneID: zoneID,
+                previousToken: previousToken
+            )
+
+            if let fallbackReason = page.fallbackReason {
+                await changeTokenStore.setZoneToken(nil, scope: scope, zoneID: zoneID)
+                await recordDeltaProgress(
+                    "delta.token.reset scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName) reason=\(fallbackReason)"
+                )
+                return HouseholdCloudDelta(
+                    householdId: householdId,
+                    scope: scope,
+                    changedDomains: [],
+                    fallbackReason: fallbackReason
+                )
+            }
+
+            changedRecordTypes.formUnion(page.changedRecordTypes)
+            totalChangedRecordCount += page.changedRecordCount
+            totalDeletedRecordCount += page.deletedRecordCount
+            previousToken = page.serverChangeToken
+            moreComing = page.moreComing
+        }
+
+        await changeTokenStore.setZoneToken(previousToken, scope: scope, zoneID: zoneID)
+        await recordDeltaProgress(
+            "delta.token.updated scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName)"
+        )
+
+        guard let changedDomains = householdDeltaDomains(for: changedRecordTypes) else {
+            return HouseholdCloudDelta(
+                householdId: householdId,
+                scope: scope,
+                changedDomains: [],
+                fallbackReason: "unknownRecordType"
+            )
+        }
+
+        await recordDeltaProgress(
+            "delta.zone.completed scope=\(scopeLabel(scope)) zone=\(zoneID.zoneName)|\(zoneID.ownerName) changedRecords=\(totalChangedRecordCount) deletedRecords=\(totalDeletedRecordCount)"
+        )
+
+        return HouseholdCloudDelta(
+            householdId: householdId,
+            scope: scope,
+            changedDomains: changedDomains
+        )
     }
 
     init() {
@@ -1699,6 +1785,149 @@ actor CloudKitManager {
         }
 
         return allRecords
+    }
+
+    private struct HouseholdZoneDeltaPage {
+        let changedRecordTypes: Set<String>
+        let changedRecordCount: Int
+        let deletedRecordCount: Int
+        let serverChangeToken: CKServerChangeToken?
+        let moreComing: Bool
+        let fallbackReason: String?
+    }
+
+    private func fetchZoneDeltaPage(
+        database: CKDatabase,
+        zoneID: CKRecordZone.ID,
+        previousToken: CKServerChangeToken?
+    ) async throws -> HouseholdZoneDeltaPage {
+        try await withCheckedThrowingContinuation { continuation in
+            let options = CKFetchRecordZoneChangesOperation.ZoneOptions()
+            options.previousServerChangeToken = previousToken
+            options.resultsLimit = Self.defaultQueryPageSize
+
+            let operation = CKFetchRecordZoneChangesOperation(
+                recordZoneIDs: [zoneID],
+                optionsByRecordZoneID: [zoneID: options]
+            )
+            operation.qualityOfService = .userInitiated
+
+            let resumeLock = NSLock()
+            var hasResumed = false
+            var changedRecordTypes: Set<String> = []
+            var changedRecordCount = 0
+            var deletedRecordCount = 0
+            var latestServerToken = previousToken
+
+            func resumeOnce(with result: Result<HouseholdZoneDeltaPage, Error>) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(with: result)
+            }
+
+            operation.recordChangedBlock = { record in
+                changedRecordTypes.insert(record.recordType)
+                changedRecordCount += 1
+            }
+
+            operation.recordWithIDWasDeletedBlock = { _, recordType in
+                if let recordType {
+                    changedRecordTypes.insert(recordType)
+                }
+                deletedRecordCount += 1
+            }
+
+            operation.recordZoneChangeTokensUpdatedBlock = { _, serverChangeToken, _ in
+                latestServerToken = serverChangeToken
+            }
+
+            operation.recordZoneFetchCompletionBlock = { _, serverChangeToken, _, moreComing, error in
+                if let ckError = error as? CKError, ckError.code == .changeTokenExpired {
+                    resumeOnce(
+                        with: .success(
+                            HouseholdZoneDeltaPage(
+                                changedRecordTypes: changedRecordTypes,
+                                changedRecordCount: changedRecordCount,
+                                deletedRecordCount: deletedRecordCount,
+                                serverChangeToken: nil,
+                                moreComing: false,
+                                fallbackReason: "changeTokenExpired"
+                            )
+                        )
+                    )
+                    return
+                }
+
+                if let error {
+                    resumeOnce(with: .failure(error))
+                    return
+                }
+
+                latestServerToken = serverChangeToken ?? latestServerToken
+                resumeOnce(
+                    with: .success(
+                        HouseholdZoneDeltaPage(
+                            changedRecordTypes: changedRecordTypes,
+                            changedRecordCount: changedRecordCount,
+                            deletedRecordCount: deletedRecordCount,
+                            serverChangeToken: latestServerToken,
+                            moreComing: moreComing,
+                            fallbackReason: nil
+                        )
+                    )
+                )
+            }
+
+            database.add(operation)
+        }
+    }
+
+    private func householdDeltaDomains(
+        for recordTypes: Set<String>
+    ) -> Set<HouseholdCloudDeltaDomain>? {
+        var domains: Set<HouseholdCloudDeltaDomain> = []
+
+        for recordType in recordTypes {
+            switch recordType {
+            case "Household":
+                domains.insert(.householdMetadata)
+            case "Member":
+                domains.insert(.members)
+            case "ShoppingItem":
+                domains.insert(.shoppingItems)
+            case "ShoppingBundle":
+                domains.insert(.shoppingBundles)
+            case "Task":
+                domains.insert(.tasks)
+            case "WorkItem":
+                domains.insert(.workItems)
+            case "BacklogCategory":
+                domains.insert(.backlogCategories)
+            case "BacklogItem":
+                domains.insert(.backlogItems)
+            default:
+                return nil
+            }
+        }
+
+        return domains
+    }
+
+    private func recordDeltaProgress(_ operation: String) async {
+        await MainActor.run {
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+        }
+    }
+
+    private func scopeLabel(_ scope: HouseholdDatabaseScope) -> String {
+        switch scope {
+        case .ownerPrivate:
+            "ownerPrivate"
+        case .participantShared:
+            "participantShared"
+        }
     }
 
     // swiftlint:disable cyclomatic_complexity function_body_length

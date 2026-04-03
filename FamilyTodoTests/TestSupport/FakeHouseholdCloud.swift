@@ -44,6 +44,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     private let createInviteCodeResultsByHouseholdId: [UUID: InviteToken]
     private let ownerZoneIDsByHouseholdId: [UUID: CKRecordZone.ID]
     private let participantSharedZoneIDsByHouseholdId: [UUID: CKRecordZone.ID]
+    private let ownerPrivateDeltasByHouseholdId: [UUID: HouseholdCloudDelta]
+    private let participantSharedDeltasByHouseholdId: [UUID: HouseholdCloudDelta]
     private let fetchDelayNanosecondsByOperation: [String: UInt64]
     private var createInviteCodeCalls = 0
 
@@ -69,6 +71,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         createInviteCodeResultsByHouseholdId: [UUID: InviteToken] = [:],
         ownerZoneIDsByHouseholdId: [UUID: CKRecordZone.ID] = [:],
         participantSharedZoneIDsByHouseholdId: [UUID: CKRecordZone.ID] = [:],
+        ownerPrivateDeltasByHouseholdId: [UUID: HouseholdCloudDelta] = [:],
+        participantSharedDeltasByHouseholdId: [UUID: HouseholdCloudDelta] = [:],
         fetchDelayNanosecondsByOperation: [String: UInt64] = [:]
     ) {
         householdsById = Dictionary(uniqueKeysWithValues: households.map { ($0.id, $0) })
@@ -92,6 +96,8 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
         self.createInviteCodeResultsByHouseholdId = createInviteCodeResultsByHouseholdId
         self.ownerZoneIDsByHouseholdId = ownerZoneIDsByHouseholdId
         self.participantSharedZoneIDsByHouseholdId = participantSharedZoneIDsByHouseholdId
+        self.ownerPrivateDeltasByHouseholdId = ownerPrivateDeltasByHouseholdId
+        self.participantSharedDeltasByHouseholdId = participantSharedDeltasByHouseholdId
         self.fetchDelayNanosecondsByOperation = fetchDelayNanosecondsByOperation
     }
 
@@ -210,6 +216,30 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
     func migrateHouseholdToCustomZoneIfNeeded(householdId _: UUID) async throws {}
     func repairSharedHouseholdGraphIfNeeded(householdId _: UUID) async throws {}
     func migrateMemberColorsIfNeeded(householdId _: UUID) async {}
+
+    func fetchHouseholdDelta(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> HouseholdCloudDelta {
+        let scope = resolvedScope(explicitScope)
+        appendOperation("fetchHouseholdDelta", scope: scope, householdId: householdId)
+        return switch scope {
+        case .ownerPrivate:
+            ownerPrivateDeltasByHouseholdId[householdId] ?? HouseholdCloudDelta(
+                householdId: householdId,
+                scope: .ownerPrivate,
+                changedDomains: [],
+                fallbackReason: "fakeDeltaUnavailable"
+            )
+        case .participantShared:
+            participantSharedDeltasByHouseholdId[householdId] ?? HouseholdCloudDelta(
+                householdId: householdId,
+                scope: .participantShared,
+                changedDomains: [],
+                fallbackReason: "fakeDeltaUnavailable"
+            )
+        }
+    }
 
     func createHouseholdWithMember(
         _ household: Household,

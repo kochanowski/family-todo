@@ -264,7 +264,9 @@ private final class FakeHouseholdRemoteSyncDataSource: HouseholdRemoteSyncDataSo
 
     func refreshCurrentHouseholdForRemoteCloudChange(
         userId _: String,
-        preferredHouseholdId _: UUID?
+        preferredHouseholdId _: UUID?,
+        reason _: HouseholdSyncReason,
+        context _: RemoteCloudChangeContext
     ) async throws -> HouseholdStore.JoinedHouseholdHydrationSnapshot? {
         recordedCalls.append("refresh")
         if let refreshError {

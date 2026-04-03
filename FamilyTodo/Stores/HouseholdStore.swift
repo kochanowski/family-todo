@@ -503,6 +503,40 @@ struct RemoteSyncPassBuildContext {
     let visibleContentResolution: RemoteVisibleContentResolution?
 }
 
+enum HouseholdCloudDeltaDomain: String, Equatable, Hashable {
+    case householdMetadata
+    case members
+    case shoppingItems
+    case shoppingBundles
+    case tasks
+    case workItems
+    case backlogCategories
+    case backlogItems
+}
+
+struct HouseholdCloudDelta: Equatable {
+    let householdId: UUID
+    let scope: CloudKitManager.HouseholdDatabaseScope
+    let changedDomains: Set<HouseholdCloudDeltaDomain>
+    let fallbackReason: String?
+
+    init(
+        householdId: UUID,
+        scope: CloudKitManager.HouseholdDatabaseScope,
+        changedDomains: Set<HouseholdCloudDeltaDomain>,
+        fallbackReason: String? = nil
+    ) {
+        self.householdId = householdId
+        self.scope = scope
+        self.changedDomains = changedDomains
+        self.fallbackReason = fallbackReason
+    }
+
+    var requiresFullSnapshot: Bool {
+        fallbackReason != nil
+    }
+}
+
 protocol HouseholdCloudSyncing: Actor {
     func ensureReady() async
     func checkAvailability() async throws
@@ -517,6 +551,10 @@ protocol HouseholdCloudSyncing: Actor {
     func migrateHouseholdToCustomZoneIfNeeded(householdId: UUID) async throws
     func repairSharedHouseholdGraphIfNeeded(householdId: UUID) async throws
     func migrateMemberColorsIfNeeded(householdId: UUID) async
+    func fetchHouseholdDelta(
+        householdId: UUID,
+        scope explicitScope: CloudKitManager.HouseholdDatabaseScope?
+    ) async throws -> HouseholdCloudDelta
 
     func createHouseholdWithMember(
         _ household: Household,
@@ -3646,7 +3684,9 @@ class HouseholdStore: ObservableObject {
 
     func refreshCurrentHouseholdForRemoteCloudChange(
         userId: String,
-        preferredHouseholdId: UUID?
+        preferredHouseholdId: UUID?,
+        reason: HouseholdSyncReason,
+        context: RemoteCloudChangeContext
     ) async throws -> JoinedHouseholdHydrationSnapshot? {
         await refreshCurrentHouseholdAndMembershipFromCloud(
             userId: userId,
@@ -3655,6 +3695,15 @@ class HouseholdStore: ObservableObject {
 
         guard let household = currentHousehold else {
             return nil
+        }
+
+        if let deltaSnapshot = try await refreshCurrentHouseholdFromDeltaIfPossible(
+            household: household,
+            userId: userId,
+            reason: reason,
+            context: context
+        ) {
+            return deltaSnapshot
         }
 
         let hydrationSnapshot = try await runJoinedHouseholdHydrationPass(
@@ -3671,6 +3720,208 @@ class HouseholdStore: ObservableObject {
             "[RemoteSync] Hydration pass finished for household \(household.id). members=\(hydrationSnapshot.activeMemberCount) tasks=\(hydrationSnapshot.taskCount) ideas=\(hydrationSnapshot.ideaCount) shopping=\(hydrationSnapshot.shoppingItemCount) bundles=\(hydrationSnapshot.bundleCount)"
         )
         return hydrationSnapshot
+    }
+
+    private func refreshCurrentHouseholdFromDeltaIfPossible(
+        household: Household,
+        userId: String,
+        reason: HouseholdSyncReason,
+        context _: RemoteCloudChangeContext
+    ) async throws -> JoinedHouseholdHydrationSnapshot? {
+        guard let syncContext = HouseholdSyncContextFactory.make(
+            household: household,
+            currentUserId: userId
+        ), shouldAttemptHouseholdDeltaRefresh(reason: reason, syncContext: syncContext)
+        else {
+            return nil
+        }
+
+        let delta = try await cloudKit.fetchHouseholdDelta(
+            householdId: household.id,
+            scope: syncContext.scope
+        )
+        let domainLabels = delta.changedDomains
+            .map(\.rawValue)
+            .sorted()
+            .joined(separator: ",")
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "delta.impact scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(household.id.uuidString) domains=\(domainLabels) fallbackRequired=\(delta.requiresFullSnapshot)"
+        )
+
+        guard !delta.requiresFullSnapshot else {
+            if let fallbackReason = delta.fallbackReason {
+                CloudKitDiagnosticsState.shared.recordProgress(
+                    operation: "delta.fallbackToSnapshot scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(household.id.uuidString) reason=\(fallbackReason)"
+                )
+            }
+            return nil
+        }
+
+        guard let modelContext else {
+            return cachedJoinHydrationSnapshot(
+                householdId: household.id,
+                userId: userId,
+                remoteMembershipConfirmed: false
+            )
+        }
+
+        let taskStore = makeTaskStore(modelContext: modelContext, householdId: household.id)
+        let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
+        let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
+        let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
+
+        try await applyDeltaMetadataAndMembers(
+            household: household,
+            userId: userId,
+            syncContext: syncContext,
+            delta: delta
+        )
+        try await applyDeltaShopping(
+            householdId: household.id,
+            syncContext: syncContext,
+            delta: delta,
+            shoppingStore: shoppingStore,
+            bundleStore: bundleStore
+        )
+        try await applyDeltaWorkAndBacklog(
+            householdId: household.id,
+            syncContext: syncContext,
+            delta: delta,
+            taskStore: taskStore,
+            backlogStore: backlogStore
+        )
+
+        let cachedSnapshot = cachedJoinHydrationSnapshot(
+            householdId: household.id,
+            userId: userId,
+            remoteMembershipConfirmed: fetchCachedMembers(householdId: household.id).contains {
+                $0.userId == userId && $0.isActive
+            }
+        )
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "delta.cacheApplied scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(household.id.uuidString) domains=\(domainLabels) shopping=\(cachedSnapshot.shoppingItemCount) bundles=\(cachedSnapshot.bundleCount) workItems=\(cachedSnapshot.taskCount + cachedSnapshot.ideaCount) categories=\(cachedSnapshot.categoryCount)"
+        )
+        return cachedSnapshot
+    }
+
+    private func makeTaskStore(
+        modelContext: ModelContext,
+        householdId: UUID
+    ) -> TaskStore {
+        let taskStore = TaskStore(modelContext: modelContext)
+        taskStore.setHousehold(householdId)
+        return taskStore
+    }
+
+    private func applyDeltaMetadataAndMembers(
+        household: Household,
+        userId: String,
+        syncContext: HouseholdSyncContext,
+        delta: HouseholdCloudDelta
+    ) async throws {
+        if delta.changedDomains.contains(.householdMetadata) {
+            let refreshedHousehold = try await cloudKit.fetchHousehold(
+                id: household.id,
+                scope: syncContext.scope
+            )
+            updateCache(with: refreshedHousehold)
+            currentHousehold = refreshedHousehold
+        }
+
+        if delta.changedDomains.contains(.members) {
+            let fetchedMembers = try await cloudKit.fetchMembers(
+                householdId: household.id,
+                scope: syncContext.scope
+            )
+            let mergedMembers = mergeRemoteMembersWithLocalJoinFallback(
+                fetchedMembers,
+                householdId: household.id,
+                currentUserId: userId
+            )
+            updateCache(with: mergedMembers)
+        }
+    }
+
+    private func applyDeltaShopping(
+        householdId: UUID,
+        syncContext: HouseholdSyncContext,
+        delta: HouseholdCloudDelta,
+        shoppingStore: ShoppingListStore,
+        bundleStore: ShoppingBundleStore
+    ) async throws {
+        if delta.changedDomains.contains(.shoppingItems) {
+            let fetchedItems = try await cloudKit.fetchShoppingItems(
+                householdId: householdId,
+                scope: syncContext.scope
+            )
+            shoppingStore.syncToCache(fetchedItems)
+        }
+
+        if delta.changedDomains.contains(.shoppingBundles) {
+            let fetchedBundles = try await cloudKit.fetchShoppingBundles(
+                householdId: householdId,
+                scope: syncContext.scope
+            )
+            bundleStore.syncToCache(
+                fetchedBundles,
+                cloudBundleIDs: Set(fetchedBundles.map(\.id))
+            )
+        }
+    }
+
+    private func applyDeltaWorkAndBacklog(
+        householdId: UUID,
+        syncContext: HouseholdSyncContext,
+        delta: HouseholdCloudDelta,
+        taskStore: TaskStore,
+        backlogStore: BacklogStore
+    ) async throws {
+        let needsUnifiedWorkRefresh =
+            delta.changedDomains.contains(.tasks) ||
+            delta.changedDomains.contains(.workItems) ||
+            delta.changedDomains.contains(.backlogItems)
+        let needsBacklogRefresh =
+            delta.changedDomains.contains(.backlogItems) ||
+            delta.changedDomains.contains(.backlogCategories)
+
+        if needsUnifiedWorkRefresh {
+            let unifiedWorkItems = try await cloudKit.fetchUnifiedWorkItems(
+                householdId: householdId,
+                scope: syncContext.scope
+            )
+            taskStore.syncUnifiedWorkItemsToCache(unifiedWorkItems)
+        }
+
+        if needsBacklogRefresh {
+            let categories = try await cloudKit.fetchBacklogCategories(
+                householdId: householdId,
+                scope: syncContext.scope
+            )
+            let items = try await cloudKit.fetchBacklogItems(
+                householdId: householdId,
+                scope: syncContext.scope
+            )
+            backlogStore.syncToCache(
+                categories: categories,
+                items: items,
+                cloudCategoryIDs: Set(categories.map(\.id)),
+                cloudItemIDs: Set(items.map(\.id))
+            )
+        }
+    }
+
+    private func shouldAttemptHouseholdDeltaRefresh(
+        reason: HouseholdSyncReason,
+        syncContext: HouseholdSyncContext
+    ) -> Bool {
+        switch reason {
+        case .remotePush:
+            true
+        case .foregroundRepairWindow:
+            syncContext.scope == .ownerPrivate
+        default:
+            false
+        }
     }
 
     func processRemoteVisibleContentChangeIfNeeded(
