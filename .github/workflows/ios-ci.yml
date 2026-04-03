@@ -5,7 +5,7 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, fix/tasks-ideas-sync, fix/tasks-ideas-sync-new-implementation]
+    branches: [main, fix/tasks-ideas-sync, fix/remote-update-cleanup]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -263,7 +263,7 @@ jobs:
           (
             github.ref == 'refs/heads/main' ||
             github.ref == 'refs/heads/fix/tasks-ideas-sync' ||
-            github.ref == 'refs/heads/fix/tasks-ideas-sync-new-implementation'
+            github.ref == 'refs/heads/fix/remote-update-cleanup'
           )
         )
       )
