@@ -1802,13 +1802,14 @@ actor CloudKitManager {
         previousToken: CKServerChangeToken?
     ) async throws -> HouseholdZoneDeltaPage {
         try await withCheckedThrowingContinuation { continuation in
-            let options = CKFetchRecordZoneChangesOperation.ZoneOptions()
-            options.previousServerChangeToken = previousToken
-            options.resultsLimit = Self.defaultQueryPageSize
+            let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+            configuration.previousServerChangeToken = previousToken
+            configuration.resultsLimit = Self.defaultQueryPageSize
+            configuration.fetchAllChanges = false
 
             let operation = CKFetchRecordZoneChangesOperation(
                 recordZoneIDs: [zoneID],
-                optionsByRecordZoneID: [zoneID: options]
+                configurationsByRecordZoneID: [zoneID: configuration]
             )
             operation.qualityOfService = .userInitiated
 
@@ -1827,15 +1828,18 @@ actor CloudKitManager {
                 continuation.resume(with: result)
             }
 
-            operation.recordChangedBlock = { record in
-                changedRecordTypes.insert(record.recordType)
-                changedRecordCount += 1
+            operation.recordWasChangedBlock = { _, result in
+                switch result {
+                case let .success(record):
+                    changedRecordTypes.insert(record.recordType)
+                    changedRecordCount += 1
+                case let .failure(error):
+                    resumeOnce(with: .failure(error))
+                }
             }
 
             operation.recordWithIDWasDeletedBlock = { _, recordType in
-                if let recordType {
-                    changedRecordTypes.insert(recordType)
-                }
+                changedRecordTypes.insert(recordType)
                 deletedRecordCount += 1
             }
 
@@ -1843,41 +1847,47 @@ actor CloudKitManager {
                 latestServerToken = serverChangeToken
             }
 
-            operation.recordZoneFetchCompletionBlock = { _, serverChangeToken, _, moreComing, error in
-                if let ckError = error as? CKError, ckError.code == .changeTokenExpired {
+            operation.recordZoneFetchResultBlock = { _, result in
+                switch result {
+                case let .success(zoneResult):
+                    latestServerToken = zoneResult.serverChangeToken
                     resumeOnce(
                         with: .success(
                             HouseholdZoneDeltaPage(
                                 changedRecordTypes: changedRecordTypes,
                                 changedRecordCount: changedRecordCount,
                                 deletedRecordCount: deletedRecordCount,
-                                serverChangeToken: nil,
-                                moreComing: false,
-                                fallbackReason: "changeTokenExpired"
+                                serverChangeToken: latestServerToken,
+                                moreComing: zoneResult.moreComing,
+                                fallbackReason: nil
                             )
                         )
                     )
-                    return
-                }
-
-                if let error {
-                    resumeOnce(with: .failure(error))
-                    return
-                }
-
-                latestServerToken = serverChangeToken ?? latestServerToken
-                resumeOnce(
-                    with: .success(
-                        HouseholdZoneDeltaPage(
-                            changedRecordTypes: changedRecordTypes,
-                            changedRecordCount: changedRecordCount,
-                            deletedRecordCount: deletedRecordCount,
-                            serverChangeToken: latestServerToken,
-                            moreComing: moreComing,
-                            fallbackReason: nil
+                case let .failure(error):
+                    if let ckError = error as? CKError, ckError.code == .changeTokenExpired {
+                        resumeOnce(
+                            with: .success(
+                                HouseholdZoneDeltaPage(
+                                    changedRecordTypes: changedRecordTypes,
+                                    changedRecordCount: changedRecordCount,
+                                    deletedRecordCount: deletedRecordCount,
+                                    serverChangeToken: nil,
+                                    moreComing: false,
+                                    fallbackReason: "changeTokenExpired"
+                                )
+                            )
                         )
-                    )
-                )
+                        return
+                    }
+
+                    resumeOnce(with: .failure(error))
+                }
+            }
+
+            operation.fetchRecordZoneChangesResultBlock = { result in
+                if case let .failure(error) = result {
+                    resumeOnce(with: .failure(error))
+                }
             }
 
             database.add(operation)
