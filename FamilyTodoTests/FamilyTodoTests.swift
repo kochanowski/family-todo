@@ -753,6 +753,38 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertEqual(restoredState.triggerSummary.pushRegistrationStatus, "failed")
         XCTAssertEqual(restoredState.triggerSummary.lastFetchResult, "noData")
     }
+
+    func testNotificationDiagnosticsReportFiltersOutSyncNoise() {
+        let diagnostics = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        diagnostics.recordProgress(
+            operation: "sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1"
+        )
+        diagnostics.recordProgress(
+            operation: "notification.sharedActivity.suppressed householdId=household-1 domain=shopping reason=foregroundActive"
+        )
+
+        XCTAssertEqual(diagnostics.notificationEntries.count, 1)
+        XCTAssertTrue(
+            diagnostics.notificationDiagnosticsReport.contains(
+                "notification.sharedActivity.suppressed householdId=household-1"
+            )
+        )
+        XCTAssertFalse(
+            diagnostics.notificationDiagnosticsReport.contains(
+                "sync.pass.completed"
+            )
+        )
+    }
+
+    func testNotificationDiagnosticsFilterEmptyMessageIsSpecific() {
+        let diagnostics = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+
+        XCTAssertEqual(
+            diagnostics.diagnosticsReport(for: .notifications),
+            "No notification diagnostics recorded."
+        )
+        XCTAssertFalse(diagnostics.hasNotificationDiagnostics)
+    }
 }
 
 @MainActor

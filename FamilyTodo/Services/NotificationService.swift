@@ -334,6 +334,9 @@ enum NotificationSchedulePlanner {
 
         func setSettingsStore(_ store: NotificationSettingsStore) {
             settingsStore = store
+            recordNotificationProgress(
+                "notification.settings.bound hasStore=true notificationsEnabled=\(store.isEnabled) sharedActivityEnabled=\(store.sharedActivityEnabled) soundEnabled=\(store.soundEnabled)"
+            )
         }
 
         // MARK: - Authorization
@@ -342,13 +345,22 @@ enum NotificationSchedulePlanner {
             do {
                 let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
                 isAuthorized = granted
+                recordNotificationProgress(
+                    "notification.authorization.requested result=\(granted ? "granted" : "denied")"
+                )
             } catch {
                 isAuthorized = false
+                recordNotificationProgress(
+                    "notification.authorization.requestFailed description=\(sanitizeNotificationValue(error.localizedDescription))"
+                )
             }
         }
 
         func requestCollaborationAuthorizationIfNeeded() async {
             let settings = await center.notificationSettings()
+            recordNotificationProgress(
+                "notification.authorization.checked status=\(authorizationStatusLabel(settings.authorizationStatus)) source=collaborationRequest"
+            )
             switch settings.authorizationStatus {
             case .notDetermined:
                 await requestAuthorization()
@@ -366,6 +378,9 @@ enum NotificationSchedulePlanner {
             isAuthorized = settings.authorizationStatus == .authorized ||
                 settings.authorizationStatus == .provisional ||
                 settings.authorizationStatus == .ephemeral
+            recordNotificationProgress(
+                "notification.authorization.checked status=\(authorizationStatusLabel(settings.authorizationStatus)) source=refresh isAuthorized=\(isAuthorized)"
+            )
         }
 
         // MARK: - Task Notifications
@@ -577,10 +592,16 @@ enum NotificationSchedulePlanner {
 
             guard let nextFlushAt = passiveSharedActivityAlertAccumulator.nextFlushAt else {
                 passiveSharedActivityFlushTask = nil
+                recordNotificationProgress(
+                    "notification.sharedActivity.flushIdle reason=noPendingBatches"
+                )
                 return
             }
 
             let delay = max(0, nextFlushAt.timeIntervalSinceNow)
+            recordNotificationProgress(
+                "notification.sharedActivity.flushScheduled delayMs=\(Int(delay * 1000))"
+            )
             passiveSharedActivityFlushTask = _Concurrency.Task { @MainActor [weak self] in
                 guard delay > 0 else {
                     await self?.flushPassiveSharedActivityAlertBatches(at: Date())
@@ -597,6 +618,9 @@ enum NotificationSchedulePlanner {
 
         private func flushPassiveSharedActivityAlertBatches(at now: Date) async {
             let readyBatches = passiveSharedActivityAlertAccumulator.flushReady(at: now)
+            recordNotificationProgress(
+                "notification.sharedActivity.flushStarted readyBatchCount=\(readyBatches.count)"
+            )
             for batch in readyBatches {
                 await deliverPassiveSharedActivityBatch(batch)
             }
@@ -626,8 +650,18 @@ enum NotificationSchedulePlanner {
 
             do {
                 try await center.add(request)
+                recordNotificationProgress(
+                    "notification.sharedActivity.delivered householdId=\(batch.householdId.uuidString) domain=\(batch.domain.rawValue) changeCount=\(batch.changeCount) preservesShoppingTitles=\(batch.preservesShoppingTitles) threadIdentifier=\(request.content.threadIdentifier)"
+                )
             } catch {
                 // Passive collaboration alerts are optional and should not break sync.
+                recordNotificationProgress(
+                    "notification.sharedActivity.deliveryFailed householdId=\(batch.householdId.uuidString) domain=\(batch.domain.rawValue) description=\(sanitizeNotificationValue(error.localizedDescription))"
+                )
+                CloudKitDiagnosticsState.shared.record(
+                    error: error,
+                    operation: "notification.sharedActivity.delivery"
+                )
             }
         }
 
@@ -679,7 +713,7 @@ enum NotificationSchedulePlanner {
             identifier: String,
             threadIdentifier: String,
             categoryIdentifier: String
-        ) async {
+        ) async -> Bool {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
@@ -695,8 +729,14 @@ enum NotificationSchedulePlanner {
 
             do {
                 try await center.add(request)
+                return true
             } catch {
                 // Collaboration alerts are optional.
+                CloudKitDiagnosticsState.shared.record(
+                    error: error,
+                    operation: "notification.immediateAlert.delivery"
+                )
+                return false
             }
         }
 
@@ -721,16 +761,49 @@ enum NotificationSchedulePlanner {
             _ descriptor: PassiveSharedActivityAlertDescriptor
         ) async {
             await checkAuthorizationStatus()
-            guard isAuthorized else { return }
-            guard notificationsEnabled() else { return }
-            guard passiveSharedActivityEnabled() else { return }
-            guard !CloudKitSubscriptionManager.shared.shouldSuppressPassiveSharedActivityAlert() else {
+            let notificationsEnabled = notificationsEnabled()
+            let sharedActivityEnabled = passiveSharedActivityEnabled()
+            let applicationState = UIApplication.shared.applicationState
+            let isSuppressedInForeground = CloudKitSubscriptionManager.shared
+                .shouldSuppressPassiveSharedActivityAlert(applicationState: applicationState)
+
+            recordNotificationProgress(
+                "notification.sharedActivity.candidate householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) changeCount=\(descriptor.changeCount) titleCount=\(descriptor.shoppingTitles.count) preservesShoppingTitles=\(descriptor.preservesShoppingTitles) isAuthorized=\(isAuthorized) notificationsEnabled=\(notificationsEnabled) sharedActivityEnabled=\(sharedActivityEnabled) appState=\(applicationStateLabel(applicationState)) foregroundSuppressed=\(isSuppressedInForeground)"
+            )
+
+            guard isAuthorized else {
+                recordNotificationProgress(
+                    "notification.sharedActivity.suppressed householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) reason=unauthorized"
+                )
+                return
+            }
+            guard notificationsEnabled else {
+                recordNotificationProgress(
+                    "notification.sharedActivity.suppressed householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) reason=notificationsDisabled"
+                )
+                return
+            }
+            guard sharedActivityEnabled else {
+                recordNotificationProgress(
+                    "notification.sharedActivity.suppressed householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) reason=sharedActivityDisabled"
+                )
+                return
+            }
+            guard !isSuppressedInForeground else {
+                recordNotificationProgress(
+                    "notification.sharedActivity.suppressed householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) reason=foregroundActive"
+                )
                 return
             }
 
             let readyBatches = passiveSharedActivityAlertAccumulator.record(
                 descriptor,
                 at: Date()
+            )
+            let nextFlushDelayMilliseconds = passiveSharedActivityAlertAccumulator.nextFlushAt
+                .map { max(0, Int($0.timeIntervalSinceNow * 1000)) } ?? -1
+            recordNotificationProgress(
+                "notification.sharedActivity.queued householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) readyBatchCount=\(readyBatches.count) nextFlushDelayMs=\(nextFlushDelayMilliseconds)"
             )
             for readyBatch in readyBatches {
                 await deliverPassiveSharedActivityBatch(readyBatch)
@@ -744,19 +817,88 @@ enum NotificationSchedulePlanner {
             householdId: UUID
         ) async {
             await checkAuthorizationStatus()
-            guard isAuthorized else { return }
-            guard notificationsEnabled() else { return }
-            guard !CloudKitSubscriptionManager.shared.shouldSuppressHouseholdCelebrationAlert() else {
+            let notificationsEnabled = notificationsEnabled()
+            let applicationState = UIApplication.shared.applicationState
+            let isSuppressedInForeground = CloudKitSubscriptionManager.shared
+                .shouldSuppressHouseholdCelebrationAlert(applicationState: applicationState)
+
+            recordNotificationProgress(
+                "notification.celebration.candidate householdId=\(householdId.uuidString) isAuthorized=\(isAuthorized) notificationsEnabled=\(notificationsEnabled) appState=\(applicationStateLabel(applicationState)) foregroundSuppressed=\(isSuppressedInForeground)"
+            )
+
+            guard isAuthorized else {
+                recordNotificationProgress(
+                    "notification.celebration.suppressed householdId=\(householdId.uuidString) reason=unauthorized"
+                )
+                return
+            }
+            guard notificationsEnabled else {
+                recordNotificationProgress(
+                    "notification.celebration.suppressed householdId=\(householdId.uuidString) reason=notificationsDisabled"
+                )
+                return
+            }
+            guard !isSuppressedInForeground else {
+                recordNotificationProgress(
+                    "notification.celebration.suppressed householdId=\(householdId.uuidString) reason=foregroundActive"
+                )
                 return
             }
 
-            await deliverImmediateAlert(
+            let delivered = await deliverImmediateAlert(
                 title: title,
                 body: body,
                 identifier: "celebration-\(householdId.uuidString)-\(UUID().uuidString)",
                 threadIdentifier: "celebration-\(householdId.uuidString)",
                 categoryIdentifier: AppNotificationCategory.celebration
             )
+            recordNotificationProgress(
+                delivered
+                    ? "notification.celebration.delivered householdId=\(householdId.uuidString)"
+                    : "notification.celebration.deliveryFailed householdId=\(householdId.uuidString)"
+            )
+        }
+
+        private func recordNotificationProgress(_ operation: String) {
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+        }
+
+        private func authorizationStatusLabel(
+            _ status: UNAuthorizationStatus
+        ) -> String {
+            switch status {
+            case .notDetermined:
+                "notDetermined"
+            case .denied:
+                "denied"
+            case .authorized:
+                "authorized"
+            case .provisional:
+                "provisional"
+            case .ephemeral:
+                "ephemeral"
+            @unknown default:
+                "unknown"
+            }
+        }
+
+        private func applicationStateLabel(_ state: UIApplication.State) -> String {
+            switch state {
+            case .active:
+                "active"
+            case .inactive:
+                "inactive"
+            case .background:
+                "background"
+            @unknown default:
+                "unknown"
+            }
+        }
+
+        private func sanitizeNotificationValue(_ value: String) -> String {
+            value
+                .replacingOccurrences(of: "\n", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
         }
     }
 #else

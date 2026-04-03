@@ -501,9 +501,26 @@ final class HouseholdSyncCoordinator: ObservableObject {
     }
 
     private func deliverSystemAlerts(for batch: HouseholdSyncBatch) async {
-        guard batch.classification == .steadyStateRemote else { return }
+        guard batch.classification == .steadyStateRemote else {
+            recordNotificationProgress(
+                "notification.sharedActivity.batchSkipped classification=\(batchClassificationLabel(batch.classification)) eventCount=\(batch.events.count) reason=nonRemoteBatch"
+            )
+            return
+        }
 
-        for descriptor in passiveSharedActivityDescriptors(for: batch) {
+        let descriptors = passiveSharedActivityDescriptors(for: batch)
+        guard !descriptors.isEmpty else {
+            let householdLabel = batch.events.first?.householdId.uuidString ?? "unknown"
+            recordNotificationProgress(
+                "notification.sharedActivity.batchSuppressed householdId=\(householdLabel) eventCount=\(batch.events.count) reason=noRemoteNonLocalChanges"
+            )
+            return
+        }
+
+        for descriptor in descriptors {
+            recordNotificationProgress(
+                "notification.sharedActivity.descriptorPrepared householdId=\(descriptor.householdId.uuidString) domain=\(descriptor.domain.rawValue) changeCount=\(descriptor.changeCount) preservesShoppingTitles=\(descriptor.preservesShoppingTitles) titleCount=\(descriptor.shoppingTitles.count)"
+            )
             await passiveSharedActivityAlertDelivery(descriptor)
         }
     }
@@ -759,6 +776,10 @@ final class HouseholdSyncCoordinator: ObservableObject {
         CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
     }
 
+    private func recordNotificationProgress(_ operation: String) {
+        CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
+    }
+
     private func prioritizeRemotePushIfNeeded(_ reason: HouseholdSyncReason) {
         guard case .remotePush(context: .sharedDatabase) = reason else { return }
         cancelForegroundRepair(reason: "remotePushPriority")
@@ -827,6 +848,17 @@ final class HouseholdSyncCoordinator: ObservableObject {
         scheduleNextForegroundRepairPass(
             intervalNanoseconds: foregroundRepairConfiguration.steadyIntervalNanoseconds
         )
+    }
+
+    private func batchClassificationLabel(_ classification: HouseholdSyncBatchClassification) -> String {
+        switch classification {
+        case .bootstrap:
+            "bootstrap"
+        case .steadyStateRemote:
+            "steadyStateRemote"
+        case .steadyStateLifecycle:
+            "steadyStateLifecycle"
+        }
     }
 
     private func startOwnerFallback(trigger: HouseholdSyncReason) {

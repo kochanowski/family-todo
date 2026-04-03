@@ -1,5 +1,32 @@
 import Foundation
 
+enum CloudKitDiagnosticsFilter: String, CaseIterable, Identifiable {
+    case all
+    case notifications
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .all:
+            "All"
+        case .notifications:
+            "Notifications"
+        }
+    }
+
+    var emptyMessage: String {
+        switch self {
+        case .all:
+            "No CloudKit diagnostics recorded."
+        case .notifications:
+            "No notification diagnostics recorded."
+        }
+    }
+}
+
 struct CloudKitTriggerSummary: Equatable, Codable {
     var syncRole: String?
     var syncScope: String?
@@ -162,12 +189,29 @@ final class CloudKitDiagnosticsState: ObservableObject {
         !entries.isEmpty || lastCloudKitError != nil || lastCloudKitProgressOperation != nil
     }
 
+    var hasNotificationDiagnostics: Bool {
+        !notificationEntries.isEmpty
+    }
+
+    var notificationEntries: [CloudKitDiagnosticsEntry] {
+        entries.filter { Self.isNotificationOperation($0.operation) }
+    }
+
     var diagnosticsReport: String {
-        guard !entries.isEmpty else {
-            return "No CloudKit diagnostics recorded."
+        diagnosticsReport(for: .all)
+    }
+
+    var notificationDiagnosticsReport: String {
+        diagnosticsReport(for: .notifications)
+    }
+
+    func diagnosticsReport(for filter: CloudKitDiagnosticsFilter) -> String {
+        let filteredEntries = entries(for: filter)
+        guard !filteredEntries.isEmpty else {
+            return filter.emptyMessage
         }
 
-        return entries
+        return filteredEntries
             .map(\.reportSection)
             .joined(separator: "\n\n---\n\n")
     }
@@ -219,6 +263,19 @@ final class CloudKitDiagnosticsState: ObservableObject {
         for entry in entries {
             updateTriggerSummary(with: entry)
         }
+    }
+
+    private func entries(for filter: CloudKitDiagnosticsFilter) -> [CloudKitDiagnosticsEntry] {
+        switch filter {
+        case .all:
+            entries
+        case .notifications:
+            notificationEntries
+        }
+    }
+
+    private static func isNotificationOperation(_ operation: String) -> Bool {
+        operation.hasPrefix("notification.")
     }
 
     private func updateTriggerSummary(with entry: CloudKitDiagnosticsEntry) {

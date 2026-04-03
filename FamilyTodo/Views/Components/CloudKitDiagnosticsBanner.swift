@@ -61,10 +61,17 @@ struct CloudKitDiagnosticsBanner: View {
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("Copy log") {
+                    Button("Copy all") {
                         UIPasteboard.general.string = diagnostics.diagnosticsReport
                     }
                     .buttonStyle(.bordered)
+
+                    if diagnostics.hasNotificationDiagnostics {
+                        Button("Copy notifications") {
+                            UIPasteboard.general.string = diagnostics.notificationDiagnosticsReport
+                        }
+                        .buttonStyle(.bordered)
+                    }
 
                     Button("Clear") {
                         diagnostics.clear()
@@ -174,21 +181,31 @@ private struct CloudKitDiagnosticsSheet: View {
     @State private var showShareSheet = false
     @State private var copied = false
     @State private var cleared = false
+    @State private var selectedFilter: CloudKitDiagnosticsFilter = .all
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if diagnostics.hasNotificationDiagnostics {
+                        Picker("Log filter", selection: $selectedFilter) {
+                            ForEach(CloudKitDiagnosticsFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
                     if diagnostics.triggerSummary.hasAnyValue {
                         triggerSummarySection(diagnostics.triggerSummary)
                     }
 
-                    ForEach(Array(diagnostics.entries.reversed())) { entry in
+                    ForEach(Array(displayedEntries.reversed())) { entry in
                         diagnosticsEntryCard(entry)
                     }
 
-                    if diagnostics.entries.isEmpty {
-                        Text("No CloudKit diagnostics recorded.")
+                    if displayedEntries.isEmpty {
+                        Text(selectedFilter.emptyMessage)
                             .font(themeStore.font(for: .bodySmall))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                     }
@@ -221,14 +238,14 @@ private struct CloudKitDiagnosticsSheet: View {
             }
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 10) {
-                    Button("Copy diagnostics") {
-                        UIPasteboard.general.string = diagnostics.diagnosticsReport
+                    Button(copyButtonTitle) {
+                        UIPasteboard.general.string = diagnostics.diagnosticsReport(for: selectedFilter)
                         copied = true
                     }
                     .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.bordered)
 
-                    Button("Share diagnostics") {
+                    Button(shareButtonTitle) {
                         showShareSheet = true
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -247,8 +264,42 @@ private struct CloudKitDiagnosticsSheet: View {
                 .background(.ultraThinMaterial)
             }
         }
+        .onAppear {
+            if diagnostics.hasNotificationDiagnostics {
+                selectedFilter = .notifications
+            }
+        }
         .sheet(isPresented: $showShareSheet) {
-            CloudKitDiagnosticsActivityView(activityItems: [diagnostics.diagnosticsReport])
+            CloudKitDiagnosticsActivityView(
+                activityItems: [diagnostics.diagnosticsReport(for: selectedFilter)]
+            )
+        }
+    }
+
+    private var displayedEntries: [CloudKitDiagnosticsEntry] {
+        switch selectedFilter {
+        case .all:
+            diagnostics.entries
+        case .notifications:
+            diagnostics.notificationEntries
+        }
+    }
+
+    private var copyButtonTitle: String {
+        switch selectedFilter {
+        case .all:
+            "Copy diagnostics"
+        case .notifications:
+            "Copy notifications"
+        }
+    }
+
+    private var shareButtonTitle: String {
+        switch selectedFilter {
+        case .all:
+            "Share diagnostics"
+        case .notifications:
+            "Share notifications"
         }
     }
 

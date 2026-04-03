@@ -101,4 +101,19 @@ final class AppDelegateBridgeTests: XCTestCase {
 
         XCTAssertEqual(options, [])
     }
+
+    func testForegroundNotificationOperationExplainsSuppressedCollaborationDecision() {
+        let bridge = AppDelegateBridge()
+
+        let operation = bridge.foregroundNotificationOperation(
+            categoryIdentifier: "SHARED_ACTIVITY",
+            hasSound: true,
+            options: []
+        )
+
+        XCTAssertTrue(operation.contains("notification.foregroundPresentation"))
+        XCTAssertTrue(operation.contains("category=SHARED_ACTIVITY"))
+        XCTAssertTrue(operation.contains("options=none"))
+        XCTAssertTrue(operation.contains("reason=collaborationSuppressed"))
+    }
 }
