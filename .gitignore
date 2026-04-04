@@ -133,3 +133,4 @@ testflight_feedback/
 
 # Local media captured during manual app testing
 /media/
+.omx/
