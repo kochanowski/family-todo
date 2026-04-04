@@ -1790,4 +1790,124 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         XCTAssertEqual(diff.changedTaskIDs, [])
         XCTAssertTrue(diff.hasAnyChange)
     }
+
+    func testTaskContentDiffTreatsTaskDemotionAsTaskRemoval() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Book flights", status: .next),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights someday",
+                    status: .idea,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.taskContentDiff(from: before)
+        XCTAssertEqual(diff.addedTaskCount, 0)
+        XCTAssertEqual(diff.removedTaskCount, 1)
+        XCTAssertEqual(diff.changedTaskIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
+    }
+
+    func testIdeaContentDiffIgnoresTaskOnlyChanges() {
+        let taskID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                taskID: makeWorkItemState(title: "Take out trash", status: .next),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                taskID: makeWorkItemState(
+                    title: "Take out the trash now",
+                    status: .next,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.ideaContentDiff(from: before)
+        XCTAssertEqual(diff.addedIdeaCount, 0)
+        XCTAssertEqual(diff.removedIdeaCount, 0)
+        XCTAssertEqual(diff.changedIdeaIDs, [])
+        XCTAssertFalse(diff.hasAnyChange)
+    }
+
+    func testIdeaContentDiffTreatsTaskDemotionAsIdeaAddition() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Book flights", status: .next),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights someday",
+                    status: .idea,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.ideaContentDiff(from: before)
+        XCTAssertEqual(diff.addedIdeaCount, 1)
+        XCTAssertEqual(diff.removedIdeaCount, 0)
+        XCTAssertEqual(diff.changedIdeaIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
+    }
+
+    func testIdeaContentDiffTreatsIdeaPromotionAsIdeaRemoval() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Plan trip", status: .idea),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights",
+                    status: .next,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.ideaContentDiff(from: before)
+        XCTAssertEqual(diff.addedIdeaCount, 0)
+        XCTAssertEqual(diff.removedIdeaCount, 1)
+        XCTAssertEqual(diff.changedIdeaIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
+    }
 }
