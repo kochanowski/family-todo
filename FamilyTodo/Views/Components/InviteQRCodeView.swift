@@ -17,10 +17,10 @@ struct InviteQRCodeCard: View {
                     .interpolation(.none)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 260, maxHeight: 260)
-                    .padding(16)
+                    .frame(maxWidth: 220, maxHeight: 220)
+                    .padding(12)
                     .background(
-                        RoundedRectangle(cornerRadius: 20)
+                        RoundedRectangle(cornerRadius: 16)
                             .fill(Color(.secondarySystemBackground))
                     )
             } else {
@@ -30,20 +30,15 @@ struct InviteQRCodeCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 48)
                     .background(
-                        RoundedRectangle(cornerRadius: 20)
+                        RoundedRectangle(cornerRadius: 16)
                             .fill(themeStore.surfaceElevatedColor)
                     )
             }
-
-            Text("Scan this QR code to join in HousePulse.")
-                .font(themeStore.font(for: .inlineTitle))
-                .foregroundStyle(themeStore.contentPrimaryColor)
-                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(20)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(themeStore.surfaceElevatedColor)
         )
     }
