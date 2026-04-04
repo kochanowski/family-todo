@@ -278,6 +278,18 @@ struct HouseholdSyncVisibleChanges: Equatable {
             .union(contentDiff.changedMemberIDs)
             .union(contentDiff.removedMemberIDs)
     }
+
+    var legacyTaskPresentationDiff: RemoteTaskVisibleContentDiff? {
+        if let taskDiff {
+            return taskDiff
+        }
+        guard let contentDiff else { return nil }
+        return RemoteTaskVisibleContentDiff(
+            addedTaskIDs: contentDiff.addedTaskIDs,
+            removedTaskIDs: contentDiff.removedTaskIDs,
+            changedTaskIDs: contentDiff.changedTaskIDs
+        )
+    }
 }
 
 struct HouseholdSyncPassResult: Equatable {

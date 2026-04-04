@@ -3684,7 +3684,7 @@ class HouseholdStore: ObservableObject {
                 pushReceivedAt: context.receivedAt == .distantPast ? nil : context.receivedAt,
                 cacheUpdatedAt: result.diagnostics.syncFinishedAt
             )
-            deliverLegacySyncPresentation(for: result.events)
+            deliverLegacySyncPresentation(for: result.events, visibleChanges: result.visibleChanges)
         }
 
         return result.fetchResult
@@ -4812,10 +4812,11 @@ class HouseholdStore: ObservableObject {
     }
 
     private func deliverLegacySyncPresentation(
-        for events: [HouseholdSyncEvent]
+        for events: [HouseholdSyncEvent],
+        visibleChanges: HouseholdSyncVisibleChanges
     ) {
-        let contentDiff = remoteVisibleContentDiff(from: events)
-        let taskDiff = RemoteTaskVisibleContentDiff(
+        let contentDiff = visibleChanges.contentDiff ?? remoteVisibleContentDiff(from: events)
+        let taskDiff = visibleChanges.legacyTaskPresentationDiff ?? RemoteTaskVisibleContentDiff(
             addedTaskIDs: events.reduce(into: Set<UUID>()) { partialResult, event in
                 if case let .tasksChanged(addedIDs, _, _) = event.kind {
                     partialResult.formUnion(addedIDs)
