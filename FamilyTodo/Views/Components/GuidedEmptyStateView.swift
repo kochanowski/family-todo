@@ -77,7 +77,13 @@ struct GuidedEmptyStateView: View {
             }
             .padding(.horizontal, 40)
 
-            if !canJoinViaInvite {
+            if canJoinViaInvite {
+                Text("Ask your household owner for an invite code or QR.")
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            } else {
                 Text("Joining requires Apple/iCloud sign in.")
                     .font(themeStore.font(for: .bodySmall))
                     .foregroundStyle(themeStore.contentSecondaryColor)
