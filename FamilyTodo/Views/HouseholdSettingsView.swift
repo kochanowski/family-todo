@@ -246,6 +246,10 @@ struct ProfileView: View {
                 }
             } header: {
                 sectionHeader("Invite")
+            } footer: {
+                if canCreateInvite {
+                    Text("Share the code or QR — the other person opens HousePulse and enters it to join.")
+                }
             }
         }
     }
