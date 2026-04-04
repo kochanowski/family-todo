@@ -4,171 +4,124 @@ import XCTest
 
 final class HouseholdSyncBatchTests: XCTestCase {
     func testChangedIDAccessorsUnionAddedChangedAndRemovedIDsAcrossEvents() {
-        let householdId = UUID()
-        let batchId = UUID()
-        let addedTaskID = UUID()
-        let changedTaskID = UUID()
-        let removedTaskID = UUID()
-        let addedIdeaID = UUID()
-        let changedIdeaID = UUID()
-        let removedIdeaID = UUID()
-        let addedCategoryID = UUID()
-        let changedCategoryID = UUID()
-        let removedCategoryID = UUID()
-        let addedShoppingID = UUID()
-        let changedShoppingID = UUID()
-        let changedBundleID = UUID()
-        let removedShoppingID = UUID()
-        let removedBundleID = UUID()
-        let memberID = UUID()
-
-        let batch = HouseholdSyncBatch(
+        let ids = makeChangedIDFixture()
+        let batch = makeBatch(
             events: [
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
+                makeEvent(
                     kind: .tasksChanged(
-                        addedIDs: [addedTaskID],
-                        changedIDs: [changedTaskID],
-                        removedIDs: [removedTaskID]
+                        addedIDs: [ids.addedTaskID],
+                        changedIDs: [ids.changedTaskID],
+                        removedIDs: [ids.removedTaskID]
                     )
                 ),
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
+                makeEvent(
                     kind: .ideasChanged(
-                        addedIDs: [addedIdeaID],
-                        changedIDs: [changedIdeaID],
-                        removedIDs: [removedIdeaID]
+                        addedIDs: [ids.addedIdeaID],
+                        changedIDs: [ids.changedIdeaID],
+                        removedIDs: [ids.removedIdeaID]
                     )
                 ),
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
+                makeEvent(
                     kind: .backlogCategoriesChanged(
-                        addedIDs: [addedCategoryID],
-                        changedIDs: [changedCategoryID],
-                        removedIDs: [removedCategoryID]
+                        addedIDs: [ids.addedCategoryID],
+                        changedIDs: [ids.changedCategoryID],
+                        removedIDs: [ids.removedCategoryID]
                     )
                 ),
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
-                    kind: .shoppingAdded(ids: [addedShoppingID], titles: ["Milk"])
-                ),
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
+                makeEvent(kind: .shoppingAdded(ids: [ids.addedShoppingID], titles: ["Milk"])),
+                makeEvent(
                     kind: .shoppingUpdated(
-                        itemIDs: [changedShoppingID],
-                        bundleIDs: [changedBundleID]
+                        itemIDs: [ids.changedShoppingID],
+                        bundleIDs: [ids.changedBundleID]
                     )
                 ),
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
+                makeEvent(
                     kind: .shoppingRemoved(
-                        itemIDs: [removedShoppingID],
-                        bundleIDs: [removedBundleID]
+                        itemIDs: [ids.removedShoppingID],
+                        bundleIDs: [ids.removedBundleID]
                     )
                 ),
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
-                    kind: .membersChanged(ids: [memberID])
-                ),
-            ],
-            diagnostics: makeDiagnostics(batchId: batchId, reason: .remotePush(context: .sharedDatabase))
+                makeEvent(kind: .membersChanged(ids: [ids.memberID]))
+            ]
         )
 
-        XCTAssertEqual(batch.taskChangedIDs, [addedTaskID, changedTaskID, removedTaskID])
-        XCTAssertEqual(batch.ideaChangedIDs, [addedIdeaID, changedIdeaID, removedIdeaID])
-        XCTAssertEqual(
-            batch.backlogChangedCategoryIDs,
-            [addedCategoryID, changedCategoryID, removedCategoryID]
-        )
-        XCTAssertEqual(
-            batch.shoppingChangedItemIDs,
-            [addedShoppingID, changedShoppingID, removedShoppingID]
-        )
-        XCTAssertEqual(batch.memberChangedIDs, [memberID])
+        XCTAssertEqual(batch.taskChangedIDs, [ids.addedTaskID, ids.changedTaskID, ids.removedTaskID])
+        XCTAssertEqual(batch.ideaChangedIDs, [ids.addedIdeaID, ids.changedIdeaID, ids.removedIdeaID])
+        XCTAssertEqual(batch.backlogChangedCategoryIDs, [ids.addedCategoryID, ids.changedCategoryID, ids.removedCategoryID])
+        XCTAssertEqual(batch.shoppingChangedItemIDs, [ids.addedShoppingID, ids.changedShoppingID, ids.removedShoppingID])
+        XCTAssertEqual(batch.memberChangedIDs, [ids.memberID])
     }
 
     func testClassificationIsBootstrapWhenBatchContainsMembershipChange() {
-        let householdId = UUID()
-        let batchId = UUID()
-        let memberID = UUID()
-
-        let batch = HouseholdSyncBatch(
-            events: [
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
-                    kind: .membersChanged(ids: [memberID])
-                ),
-            ],
-            diagnostics: makeDiagnostics(batchId: batchId, reason: .remotePush(context: .sharedDatabase))
-        )
+        let batch = makeBatch(events: [makeEvent(kind: .membersChanged(ids: [UUID()]))])
 
         XCTAssertEqual(batch.classification, .bootstrap)
     }
 
     func testClassificationStaysSteadyStateRemoteForNonMembershipRemotePush() {
-        let householdId = UUID()
-        let batchId = UUID()
-
-        let batch = HouseholdSyncBatch(
+        let batch = makeBatch(
             events: [
-                HouseholdSyncEvent(
-                    householdId: householdId,
-                    batchID: batchId,
-                    source: .remote,
-                    reason: .remotePush(context: .sharedDatabase),
-                    timestamp: Date(timeIntervalSince1970: 1),
-                    direction: .participantToOwner,
+                makeEvent(
                     kind: .tasksChanged(
                         addedIDs: [UUID()],
                         changedIDs: [],
                         removedIDs: []
                     )
-                ),
-            ],
-            diagnostics: makeDiagnostics(batchId: batchId, reason: .remotePush(context: .sharedDatabase))
+                )
+            ]
         )
 
         XCTAssertEqual(batch.classification, .steadyStateRemote)
+    }
+
+    private func makeBatch(events: [HouseholdSyncEvent]) -> HouseholdSyncBatch {
+        let batchId = UUID()
+        return HouseholdSyncBatch(
+            events: events.map { event in
+                HouseholdSyncEvent(
+                    householdId: event.householdId,
+                    batchID: batchId,
+                    source: event.source,
+                    reason: event.reason,
+                    timestamp: event.timestamp,
+                    direction: event.direction,
+                    kind: event.kind
+                )
+            },
+            diagnostics: makeDiagnostics(batchId: batchId, reason: .remotePush(context: .sharedDatabase))
+        )
+    }
+
+    private func makeEvent(kind: HouseholdSyncEventKind) -> HouseholdSyncEvent {
+        HouseholdSyncEvent(
+            householdId: UUID(),
+            batchID: UUID(),
+            source: .remote,
+            reason: .remotePush(context: .sharedDatabase),
+            timestamp: Date(timeIntervalSince1970: 1),
+            direction: .participantToOwner,
+            kind: kind
+        )
+    }
+
+    private func makeChangedIDFixture() -> ChangedIDFixture {
+        ChangedIDFixture(
+            addedTaskID: UUID(),
+            changedTaskID: UUID(),
+            removedTaskID: UUID(),
+            addedIdeaID: UUID(),
+            changedIdeaID: UUID(),
+            removedIdeaID: UUID(),
+            addedCategoryID: UUID(),
+            changedCategoryID: UUID(),
+            removedCategoryID: UUID(),
+            addedShoppingID: UUID(),
+            changedShoppingID: UUID(),
+            changedBundleID: UUID(),
+            removedShoppingID: UUID(),
+            removedBundleID: UUID(),
+            memberID: UUID()
+        )
     }
 
     private func makeDiagnostics(
@@ -187,4 +140,22 @@ final class HouseholdSyncBatchTests: XCTestCase {
             activeMemberCount: 2
         )
     }
+}
+
+private struct ChangedIDFixture {
+    let addedTaskID: UUID
+    let changedTaskID: UUID
+    let removedTaskID: UUID
+    let addedIdeaID: UUID
+    let changedIdeaID: UUID
+    let removedIdeaID: UUID
+    let addedCategoryID: UUID
+    let changedCategoryID: UUID
+    let removedCategoryID: UUID
+    let addedShoppingID: UUID
+    let changedShoppingID: UUID
+    let changedBundleID: UUID
+    let removedShoppingID: UUID
+    let removedBundleID: UUID
+    let memberID: UUID
 }

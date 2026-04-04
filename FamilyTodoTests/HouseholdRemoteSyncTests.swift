@@ -1797,7 +1797,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
             shoppingItemsByID: [:],
             shoppingBundlesByID: [:],
             workItemsByID: [
-                sharedID: makeWorkItemState(title: "Book flights", status: .next),
+                sharedID: makeWorkItemState(title: "Book flights", status: .next)
             ],
             backlogCategoriesByID: [:]
         )
@@ -1809,7 +1809,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
                     title: "Book flights someday",
                     status: .idea,
                     updatedAt: Date(timeIntervalSince1970: 2)
-                ),
+                )
             ],
             backlogCategoriesByID: [:]
         )
@@ -1827,7 +1827,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
             shoppingItemsByID: [:],
             shoppingBundlesByID: [:],
             workItemsByID: [
-                taskID: makeWorkItemState(title: "Take out trash", status: .next),
+                taskID: makeWorkItemState(title: "Take out trash", status: .next)
             ],
             backlogCategoriesByID: [:]
         )
@@ -1839,7 +1839,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
                     title: "Take out the trash now",
                     status: .next,
                     updatedAt: Date(timeIntervalSince1970: 2)
-                ),
+                )
             ],
             backlogCategoriesByID: [:]
         )
@@ -1857,7 +1857,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
             shoppingItemsByID: [:],
             shoppingBundlesByID: [:],
             workItemsByID: [
-                sharedID: makeWorkItemState(title: "Book flights", status: .next),
+                sharedID: makeWorkItemState(title: "Book flights", status: .next)
             ],
             backlogCategoriesByID: [:]
         )
@@ -1869,7 +1869,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
                     title: "Book flights someday",
                     status: .idea,
                     updatedAt: Date(timeIntervalSince1970: 2)
-                ),
+                )
             ],
             backlogCategoriesByID: [:]
         )
@@ -1887,7 +1887,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
             shoppingItemsByID: [:],
             shoppingBundlesByID: [:],
             workItemsByID: [
-                sharedID: makeWorkItemState(title: "Plan trip", status: .idea),
+                sharedID: makeWorkItemState(title: "Plan trip", status: .idea)
             ],
             backlogCategoriesByID: [:]
         )
@@ -1899,7 +1899,7 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
                     title: "Book flights",
                     status: .next,
                     updatedAt: Date(timeIntervalSince1970: 2)
-                ),
+                )
             ],
             backlogCategoriesByID: [:]
         )
