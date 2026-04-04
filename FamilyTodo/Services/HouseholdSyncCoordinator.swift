@@ -250,68 +250,81 @@ struct HouseholdSyncBatch: Equatable, Identifiable {
     }
 
     var shoppingChangedItemIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .shoppingAdded(ids, _):
-                partialResult.formUnion(ids)
-            case let .shoppingUpdated(itemIDs, _):
-                partialResult.formUnion(itemIDs)
-            case let .shoppingRemoved(itemIDs, _):
-                partialResult.formUnion(itemIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.shopping] ?? []
     }
 
     var backlogChangedCategoryIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
-                partialResult.formUnion(addedIDs)
-                partialResult.formUnion(changedIDs)
-                partialResult.formUnion(removedIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.backlog] ?? []
     }
 
     var taskChangedIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
-                partialResult.formUnion(addedIDs)
-                partialResult.formUnion(changedIDs)
-                partialResult.formUnion(removedIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.tasks] ?? []
     }
 
     var ideaChangedIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .ideasChanged(addedIDs, changedIDs, removedIDs):
-                partialResult.formUnion(addedIDs)
-                partialResult.formUnion(changedIDs)
-                partialResult.formUnion(removedIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.ideas] ?? []
     }
 
     var memberChangedIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .membersChanged(ids):
-                partialResult.formUnion(ids)
-            default:
-                break
-            }
+        diagnostics.changedIDsByDomain[.members] ?? []
+    }
+
+    var remoteSyncAnimationPayload: RemoteSyncAnimationPayload {
+        RemoteSyncAnimationPayload(
+            batchToken: id,
+            shoppingChangedItemIDs: shoppingChangedItemIDs,
+            workItemChangedIDs: taskChangedIDs.union(ideaChangedIDs),
+            backlogChangedCategoryIDs: backlogChangedCategoryIDs,
+            direction: diagnostics.direction.rawValue,
+            pushReceivedAt: diagnostics.triggerReceivedAt,
+            cacheUpdatedAt: diagnostics.syncFinishedAt
+        )
+    }
+
+    var tasksScreenRefresh: HouseholdTasksScreenRefresh? {
+        guard !domains.isDisjoint(with: [.tasks, .members, .backlog, .ideas]) else {
+            return nil
         }
+
+        return HouseholdTasksScreenRefresh(
+            classification: classification,
+            changedTaskIDs: taskChangedIDs,
+            animationPayload: remoteSyncAnimationPayload
+        )
+    }
+
+    var backlogScreenRefresh: HouseholdBacklogScreenRefresh? {
+        guard !domains.isDisjoint(with: [.ideas, .backlog, .members, .tasks]) else {
+            return nil
+        }
+
+        return HouseholdBacklogScreenRefresh(
+            classification: classification,
+            changedCategoryIDs: backlogChangedCategoryIDs,
+            changedIdeaIDs: ideaChangedIDs,
+            animationPayload: remoteSyncAnimationPayload
+        )
+    }
+}
+
+struct HouseholdTasksScreenRefresh: Equatable {
+    let classification: HouseholdSyncBatchClassification
+    let changedTaskIDs: Set<UUID>
+    let animationPayload: RemoteSyncAnimationPayload
+
+    var isBootstrap: Bool {
+        classification == .bootstrap
+    }
+}
+
+struct HouseholdBacklogScreenRefresh: Equatable {
+    let classification: HouseholdSyncBatchClassification
+    let changedCategoryIDs: Set<UUID>
+    let changedIdeaIDs: Set<UUID>
+    let animationPayload: RemoteSyncAnimationPayload
+
+    var isBootstrap: Bool {
+        classification == .bootstrap
     }
 }
 

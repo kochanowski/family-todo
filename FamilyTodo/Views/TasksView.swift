@@ -258,15 +258,14 @@ private struct TasksContent: View {
             }
         }
         .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
-            guard let batch = syncCoordinator.latestBatch,
-                  !batch.domains.isDisjoint(with: [.tasks, .members, .backlog, .ideas])
+            guard let refresh = syncCoordinator.latestBatch?.tasksScreenRefresh
             else {
                 return
             }
 
             store.markLocalSnapshotStale()
             if selectedTab == .tasks {
-                handleRemoteTaskSyncBatch(batch)
+                handleRemoteTaskSyncBatch(refresh)
             } else {
                 store.rehydrateVisibleSnapshotFromCache()
                 store.replayPendingMutationsIfNeeded()
@@ -1158,41 +1157,8 @@ private struct TasksContent: View {
         (notification.object as? String) == "local"
     }
 
-    private func handleRemoteTaskBoardChange(_ notification: Notification) {
-        let payload = notification.remoteSyncAnimationPayload
-        let changedIDs = payload?.workItemChangedIDs ?? []
-
-        cancelRemoteSyncAnimationReset()
-        isApplyingRemoteSyncAnimation = true
-
-        _ = _Concurrency.Task { @MainActor in
-            let refreshTask = RemoteVisibleRefreshTask(
-                changedIDs: changedIDs,
-                captureVisibleLocations: visibleTaskLocations,
-                rehydratePrimaryStore: {
-                    withAnimation(WowAnimation.spring) {
-                        store.rehydrateVisibleSnapshotFromCache()
-                    }
-                },
-                refreshDependentStores: {
-                    memberStore.markLocalSnapshotStale()
-                    memberStore.rehydrateVisibleSnapshotFromCache()
-                    backlogStore.markLocalSnapshotStale()
-                    backlogStore.rehydrateVisibleSnapshotFromCache()
-                    normalizeAssigneeFilterSelection()
-                }
-            )
-
-            let delta = await refreshTask.run()
-            remoteHighlightedTaskIDs = delta.highlightedIDs
-            logRemoteSyncVisibleRefreshLatency(screen: "Tasks", payload: payload)
-            scheduleRemoteSyncAnimationReset()
-            markTasksTutorialAsSeenIfNeeded()
-        }
-    }
-
-    private func handleRemoteTaskSyncBatch(_ batch: HouseholdSyncBatch) {
-        if batch.classification == .bootstrap {
+    private func handleRemoteTaskSyncBatch(_ refresh: HouseholdTasksScreenRefresh) {
+        if refresh.isBootstrap {
             cancelRemoteSyncAnimationReset()
             _ = _Concurrency.Task { @MainActor in
                 store.rehydrateVisibleSnapshotFromCache()
@@ -1206,14 +1172,12 @@ private struct TasksContent: View {
             return
         }
 
-        let changedIDs = batch.taskChangedIDs
-
         cancelRemoteSyncAnimationReset()
         isApplyingRemoteSyncAnimation = true
 
         _ = _Concurrency.Task { @MainActor in
             let refreshTask = RemoteVisibleRefreshTask(
-                changedIDs: changedIDs,
+                changedIDs: refresh.changedTaskIDs,
                 captureVisibleLocations: visibleTaskLocations,
                 rehydratePrimaryStore: {
                     withAnimation(WowAnimation.spring) {
@@ -1231,6 +1195,10 @@ private struct TasksContent: View {
 
             let delta = await refreshTask.run()
             remoteHighlightedTaskIDs = delta.highlightedIDs
+            logRemoteSyncVisibleRefreshLatency(
+                screen: "Tasks",
+                payload: refresh.animationPayload
+            )
             scheduleRemoteSyncAnimationReset()
             markTasksTutorialAsSeenIfNeeded()
         }
