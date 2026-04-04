@@ -12,27 +12,33 @@ struct OnboardingSlide: Identifiable {
 private let slides: [OnboardingSlide] = [
     OnboardingSlide(
         id: 0,
-        icon: "cart.fill",
-        title: "Smart Shopping",
-        subtitle: "Build and restore grocery lists quickly with one-tap recent purchases."
+        icon: "house.and.flag.fill",
+        title: "Your Home, Organized",
+        subtitle: "One shared space for everything your household needs to remember."
     ),
     OnboardingSlide(
         id: 1,
-        icon: "checklist",
-        title: "Clear Your Mind",
-        subtitle: "Turn home chaos into clear, assignable tasks everyone can see."
+        icon: "cart.fill",
+        title: "Smart Shopping",
+        subtitle: "Shared lists, one-tap restock, and saved bundles for recipes or weekly essentials."
     ),
     OnboardingSlide(
         id: 2,
-        icon: "slider.horizontal.3",
-        title: "Make It Yours",
-        subtitle: "Pick the theme and workflow that feels right for your household."
+        icon: "checklist",
+        title: "Tasks That Get Done",
+        subtitle: "Assign who does what, set due dates, and track progress — no nagging needed."
     ),
     OnboardingSlide(
         id: 3,
+        icon: "lightbulb.fill",
+        title: "Ideas for Later",
+        subtitle: "A parking lot for future plans. When you're ready, promote an idea into a task."
+    ),
+    OnboardingSlide(
+        id: 4,
         icon: "person.2.fill",
         title: "Better Together",
-        subtitle: "Invite members and keep shopping, tasks, and ideas in sync."
+        subtitle: "Invite your household. Changes sync instantly to every phone."
     ),
 ]
 
@@ -46,12 +52,13 @@ struct OnboardingCarouselView: View {
 
     var body: some View {
         let isLastSlide = currentSlide == slides.count - 1
+        let showSkip = currentSlide > 0 && !isLastSlide
 
         GeometryReader { proxy in
             let availableHeight = proxy.size.height
             let carouselHeight = min(max(availableHeight * 0.48, 320), 460)
 
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 // Animated Aurora Background
                 AnimatedAuroraBackground(currentSlide: currentSlide)
                     .ignoresSafeArea()
@@ -74,8 +81,11 @@ struct OnboardingCarouselView: View {
                     HStack(spacing: 8) {
                         ForEach(0 ..< slides.count, id: \.self) { index in
                             Circle()
-                                .fill(currentSlide == index ? Color.primary : Color.secondary.opacity(0.4))
+                                .fill(currentSlide == index
+                                    ? themeStore.contentPrimaryColor
+                                    : themeStore.contentSecondaryColor.opacity(0.4))
                                 .frame(width: 8, height: 8)
+                                .accessibilityLabel("Slide \(index + 1) of \(slides.count)")
                         }
                     }
                     .padding(.top, 16)
@@ -96,7 +106,7 @@ struct OnboardingCarouselView: View {
                                     .padding(.vertical, 16)
                                     .background(
                                         Capsule()
-                                            .fill(Color.blue)
+                                            .fill(Color.accentColor)
                                     )
                             }
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -113,6 +123,21 @@ struct OnboardingCarouselView: View {
                     maxWidth: AppChromeMetrics.regularFormMaxWidth,
                     alignment: .center
                 )
+
+                // Skip button — visible on slides 1–3
+                if showSkip {
+                    Button {
+                        onboardingState.completeOnboarding()
+                    } label: {
+                        Text("Skip")
+                            .font(themeStore.font(for: .listRowSubtitle))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                    }
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: showSkip)
+                }
             }
         }
         .onChange(of: currentSlide) { _, _ in
