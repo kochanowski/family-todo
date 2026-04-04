@@ -41,7 +41,7 @@ final class HouseholdSyncBatchTests: XCTestCase {
                         bundleIDs: [ids.removedBundleID]
                     )
                 ),
-                makeEvent(kind: .membersChanged(ids: [ids.memberID]))
+                makeEvent(kind: .membersChanged(ids: [ids.memberID])),
             ]
         )
 
@@ -67,7 +67,7 @@ final class HouseholdSyncBatchTests: XCTestCase {
                         changedIDs: [],
                         removedIDs: []
                     )
-                )
+                ),
             ]
         )
 
@@ -76,19 +76,24 @@ final class HouseholdSyncBatchTests: XCTestCase {
 
     private func makeBatch(events: [HouseholdSyncEvent]) -> HouseholdSyncBatch {
         let batchId = UUID()
+        let normalizedEvents = events.map { event in
+            HouseholdSyncEvent(
+                householdId: event.householdId,
+                batchID: batchId,
+                source: event.source,
+                reason: event.reason,
+                timestamp: event.timestamp,
+                direction: event.direction,
+                kind: event.kind
+            )
+        }
         return HouseholdSyncBatch(
-            events: events.map { event in
-                HouseholdSyncEvent(
-                    householdId: event.householdId,
-                    batchID: batchId,
-                    source: event.source,
-                    reason: event.reason,
-                    timestamp: event.timestamp,
-                    direction: event.direction,
-                    kind: event.kind
-                )
-            },
-            diagnostics: makeDiagnostics(batchId: batchId, reason: .remotePush(context: .sharedDatabase))
+            events: normalizedEvents,
+            diagnostics: makeDiagnostics(
+                batchId: batchId,
+                reason: .remotePush(context: .sharedDatabase),
+                events: normalizedEvents
+            )
         )
     }
 
@@ -126,8 +131,36 @@ final class HouseholdSyncBatchTests: XCTestCase {
 
     private func makeDiagnostics(
         batchId: UUID,
-        reason: HouseholdSyncReason
+        reason: HouseholdSyncReason,
+        events: [HouseholdSyncEvent]
     ) -> HouseholdSyncDiagnostics {
+        let changedIDsByDomain = events.reduce(into: [HouseholdSyncChangedDomain: Set<UUID>]()) { partialResult, event in
+            switch event.kind {
+            case let .shoppingAdded(ids, _):
+                partialResult[.shopping, default: []].formUnion(ids)
+            case let .shoppingUpdated(itemIDs, _):
+                partialResult[.shopping, default: []].formUnion(itemIDs)
+            case let .shoppingRemoved(itemIDs, _):
+                partialResult[.shopping, default: []].formUnion(itemIDs)
+            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
+                partialResult[.tasks, default: []].formUnion(addedIDs)
+                partialResult[.tasks, default: []].formUnion(changedIDs)
+                partialResult[.tasks, default: []].formUnion(removedIDs)
+            case let .ideasChanged(addedIDs, changedIDs, removedIDs):
+                partialResult[.ideas, default: []].formUnion(addedIDs)
+                partialResult[.ideas, default: []].formUnion(changedIDs)
+                partialResult[.ideas, default: []].formUnion(removedIDs)
+            case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
+                partialResult[.backlog, default: []].formUnion(addedIDs)
+                partialResult[.backlog, default: []].formUnion(changedIDs)
+                partialResult[.backlog, default: []].formUnion(removedIDs)
+            case let .membersChanged(ids):
+                partialResult[.members, default: []].formUnion(ids)
+            default:
+                break
+            }
+        }
+
         HouseholdSyncDiagnostics(
             batchID: batchId,
             reason: reason,
@@ -135,8 +168,8 @@ final class HouseholdSyncBatchTests: XCTestCase {
             triggerReceivedAt: Date(timeIntervalSince1970: 1),
             syncStartedAt: Date(timeIntervalSince1970: 2),
             syncFinishedAt: Date(timeIntervalSince1970: 3),
-            changedDomains: [],
-            changedIDsByDomain: [:],
+            changedDomains: Set(changedIDsByDomain.keys),
+            changedIDsByDomain: changedIDsByDomain,
             activeMemberCount: 2
         )
     }
