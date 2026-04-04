@@ -370,15 +370,14 @@ private struct BacklogContent: View {
                 }
             }
             .onChange(of: syncCoordinator.latestBatch?.id) { _, _ in
-                guard let batch = syncCoordinator.latestBatch,
-                      !batch.domains.isDisjoint(with: [.ideas, .backlog, .members, .tasks])
+                guard let refresh = syncCoordinator.latestBatch?.backlogScreenRefresh
                 else {
                     return
                 }
 
                 store.markLocalSnapshotStale()
                 if selectedTab == .backlog {
-                    handleRemoteBacklogSyncBatch(batch)
+                    handleRemoteBacklogSyncBatch(refresh)
                 } else {
                     store.rehydrateVisibleSnapshotFromCache()
                     store.replayPendingMutationsIfNeeded()
@@ -739,58 +738,8 @@ private struct BacklogContent: View {
         (notification.object as? String) == "local"
     }
 
-    private func handleRemoteBacklogRefresh(_ notification: Notification) {
-        let payload = notification.remoteSyncAnimationPayload
-        if let batchToken = payload?.batchToken,
-           lastProcessedRemoteAnimationBatchToken == batchToken
-        {
-            return
-        }
-
-        let beforeIdeaLocations = backlogIdeaLocations()
-        cancelRemoteSyncAnimationReset()
-        isApplyingRemoteSyncAnimation = true
-
-        _ = _Concurrency.Task { @MainActor in
-            let categoryRefreshTask = RemoteVisibleRefreshTask(
-                changedIDs: payload?.backlogChangedCategoryIDs ?? [],
-                captureVisibleLocations: backlogCategoryLocations,
-                rehydratePrimaryStore: {
-                    withAnimation(WowAnimation.spring) {
-                        store.rehydrateVisibleSnapshotFromCache()
-                    }
-                },
-                refreshDependentStores: {
-                    memberStore.markLocalSnapshotStale()
-                    memberStore.rehydrateVisibleSnapshotFromCache()
-                }
-            )
-            let categoryDelta = await categoryRefreshTask.run()
-
-            let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
-                beforeLocations: beforeIdeaLocations,
-                afterLocations: backlogIdeaLocations(),
-                changedIDs: payload?.workItemChangedIDs ?? []
-            )
-
-            remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
-            remoteHighlightedItemIDs = itemDelta.highlightedIDs
-
-            if let batchToken = payload?.batchToken {
-                lastProcessedRemoteAnimationBatchToken = batchToken
-            }
-
-            let activeItemIds = Set(store.items.map(\.id))
-            hiddenPendingPromotionIds.subtract(activeItemIds)
-            syncPromotionTipAnchorWithVisibleItems()
-            logRemoteSyncVisibleRefreshLatency(screen: "Ideas", payload: payload)
-            scheduleRemoteSyncAnimationReset()
-            markIdeasTutorialAsSeenIfNeeded()
-        }
-    }
-
-    private func handleRemoteBacklogSyncBatch(_ batch: HouseholdSyncBatch) {
-        if batch.classification == .bootstrap {
+    private func handleRemoteBacklogSyncBatch(_ refresh: HouseholdBacklogScreenRefresh) {
+        if refresh.isBootstrap {
             cancelRemoteSyncAnimationReset()
             _ = _Concurrency.Task { @MainActor in
                 store.rehydrateVisibleSnapshotFromCache()
@@ -804,7 +753,7 @@ private struct BacklogContent: View {
             return
         }
 
-        if lastProcessedRemoteAnimationBatchToken == batch.id {
+        if lastProcessedRemoteAnimationBatchToken == refresh.animationPayload.batchToken {
             return
         }
 
@@ -814,7 +763,7 @@ private struct BacklogContent: View {
 
         _ = _Concurrency.Task { @MainActor in
             let categoryRefreshTask = RemoteVisibleRefreshTask(
-                changedIDs: batch.backlogChangedCategoryIDs,
+                changedIDs: refresh.changedCategoryIDs,
                 captureVisibleLocations: backlogCategoryLocations,
                 rehydratePrimaryStore: {
                     withAnimation(WowAnimation.spring) {
@@ -831,16 +780,20 @@ private struct BacklogContent: View {
             let itemDelta = RemoteSyncVisibleDeltaResolver.resolve(
                 beforeLocations: beforeIdeaLocations,
                 afterLocations: backlogIdeaLocations(),
-                changedIDs: batch.ideaChangedIDs
+                changedIDs: refresh.changedIdeaIDs
             )
 
             remoteHighlightedCategoryIDs = categoryDelta.highlightedIDs
             remoteHighlightedItemIDs = itemDelta.highlightedIDs
-            lastProcessedRemoteAnimationBatchToken = batch.id
+            lastProcessedRemoteAnimationBatchToken = refresh.animationPayload.batchToken
 
             let activeItemIds = Set(store.items.map(\.id))
             hiddenPendingPromotionIds.subtract(activeItemIds)
             syncPromotionTipAnchorWithVisibleItems()
+            logRemoteSyncVisibleRefreshLatency(
+                screen: "Ideas",
+                payload: refresh.animationPayload
+            )
             scheduleRemoteSyncAnimationReset()
             markIdeasTutorialAsSeenIfNeeded()
         }
