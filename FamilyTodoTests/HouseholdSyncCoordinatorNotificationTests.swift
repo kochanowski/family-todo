@@ -10,6 +10,102 @@ final class HouseholdSyncCoordinatorNotificationTests: XCTestCase {
         CloudKitDiagnosticsState.shared.clear()
     }
 
+    func testHouseholdSyncReasonMergedPrefersSharedRemotePushContext() {
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .privateDatabase).merged(
+                with: .remotePush(context: .sharedDatabase)
+            ),
+            .remotePush(context: .sharedDatabase)
+        )
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .unknown).merged(
+                with: .remotePush(context: .privateDatabase)
+            ),
+            .remotePush(context: .privateDatabase)
+        )
+    }
+
+    func testHouseholdSyncReasonMergedKeepsRemotePushAheadOfForegroundRepairWindow() {
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .sharedDatabase).merged(
+                with: .foregroundRepairWindow
+            ),
+            .remotePush(context: .sharedDatabase)
+        )
+        XCTAssertEqual(
+            HouseholdSyncReason.foregroundRepairWindow.merged(
+                with: .remotePush(context: .privateDatabase)
+            ),
+            .remotePush(context: .privateDatabase)
+        )
+    }
+
+    func testHouseholdSyncBatchClassificationTreatsMembershipChangeAsBootstrap() {
+        let batchID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .membersChanged(ids: Set([UUID()]))
+                )
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.members]),
+                changedIDsByDomain: [:],
+                activeMemberCount: 2
+            )
+        )
+
+        XCTAssertEqual(batch.classification, .bootstrap)
+        XCTAssertEqual(batch.domains, Set([.members]))
+    }
+
+    func testHouseholdSyncBatchClassificationTreatsRemoteTaskBatchAsSteadyStateRemote() {
+        let batchID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .tasksChanged(
+                        addedIDs: Set([UUID()]),
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                )
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.tasks]),
+                changedIDsByDomain: [:],
+                activeMemberCount: 2
+            )
+        )
+
+        XCTAssertEqual(batch.classification, .steadyStateRemote)
+        XCTAssertEqual(batch.domains, Set([.tasks]))
+    }
+
     func testPerformSyncDeliversPassiveTaskAlertForSteadyStateRemoteBatch() async {
         let householdId = UUID()
         let batchID = UUID()

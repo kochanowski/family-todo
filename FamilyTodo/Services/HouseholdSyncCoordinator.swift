@@ -361,6 +361,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private let passiveSharedActivityAlertDelivery: @MainActor (PassiveSharedActivityAlertDescriptor) async -> Void
     private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
+    private var lastLifecycleSyncedHouseholdID: UUID?
     private var scheduledForegroundRepairTask: _Concurrency.Task<Void, Never>?
     private var scheduledOwnerFallbackTask: _Concurrency.Task<Void, Never>?
     private var currentForegroundRepairMode: ForegroundRepairMode = .burst
@@ -428,6 +429,27 @@ final class HouseholdSyncCoordinator: ObservableObject {
             await group.next()
             group.cancelAll()
         }
+    }
+
+    func performHouseholdLifecycleSyncIfNeeded(
+        currentHouseholdID: UUID?
+    ) async -> UIBackgroundFetchResult {
+        guard let currentHouseholdID else {
+            lastLifecycleSyncedHouseholdID = nil
+            return .noData
+        }
+
+        guard lastLifecycleSyncedHouseholdID != currentHouseholdID else {
+            return .noData
+        }
+
+        let reason: HouseholdSyncReason = if lastLifecycleSyncedHouseholdID == nil {
+            .householdJoined
+        } else {
+            .householdSwitched
+        }
+        lastLifecycleSyncedHouseholdID = currentHouseholdID
+        return await performSync(reason: reason)
     }
 
     func performSync(reason: HouseholdSyncReason) async -> UIBackgroundFetchResult {

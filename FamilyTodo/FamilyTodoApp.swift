@@ -332,6 +332,9 @@ struct RootView: View {
         .task(id: subscriptionConfigurationKey) {
             configureSubscriptionsIfNeeded()
         }
+        .task(id: householdLifecycleSyncKey) {
+            await syncCurrentHouseholdLifecycleIfNeeded()
+        }
         .task(id: householdRecoveryKey) {
             await recoverHouseholdRouteIfNeeded()
         }
@@ -396,6 +399,15 @@ struct RootView: View {
             userSession.userId ?? "none",
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.ownerId ?? "unknownOwner",
+        ].joined(separator: "|")
+    }
+
+    private var householdLifecycleSyncKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            userSession.syncMode == .cloud ? "cloud" : "local",
+            userSession.userId ?? "none",
+            userSession.currentHouseholdID?.uuidString ?? "none"
         ].joined(separator: "|")
     }
 
@@ -495,15 +507,23 @@ struct RootView: View {
 
     private func handleHouseholdDataDidChange() async {
         guard onboardingState.currentState == .mainApp else { return }
-        guard userSession.syncMode == .cloud else { return }
-        guard let userId = userSession.userId else { return }
-        guard userSession.currentHouseholdID != nil else { return }
+        _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: true)
+    }
 
-        await householdStore.refreshCurrentHouseholdAndMembershipFromCloud(
-            userId: userId,
-            preferredHouseholdId: userSession.currentHouseholdID
+    private func syncCurrentHouseholdLifecycleIfNeeded() async {
+        guard onboardingState.currentState == .mainApp,
+              userSession.syncMode == .cloud,
+              userSession.hasActiveSession
+        else {
+            _ = await syncCoordinator.performHouseholdLifecycleSyncIfNeeded(
+                currentHouseholdID: nil
+            )
+            return
+        }
+
+        _ = await syncCoordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: userSession.currentHouseholdID
         )
-
         _ = clearSuppressedCurrentHouseholdSelectionIfNeeded(routeToSetup: true)
     }
 

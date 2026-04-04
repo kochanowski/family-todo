@@ -215,6 +215,94 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .manualRefresh)
     }
 
+    func testPerformHouseholdLifecycleSyncUsesJoinedForFirstSelectionAndDedupesSameHousehold() async {
+        let householdId = UUID()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                makeLifecycleNoDataPassResult(
+                    reason: .householdJoined,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 99,
+                    activeMemberCount: 1
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(engine: engine)
+
+        let firstResult = await coordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: householdId
+        )
+        let secondResult = await coordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: householdId
+        )
+
+        XCTAssertEqual(firstResult, .noData)
+        XCTAssertEqual(secondResult, .noData)
+        XCTAssertEqual(engine.recordedReasons, [.householdJoined])
+        XCTAssertEqual(coordinator.lastDiagnostics?.reason, .householdJoined)
+    }
+
+    func testPerformHouseholdLifecycleSyncUsesSwitchedAndResetsAfterClearingSelection() async {
+        let firstHouseholdId = UUID()
+        let secondHouseholdId = UUID()
+        let thirdHouseholdId = UUID()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                makeLifecycleNoDataPassResult(
+                    reason: .householdJoined,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 99,
+                    activeMemberCount: 1
+                ),
+                makeLifecycleNoDataPassResult(
+                    reason: .householdSwitched,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 102,
+                    activeMemberCount: 1
+                ),
+                makeLifecycleNoDataPassResult(
+                    reason: .householdJoined,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 105,
+                    activeMemberCount: 1
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(engine: engine)
+
+        _ = await coordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: firstHouseholdId
+        )
+        _ = await coordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: secondHouseholdId
+        )
+        let clearedResult = await coordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: nil
+        )
+        _ = await coordinator.performHouseholdLifecycleSyncIfNeeded(
+            currentHouseholdID: thirdHouseholdId
+        )
+
+        XCTAssertEqual(clearedResult, .noData)
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .householdJoined,
+                .householdSwitched,
+                .householdJoined,
+            ]
+        )
+        XCTAssertEqual(coordinator.lastDiagnostics?.reason, .householdJoined)
+    }
+
     func testPerformSyncSkipsSharedShoppingAlertDeliveryForBootstrapBatch() async {
         let householdId = UUID()
         let batchID = UUID()
