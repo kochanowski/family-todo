@@ -227,7 +227,19 @@ struct HouseholdSyncPassResult: Equatable {
     let fetchResult: UIBackgroundFetchResult
     let events: [HouseholdSyncEvent]
     let diagnostics: HouseholdSyncDiagnostics
-    let visibleChanges: HouseholdSyncVisibleChanges = .empty
+    let visibleChanges: HouseholdSyncVisibleChanges
+
+    init(
+        fetchResult: UIBackgroundFetchResult,
+        events: [HouseholdSyncEvent],
+        diagnostics: HouseholdSyncDiagnostics,
+        visibleChanges: HouseholdSyncVisibleChanges = .empty
+    ) {
+        self.fetchResult = fetchResult
+        self.events = events
+        self.diagnostics = diagnostics
+        self.visibleChanges = visibleChanges
+    }
 }
 
 struct HouseholdSyncBatch: Equatable, Identifiable {
