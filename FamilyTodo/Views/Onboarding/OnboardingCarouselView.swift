@@ -130,7 +130,7 @@ struct OnboardingCarouselView: View {
                         onboardingState.completeOnboarding()
                     } label: {
                         Text("Skip")
-                            .font(themeStore.font(for: .listRowSubtitle))
+                            .font(themeStore.font(for: .bodySmall))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
