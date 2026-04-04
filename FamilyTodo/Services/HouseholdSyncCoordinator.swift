@@ -314,23 +314,81 @@ struct HouseholdSyncBatch: Equatable, Identifiable {
     }
 
     var shoppingChangedItemIDs: Set<UUID> {
-        visibleChanges.shoppingChangedItemIDs
+        diagnostics.changedIDsByDomain[.shopping] ?? []
     }
 
     var backlogChangedCategoryIDs: Set<UUID> {
-        visibleChanges.backlogChangedCategoryIDs
+        diagnostics.changedIDsByDomain[.backlog] ?? []
     }
 
     var taskChangedIDs: Set<UUID> {
-        visibleChanges.taskChangedIDs
+        diagnostics.changedIDsByDomain[.tasks] ?? []
     }
 
     var ideaChangedIDs: Set<UUID> {
-        visibleChanges.ideaChangedIDs
+        diagnostics.changedIDsByDomain[.ideas] ?? []
     }
 
     var memberChangedIDs: Set<UUID> {
-        visibleChanges.memberChangedIDs
+        diagnostics.changedIDsByDomain[.members] ?? []
+    }
+
+    var remoteSyncAnimationPayload: RemoteSyncAnimationPayload {
+        RemoteSyncAnimationPayload(
+            batchToken: id,
+            shoppingChangedItemIDs: shoppingChangedItemIDs,
+            workItemChangedIDs: taskChangedIDs.union(ideaChangedIDs),
+            backlogChangedCategoryIDs: backlogChangedCategoryIDs,
+            direction: diagnostics.direction.rawValue,
+            pushReceivedAt: diagnostics.triggerReceivedAt,
+            cacheUpdatedAt: diagnostics.syncFinishedAt
+        )
+    }
+
+    var tasksScreenRefresh: HouseholdTasksScreenRefresh? {
+        guard !domains.isDisjoint(with: [.tasks, .members, .backlog, .ideas]) else {
+            return nil
+        }
+
+        return HouseholdTasksScreenRefresh(
+            classification: classification,
+            changedTaskIDs: taskChangedIDs,
+            animationPayload: remoteSyncAnimationPayload
+        )
+    }
+
+    var backlogScreenRefresh: HouseholdBacklogScreenRefresh? {
+        guard !domains.isDisjoint(with: [.ideas, .backlog, .members, .tasks]) else {
+            return nil
+        }
+
+        return HouseholdBacklogScreenRefresh(
+            classification: classification,
+            changedCategoryIDs: backlogChangedCategoryIDs,
+            changedIdeaIDs: ideaChangedIDs,
+            animationPayload: remoteSyncAnimationPayload
+        )
+    }
+}
+
+struct HouseholdTasksScreenRefresh: Equatable {
+    let classification: HouseholdSyncBatchClassification
+    let changedTaskIDs: Set<UUID>
+    let animationPayload: RemoteSyncAnimationPayload
+
+    var isBootstrap: Bool {
+        classification == .bootstrap
+    }
+}
+
+struct HouseholdBacklogScreenRefresh: Equatable {
+    let classification: HouseholdSyncBatchClassification
+    let changedCategoryIDs: Set<UUID>
+    let changedIdeaIDs: Set<UUID>
+    let animationPayload: RemoteSyncAnimationPayload
+
+    var isBootstrap: Bool {
+        classification == .bootstrap
     }
 }
 
