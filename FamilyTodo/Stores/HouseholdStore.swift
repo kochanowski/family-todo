@@ -3677,10 +3677,9 @@ class HouseholdStore: ObservableObject {
         )
 
         if result.fetchResult == .newData {
-            let contentDiff = remoteVisibleContentDiff(from: result.events)
             publishRemoteCloudRefreshNotifications(
                 source: "remotePush",
-                remoteVisibleContentDiff: contentDiff,
+                remoteVisibleContentDiff: result.visibleChanges.contentDiff,
                 direction: result.diagnostics.direction,
                 pushReceivedAt: context.receivedAt == .distantPast ? nil : context.receivedAt,
                 cacheUpdatedAt: result.diagnostics.syncFinishedAt
@@ -4280,7 +4279,8 @@ class HouseholdStore: ObservableObject {
         return HouseholdSyncPassResult(
             fetchResult: fetchResult,
             events: [],
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            visibleChanges: .empty
         )
     }
 
@@ -4343,6 +4343,11 @@ class HouseholdStore: ObservableObject {
             taskDiff: taskDiff,
             ideaDiff: ideaDiff
         )
+        let visibleChanges = HouseholdSyncVisibleChanges(
+            contentDiff: context.visibleContentResolution?.diff,
+            taskDiff: taskDiff,
+            ideaDiff: ideaDiff
+        )
         let diagnostics = HouseholdSyncDiagnostics(
             batchID: batchID,
             reason: context.reason,
@@ -4377,7 +4382,8 @@ class HouseholdStore: ObservableObject {
         return HouseholdSyncPassResult(
             fetchResult: fetchResult,
             events: events,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            visibleChanges: visibleChanges
         )
     }
 
