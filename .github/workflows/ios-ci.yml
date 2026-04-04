@@ -234,8 +234,8 @@ jobs:
       )
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
-      promote_to_production: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      dry_run: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/tasks-ideas-sync' }}
+      promote_to_production: false
+      dry_run: true
       schema_source: cloudkit/schema/housepulse-schema.json
     secrets: inherit
 
