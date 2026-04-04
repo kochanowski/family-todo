@@ -52,7 +52,7 @@ final class HouseholdSyncCoordinatorNotificationTests: XCTestCase {
                     timestamp: Date(timeIntervalSince1970: 100),
                     direction: .ownerToParticipant,
                     kind: .membersChanged(ids: Set([UUID()]))
-                )
+                ),
             ],
             diagnostics: HouseholdSyncDiagnostics(
                 batchID: batchID,
@@ -87,7 +87,7 @@ final class HouseholdSyncCoordinatorNotificationTests: XCTestCase {
                         changedIDs: [],
                         removedIDs: []
                     )
-                )
+                ),
             ],
             diagnostics: HouseholdSyncDiagnostics(
                 batchID: batchID,

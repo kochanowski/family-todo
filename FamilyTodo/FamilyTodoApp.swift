@@ -407,7 +407,7 @@ struct RootView: View {
             onboardingState.currentState.rawValue,
             userSession.syncMode == .cloud ? "cloud" : "local",
             userSession.userId ?? "none",
-            userSession.currentHouseholdID?.uuidString ?? "none"
+            userSession.currentHouseholdID?.uuidString ?? "none",
         ].joined(separator: "|")
     }
 
