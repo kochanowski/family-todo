@@ -1,0 +1,264 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775495467692,
+  "projectRoot": "/home/wkochanowski/code/family-todo",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Ruby",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Gemfile"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "bundler",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "FamilyTodo": {
+      "path": "FamilyTodo",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1775495467681,
+      "keyFiles": [
+        "CLAUDE.md",
+        "ContentView.swift",
+        "FamilyTodoApp.swift",
+        "HousePulse.Debug.entitlements",
+        "HousePulse.entitlements"
+      ]
+    },
+    "FamilyTodo.xcodeproj": {
+      "path": "FamilyTodo.xcodeproj",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1775495467682,
+      "keyFiles": [
+        "project.pbxproj"
+      ]
+    },
+    "FamilyTodoTests": {
+      "path": "FamilyTodoTests",
+      "purpose": null,
+      "fileCount": 25,
+      "lastAccessed": 1775495467686,
+      "keyFiles": [
+        "AppDelegateBridgeTests.swift",
+        "AppTipVisibilityTests.swift",
+        "AppTipsResetTests.swift",
+        "BacklogStoreTests.swift",
+        "CLAUDE.md"
+      ]
+    },
+    "FamilyTodoUITests": {
+      "path": "FamilyTodoUITests",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1775495467686,
+      "keyFiles": [
+        "CLAUDE.md",
+        "FamilyTodoUITests.swift"
+      ]
+    },
+    "UI": {
+      "path": "UI",
+      "purpose": null,
+      "fileCount": 30,
+      "lastAccessed": 1775495467687,
+      "keyFiles": [
+        "IMG_8521.PNG",
+        "IMG_8522.PNG",
+        "IMG_8523.PNG",
+        "IMG_8524.PNG",
+        "IMG_8525.PNG"
+      ]
+    },
+    "cloudkit": {
+      "path": "cloudkit",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1775495467687,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 13,
+      "lastAccessed": 1775495467687,
+      "keyFiles": [
+        "2026-01-10_adr-001-cloudkit-backend.md",
+        "2026-01-10_adr-explained.md",
+        "2026-01-10_cloudkit-setup-guide.md",
+        "2026-01-10_github-actions-setup.md",
+        "2026-01-11_cloudkit-schema.md"
+      ]
+    },
+    "fastlane": {
+      "path": "fastlane",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1775495467687,
+      "keyFiles": [
+        "Appfile",
+        "CLAUDE.md",
+        "Fastfile"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 3,
+      "lastAccessed": 1775495467688,
+      "keyFiles": [
+        "README.md",
+        "add-uitest-target.sh",
+        "run-swiftlint.sh"
+      ]
+    },
+    "FamilyTodo/Models": {
+      "path": "FamilyTodo/Models",
+      "purpose": "Data models",
+      "fileCount": 19,
+      "lastAccessed": 1775495467689,
+      "keyFiles": [
+        "BacklogCategory.swift",
+        "CLAUDE.md",
+        "CachedBacklogCategory.swift"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "",
+      "accessCount": 9,
+      "lastAccessed": 1775342707918,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/TasksView.swift",
+      "accessCount": 9,
+      "lastAccessed": 1775342935287,
+      "type": "directory"
+    },
+    {
+      "path": "TODO.md",
+      "accessCount": 9,
+      "lastAccessed": 1775343042632,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views/HouseholdSettingsView.swift",
+      "accessCount": 8,
+      "lastAccessed": 1775341842178,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/Onboarding/AuroraBackground.swift",
+      "accessCount": 4,
+      "lastAccessed": 1775339307537,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views/Onboarding/OnboardingCarouselView.swift",
+      "accessCount": 4,
+      "lastAccessed": 1775339621811,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodoTests/TaskStoreTests.swift",
+      "accessCount": 4,
+      "lastAccessed": 1775342950741,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/Components/InviteQRCodeView.swift",
+      "accessCount": 3,
+      "lastAccessed": 1775340920590,
+      "type": "file"
+    },
+    {
+      "path": "TODO_DETAILS.md",
+      "accessCount": 3,
+      "lastAccessed": 1775342684322,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/Onboarding/CreateHouseholdView.swift",
+      "accessCount": 2,
+      "lastAccessed": 1775341851700,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views/Components/GuidedEmptyStateView.swift",
+      "accessCount": 2,
+      "lastAccessed": 1775341858983,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Stores/TaskStore.swift",
+      "accessCount": 2,
+      "lastAccessed": 1775342699794,
+      "type": "directory"
+    },
+    {
+      "path": "onboarding-flow-claude-analysis.md",
+      "accessCount": 1,
+      "lastAccessed": 1775339151643,
+      "type": "file"
+    },
+    {
+      "path": "scripts/cloudkit/apply_schema.sh",
+      "accessCount": 1,
+      "lastAccessed": 1775339884808,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views",
+      "accessCount": 1,
+      "lastAccessed": 1775340825438,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/ShareInviteView.swift",
+      "accessCount": 1,
+      "lastAccessed": 1775340829166,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views/MoreView.swift",
+      "accessCount": 1,
+      "lastAccessed": 1775340836780,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}

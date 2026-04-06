@@ -68,7 +68,9 @@ struct BundlesManagementView: View {
                 Button {
                     presentedEditor = .edit(bundle)
                 } label: {
-                    ShoppingBundleRow(bundle: bundle)
+                    ShoppingBundleRow(bundle: bundle, onAddToShopping: shoppingStore != nil ? {
+                        addBundleToShopping(bundle)
+                    } : nil)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
@@ -157,6 +159,7 @@ private enum PresentedBundleEditor: Identifiable {
 
 private struct ShoppingBundleRow: View {
     let bundle: ShoppingBundle
+    var onAddToShopping: (() -> Void)?
 
     @EnvironmentObject private var themeStore: ThemeStore
 
@@ -180,11 +183,23 @@ private struct ShoppingBundleRow: View {
             }
 
             Spacer()
+
+            if let onAddToShopping {
+                Button(action: onAddToShopping) {
+                    Image(systemName: "cart.badge.plus")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(themeStore.accentTabColor)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add \(bundle.name) to shopping list")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(bundle.name), \(itemCountLabel(for: bundle.itemCount))")
     }
 
@@ -437,8 +452,7 @@ private struct ShoppingBundleEditorSheet: View {
 
         itemDrafts.append(BundleItemDraft(title: trimmedTitle))
         newItemText = ""
-
-        setFocus(.composer)
+        focusedField = .composer
     }
 
     private func applyInitialFocusIfNeeded() {
