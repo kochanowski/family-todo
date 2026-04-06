@@ -69,6 +69,34 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertTrue(store.canMoveToNext(assigneeId: assigneeId))
     }
 
+    func testNextTaskCount_PerAssignee_IsIsolated() async {
+        let userA = UUID()
+        let userB = UUID()
+        for i in 0 ..< 3 {
+            await store.createTask(title: "A\(i)", status: .next, assigneeId: userA)
+        }
+        await store.createTask(title: "B0", status: .next, assigneeId: userB)
+        await store.loadTasks()
+        XCTAssertEqual(store.nextTaskCount(for: userA), 3)
+        XCTAssertEqual(
+            store.nextTaskCount(for: userB), 1,
+            "User B at 1 task should not be affected by user A reaching the limit"
+        )
+    }
+
+    func testNextTaskCount_UnassignedTasks_NotCounted() async {
+        let userA = UUID()
+        await store.createTask(title: "Assigned", status: .next, assigneeId: userA)
+        // Unassigned tasks go to backlog — validate they don't count against userA
+        await store.createTask(title: "Free1", status: .backlog, assigneeId: nil)
+        await store.createTask(title: "Free2", status: .backlog, assigneeId: nil)
+        await store.loadTasks()
+        XCTAssertEqual(
+            store.nextTaskCount(for: userA), 1,
+            "Unassigned backlog tasks must not inflate any assignee's next count"
+        )
+    }
+
     func testCreateTask_BacklogWithoutAssignee_IsAllowed() async {
         let result = await store.createTask(
             title: "Idea without owner yet",

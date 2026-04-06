@@ -367,7 +367,10 @@ private struct TasksContent: View {
         ForEach(displayedTasks) { task in
             if taskBeingCompleted != task.id {
                 let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
-                if index == normalizedWipLimit, displayedTasks.count > normalizedWipLimit {
+                if isSingleAssigneeFilter,
+                   index == normalizedWipLimit,
+                   displayedTasks.count > normalizedWipLimit
+                {
                     overLimitSeparator
                         .tasksListRowStyle(taskListRowInsets)
                 }
@@ -378,7 +381,7 @@ private struct TasksContent: View {
                     categoryName: categoryName(for: task),
                     categoryColor: categoryColor(for: task),
                     appTipRuntimeGeneration: appTipRuntimeGeneration,
-                    wipZone: wipZone(for: index),
+                    wipZone: wipZone(for: task),
                     showsSwipeActionsTip: shouldShowTaskSwipeActionsTip &&
                         task.id == taskSwipeActionsTipTaskID,
                     onToggle: { toggleTask(task) },
@@ -612,7 +615,7 @@ private struct TasksContent: View {
                     Button {
                         showRecommendedLimitInfo = true
                     } label: {
-                        TasksWIPBadge(count: filteredActiveTasks.count, limit: normalizedWipLimit)
+                        TasksWIPBadge(count: wipBadgeCount, limit: normalizedWipLimit)
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Shows information about the recommended task limit")
@@ -919,12 +922,29 @@ private struct TasksContent: View {
         .accessibilityIdentifier("tasksOverLimitSeparator")
     }
 
-    private func wipZone(for index: Int) -> TaskRow.WipZone {
+    private func wipZone(for task: Task) -> TaskRow.WipZone {
         let limit = normalizedWipLimit
-        if index < limit {
-            return .normal
+        guard let assigneeId = task.assigneeId else { return .normal }
+        let assigneeTasks = visibleNextTasks.filter { $0.assigneeId == assigneeId }
+        let assigneeIndex = assigneeTasks.firstIndex(where: { $0.id == task.id }) ?? 0
+        return assigneeIndex < limit ? .normal : .warning
+    }
+
+    private var isSingleAssigneeFilter: Bool {
+        switch assigneeFilter {
+        case .all: false
+        case .mine, .member: true
         }
-        return .warning
+    }
+
+    private var wipBadgeCount: Int {
+        switch assigneeFilter {
+        case .all:
+            guard let id = currentMemberId else { return filteredActiveTasks.count }
+            return store.nextTaskCount(for: id)
+        case .mine, .member:
+            return filteredActiveTasks.count
+        }
     }
 
     private var normalizedWipLimit: Int {
