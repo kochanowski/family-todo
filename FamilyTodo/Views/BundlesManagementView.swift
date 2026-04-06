@@ -242,84 +242,92 @@ private struct ShoppingBundleEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    BundleSectionCard {
-                        ShoppingBundleHeaderRow(
-                            name: $name,
-                            selectedIcon: $selectedIcon,
-                            focusedField: $focusedField,
-                            onSubmitName: focusNextFieldAfterName,
-                            onChooseIcon: { showIconPicker = true }
-                        )
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Items")
-                            .font(themeStore.font(for: .sectionHeader))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
                         BundleSectionCard {
-                            ForEach($itemDrafts) { $draft in
-                                ShoppingBundleItemRow(
-                                    title: $draft.title,
-                                    focusedField: $focusedField,
-                                    focusID: .existing(draft.id),
-                                    onSubmit: {
-                                        handleExistingItemSubmit(forDraftID: draft.id)
-                                    },
-                                    onRemove: {
-                                        removeItemDraft(withID: draft.id)
-                                    }
-                                )
-
-                                if draft.id != itemDrafts.last?.id {
-                                    Divider()
-                                        .padding(.leading, 16)
-                                }
-                            }
-
-                            if !itemDrafts.isEmpty {
-                                Divider()
-                                    .padding(.leading, 16)
-                            }
-
-                            ShoppingBundleComposerRow(
-                                text: $newItemText,
-                                isFocused: $composerFocused,
-                                onSubmit: commitComposerItem
+                            ShoppingBundleHeaderRow(
+                                name: $name,
+                                selectedIcon: $selectedIcon,
+                                focusedField: $focusedField,
+                                onSubmitName: focusNextFieldAfterName,
+                                onChooseIcon: { showIconPicker = true }
                             )
                         }
 
-                        if bundle == nil {
-                            Button {
-                                _ = _Concurrency.Task {
-                                    await saveBundle(andAddToShoppingList: true)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Items")
+                                .font(themeStore.font(for: .sectionHeader))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+
+                            BundleSectionCard {
+                                ForEach($itemDrafts) { $draft in
+                                    ShoppingBundleItemRow(
+                                        title: $draft.title,
+                                        focusedField: $focusedField,
+                                        focusID: .existing(draft.id),
+                                        onSubmit: {
+                                            handleExistingItemSubmit(forDraftID: draft.id)
+                                        },
+                                        onRemove: {
+                                            removeItemDraft(withID: draft.id)
+                                        }
+                                    )
+
+                                    if draft.id != itemDrafts.last?.id {
+                                        Divider()
+                                            .padding(.leading, 16)
+                                    }
                                 }
-                            } label: {
-                                Text(isSaving ? "Saving..." : "Save & Add to List")
-                                    .font(themeStore.font(for: .buttonLabel))
-                                    .frame(maxWidth: .infinity)
+
+                                if !itemDrafts.isEmpty {
+                                    Divider()
+                                        .padding(.leading, 16)
+                                }
+
+                                ShoppingBundleComposerRow(
+                                    text: $newItemText,
+                                    isFocused: $composerFocused,
+                                    onSubmit: commitComposerItem
+                                )
+                                .id("bundleComposer")
                             }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!canSave || isSaving)
-                            .padding(.top, 4)
+
+                            if bundle == nil {
+                                Button {
+                                    _ = _Concurrency.Task {
+                                        await saveBundle(andAddToShoppingList: true)
+                                    }
+                                } label: {
+                                    Text(isSaving ? "Saving..." : "Save & Add to List")
+                                        .font(themeStore.font(for: .buttonLabel))
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!canSave || isSaving)
+                                .padding(.top, 4)
+                            }
+                        }
+
+                        if bundle != nil {
+                            Button("Delete Bundle", role: .destructive) {
+                                showDeleteConfirmation = true
+                            }
+                            .font(themeStore.font(for: .buttonLabel))
                         }
                     }
-
-                    if bundle != nil {
-                        Button("Delete Bundle", role: .destructive) {
-                            showDeleteConfirmation = true
-                        }
-                        .font(themeStore.font(for: .buttonLabel))
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .background(themeStore.canvasColor.ignoresSafeArea())
+                .onChange(of: itemDrafts.count) { _, _ in
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        scrollProxy.scrollTo("bundleComposer", anchor: .bottom)
                     }
                 }
-                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(themeStore.canvasColor.ignoresSafeArea())
+            } // ScrollViewReader
             .navigationTitle(bundle == nil ? "New Bundle" : "Edit Bundle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
