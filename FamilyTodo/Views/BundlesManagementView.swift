@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct BundlesManagementView: View {
     @ObservedObject var store: ShoppingBundleStore
@@ -224,6 +225,7 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var showDeleteConfirmation = false
     @State private var showIconPicker = false
     @State private var hasAppliedInitialFocus = false
+    @State private var composerFocused = false
     @FocusState private var focusedField: BundleEditorFocus?
 
     init(store: ShoppingBundleStore, shoppingStore: ShoppingListStore?, bundle: ShoppingBundle?) {
@@ -284,7 +286,7 @@ private struct ShoppingBundleEditorSheet: View {
 
                             ShoppingBundleComposerRow(
                                 text: $newItemText,
-                                focusedField: $focusedField,
+                                isFocused: $composerFocused,
                                 onSubmit: commitComposerItem
                             )
                         }
@@ -369,6 +371,12 @@ private struct ShoppingBundleEditorSheet: View {
         }
         .onAppear {
             applyInitialFocusIfNeeded()
+        }
+        .onChange(of: focusedField) { _, newValue in
+            if newValue == .composer {
+                composerFocused = true
+                focusedField = nil
+            }
         }
         .sheet(isPresented: $showIconPicker) {
             ShoppingBundleIconPickerSheet(selectedIcon: $selectedIcon)
@@ -647,6 +655,82 @@ private struct BundleItemDraft: Identifiable {
     }
 }
 
+private struct StableComposerTextField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let placeholder: String
+    let themeStore: ThemeStore
+    let onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField(frame: .zero)
+        field.delegate = context.coordinator
+        field.returnKeyType = .done
+        field.autocapitalizationType = .sentences
+        field.autocorrectionType = .no
+        field.enablesReturnKeyAutomatically = false
+        applyStyle(to: field)
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        applyStyle(to: field)
+        if isFocused, !field.isFirstResponder {
+            field.becomeFirstResponder()
+        } else if !isFocused, field.isFirstResponder {
+            field.resignFirstResponder()
+        }
+    }
+
+    private func applyStyle(to field: UITextField) {
+        let font = themeStore.uiFont(for: .listRowTitle)
+        field.font = font
+        field.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: font,
+                .foregroundColor: UIColor.secondaryLabel,
+            ]
+        )
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: StableComposerTextField
+
+        init(_ parent: StableComposerTextField) {
+            self.parent = parent
+        }
+
+        @objc func textChanged(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_: UITextField) {
+            parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_: UITextField) {
+            parent.isFocused = false
+        }
+
+        func textFieldShouldReturn(_: UITextField) -> Bool {
+            parent.onSubmit()
+            return false
+        }
+    }
+}
+
 private struct BundleSectionCard<Content: View>: View {
     @EnvironmentObject private var themeStore: ThemeStore
     let content: Content
@@ -704,27 +788,21 @@ private struct ShoppingBundleItemRow: View {
 
 private struct ShoppingBundleComposerRow: View {
     @Binding var text: String
-    let focusedField: FocusState<BundleEditorFocus?>.Binding
+    @Binding var isFocused: Bool
     let onSubmit: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         HStack(spacing: 12) {
-            TextField(
-                "",
+            StableComposerTextField(
                 text: $text,
-                prompt: Text("Add item")
-                    .font(themeStore.font(for: .listRowTitle))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+                isFocused: $isFocused,
+                placeholder: "Add item",
+                themeStore: themeStore,
+                onSubmit: onSubmit
             )
-            .font(themeStore.font(for: .listRowTitle))
-            .textFieldStyle(.plain)
-            .textInputAutocapitalization(.sentences)
-            .autocorrectionDisabled()
-            .submitLabel(.done)
-            .focused(focusedField, equals: .composer)
-            .onSubmit(onSubmit)
+            .frame(height: 24)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
