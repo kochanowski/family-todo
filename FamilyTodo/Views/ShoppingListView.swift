@@ -524,17 +524,6 @@ private struct ShoppingListContent: View {
                         onDeleteItem: deleteRecentItem,
                         onClearAll: clearRecentItems
                     )
-                    .onAppear {
-                        // Half-sheet: tab bar stays visible while sheet is open, but
-                        // the presentation animation corrupts the blur. Refresh once
-                        // the animation has settled so the blur re-samples correctly.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                            NotificationCenter.default.post(
-                                name: .tabBarAppearanceRefreshRequested,
-                                object: nil
-                            )
-                        }
-                    }
                 }
             }
         }

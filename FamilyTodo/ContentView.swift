@@ -231,20 +231,31 @@ struct MainAppView: View {
         )
     }
 
+    /// Force-reconciles the tab bar, bypassing the appearance-match guard.
+    /// Creates fresh UITabBarAppearance objects so UIKit unconditionally refreshes
+    /// its internal blur/vibrancy state. Use after sheet dismissal where the blur
+    /// can go grey even though the appearance settings haven't changed.
+    private func forceReconcileTabBarAppearance() {
+        TabBarTypographyManager.reconcile(
+            themeStore: themeStore,
+            tabBarController: tabBarController,
+            selectedIndex: AppTab.allCases.firstIndex(of: activeTab),
+            force: true
+        )
+    }
+
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
-        // Immediately reset any UIVisualEffectViews that got corrupted during sheet
-        // presentation, then re-apply correct appearance.
-        TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
-        reconcileTabBarAppearance()
-        // Sheet teardown animation typically runs 0.3–0.5 s; fire again once it has
-        // settled so the blur re-samples against the fully restored background.
+        // Force-apply a fresh appearance immediately — bypasses the guard that
+        // short-circuits when settings haven't changed but the blur has gone grey.
+        forceReconcileTabBarAppearance()
+        // Sheet animation runs ~0.3–0.5 s. Re-apply once settled.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
-            reconcileTabBarAppearance()
+            forceReconcileTabBarAppearance()
         }
-        // Belt-and-suspenders pass for NavigationStack-wrapped sheets that take longer.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
+        // Extra pass for NavigationStack-wrapped sheets (EditHouseholdView) that
+        // have a longer teardown cycle.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            forceReconcileTabBarAppearance()
         }
     }
 

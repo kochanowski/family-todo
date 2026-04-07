@@ -22,7 +22,8 @@ enum TabBarTypographyManager {
     static func reconcile(
         themeStore: ThemeStore,
         tabBarController: UITabBarController? = nil,
-        selectedIndex: Int? = nil
+        selectedIndex: Int? = nil,
+        force: Bool = false
     ) {
         guard let tabBarController else { return }
 
@@ -32,24 +33,29 @@ enum TabBarTypographyManager {
             selectedIndex: selectedIndex
         )
         let desiredIndex = style.selectedIndex
-        let currentStyle = currentStyle(from: tabBarController)
-        let standardAppearanceMatches = appearanceMatches(
-            tabBarController.tabBar.standardAppearance,
-            style: style
-        )
-        let scrollEdgeAppearanceMatches: Bool = if #available(iOS 15.0, *) {
-            appearanceMatches(tabBarController.tabBar.scrollEdgeAppearance, style: style)
-        } else {
-            true
-        }
-        let needsAppearanceRepair = currentStyle != style ||
-            !standardAppearanceMatches ||
-            !scrollEdgeAppearanceMatches
 
-        guard needsAppearanceRepair || tabBarController.selectedIndex != desiredIndex else {
-            return
+        if !force {
+            let currentStyle = currentStyle(from: tabBarController)
+            let standardAppearanceMatches = appearanceMatches(
+                tabBarController.tabBar.standardAppearance,
+                style: style
+            )
+            let scrollEdgeAppearanceMatches: Bool = if #available(iOS 15.0, *) {
+                appearanceMatches(tabBarController.tabBar.scrollEdgeAppearance, style: style)
+            } else {
+                true
+            }
+            let needsAppearanceRepair = currentStyle != style ||
+                !standardAppearanceMatches ||
+                !scrollEdgeAppearanceMatches
+
+            guard needsAppearanceRepair || tabBarController.selectedIndex != desiredIndex else {
+                return
+            }
         }
 
+        // Always create fresh appearance objects so UIKit sees a new assignment
+        // and unconditionally refreshes its internal blur/vibrancy state.
         let standardAppearance = makeAppearance(style: style)
 
         var resolvedScrollEdgeAppearance: UITabBarAppearance?
@@ -96,27 +102,13 @@ enum TabBarTypographyManager {
         )
     }
 
-    /// Forces the tab bar blur to recover after sheet presentation corrupts UIKit's
-    /// visual effect sampling context. Walks the tab bar subview hierarchy and resets
-    /// each UIVisualEffectView by setting effect=nil then restoring it — this is the
-    /// only reliable way to tear down and rebuild UIKit's internal blur pipeline.
-    /// A layout pass is forced immediately after so the new sample takes effect.
+    /// Forces a layout pass on the tab bar without any visual disruption.
+    /// Prefer reconcile(force:true) for post-sheet-dismissal recovery — it creates
+    /// fresh UITabBarAppearance objects so UIKit unconditionally refreshes its blur state.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
         guard let tabBar = tabBarController?.tabBar else { return }
-        resetEffectViews(in: tabBar)
         tabBar.setNeedsLayout()
         tabBar.layoutIfNeeded()
-    }
-
-    private static func resetEffectViews(in view: UIView) {
-        for subview in view.subviews {
-            if let effectView = subview as? UIVisualEffectView {
-                let saved = effectView.effect
-                effectView.effect = nil
-                effectView.effect = saved
-            }
-            resetEffectViews(in: subview)
-        }
     }
 
     private static func resolvedStyle(
