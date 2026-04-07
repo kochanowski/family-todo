@@ -96,6 +96,19 @@ enum TabBarTypographyManager {
         )
     }
 
+    /// Forces the tab bar blur layer to re-sample its background.
+    /// Call this after sheet dismissal when the visual effect view may have gone grey,
+    /// even if the appearance settings haven't changed (reconcile() would return early).
+    static func forceBlurRefresh(tabBarController: UITabBarController?) {
+        guard let tabBar = tabBarController?.tabBar else { return }
+        tabBar.isTranslucent = false
+        tabBar.setNeedsLayout()
+        tabBar.layoutIfNeeded()
+        tabBar.isTranslucent = true
+        tabBar.setNeedsLayout()
+        tabBar.layoutIfNeeded()
+    }
+
     private static func resolvedStyle(
         themeStore: ThemeStore,
         tabBarController: UITabBarController,

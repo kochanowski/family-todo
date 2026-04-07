@@ -235,10 +235,15 @@ struct MainAppView: View {
         reconcileTabBarAppearance()
         DispatchQueue.main.async {
             reconcileTabBarAppearance()
+            // Force the blur layer to re-sample after sheet teardown animation completes.
+            // reconcile() returns early when style already matches, so the visual effect
+            // view can stay grey without this explicit refresh.
+            TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
         }
         // A defensive reapply keeps the selected tab tinted even if UIKit settles later.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             reconcileTabBarAppearance()
+            TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
         }
     }
 
