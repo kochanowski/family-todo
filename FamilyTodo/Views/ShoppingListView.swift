@@ -184,7 +184,7 @@ private struct ShoppingListContent: View {
                     onPrimary: clearToBuy
                 )
             }
-            .sheet(isPresented: $showQuickAddBundleChooser) {
+            .sheet(isPresented: $showQuickAddBundleChooser, onDismiss: refreshTabBarAfterSheetDismiss) {
                 ShoppingQuickAddBundleSheet(
                     bundles: quickAddBundles,
                     onSelectBundle: { bundle in

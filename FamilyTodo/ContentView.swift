@@ -232,18 +232,19 @@ struct MainAppView: View {
     }
 
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
+        // Blank the appearance first so reconcile()'s guard won't short-circuit,
+        // then immediately reconcile to re-apply the correct appearance.
+        TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
         reconcileTabBarAppearance()
-        DispatchQueue.main.async {
-            reconcileTabBarAppearance()
-            // Force the blur layer to re-sample after sheet teardown animation completes.
-            // reconcile() returns early when style already matches, so the visual effect
-            // view can stay grey without this explicit refresh.
+        // Sheet teardown animation runs ~0.3–0.5 s. Repeat after it completes so the
+        // blur re-samples against the fully restored background.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
+            reconcileTabBarAppearance()
         }
-        // A defensive reapply keeps the selected tab tinted even if UIKit settles later.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            reconcileTabBarAppearance()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
             TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
+            reconcileTabBarAppearance()
         }
     }
 

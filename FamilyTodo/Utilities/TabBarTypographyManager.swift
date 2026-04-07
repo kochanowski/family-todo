@@ -96,17 +96,19 @@ enum TabBarTypographyManager {
         )
     }
 
-    /// Forces the tab bar blur layer to re-sample its background.
-    /// Call this after sheet dismissal when the visual effect view may have gone grey,
-    /// even if the appearance settings haven't changed (reconcile() would return early).
+    /// Corrupts the tab bar appearance to a blank state so the next reconcile() call
+    /// cannot short-circuit its guard. Call this BEFORE reconcileTabBarAppearance() after
+    /// sheet dismissal — the blank appearance makes needsAppearanceRepair = true so
+    /// updateLiveTabBar() runs, which forces setNeedsLayout()/layoutIfNeeded() and
+    /// causes UIKit to rebuild the blur sampling context.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
         guard let tabBar = tabBarController?.tabBar else { return }
-        tabBar.isTranslucent = false
-        tabBar.setNeedsLayout()
-        tabBar.layoutIfNeeded()
-        tabBar.isTranslucent = true
-        tabBar.setNeedsLayout()
-        tabBar.layoutIfNeeded()
+        let blank = UITabBarAppearance()
+        blank.configureWithTransparentBackground()
+        tabBar.standardAppearance = blank
+        if #available(iOS 15.0, *) {
+            tabBar.scrollEdgeAppearance = blank
+        }
     }
 
     private static func resolvedStyle(

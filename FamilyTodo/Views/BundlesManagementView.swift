@@ -55,7 +55,7 @@ struct BundlesManagementView: View {
                 await store.loadBundlesForDisplay()
             }
         }
-        .sheet(item: $presentedEditor) { destination in
+        .sheet(item: $presentedEditor, onDismiss: refreshTabBarAfterSheetDismiss) { destination in
             ShoppingBundleEditorSheet(
                 store: store,
                 shoppingStore: shoppingStore,
@@ -137,6 +137,12 @@ struct BundlesManagementView: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(.bottom, 24)
+    }
+
+    private func refreshTabBarAfterSheetDismiss() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
+        }
     }
 
     private func addBundleToShopping(_ bundle: ShoppingBundle) {
