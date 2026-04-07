@@ -9,6 +9,7 @@ struct BundlesManagementView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var presentedEditor: PresentedBundleEditor?
     @State private var hasStartedInitialLoad = false
+    @State private var lastAddedBundleId: UUID?
 
     var body: some View {
         Group {
@@ -66,22 +67,33 @@ struct BundlesManagementView: View {
     private var bundlesList: some View {
         List {
             ForEach(store.bundles) { bundle in
-                Button {
-                    presentedEditor = .edit(bundle)
-                } label: {
-                    ShoppingBundleRow(bundle: bundle, onAddToShopping: shoppingStore != nil ? {
-                        addBundleToShopping(bundle)
-                    } : nil)
+                HStack(spacing: 0) {
+                    Button {
+                        presentedEditor = .edit(bundle)
+                    } label: {
+                        ShoppingBundleRow(bundle: bundle)
+                    }
+                    .buttonStyle(.plain)
+
+                    if shoppingStore != nil {
+                        let added = lastAddedBundleId == bundle.id
+                        Button {
+                            addBundleToShopping(bundle)
+                        } label: {
+                            Image(systemName: added ? "checkmark.circle.fill" : "cart.badge.plus")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(added ? .green : themeStore.accentTabColor)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                                .animation(.easeInOut(duration: 0.2), value: added)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(bundle.name) to shopping list")
+                    }
                 }
-                .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .listRowInsets(
-                    EdgeInsets(
-                        top: 0,
-                        leading: 16,
-                        bottom: 0,
-                        trailing: 16
-                    )
+                    EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 8)
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -129,8 +141,15 @@ struct BundlesManagementView: View {
 
     private func addBundleToShopping(_ bundle: ShoppingBundle) {
         guard let shoppingStore else { return }
+        lastAddedBundleId = bundle.id
         _ = _Concurrency.Task {
             _ = await shoppingStore.createItems(fromTitles: bundle.normalizedItems)
+        }
+        _ = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
+            if lastAddedBundleId == bundle.id {
+                lastAddedBundleId = nil
+            }
         }
     }
 }
@@ -160,7 +179,6 @@ private enum PresentedBundleEditor: Identifiable {
 
 private struct ShoppingBundleRow: View {
     let bundle: ShoppingBundle
-    var onAddToShopping: (() -> Void)?
 
     @EnvironmentObject private var themeStore: ThemeStore
 
@@ -184,18 +202,6 @@ private struct ShoppingBundleRow: View {
             }
 
             Spacer()
-
-            if let onAddToShopping {
-                Button(action: onAddToShopping) {
-                    Image(systemName: "cart.badge.plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(themeStore.accentTabColor)
-                        .frame(width: 36, height: 36)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add \(bundle.name) to shopping list")
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
