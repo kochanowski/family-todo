@@ -245,10 +245,15 @@ struct MainAppView: View {
     }
 
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
-        // Called via .onDisappear on sheet content, which fires after the dismiss
-        // animation completes — the compositor content behind the tab bar is already
-        // correct at this point, so a single forceBlurRefresh is sufficient.
-        TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
+        // .onDisappear fires at different points depending on sheet type:
+        // simple sheets (~0.2 s animation) → fires near animation end
+        // NavigationStack-wrapped sheets (~0.4 s) → fires closer to animation start
+        // Two passes cover both cases without polling:
+        let controller = tabBarController
+        TabBarTypographyManager.forceBlurRefresh(tabBarController: controller)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            TabBarTypographyManager.forceBlurRefresh(tabBarController: controller)
+        }
     }
 
     @discardableResult

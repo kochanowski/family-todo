@@ -125,25 +125,33 @@ enum TabBarTypographyManager {
         ])
     }
 
-    /// Forces the custom blur view to re-sample compositor content.
-    /// Splits nil and restore into two separate async dispatches so CoreAnimation
-    /// cannot batch them into one no-op commit — each dispatch is a distinct render pass.
+    /// Forces the custom blur view to re-sample compositor content by replacing it.
+    /// Removing and reinserting the UIVisualEffectView within a single
+    /// setDisableActions transaction creates a brand-new _UIBackdropLayer with no
+    /// cached state — it samples the current compositor output on its next render cycle.
+    /// No visible flash: the remove+insert commit together as one display operation.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
-        guard let tabBar = tabBarController?.tabBar,
-              let blur = tabBar.viewWithTag(customBlurViewTag) as? UIVisualEffectView
+        guard let tabBarController,
+              let tabBar = tabBarController.tabBar as UITabBar?
         else { return }
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        blur.effect = nil
-        CATransaction.commit()
 
-        DispatchQueue.main.async {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            blur.effect = UIBlurEffect(style: .systemChromeMaterial)
-            CATransaction.commit()
-        }
+        tabBar.viewWithTag(customBlurViewTag)?.removeFromSuperview()
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+        blur.tag = customBlurViewTag
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        tabBar.insertSubview(blur, at: 0)
+        NSLayoutConstraint.activate([
+            blur.topAnchor.constraint(equalTo: tabBar.topAnchor),
+            blur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: tabBar.trailingAnchor),
+            blur.bottomAnchor.constraint(equalTo: tabBar.bottomAnchor),
+        ])
+
+        CATransaction.commit()
     }
 
     private static let customBlurViewTag = 0x5442_4152 // 'TBAR'
