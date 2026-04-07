@@ -40,16 +40,18 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(item: $householdBeingEdited, onDismiss: handleHouseholdEditDismiss) { household in
+        .sheet(item: $householdBeingEdited) { household in
             NavigationStack {
                 EditHouseholdView(household: household)
                     .id(household.id)
             }
+            .onDisappear { handleHouseholdEditDismiss() }
         }
-        .sheet(isPresented: $showInviteMember, onDismiss: handleHouseholdEditDismiss) {
+        .sheet(isPresented: $showInviteMember) {
             InviteMemberView()
                 .environmentObject(householdStore)
                 .environmentObject(cloudKitDiagnostics)
+                .onDisappear { handleHouseholdEditDismiss() }
         }
         .sheet(isPresented: $showLeaveConfirmation) {
             AppConfirmationSheet(

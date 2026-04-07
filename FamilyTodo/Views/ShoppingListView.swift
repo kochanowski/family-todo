@@ -184,7 +184,7 @@ private struct ShoppingListContent: View {
                     onPrimary: clearToBuy
                 )
             }
-            .sheet(isPresented: $showQuickAddBundleChooser, onDismiss: refreshTabBarAfterSheetDismiss) {
+            .sheet(isPresented: $showQuickAddBundleChooser) {
                 ShoppingQuickAddBundleSheet(
                     bundles: quickAddBundles,
                     onSelectBundle: { bundle in
@@ -192,6 +192,7 @@ private struct ShoppingListContent: View {
                         handleBundleQuickAdd(bundle)
                     }
                 )
+                .onDisappear { refreshTabBarAfterSheetDismiss() }
             }
             .overlay(alignment: .bottom) {
                 if let activeToast {
@@ -517,13 +518,14 @@ private struct ShoppingListContent: View {
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
                 )
-                .sheet(isPresented: $showRestock, onDismiss: refreshTabBarAfterSheetDismiss) {
+                .sheet(isPresented: $showRestock) {
                     RestockSheet(
                         store: store,
                         onRestore: restoreRecentItem,
                         onDeleteItem: deleteRecentItem,
                         onClearAll: clearRecentItems
                     )
+                    .onDisappear { refreshTabBarAfterSheetDismiss() }
                 }
             }
         }

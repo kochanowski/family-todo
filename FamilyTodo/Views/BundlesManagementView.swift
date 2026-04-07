@@ -55,12 +55,13 @@ struct BundlesManagementView: View {
                 await store.loadBundlesForDisplay()
             }
         }
-        .sheet(item: $presentedEditor, onDismiss: refreshTabBarAfterSheetDismiss) { destination in
+        .sheet(item: $presentedEditor) { destination in
             ShoppingBundleEditorSheet(
                 store: store,
                 shoppingStore: shoppingStore,
                 bundle: destination.bundle
             )
+            .onDisappear { refreshTabBarAfterSheetDismiss() }
         }
     }
 

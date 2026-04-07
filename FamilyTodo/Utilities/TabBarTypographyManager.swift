@@ -125,9 +125,9 @@ enum TabBarTypographyManager {
         ])
     }
 
-    /// Resets the custom blur view's effect within a no-animation CATransaction.
-    /// Because CoreAnimation batches effect=nil and effect=restore into the same
-    /// committed frame, there is zero visible flash — only the final state is rendered.
+    /// Forces the custom blur view to re-sample compositor content.
+    /// Splits nil and restore into two separate async dispatches so CoreAnimation
+    /// cannot batch them into one no-op commit — each dispatch is a distinct render pass.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
         guard let tabBar = tabBarController?.tabBar,
               let blur = tabBar.viewWithTag(customBlurViewTag) as? UIVisualEffectView
@@ -135,10 +135,15 @@ enum TabBarTypographyManager {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let saved = blur.effect
         blur.effect = nil
-        blur.effect = saved
         CATransaction.commit()
+
+        DispatchQueue.main.async {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            blur.effect = UIBlurEffect(style: .systemChromeMaterial)
+            CATransaction.commit()
+        }
     }
 
     private static let customBlurViewTag = 0x5442_4152 // 'TBAR'

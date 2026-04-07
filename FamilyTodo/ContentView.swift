@@ -245,23 +245,10 @@ struct MainAppView: View {
     }
 
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
-        // Two-part refresh on every pass:
-        // 1. forceReconcileTabBarAppearance — fresh UITabBarAppearance objects tell
-        //    UIKit to unconditionally reconfigure its blur pipeline.
-        // 2. forceBlurRefresh — CALayer display pass forces _UIBackdropLayer to
-        //    re-sample the compositor content (layout passes alone are not enough).
-        forceReconcileTabBarAppearance()
+        // Called via .onDisappear on sheet content, which fires after the dismiss
+        // animation completes — the compositor content behind the tab bar is already
+        // correct at this point, so a single forceBlurRefresh is sufficient.
         TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
-        // Sheet animation runs ~0.3–0.5 s. Re-apply once settled.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            forceReconcileTabBarAppearance()
-            TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
-        }
-        // Extra pass for NavigationStack-wrapped sheets (EditHouseholdView).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
-            forceReconcileTabBarAppearance()
-            TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
-        }
     }
 
     @discardableResult
