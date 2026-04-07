@@ -27,8 +27,10 @@ enum TabBarTypographyManager {
     ) {
         guard let tabBarController else { return }
 
-        // Ensure our custom blur view exists before any appearance work.
+        // Ensure our custom blur view exists and is correctly positioned.
         insertCustomBlurIfNeeded(in: tabBarController)
+        // Keep UITabBar's own background transparent so it cannot cover our blur view.
+        tabBarController.tabBar.backgroundColor = .clear
 
         let style = resolvedStyle(
             themeStore: themeStore,
@@ -105,24 +107,49 @@ enum TabBarTypographyManager {
         )
     }
 
-    /// Inserts a custom UIVisualEffectView as the tab bar's blur background.
-    /// This replaces UIKit's internal _UIBackdropLayer-based blur so we own the
-    /// view and can force it to re-sample at any time without UIKit's caching issues.
+    /// Inserts a custom UIVisualEffectView as the tab bar's blur background and
+    /// positions it above UIKit's internal _UIBarBackground view.
+    ///
+    /// Insertion at index 0 (the original approach) put our view BEHIND _UIBarBackground.
+    /// configureWithTransparentBackground() normally makes _UIBarBackground clear, but
+    /// UIKit's presentation-controller cleanup briefly resets it to grey after sheet
+    /// dismissal — hiding our blur entirely. Positioning above _UIBarBackground (but
+    /// below the interactive UIControl tab buttons) means our blur is always visible
+    /// regardless of _UIBarBackground's transient state.
     static func insertCustomBlurIfNeeded(in tabBarController: UITabBarController) {
         let tabBar = tabBarController.tabBar
-        guard tabBar.viewWithTag(customBlurViewTag) == nil else { return }
 
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-        blur.tag = customBlurViewTag
-        blur.translatesAutoresizingMaskIntoConstraints = false
-        tabBar.insertSubview(blur, at: 0)
+        let blur: UIVisualEffectView
+        if let existing = tabBar.viewWithTag(customBlurViewTag) as? UIVisualEffectView {
+            blur = existing
+        } else {
+            let newBlur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+            newBlur.tag = customBlurViewTag
+            newBlur.translatesAutoresizingMaskIntoConstraints = false
+            tabBar.addSubview(newBlur)
+            NSLayoutConstraint.activate([
+                newBlur.topAnchor.constraint(equalTo: tabBar.topAnchor),
+                newBlur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
+                newBlur.trailingAnchor.constraint(equalTo: tabBar.trailingAnchor),
+                newBlur.bottomAnchor.constraint(equalTo: tabBar.bottomAnchor),
+            ])
+            blur = newBlur
+        }
 
-        NSLayoutConstraint.activate([
-            blur.topAnchor.constraint(equalTo: tabBar.topAnchor),
-            blur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
-            blur.trailingAnchor.constraint(equalTo: tabBar.trailingAnchor),
-            blur.bottomAnchor.constraint(equalTo: tabBar.bottomAnchor),
-        ])
+        positionBlurAboveBackground(blur, in: tabBar)
+    }
+
+    /// Moves the blur view to the correct z-position:
+    /// above UIKit's internal background views, below the interactive tab buttons.
+    /// Computed against the subviews excluding blur itself to get a stable index.
+    private static func positionBlurAboveBackground(
+        _ blur: UIVisualEffectView,
+        in tabBar: UITabBar
+    ) {
+        let others = tabBar.subviews.filter { $0 !== blur }
+        // Tab buttons are UIControls; everything before them is UIKit background.
+        let targetIndex = others.firstIndex(where: { $0 is UIControl }) ?? min(1, others.count)
+        tabBar.insertSubview(blur, at: targetIndex)
     }
 
     /// Forces the custom blur view to re-sample compositor content by replacing it.
@@ -131,19 +158,26 @@ enum TabBarTypographyManager {
     /// cached state — it samples the current compositor output on its next render cycle.
     /// No visible flash: the remove+insert commit together as one display operation.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
-        guard let tabBarController,
-              let tabBar = tabBarController.tabBar as UITabBar?
-        else { return }
+        guard let tabBarController else { return }
+        let tabBar = tabBarController.tabBar
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
         tabBar.viewWithTag(customBlurViewTag)?.removeFromSuperview()
+        // Belt-and-suspenders: ensure UITabBar's own background layer is clear
+        // so it cannot show grey behind our blur view.
+        tabBar.backgroundColor = .clear
 
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
         blur.tag = customBlurViewTag
         blur.translatesAutoresizingMaskIntoConstraints = false
-        tabBar.insertSubview(blur, at: 0)
+
+        // Insert above UIKit's _UIBarBackground (which is at index 0), below tab buttons.
+        // After removing the old blur, the remaining subviews start with UIKit's own views.
+        let targetIndex = tabBar.subviews.firstIndex(where: { $0 is UIControl }) ?? tabBar.subviews.count
+        tabBar.insertSubview(blur, at: targetIndex)
+
         NSLayoutConstraint.activate([
             blur.topAnchor.constraint(equalTo: tabBar.topAnchor),
             blur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
@@ -331,6 +365,7 @@ enum TabBarTypographyManager {
         }
         tabBar.tintColor = selectedColor
         tabBar.unselectedItemTintColor = normalColor
+        tabBar.backgroundColor = .clear
 
         repairSelection(
             on: tabBarController,
