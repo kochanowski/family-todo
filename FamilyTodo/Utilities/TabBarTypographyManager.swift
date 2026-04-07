@@ -102,13 +102,23 @@ enum TabBarTypographyManager {
         )
     }
 
-    /// Forces a layout pass on the tab bar without any visual disruption.
-    /// Prefer reconcile(force:true) for post-sheet-dismissal recovery — it creates
-    /// fresh UITabBarAppearance objects so UIKit unconditionally refreshes its blur state.
+    /// Forces the tab bar's _UIBackdropLayer to re-capture the compositor content.
+    /// Layout passes alone are insufficient — _UIBackdropLayer (UIKit's internal blur
+    /// implementation) re-reads the content behind it during CALayer DISPLAY, not layout.
+    /// Also forces a window-level layout so the compositor sees the updated scene graph.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
         guard let tabBar = tabBarController?.tabBar else { return }
+        // Layout pass first to ensure geometry is current.
         tabBar.setNeedsLayout()
         tabBar.layoutIfNeeded()
+        // Display pass: tells Core Animation to re-render the layer tree including
+        // the internal _UIBackdropLayer which samples content behind the tab bar.
+        tabBar.layer.setNeedsDisplay()
+        tabBar.layer.displayIfNeeded()
+        // Window-level layout so the compositor sees the fully restored scene graph
+        // after sheet teardown, giving _UIBackdropLayer accurate content to sample.
+        tabBar.window?.setNeedsLayout()
+        tabBar.window?.layoutIfNeeded()
     }
 
     private static func resolvedStyle(
