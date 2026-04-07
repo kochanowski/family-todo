@@ -46,7 +46,7 @@ struct ProfileView: View {
                     .id(household.id)
             }
         }
-        .sheet(isPresented: $showInviteMember) {
+        .sheet(isPresented: $showInviteMember, onDismiss: handleHouseholdEditDismiss) {
             InviteMemberView()
                 .environmentObject(householdStore)
                 .environmentObject(cloudKitDiagnostics)

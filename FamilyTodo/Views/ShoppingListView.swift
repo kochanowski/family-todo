@@ -517,7 +517,7 @@ private struct ShoppingListContent: View {
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
                 )
-                .sheet(isPresented: $showRestock) {
+                .sheet(isPresented: $showRestock, onDismiss: refreshTabBarAfterSheetDismiss) {
                     RestockSheet(
                         store: store,
                         onRestore: restoreRecentItem,
@@ -824,6 +824,12 @@ private struct ShoppingListContent: View {
             await store.clearRecentItems()
         }
         HapticManager.success()
+    }
+
+    private func refreshTabBarAfterSheetDismiss() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
+        }
     }
 
     private func clearToBuy() {
