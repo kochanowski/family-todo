@@ -96,18 +96,26 @@ enum TabBarTypographyManager {
         )
     }
 
-    /// Corrupts the tab bar appearance to a blank state so the next reconcile() call
-    /// cannot short-circuit its guard. Call this BEFORE reconcileTabBarAppearance() after
-    /// sheet dismissal — the blank appearance makes needsAppearanceRepair = true so
-    /// updateLiveTabBar() runs, which forces setNeedsLayout()/layoutIfNeeded() and
-    /// causes UIKit to rebuild the blur sampling context.
+    /// Forces the tab bar blur to recover after sheet presentation corrupts UIKit's
+    /// visual effect sampling context. Walks the tab bar subview hierarchy and resets
+    /// each UIVisualEffectView by setting effect=nil then restoring it — this is the
+    /// only reliable way to tear down and rebuild UIKit's internal blur pipeline.
+    /// A layout pass is forced immediately after so the new sample takes effect.
     static func forceBlurRefresh(tabBarController: UITabBarController?) {
         guard let tabBar = tabBarController?.tabBar else { return }
-        let blank = UITabBarAppearance()
-        blank.configureWithTransparentBackground()
-        tabBar.standardAppearance = blank
-        if #available(iOS 15.0, *) {
-            tabBar.scrollEdgeAppearance = blank
+        resetEffectViews(in: tabBar)
+        tabBar.setNeedsLayout()
+        tabBar.layoutIfNeeded()
+    }
+
+    private static func resetEffectViews(in view: UIView) {
+        for subview in view.subviews {
+            if let effectView = subview as? UIVisualEffectView {
+                let saved = effectView.effect
+                effectView.effect = nil
+                effectView.effect = saved
+            }
+            resetEffectViews(in: subview)
         }
     }
 

@@ -232,19 +232,19 @@ struct MainAppView: View {
     }
 
     private func refreshTabBarAppearanceForHouseholdChromeChange() {
-        // Blank the appearance first so reconcile()'s guard won't short-circuit,
-        // then immediately reconcile to re-apply the correct appearance.
+        // Immediately reset any UIVisualEffectViews that got corrupted during sheet
+        // presentation, then re-apply correct appearance.
         TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
         reconcileTabBarAppearance()
-        // Sheet teardown animation runs ~0.3–0.5 s. Repeat after it completes so the
-        // blur re-samples against the fully restored background.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        // Sheet teardown animation typically runs 0.3–0.5 s; fire again once it has
+        // settled so the blur re-samples against the fully restored background.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
             TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
             reconcileTabBarAppearance()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+        // Belt-and-suspenders pass for NavigationStack-wrapped sheets that take longer.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             TabBarTypographyManager.forceBlurRefresh(tabBarController: tabBarController)
-            reconcileTabBarAppearance()
         }
     }
 
