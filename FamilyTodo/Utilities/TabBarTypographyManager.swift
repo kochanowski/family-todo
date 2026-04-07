@@ -27,6 +27,9 @@ enum TabBarTypographyManager {
     ) {
         guard let tabBarController else { return }
 
+        // Ensure our custom blur view exists before any appearance work.
+        insertCustomBlurIfNeeded(in: tabBarController)
+
         let style = resolvedStyle(
             themeStore: themeStore,
             tabBarController: tabBarController,
@@ -102,24 +105,43 @@ enum TabBarTypographyManager {
         )
     }
 
-    /// Forces the tab bar's _UIBackdropLayer to re-capture the compositor content.
-    /// Layout passes alone are insufficient — _UIBackdropLayer (UIKit's internal blur
-    /// implementation) re-reads the content behind it during CALayer DISPLAY, not layout.
-    /// Also forces a window-level layout so the compositor sees the updated scene graph.
-    static func forceBlurRefresh(tabBarController: UITabBarController?) {
-        guard let tabBar = tabBarController?.tabBar else { return }
-        // Layout pass first to ensure geometry is current.
-        tabBar.setNeedsLayout()
-        tabBar.layoutIfNeeded()
-        // Display pass: tells Core Animation to re-render the layer tree including
-        // the internal _UIBackdropLayer which samples content behind the tab bar.
-        tabBar.layer.setNeedsDisplay()
-        tabBar.layer.displayIfNeeded()
-        // Window-level layout so the compositor sees the fully restored scene graph
-        // after sheet teardown, giving _UIBackdropLayer accurate content to sample.
-        tabBar.window?.setNeedsLayout()
-        tabBar.window?.layoutIfNeeded()
+    /// Inserts a custom UIVisualEffectView as the tab bar's blur background.
+    /// This replaces UIKit's internal _UIBackdropLayer-based blur so we own the
+    /// view and can force it to re-sample at any time without UIKit's caching issues.
+    static func insertCustomBlurIfNeeded(in tabBarController: UITabBarController) {
+        let tabBar = tabBarController.tabBar
+        guard tabBar.viewWithTag(customBlurViewTag) == nil else { return }
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+        blur.tag = customBlurViewTag
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        tabBar.insertSubview(blur, at: 0)
+
+        NSLayoutConstraint.activate([
+            blur.topAnchor.constraint(equalTo: tabBar.topAnchor),
+            blur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: tabBar.trailingAnchor),
+            blur.bottomAnchor.constraint(equalTo: tabBar.bottomAnchor),
+        ])
     }
+
+    /// Resets the custom blur view's effect within a no-animation CATransaction.
+    /// Because CoreAnimation batches effect=nil and effect=restore into the same
+    /// committed frame, there is zero visible flash — only the final state is rendered.
+    static func forceBlurRefresh(tabBarController: UITabBarController?) {
+        guard let tabBar = tabBarController?.tabBar,
+              let blur = tabBar.viewWithTag(customBlurViewTag) as? UIVisualEffectView
+        else { return }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let saved = blur.effect
+        blur.effect = nil
+        blur.effect = saved
+        CATransaction.commit()
+    }
+
+    private static let customBlurViewTag = 0x5442_4152 // 'TBAR'
 
     private static func resolvedStyle(
         themeStore: ThemeStore,
@@ -173,7 +195,14 @@ enum TabBarTypographyManager {
 
     private static func makeAppearance(style: ResolvedTabBarStyle) -> UITabBarAppearance {
         let appearance = UITabBarAppearance()
-        appearance.configureWithDefaultBackground()
+        // Transparent background — our custom UIVisualEffectView (inserted by
+        // insertCustomBlurIfNeeded) provides the glass blur instead of UIKit's
+        // internal _UIBackdropLayer, which cannot be reliably refreshed after
+        // sheet presentation/dismissal.
+        appearance.configureWithTransparentBackground()
+        // Restore the standard top separator that configureWithDefaultBackground()
+        // would normally provide.
+        appearance.shadowColor = .separator
         let normalAttributes = makeAttributes(font: style.font, color: style.normalColor)
         let selectedAttributes = makeAttributes(font: style.font, color: style.selectedColor)
 
