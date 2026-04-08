@@ -158,27 +158,63 @@
   },
   "hotPaths": [
     {
-      "path": "",
-      "accessCount": 9,
-      "lastAccessed": 1775342707918,
+      "path": "FamilyTodo/Views/BundlesManagementView.swift",
+      "accessCount": 40,
+      "lastAccessed": 1775559032911,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views/ShoppingListView.swift",
+      "accessCount": 34,
+      "lastAccessed": 1775559017567,
       "type": "directory"
     },
     {
-      "path": "FamilyTodo/Views/TasksView.swift",
-      "accessCount": 9,
-      "lastAccessed": 1775342935287,
-      "type": "directory"
-    },
-    {
-      "path": "TODO.md",
-      "accessCount": 9,
-      "lastAccessed": 1775343042632,
+      "path": "FamilyTodo/Utilities/TabBarTypographyManager.swift",
+      "accessCount": 27,
+      "lastAccessed": 1775565346649,
       "type": "file"
     },
     {
       "path": "FamilyTodo/Views/HouseholdSettingsView.swift",
-      "accessCount": 8,
-      "lastAccessed": 1775341842178,
+      "accessCount": 25,
+      "lastAccessed": 1775559027868,
+      "type": "directory"
+    },
+    {
+      "path": "",
+      "accessCount": 16,
+      "lastAccessed": 1775556331643,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/ContentView.swift",
+      "accessCount": 13,
+      "lastAccessed": 1775565225024,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/Views/TasksView.swift",
+      "accessCount": 11,
+      "lastAccessed": 1775547079716,
+      "type": "directory"
+    },
+    {
+      "path": "TODO.md",
+      "accessCount": 10,
+      "lastAccessed": 1775496427116,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo",
+      "accessCount": 9,
+      "lastAccessed": 1775556054697,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views",
+      "accessCount": 6,
+      "lastAccessed": 1775547075817,
       "type": "directory"
     },
     {
@@ -200,6 +236,12 @@
       "type": "directory"
     },
     {
+      "path": "FamilyTodo/Views/Components/FloatingTabBar.swift",
+      "accessCount": 4,
+      "lastAccessed": 1775556335400,
+      "type": "file"
+    },
+    {
       "path": "FamilyTodo/Views/Components/InviteQRCodeView.swift",
       "accessCount": 3,
       "lastAccessed": 1775340920590,
@@ -210,6 +252,24 @@
       "accessCount": 3,
       "lastAccessed": 1775342684322,
       "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/ThemeStore.swift",
+      "accessCount": 3,
+      "lastAccessed": 1775544096317,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Stores/TaskStore.swift",
+      "accessCount": 3,
+      "lastAccessed": 1775556075251,
+      "type": "directory"
+    },
+    {
+      "path": "FamilyTodo/Views/Components/AppBackgroundView.swift",
+      "accessCount": 3,
+      "lastAccessed": 1775556325482,
+      "type": "file"
     },
     {
       "path": "FamilyTodo/Views/Onboarding/CreateHouseholdView.swift",
@@ -224,9 +284,9 @@
       "type": "file"
     },
     {
-      "path": "FamilyTodo/Stores/TaskStore.swift",
+      "path": "FamilyTodo/Views/MoreView.swift",
       "accessCount": 2,
-      "lastAccessed": 1775342699794,
+      "lastAccessed": 1775547080016,
       "type": "directory"
     },
     {
@@ -242,22 +302,34 @@
       "type": "file"
     },
     {
-      "path": "FamilyTodo/Views",
-      "accessCount": 1,
-      "lastAccessed": 1775340825438,
-      "type": "directory"
-    },
-    {
       "path": "FamilyTodo/Views/ShareInviteView.swift",
       "accessCount": 1,
       "lastAccessed": 1775340829166,
       "type": "file"
     },
     {
-      "path": "FamilyTodo/Views/MoreView.swift",
+      "path": "FamilyTodo/Views/BacklogView.swift",
       "accessCount": 1,
-      "lastAccessed": 1775340836780,
-      "type": "directory"
+      "lastAccessed": 1775547075404,
+      "type": "file"
+    },
+    {
+      "path": "FamilyTodo/FamilyTodoApp.swift",
+      "accessCount": 1,
+      "lastAccessed": 1775556049319,
+      "type": "file"
+    },
+    {
+      "path": ".claude/skills/swiftui-expert-skill/references/liquid-glass.md",
+      "accessCount": 1,
+      "lastAccessed": 1775556098113,
+      "type": "file"
+    },
+    {
+      "path": "codex-fallback-grey-menu.md",
+      "accessCount": 1,
+      "lastAccessed": 1775672566528,
+      "type": "file"
     }
   ],
   "userDirectives": []

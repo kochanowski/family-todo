@@ -3,78 +3,39 @@ import UIKit
 
 @MainActor
 enum TabBarTypographyManager {
-    private struct ResolvedTabBarStyle: Equatable {
+    struct ResolvedTabBarStyle: Equatable {
         let normalColor: UIColor
         let selectedColor: UIColor
         let font: UIFont
-        let selectedIndex: Int
         let interfaceStyle: UIUserInterfaceStyle
 
         static func == (lhs: ResolvedTabBarStyle, rhs: ResolvedTabBarStyle) -> Bool {
             colorsMatch(lhs.normalColor, rhs.normalColor) &&
                 colorsMatch(lhs.selectedColor, rhs.selectedColor) &&
                 fontsMatch(lhs.font, rhs.font) &&
-                lhs.selectedIndex == rhs.selectedIndex &&
                 lhs.interfaceStyle == rhs.interfaceStyle
         }
     }
 
-    static func reconcile(
+    static func resolvedStyle(
         themeStore: ThemeStore,
-        tabBarController: UITabBarController? = nil,
-        selectedIndex: Int? = nil,
-        force: Bool = false
-    ) {
-        guard let tabBarController else { return }
-
-        // Ensure our custom blur view exists and is correctly positioned.
-        insertCustomBlurIfNeeded(in: tabBarController)
-        // Keep UITabBar's own background transparent so it cannot cover our blur view.
-        tabBarController.tabBar.backgroundColor = .clear
-
-        let style = resolvedStyle(
+        traitCollection: UITraitCollection? = nil,
+        colorScheme: ColorScheme? = nil
+    ) -> ResolvedTabBarStyle {
+        let interfaceStyle = resolvedInterfaceStyle(
             themeStore: themeStore,
-            tabBarController: tabBarController,
-            selectedIndex: selectedIndex
+            traitCollection: traitCollection,
+            colorScheme: colorScheme
         )
-        let desiredIndex = style.selectedIndex
 
-        if !force {
-            let currentStyle = currentStyle(from: tabBarController)
-            let standardAppearanceMatches = appearanceMatches(
-                tabBarController.tabBar.standardAppearance,
-                style: style
-            )
-            let scrollEdgeAppearanceMatches: Bool = if #available(iOS 15.0, *) {
-                appearanceMatches(tabBarController.tabBar.scrollEdgeAppearance, style: style)
-            } else {
-                true
-            }
-            let needsAppearanceRepair = currentStyle != style ||
-                !standardAppearanceMatches ||
-                !scrollEdgeAppearanceMatches
-
-            guard needsAppearanceRepair || tabBarController.selectedIndex != desiredIndex else {
-                return
-            }
-        }
-
-        // Always create fresh appearance objects so UIKit sees a new assignment
-        // and unconditionally refreshes its internal blur/vibrancy state.
-        let standardAppearance = makeAppearance(style: style)
-
-        var resolvedScrollEdgeAppearance: UITabBarAppearance?
-        if #available(iOS 15.0, *) {
-            resolvedScrollEdgeAppearance = makeAppearance(style: style)
-        }
-
-        updateLiveTabBar(
-            tabBarController: tabBarController,
-            standardAppearance: standardAppearance,
-            scrollEdgeAppearance: resolvedScrollEdgeAppearance,
-            selectedColor: style.selectedColor,
-            normalColor: style.normalColor,
-            selectedIndex: desiredIndex
+        return ResolvedTabBarStyle(
+            normalColor: inactiveItemColor(
+                themeStore: themeStore,
+                traitCollection: UITraitCollection(userInterfaceStyle: interfaceStyle)
+            ),
+            selectedColor: UIColor(themeStore.resolvedTabTint),
+            font: themeStore.uiFont(for: .tabLabel),
+            interfaceStyle: interfaceStyle
         )
     }
 
@@ -95,230 +56,24 @@ enum TabBarTypographyManager {
         }
     }
 
-    static func apply(
+    private static func resolvedInterfaceStyle(
         themeStore: ThemeStore,
-        tabBarController: UITabBarController? = nil,
-        selectedIndex: Int? = nil
-    ) {
-        reconcile(
-            themeStore: themeStore,
-            tabBarController: tabBarController,
-            selectedIndex: selectedIndex
-        )
-    }
-
-    /// Inserts a custom UIVisualEffectView as the tab bar's blur background and
-    /// positions it above UIKit's internal _UIBarBackground view.
-    ///
-    /// Insertion at index 0 (the original approach) put our view BEHIND _UIBarBackground.
-    /// configureWithTransparentBackground() normally makes _UIBarBackground clear, but
-    /// UIKit's presentation-controller cleanup briefly resets it to grey after sheet
-    /// dismissal — hiding our blur entirely. Positioning above _UIBarBackground (but
-    /// below the interactive UIControl tab buttons) means our blur is always visible
-    /// regardless of _UIBarBackground's transient state.
-    static func insertCustomBlurIfNeeded(in tabBarController: UITabBarController) {
-        let tabBar = tabBarController.tabBar
-
-        let blur: UIVisualEffectView
-        if let existing = tabBar.viewWithTag(customBlurViewTag) as? UIVisualEffectView {
-            blur = existing
-        } else {
-            let newBlur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-            newBlur.tag = customBlurViewTag
-            newBlur.translatesAutoresizingMaskIntoConstraints = false
-            tabBar.addSubview(newBlur)
-            NSLayoutConstraint.activate([
-                newBlur.topAnchor.constraint(equalTo: tabBar.topAnchor),
-                newBlur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
-                newBlur.trailingAnchor.constraint(equalTo: tabBar.trailingAnchor),
-                newBlur.bottomAnchor.constraint(equalTo: tabBar.bottomAnchor),
-            ])
-            blur = newBlur
+        traitCollection: UITraitCollection?,
+        colorScheme: ColorScheme?
+    ) -> UIUserInterfaceStyle {
+        if let colorScheme {
+            return colorScheme == .dark ? .dark : .light
         }
 
-        positionBlurAboveBackground(blur, in: tabBar)
-    }
-
-    /// Moves the blur view to the correct z-position:
-    /// above UIKit's internal background views, below the interactive tab buttons.
-    /// Computed against the subviews excluding blur itself to get a stable index.
-    private static func positionBlurAboveBackground(
-        _ blur: UIVisualEffectView,
-        in tabBar: UITabBar
-    ) {
-        let others = tabBar.subviews.filter { $0 !== blur }
-        // Tab buttons are UIControls; everything before them is UIKit background.
-        let targetIndex = others.firstIndex(where: { $0 is UIControl }) ?? min(1, others.count)
-        tabBar.insertSubview(blur, at: targetIndex)
-    }
-
-    /// Forces the custom blur view to re-sample compositor content by replacing it.
-    /// Removing and reinserting the UIVisualEffectView within a single
-    /// setDisableActions transaction creates a brand-new _UIBackdropLayer with no
-    /// cached state — it samples the current compositor output on its next render cycle.
-    /// No visible flash: the remove+insert commit together as one display operation.
-    static func forceBlurRefresh(tabBarController: UITabBarController?) {
-        guard let tabBarController else { return }
-        let tabBar = tabBarController.tabBar
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-
-        tabBar.viewWithTag(customBlurViewTag)?.removeFromSuperview()
-        // Belt-and-suspenders: ensure UITabBar's own background layer is clear
-        // so it cannot show grey behind our blur view.
-        tabBar.backgroundColor = .clear
-
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-        blur.tag = customBlurViewTag
-        blur.translatesAutoresizingMaskIntoConstraints = false
-
-        // Insert above UIKit's _UIBarBackground (which is at index 0), below tab buttons.
-        // After removing the old blur, the remaining subviews start with UIKit's own views.
-        let targetIndex = tabBar.subviews.firstIndex(where: { $0 is UIControl }) ?? tabBar.subviews.count
-        tabBar.insertSubview(blur, at: targetIndex)
-
-        NSLayoutConstraint.activate([
-            blur.topAnchor.constraint(equalTo: tabBar.topAnchor),
-            blur.leadingAnchor.constraint(equalTo: tabBar.leadingAnchor),
-            blur.trailingAnchor.constraint(equalTo: tabBar.trailingAnchor),
-            blur.bottomAnchor.constraint(equalTo: tabBar.bottomAnchor),
-        ])
-
-        CATransaction.commit()
-    }
-
-    private static let customBlurViewTag = 0x5442_4152 // 'TBAR'
-
-    private static func resolvedStyle(
-        themeStore: ThemeStore,
-        tabBarController: UITabBarController,
-        selectedIndex: Int?
-    ) -> ResolvedTabBarStyle {
-        let traitCollection = tabBarController.traitCollection
-        let normalColor = inactiveItemColor(
-            themeStore: themeStore,
-            traitCollection: traitCollection
-        )
-        let selectedColor = UIColor(themeStore.resolvedTabTint)
-        let font = themeStore.uiFont(for: .tabLabel)
-        let resolvedIndex = selectedIndex ?? tabBarController.selectedIndex
-
-        return ResolvedTabBarStyle(
-            normalColor: normalColor,
-            selectedColor: selectedColor,
-            font: font,
-            selectedIndex: resolvedIndex,
-            interfaceStyle: traitCollection.userInterfaceStyle
-        )
-    }
-
-    private static func currentStyle(from tabBarController: UITabBarController) -> ResolvedTabBarStyle? {
-        let tabBar = tabBarController.tabBar
-        guard let normalColor = tabBar.unselectedItemTintColor,
-              let selectedColor = tabBar.tintColor,
-              let font = font(
-                  from: tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes
-              )
-        else {
-            return nil
+        if let traitCollection {
+            return traitCollection.userInterfaceStyle
         }
 
-        return ResolvedTabBarStyle(
-            normalColor: normalColor,
-            selectedColor: selectedColor,
-            font: font,
-            selectedIndex: tabBarController.selectedIndex,
-            interfaceStyle: tabBarController.traitCollection.userInterfaceStyle
-        )
-    }
-
-    private static func makeAttributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
-        [
-            .font: font,
-            .foregroundColor: color,
-        ]
-    }
-
-    private static func makeAppearance(style: ResolvedTabBarStyle) -> UITabBarAppearance {
-        let appearance = UITabBarAppearance()
-        // Transparent background — our custom UIVisualEffectView (inserted by
-        // insertCustomBlurIfNeeded) provides the glass blur instead of UIKit's
-        // internal _UIBackdropLayer, which cannot be reliably refreshed after
-        // sheet presentation/dismissal.
-        appearance.configureWithTransparentBackground()
-        // Restore the standard top separator that configureWithDefaultBackground()
-        // would normally provide.
-        appearance.shadowColor = .separator
-        let normalAttributes = makeAttributes(font: style.font, color: style.normalColor)
-        let selectedAttributes = makeAttributes(font: style.font, color: style.selectedColor)
-
-        let stacked = appearance.stackedLayoutAppearance
-        stacked.normal.titleTextAttributes = normalAttributes
-        stacked.selected.titleTextAttributes = selectedAttributes
-        stacked.normal.iconColor = style.normalColor
-        stacked.selected.iconColor = style.selectedColor
-
-        let inline = appearance.inlineLayoutAppearance
-        inline.normal.titleTextAttributes = normalAttributes
-        inline.selected.titleTextAttributes = selectedAttributes
-        inline.normal.iconColor = style.normalColor
-        inline.selected.iconColor = style.selectedColor
-
-        let compactInline = appearance.compactInlineLayoutAppearance
-        compactInline.normal.titleTextAttributes = normalAttributes
-        compactInline.selected.titleTextAttributes = selectedAttributes
-        compactInline.normal.iconColor = style.normalColor
-        compactInline.selected.iconColor = style.selectedColor
-
-        return appearance
-    }
-
-    private static func appearanceMatches(
-        _ appearance: UITabBarAppearance?,
-        style: ResolvedTabBarStyle
-    ) -> Bool {
-        guard let appearance else { return false }
-
-        return layoutAppearanceMatches(appearance.stackedLayoutAppearance, style: style) &&
-            layoutAppearanceMatches(appearance.inlineLayoutAppearance, style: style) &&
-            layoutAppearanceMatches(appearance.compactInlineLayoutAppearance, style: style)
-    }
-
-    private static func layoutAppearanceMatches(
-        _ layoutAppearance: UITabBarItemAppearance,
-        style: ResolvedTabBarStyle
-    ) -> Bool {
-        titleAttributesMatch(
-            layoutAppearance.normal.titleTextAttributes,
-            expectedColor: style.normalColor,
-            expectedFont: style.font
-        ) &&
-            titleAttributesMatch(
-                layoutAppearance.selected.titleTextAttributes,
-                expectedColor: style.selectedColor,
-                expectedFont: style.font
-            ) &&
-            colorsMatch(layoutAppearance.normal.iconColor, style.normalColor) &&
-            colorsMatch(layoutAppearance.selected.iconColor, style.selectedColor)
-    }
-
-    private static func titleAttributesMatch(
-        _ attributes: [NSAttributedString.Key: Any],
-        expectedColor: UIColor,
-        expectedFont: UIFont
-    ) -> Bool {
-        guard let color = attributes[.foregroundColor] as? UIColor,
-              let font = font(from: attributes)
-        else {
-            return false
+        if let themeColorScheme = themeStore.colorScheme {
+            return themeColorScheme == .dark ? .dark : .light
         }
 
-        return colorsMatch(color, expectedColor) && fontsMatch(font, expectedFont)
-    }
-
-    private static func font(from attributes: [NSAttributedString.Key: Any]) -> UIFont? {
-        attributes[.font] as? UIFont
+        return UIScreen.main.traitCollection.userInterfaceStyle
     }
 
     private nonisolated static func fontsMatch(_ lhs: UIFont, _ rhs: UIFont) -> Bool {
@@ -347,54 +102,5 @@ enum TabBarTypographyManager {
             abs(lhsGreen - rhsGreen) < 0.01 &&
             abs(lhsBlue - rhsBlue) < 0.01 &&
             abs(lhsAlpha - rhsAlpha) < 0.01
-    }
-
-    private static func updateLiveTabBar(
-        tabBarController: UITabBarController,
-        standardAppearance: UITabBarAppearance,
-        scrollEdgeAppearance: UITabBarAppearance?,
-        selectedColor: UIColor,
-        normalColor: UIColor,
-        selectedIndex: Int?
-    ) {
-        let tabBar = tabBarController.tabBar
-
-        tabBar.standardAppearance = standardAppearance
-        if #available(iOS 15.0, *), let scrollEdgeAppearance {
-            tabBar.scrollEdgeAppearance = scrollEdgeAppearance
-        }
-        tabBar.tintColor = selectedColor
-        tabBar.unselectedItemTintColor = normalColor
-        tabBar.backgroundColor = .clear
-
-        repairSelection(
-            on: tabBarController,
-            selectedIndex: selectedIndex ?? tabBarController.selectedIndex
-        )
-
-        DispatchQueue.main.async {
-            repairSelection(
-                on: tabBarController,
-                selectedIndex: selectedIndex ?? tabBarController.selectedIndex
-            )
-        }
-    }
-
-    private static func repairSelection(
-        on tabBarController: UITabBarController,
-        selectedIndex: Int
-    ) {
-        guard let viewControllers = tabBarController.viewControllers,
-              let items = tabBarController.tabBar.items,
-              !viewControllers.isEmpty,
-              !items.isEmpty
-        else {
-            return
-        }
-
-        let boundedIndex = min(max(selectedIndex, 0), min(viewControllers.count, items.count) - 1)
-        tabBarController.selectedIndex = boundedIndex
-        tabBarController.tabBar.setNeedsLayout()
-        tabBarController.tabBar.layoutIfNeeded()
     }
 }
