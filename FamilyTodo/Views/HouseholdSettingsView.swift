@@ -45,13 +45,11 @@ struct ProfileView: View {
                 EditHouseholdView(household: household)
                     .id(household.id)
             }
-            .onDisappear { handleHouseholdEditDismiss() }
         }
         .sheet(isPresented: $showInviteMember) {
             InviteMemberView()
                 .environmentObject(householdStore)
                 .environmentObject(cloudKitDiagnostics)
-                .onDisappear { handleHouseholdEditDismiss() }
         }
         .sheet(isPresented: $showLeaveConfirmation) {
             AppConfirmationSheet(
@@ -410,15 +408,6 @@ struct ProfileView: View {
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
-        }
-    }
-
-    private func handleHouseholdEditDismiss() {
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .tabBarAppearanceRefreshRequested,
-                object: nil
-            )
         }
     }
 }

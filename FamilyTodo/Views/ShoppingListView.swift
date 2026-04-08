@@ -192,7 +192,6 @@ private struct ShoppingListContent: View {
                         handleBundleQuickAdd(bundle)
                     }
                 )
-                .onDisappear { refreshTabBarAfterSheetDismiss() }
             }
             .overlay(alignment: .bottom) {
                 if let activeToast {
@@ -525,7 +524,6 @@ private struct ShoppingListContent: View {
                         onDeleteItem: deleteRecentItem,
                         onClearAll: clearRecentItems
                     )
-                    .onDisappear { refreshTabBarAfterSheetDismiss() }
                 }
             }
         }
@@ -826,12 +824,6 @@ private struct ShoppingListContent: View {
             await store.clearRecentItems()
         }
         HapticManager.success()
-    }
-
-    private func refreshTabBarAfterSheetDismiss() {
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
-        }
     }
 
     private func clearToBuy() {

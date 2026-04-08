@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct BundlesManagementView: View {
     @ObservedObject var store: ShoppingBundleStore
@@ -61,7 +60,6 @@ struct BundlesManagementView: View {
                 shoppingStore: shoppingStore,
                 bundle: destination.bundle
             )
-            .onDisappear { refreshTabBarAfterSheetDismiss() }
         }
     }
 
@@ -138,12 +136,6 @@ struct BundlesManagementView: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(.bottom, 24)
-    }
-
-    private func refreshTabBarAfterSheetDismiss() {
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .tabBarAppearanceRefreshRequested, object: nil)
-        }
     }
 
     private func addBundleToShopping(_ bundle: ShoppingBundle) {

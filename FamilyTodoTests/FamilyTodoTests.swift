@@ -165,79 +165,38 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
     }
 
-    func testReconcileRepairsCorruptedInactiveTintOnSameTabBarController() {
+    func testResolvedTabBarStyleUsesSelectedThemeTintAndTabFont() {
         let store = ThemeStore()
         store.unifiedTheme = .light
 
-        let controller = makeTabBarController()
-
-        TabBarTypographyManager.reconcile(
+        let style = TabBarTypographyManager.resolvedStyle(
             themeStore: store,
-            tabBarController: controller,
-            selectedIndex: 1
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
         )
 
-        controller.tabBar.unselectedItemTintColor = .gray
-        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor = .gray
-        var corruptedTitleAttributes =
-            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes
-        corruptedTitleAttributes[.foregroundColor] = UIColor.gray
-        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes =
-            corruptedTitleAttributes
-
-        TabBarTypographyManager.reconcile(
-            themeStore: store,
-            tabBarController: controller,
-            selectedIndex: 1
-        )
-
-        assertColor(controller.tabBar.unselectedItemTintColor ?? .clear, matches: .black)
-        XCTAssertEqual(controller.selectedIndex, 1)
-        assertColor(
-            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor ?? .clear,
-            matches: .black
-        )
+        assertColor(style.normalColor, matches: .black)
+        assertColor(style.selectedColor, matches: UIColor(store.resolvedTabTint))
+        XCTAssertEqual(style.font.fontName, store.uiFont(for: .tabLabel).fontName)
+        XCTAssertEqual(style.font.pointSize, store.uiFont(for: .tabLabel).pointSize, accuracy: 0.01)
     }
 
-    func testReconcileIsStableAcrossRepeatedCalls() {
+    func testResolvedTabBarStyleRespectsProvidedColorSchemeForAutoTheme() {
         let store = ThemeStore()
-        store.unifiedTheme = .dark
+        store.unifiedTheme = .auto
 
-        let controller = makeTabBarController()
-
-        TabBarTypographyManager.reconcile(
+        let lightStyle = TabBarTypographyManager.resolvedStyle(
             themeStore: store,
-            tabBarController: controller,
-            selectedIndex: 2
+            colorScheme: .light
         )
-        let firstNormalColor = controller.tabBar.unselectedItemTintColor
-        let firstSelectedColor = controller.tabBar.tintColor
-
-        TabBarTypographyManager.reconcile(
+        let darkStyle = TabBarTypographyManager.resolvedStyle(
             themeStore: store,
-            tabBarController: controller,
-            selectedIndex: 2
+            colorScheme: .dark
         )
 
-        assertColor(firstNormalColor ?? .clear, matches: controller.tabBar.unselectedItemTintColor ?? .clear)
-        assertColor(firstSelectedColor ?? .clear, matches: controller.tabBar.tintColor ?? .clear)
-        XCTAssertEqual(controller.selectedIndex, 2)
-    }
-
-    private func makeTabBarController() -> UITabBarController {
-        let controller = UITabBarController()
-        let viewControllers = AppTab.allCases.map { tab -> UIViewController in
-            let viewController = UIViewController()
-            viewController.tabBarItem = UITabBarItem(
-                title: tab.title,
-                image: UIImage(systemName: tab.icon),
-                selectedImage: UIImage(systemName: tab.activeIcon)
-            )
-            return viewController
-        }
-        controller.setViewControllers(viewControllers, animated: false)
-        controller.loadViewIfNeeded()
-        return controller
+        assertColor(lightStyle.normalColor, matches: .black)
+        assertColor(darkStyle.normalColor, matches: .white)
+        assertColor(lightStyle.selectedColor, matches: darkStyle.selectedColor)
+        XCTAssertNotEqual(lightStyle.interfaceStyle, darkStyle.interfaceStyle)
     }
 
     private func assertColor(
