@@ -177,6 +177,7 @@ struct FloatingTabBar: View {
         .frame(maxWidth: .infinity)
     }
 
+    @available(iOS 26.0, *)
     private var glassBar: some View {
         GlassEffectContainer(spacing: 0) {
             barContent
