@@ -100,9 +100,9 @@ struct MainAppView: View {
         .toolbar(.hidden, for: .tabBar)
     }
 
-    private func appTabRoot<Content: View>(
+    private func appTabRoot(
         for tab: AppTab,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: () -> some View
     ) -> some View {
         NavigationStack {
             content()

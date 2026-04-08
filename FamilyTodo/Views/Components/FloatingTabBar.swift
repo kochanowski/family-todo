@@ -160,8 +160,8 @@ struct FloatingTabBar: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.colorScheme) private var colorScheme
-    @ScaledMetric(relativeTo: .caption2) private var iconSize = 18
-    @ScaledMetric(relativeTo: .caption2) private var itemVerticalPadding = 6
+    @ScaledMetric(relativeTo: .caption2) private var iconSize = 18.0
+    @ScaledMetric(relativeTo: .caption2) private var itemVerticalPadding = 6.0
 
     var body: some View {
         Group {
@@ -177,7 +177,6 @@ struct FloatingTabBar: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
     private var glassBar: some View {
         GlassEffectContainer(spacing: 0) {
             barContent
@@ -268,7 +267,7 @@ struct FloatingTabBar: View {
         VStack {
             Spacer()
             FloatingTabBar(selection: .constant(.shopping))
-                .environmentObject(ThemeStore())
         }
     }
+    .environmentObject(ThemeStore())
 }
