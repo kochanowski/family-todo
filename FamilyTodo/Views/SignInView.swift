@@ -19,65 +19,12 @@ struct SignInView: View {
     @State private var displayNameErrorMessage: String?
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
-
-            VStack(spacing: 16) {
-                housePulseLogo
-
-                Text("HousePulse")
-                    .font(themeStore.font(for: .screenHeader))
-                    .foregroundStyle(themeStore.contentPrimaryColor)
-
-                Text("Share tasks, stay organized, live better together")
-                    .font(themeStore.font(for: .listRowTitle))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+        Group {
+            if shouldShowLaunchContinuation {
+                LaunchContinuationView()
+            } else {
+                signInContent
             }
-
-            Spacer()
-
-            VStack(spacing: 16) {
-                switch userSession.authService.authenticationState {
-                case .authenticating:
-                    ProgressView("Signing in...")
-                        .progressViewStyle(.circular)
-
-                case let .error(error):
-                    if case .cancelled = error {
-                        defaultAuthActions
-                    } else {
-                        errorActions(error)
-                    }
-
-                case .unauthenticated:
-                    defaultAuthActions
-
-                case .authenticated:
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                        Text("Loading your household...")
-                            .font(themeStore.font(for: .bodyStrong))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-                    }
-                }
-            }
-            .padding(.bottom, 60)
-        }
-        .padding()
-        .appAdaptiveWidth(
-            maxWidth: AppChromeMetrics.regularFormMaxWidth,
-            alignment: .top
-        )
-        .ignoresSafeArea(edges: .bottom)
-        .overlay(alignment: .topTrailing) {
-            Button("Debug") {
-                showDiagnosticsSheet = true
-            }
-            .buttonStyle(.bordered)
-            .padding(.top, 8)
         }
         .sheet(isPresented: $showDiagnosticsSheet) {
             SignInDiagnosticsSheet(
@@ -118,6 +65,75 @@ struct SignInView: View {
         .task(id: authRoutingKey) {
             await handleAuthRoutingIfNeeded()
         }
+    }
+
+    @ViewBuilder
+    private var signInContent: some View {
+        VStack(spacing: 32) {
+            Spacer()
+
+            VStack(spacing: 16) {
+                housePulseLogo
+
+                Text("HousePulse")
+                    .font(themeStore.font(for: .screenHeader))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+
+                Text("Share tasks, stay organized, live better together")
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+
+            Spacer()
+
+            VStack(spacing: 16) {
+                switch userSession.authService.authenticationState {
+                case .authenticating:
+                    ProgressView("Signing in...")
+                        .progressViewStyle(.circular)
+
+                case let .error(error):
+                    if case .cancelled = error {
+                        defaultAuthActions
+                    } else {
+                        errorActions(error)
+                    }
+
+                case .unauthenticated:
+                    defaultAuthActions
+
+                case .authenticated:
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                }
+            }
+            .padding(.bottom, 60)
+        }
+        .padding()
+        .appAdaptiveWidth(
+            maxWidth: AppChromeMetrics.regularFormMaxWidth,
+            alignment: .top
+        )
+        .ignoresSafeArea(edges: .bottom)
+        #if DEBUG
+            .overlay(alignment: .topTrailing) {
+                Button("Debug") {
+                    showDiagnosticsSheet = true
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, 8)
+            }
+        #endif
+    }
+
+    private var shouldShowLaunchContinuation: Bool {
+        guard case .authenticated = userSession.authService.authenticationState else {
+            return false
+        }
+
+        return !userSession.needsDisplayNamePrompt && !showDisplayNamePrompt
     }
 
     private var housePulseLogo: some View {
