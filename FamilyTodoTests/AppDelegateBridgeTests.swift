@@ -5,6 +5,25 @@ import XCTest
 
 @MainActor
 final class AppDelegateBridgeTests: XCTestCase {
+    func testRemoteCloudChangeContextMergedPrefersSharedScopeAndNewestPayloadMetadata() {
+        let older = RemoteCloudChangeContext(
+            databaseScope: .private,
+            notificationType: .recordZone,
+            receivedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newer = RemoteCloudChangeContext(
+            databaseScope: .shared,
+            notificationType: .database,
+            receivedAt: Date(timeIntervalSince1970: 101)
+        )
+
+        let merged = older.merged(with: newer)
+
+        XCTAssertEqual(merged.databaseScope, .shared)
+        XCTAssertEqual(merged.notificationType, .database)
+        XCTAssertEqual(merged.receivedAt, Date(timeIntervalSince1970: 101))
+    }
+
     func testRemotePushDiagnosticTracksQueuedOwnerRecordZoneInference() {
         let householdId = UUID()
         let syncContext = HouseholdSyncContext(
@@ -65,6 +84,29 @@ final class AppDelegateBridgeTests: XCTestCase {
         XCTAssertTrue(diagnostic.willInvokeRemoteCloudChangeHandler)
         XCTAssertNil(diagnostic.syncRole)
         XCTAssertNil(diagnostic.syncHouseholdId)
+    }
+
+    func testRemotePushDiagnosticProgressOperationIncludesDeclaredScopeMetadata() {
+        let bridge = AppDelegateBridge()
+        let resolution = RemoteCloudChangeScopeResolution(
+            declaredScope: .shared,
+            effectiveScope: .shared,
+            notificationType: .database,
+            currentSyncContext: nil,
+            inferredFromSyncContext: false
+        )
+
+        let diagnostic = bridge.makeRemotePushDiagnostic(
+            resolution: resolution,
+            handlerInstalled: true,
+            queuedBehindActiveRefresh: false
+        )
+
+        XCTAssertTrue(diagnostic.progressOperation.contains("declaredScope=shared"))
+        XCTAssertTrue(diagnostic.progressOperation.contains("effectiveScope=shared"))
+        XCTAssertTrue(diagnostic.progressOperation.contains("scopeResolution=declared"))
+        XCTAssertTrue(diagnostic.progressOperation.contains("queuedBehindActiveRefresh=false"))
+        XCTAssertTrue(diagnostic.progressOperation.contains("willInvokeHandler=true"))
     }
 
     func testForegroundPresentationKeepsReminderBanner() {

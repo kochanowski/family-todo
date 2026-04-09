@@ -10,6 +10,192 @@ final class HouseholdSyncCoordinatorNotificationTests: XCTestCase {
         CloudKitDiagnosticsState.shared.clear()
     }
 
+    func testHouseholdSyncReasonMergedPrefersSharedRemotePushContext() {
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .privateDatabase).merged(
+                with: .remotePush(context: .sharedDatabase)
+            ),
+            .remotePush(context: .sharedDatabase)
+        )
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .unknown).merged(
+                with: .remotePush(context: .privateDatabase)
+            ),
+            .remotePush(context: .privateDatabase)
+        )
+    }
+
+    func testHouseholdSyncReasonMergedKeepsRemotePushAheadOfForegroundRepairWindow() {
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .sharedDatabase).merged(
+                with: .foregroundRepairWindow
+            ),
+            .remotePush(context: .sharedDatabase)
+        )
+        XCTAssertEqual(
+            HouseholdSyncReason.foregroundRepairWindow.merged(
+                with: .remotePush(context: .privateDatabase)
+            ),
+            .remotePush(context: .privateDatabase)
+        )
+    }
+
+    func testHouseholdSyncBatchClassificationTreatsMembershipChangeAsBootstrap() {
+        let batchID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .membersChanged(ids: Set([UUID()]))
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.members]),
+                changedIDsByDomain: [:],
+                activeMemberCount: 2
+            )
+        )
+
+        XCTAssertEqual(batch.classification, .bootstrap)
+        XCTAssertEqual(batch.domains, Set([.members]))
+    }
+
+    func testHouseholdSyncBatchClassificationTreatsRemoteTaskBatchAsSteadyStateRemote() {
+        let batchID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .tasksChanged(
+                        addedIDs: Set([UUID()]),
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.tasks]),
+                changedIDsByDomain: [:],
+                activeMemberCount: 2
+            )
+        )
+
+        XCTAssertEqual(batch.classification, .steadyStateRemote)
+        XCTAssertEqual(batch.domains, Set([.tasks]))
+    }
+
+    func testHouseholdSyncBatchTasksScreenRefreshUsesDiagnosticsChangedIDsAndTiming() {
+        let batchID = UUID()
+        let taskID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .tasksChanged(
+                        addedIDs: [],
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.tasks]),
+                changedIDsByDomain: [.tasks: Set([taskID])],
+                activeMemberCount: 2
+            )
+        )
+
+        let refresh = try? XCTUnwrap(batch.tasksScreenRefresh)
+
+        XCTAssertEqual(refresh?.classification, .steadyStateRemote)
+        XCTAssertEqual(refresh?.changedTaskIDs, Set([taskID]))
+        XCTAssertEqual(refresh?.animationPayload.batchToken, batchID)
+        XCTAssertEqual(refresh?.animationPayload.direction, HouseholdSyncDirection.ownerToParticipant.rawValue)
+        XCTAssertEqual(refresh?.animationPayload.pushReceivedAt, Date(timeIntervalSince1970: 99))
+        XCTAssertEqual(refresh?.animationPayload.cacheUpdatedAt, Date(timeIntervalSince1970: 101))
+    }
+
+    func testHouseholdSyncBatchBacklogScreenRefreshUsesDiagnosticsChangedIDsAndTiming() {
+        let batchID = UUID()
+        let categoryID = UUID()
+        let ideaID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .participantToOwner,
+                    kind: .ideasChanged(
+                        addedIDs: [],
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .participantToOwner,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.ideas, .backlog]),
+                changedIDsByDomain: [
+                    .ideas: Set([ideaID]),
+                    .backlog: Set([categoryID]),
+                ],
+                activeMemberCount: 2
+            )
+        )
+
+        let refresh = try? XCTUnwrap(batch.backlogScreenRefresh)
+
+        XCTAssertEqual(refresh?.classification, .steadyStateRemote)
+        XCTAssertEqual(refresh?.changedCategoryIDs, Set([categoryID]))
+        XCTAssertEqual(refresh?.changedIdeaIDs, Set([ideaID]))
+        XCTAssertEqual(refresh?.animationPayload.batchToken, batchID)
+        XCTAssertEqual(
+            refresh?.animationPayload.direction,
+            HouseholdSyncDirection.participantToOwner.rawValue
+        )
+    }
+
     func testPerformSyncDeliversPassiveTaskAlertForSteadyStateRemoteBatch() async {
         let householdId = UUID()
         let batchID = UUID()

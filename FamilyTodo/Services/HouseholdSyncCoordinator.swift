@@ -227,6 +227,19 @@ struct HouseholdSyncPassResult: Equatable {
     let fetchResult: UIBackgroundFetchResult
     let events: [HouseholdSyncEvent]
     let diagnostics: HouseholdSyncDiagnostics
+    let visibleChanges: HouseholdSyncVisibleChanges
+
+    init(
+        fetchResult: UIBackgroundFetchResult,
+        events: [HouseholdSyncEvent],
+        diagnostics: HouseholdSyncDiagnostics,
+        visibleChanges: HouseholdSyncVisibleChanges = .empty
+    ) {
+        self.fetchResult = fetchResult
+        self.events = events
+        self.diagnostics = diagnostics
+        self.visibleChanges = visibleChanges
+    }
 }
 
 struct HouseholdSyncBatch: Equatable, Identifiable {
@@ -234,11 +247,17 @@ struct HouseholdSyncBatch: Equatable, Identifiable {
     let events: [HouseholdSyncEvent]
     let diagnostics: HouseholdSyncDiagnostics
     let classification: HouseholdSyncBatchClassification
+    let visibleChanges: HouseholdSyncVisibleChanges
 
-    init(events: [HouseholdSyncEvent], diagnostics: HouseholdSyncDiagnostics) {
+    init(
+        events: [HouseholdSyncEvent],
+        diagnostics: HouseholdSyncDiagnostics,
+        visibleChanges: HouseholdSyncVisibleChanges = .empty
+    ) {
         id = diagnostics.batchID
         self.events = events
         self.diagnostics = diagnostics
+        self.visibleChanges = visibleChanges
         classification = HouseholdSyncBatchClassification.resolve(
             reason: diagnostics.reason,
             events: events
@@ -250,68 +269,23 @@ struct HouseholdSyncBatch: Equatable, Identifiable {
     }
 
     var shoppingChangedItemIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .shoppingAdded(ids, _):
-                partialResult.formUnion(ids)
-            case let .shoppingUpdated(itemIDs, _):
-                partialResult.formUnion(itemIDs)
-            case let .shoppingRemoved(itemIDs, _):
-                partialResult.formUnion(itemIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.shopping] ?? []
     }
 
     var backlogChangedCategoryIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .backlogCategoriesChanged(addedIDs, changedIDs, removedIDs):
-                partialResult.formUnion(addedIDs)
-                partialResult.formUnion(changedIDs)
-                partialResult.formUnion(removedIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.backlog] ?? []
     }
 
     var taskChangedIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .tasksChanged(addedIDs, changedIDs, removedIDs):
-                partialResult.formUnion(addedIDs)
-                partialResult.formUnion(changedIDs)
-                partialResult.formUnion(removedIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.tasks] ?? []
     }
 
     var ideaChangedIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .ideasChanged(addedIDs, changedIDs, removedIDs):
-                partialResult.formUnion(addedIDs)
-                partialResult.formUnion(changedIDs)
-                partialResult.formUnion(removedIDs)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.ideas] ?? []
     }
 
     var memberChangedIDs: Set<UUID> {
-        events.reduce(into: Set<UUID>()) { partialResult, event in
-            switch event.kind {
-            case let .membersChanged(ids):
-                partialResult.formUnion(ids)
-            default:
-                break
-            }
-        }
+        diagnostics.changedIDsByDomain[.members] ?? []
     }
 }
 
@@ -361,6 +335,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private let passiveSharedActivityAlertDelivery: @MainActor (PassiveSharedActivityAlertDescriptor) async -> Void
     private var activeSyncTask: _Concurrency.Task<UIBackgroundFetchResult, Never>?
     private var pendingReason: HouseholdSyncReason?
+    private var lastLifecycleSyncedHouseholdID: UUID?
     private var scheduledForegroundRepairTask: _Concurrency.Task<Void, Never>?
     private var scheduledOwnerFallbackTask: _Concurrency.Task<Void, Never>?
     private var currentForegroundRepairMode: ForegroundRepairMode = .burst
@@ -430,6 +405,27 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
     }
 
+    func performHouseholdLifecycleSyncIfNeeded(
+        currentHouseholdID: UUID?
+    ) async -> UIBackgroundFetchResult {
+        guard let currentHouseholdID else {
+            lastLifecycleSyncedHouseholdID = nil
+            return .noData
+        }
+
+        guard lastLifecycleSyncedHouseholdID != currentHouseholdID else {
+            return .noData
+        }
+
+        let reason: HouseholdSyncReason = if lastLifecycleSyncedHouseholdID == nil {
+            .householdJoined
+        } else {
+            .householdSwitched
+        }
+        lastLifecycleSyncedHouseholdID = currentHouseholdID
+        return await performSync(reason: reason)
+    }
+
     func performSync(reason: HouseholdSyncReason) async -> UIBackgroundFetchResult {
         prioritizeRemotePushIfNeeded(reason)
         pendingReason = pendingReason?.merged(with: reason) ?? reason
@@ -475,7 +471,8 @@ final class HouseholdSyncCoordinator: ObservableObject {
         lastDiagnostics = result.diagnostics
         let batch = HouseholdSyncBatch(
             events: result.events,
-            diagnostics: result.diagnostics
+            diagnostics: result.diagnostics,
+            visibleChanges: result.visibleChanges
         )
         latestBatch = batch
         let changedDomainLabels = batch.domains.map(\.rawValue).sorted().joined(separator: ",")
