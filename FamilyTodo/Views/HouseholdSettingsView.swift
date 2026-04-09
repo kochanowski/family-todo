@@ -40,7 +40,7 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(item: $householdBeingEdited, onDismiss: handleHouseholdEditDismiss) { household in
+        .sheet(item: $householdBeingEdited) { household in
             NavigationStack {
                 EditHouseholdView(household: household)
                     .id(household.id)
@@ -408,15 +408,6 @@ struct ProfileView: View {
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
-        }
-    }
-
-    private func handleHouseholdEditDismiss() {
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .tabBarAppearanceRefreshRequested,
-                object: nil
-            )
         }
     }
 }

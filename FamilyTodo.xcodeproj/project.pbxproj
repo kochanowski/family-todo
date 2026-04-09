@@ -118,6 +118,7 @@
 		TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000004 /* BacklogStoreTests.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
 		TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABTYPO0000000000000002 /* TabBarTypographyManager.swift */; };
+		TABDIAG000000000000001 /* TabBarDiagnosticsMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABDIAG000000000000002 /* TabBarDiagnosticsMonitor.swift */; };
 			CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
 			SHOPBADGE00000000000001 /* ShoppingCountBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */; };
 			D1C0D1A1A1A1A1A1A1A1A1A3 /* CloudKitDiagnosticsBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C0D1A1A1A1A1A1A1A1A1A4 /* CloudKitDiagnosticsBanner.swift */; };
@@ -259,6 +260,7 @@
 		TSTFILE0000000000000004 /* BacklogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStoreTests.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
 		TABTYPO0000000000000002 /* TabBarTypographyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarTypographyManager.swift; sourceTree = "<group>"; };
+		TABDIAG000000000000002 /* TabBarDiagnosticsMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarDiagnosticsMonitor.swift; sourceTree = "<group>"; };
 			CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
 			SHOPBADGE00000000000002 /* ShoppingCountBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingCountBadge.swift; sourceTree = "<group>"; };
 			D1C0D1A1A1A1A1A1A1A1A1A4 /* CloudKitDiagnosticsBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitDiagnosticsBanner.swift; sourceTree = "<group>"; };
@@ -552,6 +554,7 @@
 				DA591D77C780445A82FEE9E0 /* HapticManager.swift */,
 				F2A6C8D1E3B44F10A1B2C3D4 /* AppColors.swift */,
 					TABTYPO0000000000000002 /* TabBarTypographyManager.swift */,
+					TABDIAG000000000000002 /* TabBarDiagnosticsMonitor.swift */,
 					FONTREG0000000000000002 /* FontRegistrar.swift */,
 						26545708FFCD49269BCBA414 /* InteractionTokens.swift */,
 						F0A100000000000000000001 /* InviteInputNormalizer.swift */,
@@ -756,6 +759,7 @@
 				SHOPB1000000000000000004 /* BundlesManagementView.swift in Sources */,
 				GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */,
 				TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */,
+				TABDIAG000000000000001 /* TabBarDiagnosticsMonitor.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

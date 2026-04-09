@@ -1465,14 +1465,14 @@ struct RestockSheet: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
-                        .background(themeStore.canvasColor)
+                        .background(themeStore.surfaceElevatedColor)
                         .environment(\.font, themeStore.font(for: .listRowTitle))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .background(
-                themeStore.canvasColor.ignoresSafeArea()
+                themeStore.surfaceElevatedColor.ignoresSafeArea()
             )
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showClearAllConfirmation) {
@@ -1485,9 +1485,10 @@ struct RestockSheet: View {
                 )
             }
         }
-        .background(themeStore.canvasColor.ignoresSafeArea())
+        .background(themeStore.surfaceElevatedColor.ignoresSafeArea())
         .presentationDetents([.medium, .large])
-        .presentationBackground(themeStore.canvasColor)
+        .presentationDragIndicator(.visible)
+        .presentationBackground(themeStore.surfaceElevatedColor)
     }
 
     private var restockHeader: some View {

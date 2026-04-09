@@ -8,6 +8,7 @@ struct BundlesManagementView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @State private var presentedEditor: PresentedBundleEditor?
     @State private var hasStartedInitialLoad = false
+    @State private var lastAddedBundleId: UUID?
 
     var body: some View {
         Group {
@@ -65,20 +66,33 @@ struct BundlesManagementView: View {
     private var bundlesList: some View {
         List {
             ForEach(store.bundles) { bundle in
-                Button {
-                    presentedEditor = .edit(bundle)
-                } label: {
-                    ShoppingBundleRow(bundle: bundle)
+                HStack(spacing: 0) {
+                    Button {
+                        presentedEditor = .edit(bundle)
+                    } label: {
+                        ShoppingBundleRow(bundle: bundle)
+                    }
+                    .buttonStyle(.plain)
+
+                    if shoppingStore != nil {
+                        let added = lastAddedBundleId == bundle.id
+                        Button {
+                            addBundleToShopping(bundle)
+                        } label: {
+                            Image(systemName: added ? "checkmark.circle.fill" : "cart.badge.plus")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(added ? .green : themeStore.accentTabColor)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                                .animation(.easeInOut(duration: 0.2), value: added)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(bundle.name) to shopping list")
+                    }
                 }
-                .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .listRowInsets(
-                    EdgeInsets(
-                        top: 0,
-                        leading: 16,
-                        bottom: 0,
-                        trailing: 16
-                    )
+                    EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 8)
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -126,8 +140,15 @@ struct BundlesManagementView: View {
 
     private func addBundleToShopping(_ bundle: ShoppingBundle) {
         guard let shoppingStore else { return }
+        lastAddedBundleId = bundle.id
         _ = _Concurrency.Task {
             _ = await shoppingStore.createItems(fromTitles: bundle.normalizedItems)
+        }
+        _ = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
+            if lastAddedBundleId == bundle.id {
+                lastAddedBundleId = nil
+            }
         }
     }
 }
@@ -184,7 +205,7 @@ private struct ShoppingBundleRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(bundle.name), \(itemCountLabel(for: bundle.itemCount))")
     }
 
@@ -209,6 +230,7 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var showDeleteConfirmation = false
     @State private var showIconPicker = false
     @State private var hasAppliedInitialFocus = false
+    @State private var composerFocused = false
     @FocusState private var focusedField: BundleEditorFocus?
 
     init(store: ShoppingBundleStore, shoppingStore: ShoppingListStore?, bundle: ShoppingBundle?) {
@@ -225,84 +247,92 @@ private struct ShoppingBundleEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    BundleSectionCard {
-                        ShoppingBundleHeaderRow(
-                            name: $name,
-                            selectedIcon: $selectedIcon,
-                            focusedField: $focusedField,
-                            onSubmitName: focusNextFieldAfterName,
-                            onChooseIcon: { showIconPicker = true }
-                        )
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Items")
-                            .font(themeStore.font(for: .sectionHeader))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
                         BundleSectionCard {
-                            ForEach($itemDrafts) { $draft in
-                                ShoppingBundleItemRow(
-                                    title: $draft.title,
-                                    focusedField: $focusedField,
-                                    focusID: .existing(draft.id),
-                                    onSubmit: {
-                                        handleExistingItemSubmit(forDraftID: draft.id)
-                                    },
-                                    onRemove: {
-                                        removeItemDraft(withID: draft.id)
-                                    }
-                                )
-
-                                if draft.id != itemDrafts.last?.id {
-                                    Divider()
-                                        .padding(.leading, 16)
-                                }
-                            }
-
-                            if !itemDrafts.isEmpty {
-                                Divider()
-                                    .padding(.leading, 16)
-                            }
-
-                            ShoppingBundleComposerRow(
-                                text: $newItemText,
+                            ShoppingBundleHeaderRow(
+                                name: $name,
+                                selectedIcon: $selectedIcon,
                                 focusedField: $focusedField,
-                                onSubmit: commitComposerItem
+                                onSubmitName: focusNextFieldAfterName,
+                                onChooseIcon: { showIconPicker = true }
                             )
                         }
 
-                        if bundle == nil {
-                            Button {
-                                _ = _Concurrency.Task {
-                                    await saveBundle(andAddToShoppingList: true)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Items")
+                                .font(themeStore.font(for: .sectionHeader))
+                                .foregroundStyle(themeStore.contentSecondaryColor)
+
+                            BundleSectionCard {
+                                ForEach($itemDrafts) { $draft in
+                                    ShoppingBundleItemRow(
+                                        title: $draft.title,
+                                        focusedField: $focusedField,
+                                        focusID: .existing(draft.id),
+                                        onSubmit: {
+                                            handleExistingItemSubmit(forDraftID: draft.id)
+                                        },
+                                        onRemove: {
+                                            removeItemDraft(withID: draft.id)
+                                        }
+                                    )
+
+                                    if draft.id != itemDrafts.last?.id {
+                                        Divider()
+                                            .padding(.leading, 16)
+                                    }
                                 }
-                            } label: {
-                                Text(isSaving ? "Saving..." : "Save & Add to List")
-                                    .font(themeStore.font(for: .buttonLabel))
-                                    .frame(maxWidth: .infinity)
+
+                                if !itemDrafts.isEmpty {
+                                    Divider()
+                                        .padding(.leading, 16)
+                                }
+
+                                ShoppingBundleComposerRow(
+                                    text: $newItemText,
+                                    isFocused: $composerFocused,
+                                    onSubmit: commitComposerItem
+                                )
+                                .id("bundleComposer")
                             }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!canSave || isSaving)
-                            .padding(.top, 4)
+
+                            if bundle == nil {
+                                Button {
+                                    _ = _Concurrency.Task {
+                                        await saveBundle(andAddToShoppingList: true)
+                                    }
+                                } label: {
+                                    Text(isSaving ? "Saving..." : "Save & Add to List")
+                                        .font(themeStore.font(for: .buttonLabel))
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!canSave || isSaving)
+                                .padding(.top, 4)
+                            }
+                        }
+
+                        if bundle != nil {
+                            Button("Delete Bundle", role: .destructive) {
+                                showDeleteConfirmation = true
+                            }
+                            .font(themeStore.font(for: .buttonLabel))
                         }
                     }
-
-                    if bundle != nil {
-                        Button("Delete Bundle", role: .destructive) {
-                            showDeleteConfirmation = true
-                        }
-                        .font(themeStore.font(for: .buttonLabel))
+                    .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .background(themeStore.canvasColor.ignoresSafeArea())
+                .onChange(of: itemDrafts.count) { _, _ in
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        scrollProxy.scrollTo("bundleComposer", anchor: .bottom)
                     }
                 }
-                .padding(.horizontal, AppChromeMetrics.screenHorizontalInset)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(themeStore.canvasColor.ignoresSafeArea())
+            } // ScrollViewReader
             .navigationTitle(bundle == nil ? "New Bundle" : "Edit Bundle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -354,6 +384,12 @@ private struct ShoppingBundleEditorSheet: View {
         }
         .onAppear {
             applyInitialFocusIfNeeded()
+        }
+        .onChange(of: focusedField) { _, newValue in
+            if newValue == .composer {
+                composerFocused = true
+                focusedField = nil
+            }
         }
         .sheet(isPresented: $showIconPicker) {
             ShoppingBundleIconPickerSheet(selectedIcon: $selectedIcon)
@@ -437,8 +473,7 @@ private struct ShoppingBundleEditorSheet: View {
 
         itemDrafts.append(BundleItemDraft(title: trimmedTitle))
         newItemText = ""
-
-        setFocus(.composer)
+        focusedField = .composer
     }
 
     private func applyInitialFocusIfNeeded() {
@@ -633,6 +668,82 @@ private struct BundleItemDraft: Identifiable {
     }
 }
 
+private struct StableComposerTextField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let placeholder: String
+    let themeStore: ThemeStore
+    let onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField(frame: .zero)
+        field.delegate = context.coordinator
+        field.returnKeyType = .done
+        field.autocapitalizationType = .sentences
+        field.autocorrectionType = .no
+        field.enablesReturnKeyAutomatically = false
+        applyStyle(to: field)
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        applyStyle(to: field)
+        if isFocused, !field.isFirstResponder {
+            field.becomeFirstResponder()
+        } else if !isFocused, field.isFirstResponder {
+            field.resignFirstResponder()
+        }
+    }
+
+    private func applyStyle(to field: UITextField) {
+        let font = themeStore.uiFont(for: .listRowTitle)
+        field.font = font
+        field.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: font,
+                .foregroundColor: UIColor.secondaryLabel,
+            ]
+        )
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: StableComposerTextField
+
+        init(_ parent: StableComposerTextField) {
+            self.parent = parent
+        }
+
+        @objc func textChanged(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_: UITextField) {
+            parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_: UITextField) {
+            parent.isFocused = false
+        }
+
+        func textFieldShouldReturn(_: UITextField) -> Bool {
+            parent.onSubmit()
+            return false
+        }
+    }
+}
+
 private struct BundleSectionCard<Content: View>: View {
     @EnvironmentObject private var themeStore: ThemeStore
     let content: Content
@@ -690,27 +801,21 @@ private struct ShoppingBundleItemRow: View {
 
 private struct ShoppingBundleComposerRow: View {
     @Binding var text: String
-    let focusedField: FocusState<BundleEditorFocus?>.Binding
+    @Binding var isFocused: Bool
     let onSubmit: () -> Void
 
     @EnvironmentObject private var themeStore: ThemeStore
 
     var body: some View {
         HStack(spacing: 12) {
-            TextField(
-                "",
+            StableComposerTextField(
                 text: $text,
-                prompt: Text("Add item")
-                    .font(themeStore.font(for: .listRowTitle))
-                    .foregroundStyle(themeStore.contentSecondaryColor)
+                isFocused: $isFocused,
+                placeholder: "Add item",
+                themeStore: themeStore,
+                onSubmit: onSubmit
             )
-            .font(themeStore.font(for: .listRowTitle))
-            .textFieldStyle(.plain)
-            .textInputAutocapitalization(.sentences)
-            .autocorrectionDisabled()
-            .submitLabel(.done)
-            .focused(focusedField, equals: .composer)
-            .onSubmit(onSubmit)
+            .frame(height: 24)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

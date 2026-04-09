@@ -1,5 +1,77 @@
 import Foundation
 
+enum DiagnosticsSource: String, CaseIterable, Codable, Identifiable {
+    case cloudKit
+    case tabBar
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .cloudKit:
+            "CloudKit"
+        case .tabBar:
+            "Tab Bar"
+        }
+    }
+}
+
+enum DiagnosticsFilter: String, CaseIterable, Identifiable {
+    case all
+    case tabBar
+    case cloudKit
+    case errors
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .all:
+            "All"
+        case .tabBar:
+            "Tab Bar"
+        case .cloudKit:
+            "CloudKit"
+        case .errors:
+            "Errors"
+        }
+    }
+
+    func includes(_ entry: CloudKitDiagnosticsEntry) -> Bool {
+        switch self {
+        case .all:
+            true
+        case .tabBar:
+            entry.source == .tabBar
+        case .cloudKit:
+            entry.source == .cloudKit
+        case .errors:
+            entry.kind == .error
+        }
+    }
+
+    var showsTriggerSummary: Bool {
+        self == .all || self == .cloudKit
+    }
+
+    var emptyStateMessage: String {
+        switch self {
+        case .all:
+            "No diagnostics recorded."
+        case .tabBar:
+            "No tab bar diagnostics recorded."
+        case .cloudKit:
+            "No CloudKit diagnostics recorded."
+        case .errors:
+            "No diagnostics errors recorded."
+        }
+    }
+}
+
 struct CloudKitTriggerSummary: Equatable, Codable {
     var syncRole: String?
     var syncScope: String?
@@ -51,6 +123,7 @@ struct CloudKitDiagnosticsEntry: Identifiable, Equatable, Codable {
     }
 
     let id: UUID
+    let source: DiagnosticsSource
     let kind: Kind
     let timestampISO8601: String
     let operation: String
@@ -58,21 +131,53 @@ struct CloudKitDiagnosticsEntry: Identifiable, Equatable, Codable {
 
     init(
         id: UUID = UUID(),
+        source: DiagnosticsSource = .cloudKit,
         kind: Kind,
         timestampISO8601: String,
         operation: String,
         payload: String
     ) {
         self.id = id
+        self.source = source
         self.kind = kind
         self.timestampISO8601 = timestampISO8601
         self.operation = operation
         self.payload = payload
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case source
+        case kind
+        case timestampISO8601
+        case operation
+        case payload
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        source = try container.decodeIfPresent(DiagnosticsSource.self, forKey: .source) ?? .cloudKit
+        kind = try container.decode(Kind.self, forKey: .kind)
+        timestampISO8601 = try container.decode(String.self, forKey: .timestampISO8601)
+        operation = try container.decode(String.self, forKey: .operation)
+        payload = try container.decode(String.self, forKey: .payload)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(source, forKey: .source)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(timestampISO8601, forKey: .timestampISO8601)
+        try container.encode(operation, forKey: .operation)
+        try container.encode(payload, forKey: .payload)
+    }
+
     var reportSection: String {
         [
             "timestamp=\(timestampISO8601)",
+            "source=\(source.rawValue)",
             "kind=\(kind.rawValue)",
             "operation=\(operation)",
             payload,
@@ -103,6 +208,10 @@ final class CloudKitDiagnosticsState: ObservableObject {
     }
 
     func record(error: Error, operation: String) {
+        record(error: error, operation: operation, source: .cloudKit)
+    }
+
+    func record(error: Error, operation: String, source: DiagnosticsSource) {
         let nsError = error as NSError
         let timestamp = ISO8601DateFormatter().string(from: Date())
 
@@ -114,11 +223,14 @@ final class CloudKitDiagnosticsState: ObservableObject {
             "reflecting=\(String(reflecting: error))",
         ].joined(separator: "\n")
 
-        lastCloudKitOperation = operation
-        lastCloudKitErrorTimestampISO8601 = timestamp
-        lastCloudKitError = payload
+        if source == .cloudKit {
+            lastCloudKitOperation = operation
+            lastCloudKitErrorTimestampISO8601 = timestamp
+            lastCloudKitError = payload
+        }
         appendEntry(
             CloudKitDiagnosticsEntry(
+                source: source,
                 kind: .error,
                 timestampISO8601: timestamp,
                 operation: operation,
@@ -128,17 +240,32 @@ final class CloudKitDiagnosticsState: ObservableObject {
     }
 
     func recordProgress(operation: String) {
+        recordProgress(operation: operation, source: .cloudKit)
+    }
+
+    func recordProgress(
+        operation: String,
+        source: DiagnosticsSource,
+        payload: String? = nil
+    ) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
-        lastCloudKitProgressOperation = operation
-        lastCloudKitProgressTimestampISO8601 = timestamp
+        if source == .cloudKit {
+            lastCloudKitProgressOperation = operation
+            lastCloudKitProgressTimestampISO8601 = timestamp
+        }
         appendEntry(
             CloudKitDiagnosticsEntry(
+                source: source,
                 kind: .progress,
                 timestampISO8601: timestamp,
                 operation: operation,
-                payload: operation
+                payload: payload ?? operation
             )
         )
+    }
+
+    func recordTabBarEvent(operation: String, payload: String) {
+        recordProgress(operation: operation, source: .tabBar, payload: payload)
     }
 
     func clear() {
@@ -163,13 +290,31 @@ final class CloudKitDiagnosticsState: ObservableObject {
     }
 
     var diagnosticsReport: String {
-        guard !entries.isEmpty else {
-            return "No CloudKit diagnostics recorded."
+        diagnosticsReport(filter: .all)
+    }
+
+    func diagnosticsReport(filter: DiagnosticsFilter) -> String {
+        let filteredEntries = entries(matching: filter)
+        guard !filteredEntries.isEmpty else {
+            return filter.emptyStateMessage
         }
 
-        return entries
+        return filteredEntries
             .map(\.reportSection)
             .joined(separator: "\n\n---\n\n")
+    }
+
+    func entries(matching filter: DiagnosticsFilter) -> [CloudKitDiagnosticsEntry] {
+        entries.filter(filter.includes)
+    }
+
+    func latestEntry(
+        matching filter: DiagnosticsFilter = .all,
+        kind: CloudKitDiagnosticsEntry.Kind? = nil
+    ) -> CloudKitDiagnosticsEntry? {
+        entries.last { entry in
+            filter.includes(entry) && (kind == nil || entry.kind == kind)
+        }
     }
 
     private func appendEntry(_ entry: CloudKitDiagnosticsEntry) {
@@ -177,7 +322,9 @@ final class CloudKitDiagnosticsState: ObservableObject {
         if entries.count > maxEntryCount {
             entries.removeFirst(entries.count - maxEntryCount)
         }
-        updateTriggerSummary(with: entry)
+        if entry.source == .cloudKit {
+            updateTriggerSummary(with: entry)
+        }
         persistEntries()
     }
 
@@ -205,19 +352,21 @@ final class CloudKitDiagnosticsState: ObservableObject {
     private func restoreTransientStateFromEntries() {
         triggerSummary = CloudKitTriggerSummary()
 
-        if let lastErrorEntry = entries.last(where: { $0.kind == .error }) {
+        if let lastErrorEntry = entries.last(where: { $0.kind == .error && $0.source == .cloudKit }) {
             lastCloudKitOperation = lastErrorEntry.operation
             lastCloudKitErrorTimestampISO8601 = lastErrorEntry.timestampISO8601
             lastCloudKitError = lastErrorEntry.payload
         }
 
-        if let lastProgressEntry = entries.last(where: { $0.kind == .progress }) {
+        if let lastProgressEntry = entries.last(where: { $0.kind == .progress && $0.source == .cloudKit }) {
             lastCloudKitProgressOperation = lastProgressEntry.operation
             lastCloudKitProgressTimestampISO8601 = lastProgressEntry.timestampISO8601
         }
 
         for entry in entries {
-            updateTriggerSummary(with: entry)
+            if entry.source == .cloudKit {
+                updateTriggerSummary(with: entry)
+            }
         }
     }
 
