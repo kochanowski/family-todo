@@ -333,83 +333,181 @@ private struct ActiveMemberSnapshot: Equatable {
     let members: [Entry]
 }
 
-private struct TabBarControllerAccessor: UIViewControllerRepresentable {
+private struct TabBarControllerAccessor: UIViewRepresentable {
     let onResolve: (UITabBarController) -> Void
 
-    func makeUIViewController(context _: Context) -> TabBarControllerReaderViewController {
-        let viewController = TabBarControllerReaderViewController()
-        viewController.onResolve = onResolve
-        return viewController
+    func makeUIView(context _: Context) -> TabBarControllerProbeView {
+        let view = TabBarControllerProbeView()
+        view.onResolve = onResolve
+        return view
     }
 
-    func updateUIViewController(
-        _ uiViewController: TabBarControllerReaderViewController,
-        context _: Context
-    ) {
-        uiViewController.onResolve = onResolve
-        uiViewController.resolveTabBarControllerIfNeeded()
+    func updateUIView(_ uiView: TabBarControllerProbeView, context _: Context) {
+        uiView.onResolve = onResolve
+        uiView.resolveTabBarControllerIfNeeded(reason: "updateUIView")
     }
 }
 
-private final class TabBarControllerReaderViewController: UIViewController {
+private final class TabBarControllerProbeView: UIView {
     var onResolve: ((UITabBarController) -> Void)?
+    private weak var lastResolvedController: UITabBarController?
     private var hasLoggedMissingResolution = false
+    private var hasScheduledAsyncRetry = false
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        resolveTabBarControllerIfNeeded()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        alpha = 0.001
+        isUserInteractionEnabled = false
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        resolveTabBarControllerIfNeeded()
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
-    override func didMove(toParent parent: UIViewController?) {
-        super.didMove(toParent: parent)
-        resolveTabBarControllerIfNeeded()
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        resolveTabBarControllerIfNeeded(reason: "didMoveToSuperview")
     }
 
-    func resolveTabBarControllerIfNeeded() {
-        guard let tabBarController = resolvedTabBarController else {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        resolveTabBarControllerIfNeeded(reason: "didMoveToWindow")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        resolveTabBarControllerIfNeeded(reason: "layoutSubviews")
+    }
+
+    func resolveTabBarControllerIfNeeded(reason: String) {
+        guard let resolution = resolvedTabBarController else {
             if !hasLoggedMissingResolution {
                 hasLoggedMissingResolution = true
                 CloudKitDiagnosticsState.shared.recordTabBarEvent(
                     operation: "tabbar.accessor.resolve.missed",
                     payload: [
-                        "viewController=\(String(describing: type(of: self)))",
-                        "parent=\(parent.map { String(describing: type(of: $0)) } ?? "nil")",
+                        "view=\(String(describing: type(of: self)))",
+                        "reason=\(reason)",
+                        "superview=\(superview.map { String(describing: type(of: $0)) } ?? "nil")",
+                        "window=\(window.map { String(describing: type(of: $0)) } ?? "nil")",
+                        "windowRoot=\(window?.rootViewController.map { String(describing: type(of: $0)) } ?? "nil")",
+                        "responderChain=\(responderChainDescription())",
                     ].joined(separator: "\n")
                 )
             }
+            scheduleAsyncRetryIfNeeded()
             return
         }
+
         hasLoggedMissingResolution = false
-        CloudKitDiagnosticsState.shared.recordTabBarEvent(
-            operation: "tabbar.accessor.resolved",
-            payload: [
-                "viewController=\(String(describing: type(of: self)))",
-                "tabBarController=\(String(describing: type(of: tabBarController)))",
-                "selectedIndex=\(tabBarController.selectedIndex)",
-            ].joined(separator: "\n")
-        )
-        onResolve?(tabBarController)
+        if lastResolvedController !== resolution.controller {
+            lastResolvedController = resolution.controller
+            CloudKitDiagnosticsState.shared.recordTabBarEvent(
+                operation: "tabbar.accessor.resolved",
+                payload: [
+                    "view=\(String(describing: type(of: self)))",
+                    "reason=\(reason)",
+                    "strategy=\(resolution.strategy)",
+                    "tabBarController=\(String(describing: type(of: resolution.controller)))",
+                    "selectedIndex=\(resolution.controller.selectedIndex)",
+                    "responderChain=\(responderChainDescription())",
+                ].joined(separator: "\n")
+            )
+        }
+        onResolve?(resolution.controller)
     }
 
-    private var resolvedTabBarController: UITabBarController? {
-        if let tabBarController {
-            return tabBarController
+    private var resolvedTabBarController: (controller: UITabBarController, strategy: String)? {
+        if let tabBarController = responderChainTabBarController {
+            return (tabBarController, "responderChain")
         }
 
-        var currentParent: UIViewController? = parent
-        while let candidate = currentParent {
-            if let tabBarController = candidate as? UITabBarController {
-                return tabBarController
-            }
-            currentParent = candidate.parent
+        if let rootViewController = window?.rootViewController,
+           let tabBarController = findTabBarController(in: rootViewController)
+        {
+            return (tabBarController, "windowRoot")
         }
 
         return nil
+    }
+
+    private var responderChainTabBarController: UITabBarController? {
+        var responder: UIResponder? = self
+
+        while let currentResponder = responder {
+            if let tabBarController = currentResponder as? UITabBarController {
+                return tabBarController
+            }
+
+            if let viewController = currentResponder as? UIViewController {
+                if let tabBarController = viewController as? UITabBarController {
+                    return tabBarController
+                }
+
+                var parent = viewController.parent
+                while let currentParent = parent {
+                    if let tabBarController = currentParent as? UITabBarController {
+                        return tabBarController
+                    }
+                    parent = currentParent.parent
+                }
+            }
+
+            responder = currentResponder.next
+        }
+
+        return nil
+    }
+
+    private func findTabBarController(in viewController: UIViewController) -> UITabBarController? {
+        if let tabBarController = viewController as? UITabBarController {
+            return tabBarController
+        }
+
+        for child in viewController.children {
+            if let tabBarController = findTabBarController(in: child) {
+                return tabBarController
+            }
+        }
+
+        if let presentedViewController = viewController.presentedViewController,
+           let tabBarController = findTabBarController(in: presentedViewController)
+        {
+            return tabBarController
+        }
+
+        return nil
+    }
+
+    private func responderChainDescription() -> String {
+        var responders: [String] = []
+        var responder: UIResponder? = self
+        var remainingBudget = 16
+
+        while let currentResponder = responder, remainingBudget > 0 {
+            responders.append(String(describing: type(of: currentResponder)))
+            responder = currentResponder.next
+            remainingBudget -= 1
+        }
+
+        if responder != nil {
+            responders.append("...")
+        }
+
+        return responders.joined(separator: " -> ")
+    }
+
+    private func scheduleAsyncRetryIfNeeded() {
+        guard !hasScheduledAsyncRetry else { return }
+        hasScheduledAsyncRetry = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            hasScheduledAsyncRetry = false
+            resolveTabBarControllerIfNeeded(reason: "asyncRetry")
+        }
     }
 }
 
