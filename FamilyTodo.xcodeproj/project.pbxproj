@@ -17,6 +17,7 @@
 		6A92F0C762E94B81ABC115A8 /* OnboardingCarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7F1C0A38034297BB87CA37 /* OnboardingCarouselView.swift */; };
 		30536BDF090F495C8165E191 /* AuroraBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71DCE06B5114FE99C1FDF4B /* AuroraBackground.swift */; };
 		9BE2310AFBDC43DCA1A7D081 /* OnboardingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 018556C9F7064BC3BAF7112E /* OnboardingState.swift */; };
+		9F7A1B2C3D4E5F60718293A1 /* StartupLaunchDirector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7A1B2C3D4E5F60718293A2 /* StartupLaunchDirector.swift */; };
 		57718B5777DA4E819676A7A2 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA591D77C780445A82FEE9E0 /* HapticManager.swift */; };
 			F0B100000000000000000001 /* InviteInputNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000001 /* InviteInputNormalizer.swift */; };
 			F0B100000000000000000006 /* SwiftDataContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000006 /* SwiftDataContainerFactory.swift */; };
@@ -117,6 +118,8 @@
 		TSTBUILD000000000000003 /* WorkItemTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */; };
 		TSTBUILD000000000000004 /* BacklogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TSTFILE0000000000000004 /* BacklogStoreTests.swift */; };
 		GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GLASSFIX00000000000003 /* AppBackgroundView.swift */; };
+		9F7A1B2C3D4E5F60718293A3 /* LaunchContinuationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7A1B2C3D4E5F60718293A4 /* LaunchContinuationView.swift */; };
+		9F7A1B2C3D4E5F60718293A5 /* StartupLaunchDirectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7A1B2C3D4E5F60718293A6 /* StartupLaunchDirectorTests.swift */; };
 		TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABTYPO0000000000000002 /* TabBarTypographyManager.swift */; };
 		TABDIAG000000000000001 /* TabBarDiagnosticsMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = TABDIAG000000000000002 /* TabBarDiagnosticsMonitor.swift */; };
 			CHECKBOX000000000000001 /* ThemedCheckbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHECKBOX000000000000002 /* ThemedCheckbox.swift */; };
@@ -156,6 +159,7 @@
 		4A7F1C0A38034297BB87CA37 /* OnboardingCarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCarouselView.swift; sourceTree = "<group>"; };
 		F71DCE06B5114FE99C1FDF4B /* AuroraBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuroraBackground.swift; sourceTree = "<group>"; };
 		018556C9F7064BC3BAF7112E /* OnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingState.swift; sourceTree = "<group>"; };
+		9F7A1B2C3D4E5F60718293A2 /* StartupLaunchDirector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupLaunchDirector.swift; sourceTree = "<group>"; };
 		DA591D77C780445A82FEE9E0 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 			F0A100000000000000000001 /* InviteInputNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteInputNormalizer.swift; sourceTree = "<group>"; };
 			F0A100000000000000000006 /* SwiftDataContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataContainerFactory.swift; sourceTree = "<group>"; };
@@ -259,6 +263,8 @@
 		TSTFILE0000000000000003 /* WorkItemTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkItemTransitionTests.swift; sourceTree = "<group>"; };
 		TSTFILE0000000000000004 /* BacklogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacklogStoreTests.swift; sourceTree = "<group>"; };
 		GLASSFIX00000000000003 /* AppBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackgroundView.swift; sourceTree = "<group>"; };
+		9F7A1B2C3D4E5F60718293A4 /* LaunchContinuationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchContinuationView.swift; sourceTree = "<group>"; };
+		9F7A1B2C3D4E5F60718293A6 /* StartupLaunchDirectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupLaunchDirectorTests.swift; sourceTree = "<group>"; };
 		TABTYPO0000000000000002 /* TabBarTypographyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarTypographyManager.swift; sourceTree = "<group>"; };
 		TABDIAG000000000000002 /* TabBarDiagnosticsMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarDiagnosticsMonitor.swift; sourceTree = "<group>"; };
 			CHECKBOX000000000000002 /* ThemedCheckbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemedCheckbox.swift; sourceTree = "<group>"; };
@@ -403,6 +409,7 @@
 				B3F1A2C4D5E6F708192A3B42 /* ShoppingListStoreTests.swift */,
 				SHOPA2000000000000000001 /* ShoppingBundleStoreTests.swift */,
 				TIPKITT0000000000000001 /* AppTipVisibilityTests.swift */,
+				9F7A1B2C3D4E5F60718293A6 /* StartupLaunchDirectorTests.swift */,
 					F0A200000000000000000001 /* InviteInputNormalizerTests.swift */,
 				F2A3B4C5D6E7F8091A2B3C4E /* InviteCodeFlowTests.swift */,
 					F0A200000000000000000002 /* OnboardingStateTests.swift */,
@@ -471,6 +478,7 @@
 			isa = PBXGroup;
 			children = (
 				018556C9F7064BC3BAF7112E /* OnboardingState.swift */,
+				9F7A1B2C3D4E5F60718293A2 /* StartupLaunchDirector.swift */,
 				E9B3365D1BCB4D65A686F4A4 /* NotificationService.swift */,
 				CELEB3000000000000000001 /* CelebrationManager.swift */,
 				TIPKITA0000000000000001 /* AppTips.swift */,
@@ -529,6 +537,7 @@
 					F0A100000000000000000004 /* InviteQRCodeView.swift */,
 					F0A100000000000000000005 /* QRCodeScannerView.swift */,
 					C9E8A1B2C3D4E5F607182931 /* MemberBadgeView.swift */,
+				9F7A1B2C3D4E5F60718293A4 /* LaunchContinuationView.swift */,
 				2817BEA946394BE4B5F046F9 /* GuidedEmptyStateView.swift */,
 				GLASSFIX00000000000003 /* AppBackgroundView.swift */,
 			);
@@ -683,6 +692,7 @@
 				6A92F0C762E94B81ABC115A8 /* OnboardingCarouselView.swift in Sources */,
 				30536BDF090F495C8165E191 /* AuroraBackground.swift in Sources */,
 				9BE2310AFBDC43DCA1A7D081 /* OnboardingState.swift in Sources */,
+				9F7A1B2C3D4E5F60718293A1 /* StartupLaunchDirector.swift in Sources */,
 				57718B5777DA4E819676A7A2 /* HapticManager.swift in Sources */,
 					F0B100000000000000000001 /* InviteInputNormalizer.swift in Sources */,
 					F0B100000000000000000006 /* SwiftDataContainerFactory.swift in Sources */,
@@ -758,6 +768,7 @@
 				SHOPB1000000000000000003 /* ShoppingBundleStore.swift in Sources */,
 				SHOPB1000000000000000004 /* BundlesManagementView.swift in Sources */,
 				GLASSFIX00000000000004 /* AppBackgroundView.swift in Sources */,
+				9F7A1B2C3D4E5F60718293A3 /* LaunchContinuationView.swift in Sources */,
 				TABTYPO0000000000000001 /* TabBarTypographyManager.swift in Sources */,
 				TABDIAG000000000000001 /* TabBarDiagnosticsMonitor.swift in Sources */,
 );
@@ -785,6 +796,7 @@
 				B3F1A2C4D5E6F708192A3B41 /* ShoppingListStoreTests.swift in Sources */,
 				SHOPB2000000000000000001 /* ShoppingBundleStoreTests.swift in Sources */,
 				TIPKITB0000000000000002 /* AppTipVisibilityTests.swift in Sources */,
+				9F7A1B2C3D4E5F60718293A5 /* StartupLaunchDirectorTests.swift in Sources */,
 					F0B200000000000000000001 /* InviteInputNormalizerTests.swift in Sources */,
 				F2A3B4C5D6E7F8091A2B3C4D /* InviteCodeFlowTests.swift in Sources */,
 					F0B200000000000000000002 /* OnboardingStateTests.swift in Sources */,

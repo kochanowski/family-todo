@@ -12,11 +12,10 @@ enum StartupLaunchDirector {
 
         householdStore.setSyncMode(userSession.syncMode)
 
-        let startupUserId: String?
-        if userSession.isGuest {
-            startupUserId = userSession.userId ?? "local-guest"
+        let startupUserId: String? = if userSession.isGuest {
+            userSession.userId ?? "local-guest"
         } else {
-            startupUserId = userSession.userId
+            userSession.userId
         }
 
         guard let startupUserId else { return }
@@ -24,8 +23,7 @@ enum StartupLaunchDirector {
         if let restoredHousehold = householdStore.resolveStartupHouseholdLocally(
             userId: startupUserId,
             preferredHouseholdId: userSession.currentHouseholdID
-        ), userSession.currentHouseholdID != restoredHousehold.id
-        {
+        ), userSession.currentHouseholdID != restoredHousehold.id {
             userSession.setCurrentHousehold(restoredHousehold.id)
         }
 

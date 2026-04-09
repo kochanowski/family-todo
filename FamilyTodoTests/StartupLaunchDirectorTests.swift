@@ -12,14 +12,20 @@ final class StartupLaunchDirectorTests: XCTestCase {
         func signInWithApple() {}
         func signOut() {}
         func checkCloudKitStatus() async {}
-        func diagnosticsReportJSON() -> String { "{}" }
+        func diagnosticsReportJSON() -> String {
+            "{}"
+        }
+
         func clearDiagnosticsHistory() {}
         func getChangePublisher() -> AnyPublisher<Void, Never> {
             objectWillChange.map { _ in () }.eraseToAnyPublisher()
         }
     }
 
-    private var onboardingDefaults: UserDefaults { .standard }
+    private var onboardingDefaults: UserDefaults {
+        .standard
+    }
+
     private var sessionSuiteName: String?
     private var sessionDefaults: UserDefaults?
 
