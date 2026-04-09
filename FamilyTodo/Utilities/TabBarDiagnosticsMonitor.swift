@@ -11,6 +11,7 @@ final class TabBarDiagnosticsMonitor {
     private var displayLink: CADisplayLink?
     private var remainingPostDismissFrames = 0
     private var postDismissFrameIndex = 0
+    private var dismissalSnapshotView: UIView?
 
     private init() {}
 
@@ -18,6 +19,9 @@ final class TabBarDiagnosticsMonitor {
         self.selectedTab = selectedTab
 
         let isNewController = tabBarController !== controller
+        if isNewController {
+            removeDismissStabilizer(animated: false)
+        }
         tabBarController = controller
 
         if isNewController {
@@ -46,6 +50,7 @@ final class TabBarDiagnosticsMonitor {
 
     @objc private func handleDisplayLinkTick() {
         guard let controller = tabBarController else {
+            removeDismissStabilizer(animated: false)
             displayLink?.invalidate()
             displayLink = nil
             return
@@ -67,6 +72,7 @@ final class TabBarDiagnosticsMonitor {
 
         if presentedViewController !== observedPresentedViewController {
             if let presentedViewController {
+                removeDismissStabilizer(animated: false)
                 observedPresentedViewController = presentedViewController
                 dismissalTrackingViewController = nil
                 recordSnapshot(
@@ -86,6 +92,7 @@ final class TabBarDiagnosticsMonitor {
         if presentedViewController.isBeingDismissed, dismissalTrackingViewController !== presentedViewController {
             dismissalTrackingViewController = presentedViewController
             let dismissedClassName = className(of: presentedViewController)
+            installDismissStabilizer(for: controller)
             recordSnapshot(
                 event: "tabbar.sheet.dismiss.start",
                 on: controller,
@@ -115,6 +122,68 @@ final class TabBarDiagnosticsMonitor {
             on: controller,
             extra: ["frame": "\(postDismissFrameIndex)"]
         )
+
+        if remainingPostDismissFrames == 0 {
+            removeDismissStabilizer(animated: true)
+        }
+    }
+
+    private func installDismissStabilizer(for controller: UITabBarController) {
+        guard let containerView = controller.tabBar.superview else { return }
+        guard let snapshotView = controller.tabBar.snapshotView(afterScreenUpdates: false) else {
+            return
+        }
+
+        dismissalSnapshotView?.removeFromSuperview()
+
+        snapshotView.frame = controller.tabBar.frame
+        snapshotView.isUserInteractionEnabled = false
+        snapshotView.accessibilityElementsHidden = true
+        snapshotView.layer.zPosition = CGFloat.greatestFiniteMagnitude
+        snapshotView.alpha = 1
+
+        containerView.addSubview(snapshotView)
+        containerView.bringSubviewToFront(snapshotView)
+        dismissalSnapshotView = snapshotView
+
+        recordSnapshot(event: "tabbar.dismiss.stabilizer.installed", on: controller)
+    }
+
+    private func removeDismissStabilizer(animated: Bool) {
+        guard let dismissalSnapshotView else { return }
+
+        self.dismissalSnapshotView = nil
+
+        let removeSnapshot = {
+            dismissalSnapshotView.removeFromSuperview()
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.16,
+                delay: 0,
+                options: [.beginFromCurrentState, .curveEaseOut, .allowUserInteraction]
+            ) {
+                dismissalSnapshotView.alpha = 0
+            } completion: { _ in
+                removeSnapshot()
+            }
+        } else {
+            removeSnapshot()
+        }
+
+        if let controller = tabBarController {
+            recordSnapshot(
+                event: "tabbar.dismiss.stabilizer.removed",
+                on: controller,
+                extra: ["animated": animated.description]
+            )
+        } else {
+            recordSnapshot(
+                event: "tabbar.dismiss.stabilizer.removed",
+                extra: ["animated": animated.description]
+            )
+        }
     }
 
     private func snapshotPayload(
