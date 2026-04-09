@@ -5,10 +5,10 @@ import SwiftUI
 @main
 struct FamilyTodoApp: App {
     @UIApplicationDelegateAdaptor(AppDelegateBridge.self) private var appDelegate
-    @StateObject private var userSession = UserSession.shared
+    @StateObject private var userSession: UserSession
     @StateObject private var themeStore: ThemeStore
     @StateObject private var householdStore: HouseholdStore
-    @StateObject private var onboardingState = OnboardingState()
+    @StateObject private var onboardingState: OnboardingState
     @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
@@ -37,11 +37,14 @@ struct FamilyTodoApp: App {
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
         UITestHelper.prepareForLaunch(arguments: launchArguments)
+        let userSession = UserSession.shared
+        _userSession = StateObject(wrappedValue: userSession)
 
         let fontRegistrationReport = FontRegistrar.registerBundledFonts()
         _themeStore = StateObject(
             wrappedValue: ThemeStore(initialFontReport: fontRegistrationReport)
         )
+        let onboardingState = OnboardingState()
 
         #if CI
             let bootstrapResult = SwiftDataContainerFactory.bootstrap(
@@ -57,6 +60,12 @@ struct FamilyTodoApp: App {
         sharedModelContainer = bootstrapResult.container
         let householdStore = HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
         _householdStore = StateObject(wrappedValue: householdStore)
+        StartupLaunchDirector.primeLocalLaunchRoute(
+            userSession: userSession,
+            householdStore: householdStore,
+            onboardingState: onboardingState
+        )
+        _onboardingState = StateObject(wrappedValue: onboardingState)
         _syncCoordinator = StateObject(
             wrappedValue: HouseholdSyncCoordinator(
                 engine: HouseholdStoreSyncEngine(
@@ -243,40 +252,31 @@ struct RootView: View {
             switch onboardingState.currentState {
             case .onboarding:
                 OnboardingCarouselView()
-                    .transition(.opacity)
 
             case .auth:
                 SignInView()
-                    .transition(.opacity)
 
             case .householdSetup:
                 if userSession.hasActiveSession {
                     if userSession.needsDisplayNamePrompt {
                         SignInView()
-                            .transition(.opacity)
                     } else if shouldShowHouseholdSetupLoader {
                         HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
-                            .transition(.opacity)
                     } else {
                         CreateHouseholdView()
-                            .transition(.opacity)
                     }
                 } else {
                     SignInView()
-                        .transition(.opacity)
                 }
 
             case .mainApp:
                 if userSession.hasActiveSession {
                     ContentView()
-                        .transition(.opacity)
                 } else {
                     SignInView()
-                        .transition(.opacity)
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: onboardingState.currentState)
         .onChange(of: userSession.hasActiveSession) { _, hasSession in
             if !hasSession, onboardingState.currentState != .onboarding {
                 householdStore.resetSetupResolution()

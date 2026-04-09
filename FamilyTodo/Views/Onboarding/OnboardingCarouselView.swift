@@ -12,7 +12,7 @@ struct OnboardingSlide: Identifiable {
 private let slides: [OnboardingSlide] = [
     OnboardingSlide(
         id: 0,
-        icon: "house.and.flag.fill",
+        icon: "house.fill",
         title: "Your Home, Organized",
         subtitle: "One shared space for everything your household needs to remember."
     ),
