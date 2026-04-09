@@ -21,7 +21,7 @@ struct CloudKitDiagnosticsBanner: View {
     var body: some View {
         if diagnostics.hasVisibleDiagnostics {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Diagnostics (Debug)", systemImage: "ladybug.fill")
+                Label("Diagnostics", systemImage: "ladybug.fill")
                     .font(themeStore.font(for: .bodyStrong))
                     .foregroundStyle(themeStore.contentPrimaryColor)
 

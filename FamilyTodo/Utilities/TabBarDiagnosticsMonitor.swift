@@ -6,14 +6,11 @@ final class TabBarDiagnosticsMonitor {
 
     private weak var tabBarController: UITabBarController?
     private var selectedTab: AppTab = .shopping
-
-    #if DEBUG
-        private weak var observedPresentedViewController: UIViewController?
-        private weak var dismissalTrackingViewController: UIViewController?
-        private var displayLink: CADisplayLink?
-        private var remainingPostDismissFrames = 0
-        private var postDismissFrameIndex = 0
-    #endif
+    private weak var observedPresentedViewController: UIViewController?
+    private weak var dismissalTrackingViewController: UIViewController?
+    private var displayLink: CADisplayLink?
+    private var remainingPostDismissFrames = 0
+    private var postDismissFrameIndex = 0
 
     private init() {}
 
@@ -25,9 +22,7 @@ final class TabBarDiagnosticsMonitor {
 
         if isNewController {
             recordSnapshot(event: "tabbar.attach", on: controller)
-            #if DEBUG
-                startDisplayLinkIfNeeded()
-            #endif
+            startDisplayLinkIfNeeded()
         }
     }
 
@@ -40,93 +35,85 @@ final class TabBarDiagnosticsMonitor {
         on controller: UITabBarController? = nil,
         extra: [String: String] = [:]
     ) {
-        #if DEBUG
-            guard let controller = controller ?? tabBarController else { return }
-            CloudKitDiagnosticsState.shared.recordTabBarEvent(
-                operation: event,
-                payload: snapshotPayload(for: controller, extra: extra)
-            )
-        #else
-            _ = event
-            _ = controller
-            _ = extra
-        #endif
+        guard let controller = controller ?? tabBarController else { return }
+        CloudKitDiagnosticsState.shared.recordTabBarEvent(
+            operation: event,
+            payload: snapshotPayload(for: controller, extra: extra)
+        )
     }
 
-    #if DEBUG
-        @objc private func handleDisplayLinkTick() {
-            guard let controller = tabBarController else {
-                displayLink?.invalidate()
-                displayLink = nil
-                return
-            }
-
-            inspectPresentedViewController(for: controller)
-            emitPostDismissSnapshots(for: controller)
+    @objc private func handleDisplayLinkTick() {
+        guard let controller = tabBarController else {
+            displayLink?.invalidate()
+            displayLink = nil
+            return
         }
 
-        private func startDisplayLinkIfNeeded() {
-            guard displayLink == nil else { return }
-            let displayLink = CADisplayLink(target: self, selector: #selector(handleDisplayLinkTick))
-            displayLink.add(to: .main, forMode: .common)
-            self.displayLink = displayLink
-        }
+        inspectPresentedViewController(for: controller)
+        emitPostDismissSnapshots(for: controller)
+    }
 
-        private func inspectPresentedViewController(for controller: UITabBarController) {
-            let presentedViewController = topPresentedViewController(from: controller)
+    private func startDisplayLinkIfNeeded() {
+        guard displayLink == nil else { return }
+        let displayLink = CADisplayLink(target: self, selector: #selector(handleDisplayLinkTick))
+        displayLink.add(to: .main, forMode: .common)
+        self.displayLink = displayLink
+    }
 
-            if presentedViewController !== observedPresentedViewController {
-                if let presentedViewController {
-                    observedPresentedViewController = presentedViewController
-                    dismissalTrackingViewController = nil
-                    recordSnapshot(
-                        event: "tabbar.sheet.presented",
-                        on: controller,
-                        extra: ["viewController": className(of: presentedViewController)]
-                    )
-                } else if observedPresentedViewController != nil {
-                    observedPresentedViewController = nil
-                    dismissalTrackingViewController = nil
-                    recordSnapshot(event: "tabbar.sheet.cleared", on: controller)
-                }
-            }
+    private func inspectPresentedViewController(for controller: UITabBarController) {
+        let presentedViewController = topPresentedViewController(from: controller)
 
-            guard let presentedViewController else { return }
-
-            if presentedViewController.isBeingDismissed, dismissalTrackingViewController !== presentedViewController {
-                dismissalTrackingViewController = presentedViewController
-                let dismissedClassName = className(of: presentedViewController)
+        if presentedViewController !== observedPresentedViewController {
+            if let presentedViewController {
+                observedPresentedViewController = presentedViewController
+                dismissalTrackingViewController = nil
                 recordSnapshot(
-                    event: "tabbar.sheet.dismiss.start",
+                    event: "tabbar.sheet.presented",
+                    on: controller,
+                    extra: ["viewController": className(of: presentedViewController)]
+                )
+            } else if observedPresentedViewController != nil {
+                observedPresentedViewController = nil
+                dismissalTrackingViewController = nil
+                recordSnapshot(event: "tabbar.sheet.cleared", on: controller)
+            }
+        }
+
+        guard let presentedViewController else { return }
+
+        if presentedViewController.isBeingDismissed, dismissalTrackingViewController !== presentedViewController {
+            dismissalTrackingViewController = presentedViewController
+            let dismissedClassName = className(of: presentedViewController)
+            recordSnapshot(
+                event: "tabbar.sheet.dismiss.start",
+                on: controller,
+                extra: ["viewController": dismissedClassName]
+            )
+
+            presentedViewController.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self, weak controller] _ in
+                guard let self, let controller else { return }
+                recordSnapshot(
+                    event: "tabbar.sheet.dismiss.complete",
                     on: controller,
                     extra: ["viewController": dismissedClassName]
                 )
-
-                presentedViewController.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self, weak controller] _ in
-                    guard let self, let controller else { return }
-                    self.recordSnapshot(
-                        event: "tabbar.sheet.dismiss.complete",
-                        on: controller,
-                        extra: ["viewController": dismissedClassName]
-                    )
-                    self.remainingPostDismissFrames = 12
-                    self.postDismissFrameIndex = 0
-                }
+                remainingPostDismissFrames = 12
+                postDismissFrameIndex = 0
             }
         }
+    }
 
-        private func emitPostDismissSnapshots(for controller: UITabBarController) {
-            guard remainingPostDismissFrames > 0 else { return }
+    private func emitPostDismissSnapshots(for controller: UITabBarController) {
+        guard remainingPostDismissFrames > 0 else { return }
 
-            postDismissFrameIndex += 1
-            remainingPostDismissFrames -= 1
-            recordSnapshot(
-                event: "tabbar.sheet.dismiss.postFrame",
-                on: controller,
-                extra: ["frame": "\(postDismissFrameIndex)"]
-            )
-        }
-    #endif
+        postDismissFrameIndex += 1
+        remainingPostDismissFrames -= 1
+        recordSnapshot(
+            event: "tabbar.sheet.dismiss.postFrame",
+            on: controller,
+            extra: ["frame": "\(postDismissFrameIndex)"]
+        )
+    }
 
     private func snapshotPayload(
         for controller: UITabBarController,
@@ -156,7 +143,7 @@ final class TabBarDiagnosticsMonitor {
                 "tabBar.frame=\(describe(tabBar.frame))",
             ] + extraLines + ["subviews:"] + subviewLines
         )
-            .joined(separator: "\n")
+        .joined(separator: "\n")
     }
 
     private func topPresentedViewController(from controller: UITabBarController) -> UIViewController? {

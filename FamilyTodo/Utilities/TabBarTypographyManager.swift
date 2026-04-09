@@ -72,12 +72,10 @@ enum TabBarTypographyManager {
             selectedIndex: desiredIndex
         )
 
-        #if DEBUG
-            TabBarDiagnosticsMonitor.shared.recordSnapshot(
-                event: force ? "tabbar.appearance.reconciled.force" : "tabbar.appearance.reconciled",
-                on: tabBarController
-            )
-        #endif
+        TabBarDiagnosticsMonitor.shared.recordSnapshot(
+            event: force ? "tabbar.appearance.reconciled.force" : "tabbar.appearance.reconciled",
+            on: tabBarController
+        )
     }
 
     static func inactiveItemColor(
