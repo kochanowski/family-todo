@@ -3,40 +3,81 @@ import UIKit
 
 @MainActor
 enum TabBarTypographyManager {
-    struct ResolvedTabBarStyle: Equatable {
+    private struct ResolvedTabBarStyle: Equatable {
         let normalColor: UIColor
         let selectedColor: UIColor
         let font: UIFont
+        let selectedIndex: Int
         let interfaceStyle: UIUserInterfaceStyle
 
         static func == (lhs: ResolvedTabBarStyle, rhs: ResolvedTabBarStyle) -> Bool {
             colorsMatch(lhs.normalColor, rhs.normalColor) &&
                 colorsMatch(lhs.selectedColor, rhs.selectedColor) &&
                 fontsMatch(lhs.font, rhs.font) &&
+                lhs.selectedIndex == rhs.selectedIndex &&
                 lhs.interfaceStyle == rhs.interfaceStyle
         }
     }
 
-    static func resolvedStyle(
+    static func reconcile(
         themeStore: ThemeStore,
-        traitCollection: UITraitCollection? = nil,
-        colorScheme: ColorScheme? = nil
-    ) -> ResolvedTabBarStyle {
-        let interfaceStyle = resolvedInterfaceStyle(
+        tabBarController: UITabBarController? = nil,
+        selectedIndex: Int? = nil,
+        force: Bool = false
+    ) {
+        guard let tabBarController else { return }
+
+        let style = resolvedStyle(
             themeStore: themeStore,
-            traitCollection: traitCollection,
-            colorScheme: colorScheme
+            tabBarController: tabBarController,
+            selectedIndex: selectedIndex
+        )
+        let desiredIndex = style.selectedIndex
+
+        if !force {
+            let currentStyle = currentStyle(from: tabBarController)
+            let standardAppearanceMatches = appearanceMatches(
+                tabBarController.tabBar.standardAppearance,
+                style: style
+            )
+            let scrollEdgeAppearanceMatches: Bool = if #available(iOS 15.0, *) {
+                appearanceMatches(tabBarController.tabBar.scrollEdgeAppearance, style: style)
+            } else {
+                true
+            }
+            let needsAppearanceRepair = currentStyle != style ||
+                !standardAppearanceMatches ||
+                !scrollEdgeAppearanceMatches
+
+            guard needsAppearanceRepair || tabBarController.selectedIndex != desiredIndex else {
+                return
+            }
+        }
+
+        // Always create fresh appearance objects so UIKit sees a new assignment
+        // and unconditionally refreshes its internal blur/vibrancy state.
+        let standardAppearance = makeAppearance(style: style)
+
+        var resolvedScrollEdgeAppearance: UITabBarAppearance?
+        if #available(iOS 15.0, *) {
+            resolvedScrollEdgeAppearance = makeAppearance(style: style)
+        }
+
+        updateLiveTabBar(
+            tabBarController: tabBarController,
+            standardAppearance: standardAppearance,
+            scrollEdgeAppearance: resolvedScrollEdgeAppearance,
+            selectedColor: style.selectedColor,
+            normalColor: style.normalColor,
+            selectedIndex: desiredIndex
         )
 
-        return ResolvedTabBarStyle(
-            normalColor: inactiveItemColor(
-                themeStore: themeStore,
-                traitCollection: UITraitCollection(userInterfaceStyle: interfaceStyle)
-            ),
-            selectedColor: UIColor(themeStore.resolvedTabTint),
-            font: themeStore.uiFont(for: .tabLabel),
-            interfaceStyle: interfaceStyle
-        )
+        #if DEBUG
+            TabBarDiagnosticsMonitor.shared.recordSnapshot(
+                event: force ? "tabbar.appearance.reconciled.force" : "tabbar.appearance.reconciled",
+                on: tabBarController
+            )
+        #endif
     }
 
     static func inactiveItemColor(
@@ -56,24 +97,146 @@ enum TabBarTypographyManager {
         }
     }
 
-    private static func resolvedInterfaceStyle(
+    static func apply(
         themeStore: ThemeStore,
-        traitCollection: UITraitCollection?,
-        colorScheme: ColorScheme?
-    ) -> UIUserInterfaceStyle {
-        if let colorScheme {
-            return colorScheme == .dark ? .dark : .light
+        tabBarController: UITabBarController? = nil,
+        selectedIndex: Int? = nil
+    ) {
+        reconcile(
+            themeStore: themeStore,
+            tabBarController: tabBarController,
+            selectedIndex: selectedIndex
+        )
+    }
+
+    private static func resolvedStyle(
+        themeStore: ThemeStore,
+        tabBarController: UITabBarController,
+        selectedIndex: Int?
+    ) -> ResolvedTabBarStyle {
+        let traitCollection = tabBarController.traitCollection
+        let normalColor = inactiveItemColor(
+            themeStore: themeStore,
+            traitCollection: traitCollection
+        )
+        let selectedColor = UIColor(themeStore.resolvedTabTint)
+        let font = themeStore.uiFont(for: .tabLabel)
+        let resolvedIndex = selectedIndex ?? tabBarController.selectedIndex
+
+        return ResolvedTabBarStyle(
+            normalColor: normalColor,
+            selectedColor: selectedColor,
+            font: font,
+            selectedIndex: resolvedIndex,
+            interfaceStyle: traitCollection.userInterfaceStyle
+        )
+    }
+
+    private static func currentStyle(from tabBarController: UITabBarController) -> ResolvedTabBarStyle? {
+        let tabBar = tabBarController.tabBar
+        guard let normalColor = tabBar.unselectedItemTintColor,
+              let selectedColor = tabBar.tintColor,
+              let font = font(
+                  from: tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes
+              )
+        else {
+            return nil
         }
 
-        if let traitCollection {
-            return traitCollection.userInterfaceStyle
+        return ResolvedTabBarStyle(
+            normalColor: normalColor,
+            selectedColor: selectedColor,
+            font: font,
+            selectedIndex: tabBarController.selectedIndex,
+            interfaceStyle: tabBarController.traitCollection.userInterfaceStyle
+        )
+    }
+
+    private static func makeAttributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
+        [
+            .font: font,
+            .foregroundColor: color,
+        ]
+    }
+
+    private static func makeAppearance(style: ResolvedTabBarStyle) -> UITabBarAppearance {
+        let appearance = UITabBarAppearance()
+        // Keep the native UITabBar blur pipeline. This matches the previous look
+        // more closely than the custom floating bar and avoids fighting UIKit's
+        // private background hierarchy during sheet dismissal.
+        appearance.configureWithDefaultBackground()
+        appearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
+        appearance.backgroundColor = nil
+        appearance.shadowColor = .separator
+        let normalAttributes = makeAttributes(font: style.font, color: style.normalColor)
+        let selectedAttributes = makeAttributes(font: style.font, color: style.selectedColor)
+
+        let stacked = appearance.stackedLayoutAppearance
+        stacked.normal.titleTextAttributes = normalAttributes
+        stacked.selected.titleTextAttributes = selectedAttributes
+        stacked.normal.iconColor = style.normalColor
+        stacked.selected.iconColor = style.selectedColor
+
+        let inline = appearance.inlineLayoutAppearance
+        inline.normal.titleTextAttributes = normalAttributes
+        inline.selected.titleTextAttributes = selectedAttributes
+        inline.normal.iconColor = style.normalColor
+        inline.selected.iconColor = style.selectedColor
+
+        let compactInline = appearance.compactInlineLayoutAppearance
+        compactInline.normal.titleTextAttributes = normalAttributes
+        compactInline.selected.titleTextAttributes = selectedAttributes
+        compactInline.normal.iconColor = style.normalColor
+        compactInline.selected.iconColor = style.selectedColor
+
+        return appearance
+    }
+
+    private static func appearanceMatches(
+        _ appearance: UITabBarAppearance?,
+        style: ResolvedTabBarStyle
+    ) -> Bool {
+        guard let appearance else { return false }
+
+        return layoutAppearanceMatches(appearance.stackedLayoutAppearance, style: style) &&
+            layoutAppearanceMatches(appearance.inlineLayoutAppearance, style: style) &&
+            layoutAppearanceMatches(appearance.compactInlineLayoutAppearance, style: style)
+    }
+
+    private static func layoutAppearanceMatches(
+        _ layoutAppearance: UITabBarItemAppearance,
+        style: ResolvedTabBarStyle
+    ) -> Bool {
+        titleAttributesMatch(
+            layoutAppearance.normal.titleTextAttributes,
+            expectedColor: style.normalColor,
+            expectedFont: style.font
+        ) &&
+            titleAttributesMatch(
+                layoutAppearance.selected.titleTextAttributes,
+                expectedColor: style.selectedColor,
+                expectedFont: style.font
+            ) &&
+            colorsMatch(layoutAppearance.normal.iconColor, style.normalColor) &&
+            colorsMatch(layoutAppearance.selected.iconColor, style.selectedColor)
+    }
+
+    private static func titleAttributesMatch(
+        _ attributes: [NSAttributedString.Key: Any],
+        expectedColor: UIColor,
+        expectedFont: UIFont
+    ) -> Bool {
+        guard let color = attributes[.foregroundColor] as? UIColor,
+              let font = font(from: attributes)
+        else {
+            return false
         }
 
-        if let themeColorScheme = themeStore.colorScheme {
-            return themeColorScheme == .dark ? .dark : .light
-        }
+        return colorsMatch(color, expectedColor) && fontsMatch(font, expectedFont)
+    }
 
-        return UIScreen.main.traitCollection.userInterfaceStyle
+    private static func font(from attributes: [NSAttributedString.Key: Any]) -> UIFont? {
+        attributes[.font] as? UIFont
     }
 
     private nonisolated static func fontsMatch(_ lhs: UIFont, _ rhs: UIFont) -> Bool {
@@ -102,5 +265,56 @@ enum TabBarTypographyManager {
             abs(lhsGreen - rhsGreen) < 0.01 &&
             abs(lhsBlue - rhsBlue) < 0.01 &&
             abs(lhsAlpha - rhsAlpha) < 0.01
+    }
+
+    private static func updateLiveTabBar(
+        tabBarController: UITabBarController,
+        standardAppearance: UITabBarAppearance,
+        scrollEdgeAppearance: UITabBarAppearance?,
+        selectedColor: UIColor,
+        normalColor: UIColor,
+        selectedIndex: Int?
+    ) {
+        let tabBar = tabBarController.tabBar
+
+        tabBar.standardAppearance = standardAppearance
+        if #available(iOS 15.0, *), let scrollEdgeAppearance {
+            tabBar.scrollEdgeAppearance = scrollEdgeAppearance
+        }
+        tabBar.tintColor = selectedColor
+        tabBar.unselectedItemTintColor = normalColor
+        tabBar.backgroundColor = nil
+        tabBar.barTintColor = nil
+        tabBar.isTranslucent = true
+
+        repairSelection(
+            on: tabBarController,
+            selectedIndex: selectedIndex ?? tabBarController.selectedIndex
+        )
+
+        DispatchQueue.main.async {
+            repairSelection(
+                on: tabBarController,
+                selectedIndex: selectedIndex ?? tabBarController.selectedIndex
+            )
+        }
+    }
+
+    private static func repairSelection(
+        on tabBarController: UITabBarController,
+        selectedIndex: Int
+    ) {
+        guard let viewControllers = tabBarController.viewControllers,
+              let items = tabBarController.tabBar.items,
+              !viewControllers.isEmpty,
+              !items.isEmpty
+        else {
+            return
+        }
+
+        let boundedIndex = min(max(selectedIndex, 0), min(viewControllers.count, items.count) - 1)
+        tabBarController.selectedIndex = boundedIndex
+        tabBarController.tabBar.setNeedsLayout()
+        tabBarController.tabBar.layoutIfNeeded()
     }
 }

@@ -6,20 +6,12 @@ struct CloudKitDiagnosticsBanner: View {
     @EnvironmentObject private var diagnostics: CloudKitDiagnosticsState
     @State private var showDiagnosticsSheet = false
 
-    private var latestProgressText: String? {
-        diagnostics.lastCloudKitProgressOperation
+    private var latestProgressEntry: CloudKitDiagnosticsEntry? {
+        diagnostics.latestEntry(matching: .all, kind: .progress)
     }
 
-    private var latestProgressTimestamp: String? {
-        diagnostics.lastCloudKitProgressTimestampISO8601
-    }
-
-    private var latestErrorText: String? {
-        diagnostics.lastCloudKitError
-    }
-
-    private var latestErrorTimestamp: String? {
-        diagnostics.lastCloudKitErrorTimestampISO8601
+    private var latestErrorEntry: CloudKitDiagnosticsEntry? {
+        diagnostics.latestEntry(matching: .errors, kind: .error)
     }
 
     private var triggerSummary: CloudKitTriggerSummary {
@@ -29,7 +21,7 @@ struct CloudKitDiagnosticsBanner: View {
     var body: some View {
         if diagnostics.hasVisibleDiagnostics {
             VStack(alignment: .leading, spacing: 10) {
-                Label("CloudKit Diagnostics (Debug)", systemImage: "ladybug.fill")
+                Label("Diagnostics (Debug)", systemImage: "ladybug.fill")
                     .font(themeStore.font(for: .bodyStrong))
                     .foregroundStyle(themeStore.contentPrimaryColor)
 
@@ -37,20 +29,22 @@ struct CloudKitDiagnosticsBanner: View {
                     triggerSummaryCard(triggerSummary)
                 }
 
-                if let latestProgressText {
+                if let latestProgressEntry {
                     diagnosticsRow(
                         title: "Latest event",
-                        timestamp: latestProgressTimestamp,
-                        value: latestProgressText,
+                        timestamp: latestProgressEntry.timestampISO8601,
+                        value: latestProgressEntry.payload,
+                        source: latestProgressEntry.source,
                         tint: themeStore.accentTabColor
                     )
                 }
 
-                if let latestErrorText {
+                if let latestErrorEntry {
                     diagnosticsRow(
                         title: "Latest error",
-                        timestamp: latestErrorTimestamp,
-                        value: latestErrorText,
+                        timestamp: latestErrorEntry.timestampISO8601,
+                        value: latestErrorEntry.payload,
+                        source: latestErrorEntry.source,
                         tint: .red
                     )
                 }
@@ -59,16 +53,19 @@ struct CloudKitDiagnosticsBanner: View {
                     Button("Open log") {
                         showDiagnosticsSheet = true
                     }
+                    .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.borderedProminent)
 
                     Button("Copy log") {
                         UIPasteboard.general.string = diagnostics.diagnosticsReport
                     }
+                    .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.bordered)
 
                     Button("Clear") {
                         diagnostics.clear()
                     }
+                    .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.bordered)
                 }
             }
@@ -128,6 +125,7 @@ struct CloudKitDiagnosticsBanner: View {
         title: String,
         timestamp: String?,
         value: String,
+        source: DiagnosticsSource,
         tint: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -135,6 +133,8 @@ struct CloudKitDiagnosticsBanner: View {
                 Text(title)
                     .font(themeStore.font(for: .bodyStrong))
                     .foregroundStyle(tint)
+
+                sourceBadge(source)
 
                 if let timestamp {
                     Text(timestamp)
@@ -150,6 +150,16 @@ struct CloudKitDiagnosticsBanner: View {
                 .lineLimit(4)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func sourceBadge(_ source: DiagnosticsSource) -> some View {
+        Text(source.displayName)
+            .font(themeStore.font(for: .bodySmall))
+            .foregroundStyle(themeStore.contentPrimaryColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(themeStore.surfaceColor.opacity(0.65))
+            .clipShape(Capsule())
     }
 
     private func triggerSummaryRow(title: String, value: String) -> some View {
@@ -174,21 +184,32 @@ private struct CloudKitDiagnosticsSheet: View {
     @State private var showShareSheet = false
     @State private var copied = false
     @State private var cleared = false
+    @State private var filter: DiagnosticsFilter = .all
+
+    private var filteredEntries: [CloudKitDiagnosticsEntry] {
+        Array(diagnostics.entries(matching: filter).reversed())
+    }
+
+    private var filteredReport: String {
+        diagnostics.diagnosticsReport(filter: filter)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if diagnostics.triggerSummary.hasAnyValue {
+                    if filter.showsTriggerSummary, diagnostics.triggerSummary.hasAnyValue {
                         triggerSummarySection(diagnostics.triggerSummary)
                     }
 
-                    ForEach(Array(diagnostics.entries.reversed())) { entry in
+                    filterMenu
+
+                    ForEach(filteredEntries) { entry in
                         diagnosticsEntryCard(entry)
                     }
 
-                    if diagnostics.entries.isEmpty {
-                        Text("No CloudKit diagnostics recorded.")
+                    if filteredEntries.isEmpty {
+                        Text(filter.emptyStateMessage)
                             .font(themeStore.font(for: .bodySmall))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                     }
@@ -209,7 +230,7 @@ private struct CloudKitDiagnosticsSheet: View {
                 .padding(.top, 16)
                 .padding(.bottom, 120)
             }
-            .navigationTitle("CloudKit Diagnostics")
+            .navigationTitle("Diagnostics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -222,7 +243,7 @@ private struct CloudKitDiagnosticsSheet: View {
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 10) {
                     Button("Copy diagnostics") {
-                        UIPasteboard.general.string = diagnostics.diagnosticsReport
+                        UIPasteboard.general.string = filteredReport
                         copied = true
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -248,7 +269,25 @@ private struct CloudKitDiagnosticsSheet: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            CloudKitDiagnosticsActivityView(activityItems: [diagnostics.diagnosticsReport])
+            CloudKitDiagnosticsActivityView(activityItems: [filteredReport])
+        }
+    }
+
+    private var filterMenu: some View {
+        HStack {
+            Menu {
+                Picker("Filter", selection: $filter) {
+                    ForEach(DiagnosticsFilter.allCases) { item in
+                        Text(item.title).tag(item)
+                    }
+                }
+            } label: {
+                Label("Filter: \(filter.title)", systemImage: "line.3.horizontal.decrease.circle")
+                    .font(themeStore.font(for: .buttonLabel))
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
         }
     }
 
@@ -258,6 +297,14 @@ private struct CloudKitDiagnosticsSheet: View {
                 Text(entry.kind == .error ? "Error" : "Event")
                     .font(themeStore.font(for: .bodyStrong))
                     .foregroundStyle(entry.kind == .error ? Color.red : themeStore.accentTabColor)
+
+                Text(entry.source.displayName)
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(themeStore.surfaceColor.opacity(0.65))
+                    .clipShape(Capsule())
 
                 Spacer()
 

@@ -165,38 +165,79 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(inactiveColor, matches: UIColor(store.contentPrimaryColor))
     }
 
-    func testResolvedTabBarStyleUsesSelectedThemeTintAndTabFont() {
+    func testReconcileRepairsCorruptedInactiveTintOnSameTabBarController() {
         let store = ThemeStore()
         store.unifiedTheme = .light
 
-        let style = TabBarTypographyManager.resolvedStyle(
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
             themeStore: store,
-            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+            tabBarController: controller,
+            selectedIndex: 1
         )
 
-        assertColor(style.normalColor, matches: .black)
-        assertColor(style.selectedColor, matches: UIColor(store.resolvedTabTint))
-        XCTAssertEqual(style.font.fontName, store.uiFont(for: .tabLabel).fontName)
-        XCTAssertEqual(style.font.pointSize, store.uiFont(for: .tabLabel).pointSize, accuracy: 0.01)
+        controller.tabBar.unselectedItemTintColor = .gray
+        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor = .gray
+        var corruptedTitleAttributes =
+            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes
+        corruptedTitleAttributes[.foregroundColor] = UIColor.gray
+        controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.titleTextAttributes =
+            corruptedTitleAttributes
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            selectedIndex: 1
+        )
+
+        assertColor(controller.tabBar.unselectedItemTintColor ?? .clear, matches: .black)
+        XCTAssertEqual(controller.selectedIndex, 1)
+        assertColor(
+            controller.tabBar.standardAppearance.stackedLayoutAppearance.normal.iconColor ?? .clear,
+            matches: .black
+        )
     }
 
-    func testResolvedTabBarStyleRespectsProvidedColorSchemeForAutoTheme() {
+    func testReconcileIsStableAcrossRepeatedCalls() {
         let store = ThemeStore()
-        store.unifiedTheme = .auto
+        store.unifiedTheme = .dark
 
-        let lightStyle = TabBarTypographyManager.resolvedStyle(
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
             themeStore: store,
-            colorScheme: .light
+            tabBarController: controller,
+            selectedIndex: 2
         )
-        let darkStyle = TabBarTypographyManager.resolvedStyle(
+        let firstNormalColor = controller.tabBar.unselectedItemTintColor
+        let firstSelectedColor = controller.tabBar.tintColor
+
+        TabBarTypographyManager.reconcile(
             themeStore: store,
-            colorScheme: .dark
+            tabBarController: controller,
+            selectedIndex: 2
         )
 
-        assertColor(lightStyle.normalColor, matches: .black)
-        assertColor(darkStyle.normalColor, matches: .white)
-        assertColor(lightStyle.selectedColor, matches: darkStyle.selectedColor)
-        XCTAssertNotEqual(lightStyle.interfaceStyle, darkStyle.interfaceStyle)
+        assertColor(firstNormalColor ?? .clear, matches: controller.tabBar.unselectedItemTintColor ?? .clear)
+        assertColor(firstSelectedColor ?? .clear, matches: controller.tabBar.tintColor ?? .clear)
+        XCTAssertEqual(controller.selectedIndex, 2)
+    }
+
+    private func makeTabBarController() -> UITabBarController {
+        let controller = UITabBarController()
+        let viewControllers = AppTab.allCases.map { tab -> UIViewController in
+            let viewController = UIViewController()
+            viewController.tabBarItem = UITabBarItem(
+                title: tab.title,
+                image: UIImage(systemName: tab.icon),
+                selectedImage: UIImage(systemName: tab.activeIcon)
+            )
+            return viewController
+        }
+        controller.setViewControllers(viewControllers, animated: false)
+        controller.loadViewIfNeeded()
+        return controller
     }
 
     private func assertColor(
@@ -707,6 +748,51 @@ final class CloudKitDiagnosticsStateTests: XCTestCase {
         XCTAssertEqual(restoredState.triggerSummary.subscriptionConfigurationStatus, "configured")
         XCTAssertEqual(restoredState.triggerSummary.pushRegistrationStatus, "failed")
         XCTAssertEqual(restoredState.triggerSummary.lastFetchResult, "noData")
+    }
+
+    func testLegacyEntryDecodingDefaultsMissingSourceToCloudKit() throws {
+        let json = """
+        {
+          "id": "B709C6A2-3E5E-4D57-BEFF-8782D37EE1F5",
+          "kind": "progress",
+          "timestampISO8601": "2026-04-09T10:00:00Z",
+          "operation": "legacy.operation",
+          "payload": "legacy payload"
+        }
+        """
+
+        let entry = try JSONDecoder().decode(
+            CloudKitDiagnosticsEntry.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(entry.source, .cloudKit)
+    }
+
+    func testTabBarFilterExportsOnlyTabBarEntries() {
+        let diagnostics = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        diagnostics.recordProgress(operation: "cloud.sync", source: .cloudKit)
+        diagnostics.recordTabBarEvent(
+            operation: "tabbar.sheet.dismiss.complete",
+            payload: "selectedTab=shopping"
+        )
+
+        let tabBarReport = diagnostics.diagnosticsReport(filter: .tabBar)
+
+        XCTAssertTrue(tabBarReport.contains("source=tabBar"))
+        XCTAssertTrue(tabBarReport.contains("tabbar.sheet.dismiss.complete"))
+        XCTAssertFalse(tabBarReport.contains("cloud.sync"))
+    }
+
+    func testTabBarProgressDoesNotReplaceCloudKitLatestProgressSummary() {
+        let diagnostics = CloudKitDiagnosticsState(userDefaults: diagnosticsDefaults)
+        diagnostics.recordProgress(operation: "cloud.sync.started", source: .cloudKit)
+        diagnostics.recordTabBarEvent(
+            operation: "tabbar.appearance.reconciled",
+            payload: "selectedTab=shopping"
+        )
+
+        XCTAssertEqual(diagnostics.lastCloudKitProgressOperation, "cloud.sync.started")
     }
 }
 

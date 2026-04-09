@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     var body: some View {
@@ -7,111 +8,132 @@ struct ContentView: View {
     }
 }
 
-/// Main app shell using TabView as a hidden content host and a custom floating tab bar.
+/// Main app shell using native TabView.
+/// iOS 26+ gets system Liquid Glass tab transitions automatically.
 struct MainAppView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @Query(sort: \CachedMember.joinedAt) private var cachedMembers: [CachedMember]
 
     @State private var activeTab: AppTab = .shopping
     @State private var hasBootstrappedHousehold = false
+    @State private var tabBarController: UITabBarController?
     @State private var hasPrimedActiveMemberBaseline = false
     @State private var knownActiveMemberIDs = Set<UUID>()
     @State private var activeJoinToastMessage: String?
     @State private var joinToastDismissTask: _Concurrency.Task<Void, Never>?
 
     var body: some View {
-        ZStack {
-            AppBackgroundView()
-            legacyTabView
-        }
-        .overlay(alignment: .top) {
-            VStack(spacing: 10) {
-                if let activeJoinToastMessage {
-                    ToastView(message: activeJoinToastMessage)
-                        .padding(.horizontal, 20)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(2)
+        legacyTabView
+            .background(
+                TabBarControllerAccessor { controller in
+                    if tabBarController !== controller {
+                        tabBarController = controller
+                    }
+                    TabBarDiagnosticsMonitor.shared.attach(to: controller, selectedTab: activeTab)
+                    reconcileTabBarAppearance(using: controller)
                 }
+            )
+            .background(AppBackgroundView())
+            .overlay(alignment: .top) {
+                VStack(spacing: 10) {
+                    if let activeJoinToastMessage {
+                        ToastView(message: activeJoinToastMessage)
+                            .padding(.horizontal, 20)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .zIndex(2)
+                    }
 
-                if subscriptionManager.showNewItemsBanner {
-                    NewItemsBanner(
-                        count: subscriptionManager.newItemsCount,
-                        onTap: {
-                            activeTab = .shopping
-                            subscriptionManager.dismissBanner()
-                        },
-                        onDismiss: {
-                            subscriptionManager.dismissBanner()
-                        }
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
+                    if subscriptionManager.showNewItemsBanner {
+                        NewItemsBanner(
+                            count: subscriptionManager.newItemsCount,
+                            onTap: {
+                                activeTab = .shopping
+                                subscriptionManager.dismissBanner()
+                            },
+                            onDismiss: {
+                                subscriptionManager.dismissBanner()
+                            }
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(1)
+                    }
                 }
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            FloatingTabBar(selection: $activeTab)
-        }
-        .onAppear {
-            primeActiveMemberBaseline()
-            subscriptionManager.updateActiveTab(activeTab)
-        }
-        .onChange(of: activeTab) { _, _ in
-            subscriptionManager.updateActiveTab(activeTab)
-        }
-        .onChange(of: userSession.currentHouseholdID) { _, _ in
-            primeActiveMemberBaseline()
-        }
-        .onChange(of: householdStore.currentHousehold?.id) { _, _ in
-            primeActiveMemberBaseline()
-        }
-        .onChange(of: activeMemberSnapshot) { oldValue, newValue in
-            handleActiveMemberSnapshotChange(from: oldValue, to: newValue)
-        }
-        .animation(.spring(response: 0.32, dampingFraction: 0.88), value: activeJoinToastMessage)
-        .task {
-            await bootstrapHouseholdIfNeeded()
-        }
+            .onAppear {
+                TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
+                reconcileTabBarAppearance()
+                primeActiveMemberBaseline()
+                subscriptionManager.updateActiveTab(activeTab)
+            }
+            .onChange(of: themeStore.unifiedTheme) { _, _ in
+                reconcileTabBarAppearance()
+            }
+            .onChange(of: themeStore.tabTintColor) { _, _ in
+                reconcileTabBarAppearance()
+            }
+            .onChange(of: themeStore.retroFontScale) { _, _ in
+                reconcileTabBarAppearance()
+            }
+            .onChange(of: activeTab) { _, _ in
+                TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
+                reconcileTabBarAppearance()
+                subscriptionManager.updateActiveTab(activeTab)
+            }
+            .onChange(of: userSession.currentHouseholdID) { _, _ in
+                primeActiveMemberBaseline()
+            }
+            .onChange(of: householdStore.currentHousehold?.id) { _, _ in
+                primeActiveMemberBaseline()
+            }
+            .onChange(of: activeMemberSnapshot) { oldValue, newValue in
+                handleActiveMemberSnapshotChange(from: oldValue, to: newValue)
+            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.88), value: activeJoinToastMessage)
+            .task {
+                await bootstrapHouseholdIfNeeded()
+            }
     }
 
     private var legacyTabView: some View {
         TabView(selection: $activeTab) {
-            appTabRoot(for: .shopping) {
+            NavigationStack {
                 ShoppingListView(selectedTab: $activeTab)
             }
+            .tabItem {
+                Label(AppTab.shopping.title, systemImage: AppTab.shopping.icon)
+            }
+            .tag(AppTab.shopping)
 
-            appTabRoot(for: .tasks) {
+            NavigationStack {
                 TasksView(selectedTab: $activeTab)
             }
+            .tabItem {
+                Label(AppTab.tasks.title, systemImage: AppTab.tasks.icon)
+            }
+            .tag(AppTab.tasks)
 
-            appTabRoot(for: .backlog) {
+            NavigationStack {
                 BacklogView(selectedTab: $activeTab)
             }
+            .tabItem {
+                Label(AppTab.backlog.title, systemImage: AppTab.backlog.icon)
+            }
+            .tag(AppTab.backlog)
 
-            appTabRoot(for: .more) {
+            NavigationStack {
                 MoreView()
             }
+            .tabItem {
+                Label(AppTab.more.title, systemImage: AppTab.more.icon)
+            }
+            .tag(AppTab.more)
         }
-        .toolbar(.hidden, for: .tabBar)
-    }
-
-    private func appTabRoot(
-        for tab: AppTab,
-        @ViewBuilder content: () -> some View
-    ) -> some View {
-        NavigationStack {
-            content()
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .tabItem {
-            Label(tab.title, systemImage: tab.icon)
-        }
-        .tag(tab)
     }
 
     private var activeMemberSnapshot: ActiveMemberSnapshot {
@@ -199,6 +221,14 @@ struct MainAppView: View {
                 handleSuppressedHouseholdRecoveryIfNeeded()
             }
         }
+    }
+
+    private func reconcileTabBarAppearance(using controller: UITabBarController? = nil) {
+        TabBarTypographyManager.reconcile(
+            themeStore: themeStore,
+            tabBarController: controller ?? tabBarController,
+            selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
+        )
     }
 
     @discardableResult
@@ -293,6 +323,64 @@ private struct ActiveMemberSnapshot: Equatable {
     let householdId: UUID?
     let currentUserId: String?
     let members: [Entry]
+}
+
+private struct TabBarControllerAccessor: UIViewControllerRepresentable {
+    let onResolve: (UITabBarController) -> Void
+
+    func makeUIViewController(context _: Context) -> TabBarControllerReaderViewController {
+        let viewController = TabBarControllerReaderViewController()
+        viewController.onResolve = onResolve
+        return viewController
+    }
+
+    func updateUIViewController(
+        _ uiViewController: TabBarControllerReaderViewController,
+        context _: Context
+    ) {
+        uiViewController.onResolve = onResolve
+        uiViewController.resolveTabBarControllerIfNeeded()
+    }
+}
+
+private final class TabBarControllerReaderViewController: UIViewController {
+    var onResolve: ((UITabBarController) -> Void)?
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        resolveTabBarControllerIfNeeded()
+    }
+
+    func resolveTabBarControllerIfNeeded() {
+        guard let tabBarController = resolvedTabBarController else { return }
+        onResolve?(tabBarController)
+    }
+
+    private var resolvedTabBarController: UITabBarController? {
+        if let tabBarController {
+            return tabBarController
+        }
+
+        var currentParent: UIViewController? = parent
+        while let candidate = currentParent {
+            if let tabBarController = candidate as? UITabBarController {
+                return tabBarController
+            }
+            currentParent = candidate.parent
+        }
+
+        return nil
+    }
 }
 
 // MARK: - Color Hex Extension
