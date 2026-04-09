@@ -35,11 +35,13 @@ final class TabBarDiagnosticsMonitor {
         on controller: UITabBarController? = nil,
         extra: [String: String] = [:]
     ) {
-        guard let controller = controller ?? tabBarController else { return }
-        CloudKitDiagnosticsState.shared.recordTabBarEvent(
-            operation: event,
-            payload: snapshotPayload(for: controller, extra: extra)
-        )
+        let payload: String = if let controller = controller ?? tabBarController {
+            snapshotPayload(for: controller, extra: extra)
+        } else {
+            fallbackPayload(extra: extra)
+        }
+
+        CloudKitDiagnosticsState.shared.recordTabBarEvent(operation: event, payload: payload)
     }
 
     @objc private func handleDisplayLinkTick() {
@@ -142,6 +144,20 @@ final class TabBarDiagnosticsMonitor {
                 "tabBar.barTintColor=\(describe(tabBar.barTintColor))",
                 "tabBar.frame=\(describe(tabBar.frame))",
             ] + extraLines + ["subviews:"] + subviewLines
+        )
+        .joined(separator: "\n")
+    }
+
+    private func fallbackPayload(extra: [String: String]) -> String {
+        let extraLines = extra
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+
+        return (
+            [
+                "selectedTab=\(selectedTab.rawValue)",
+                "tabBarController=nil",
+            ] + extraLines
         )
         .joined(separator: "\n")
     }

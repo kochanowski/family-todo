@@ -66,6 +66,10 @@ struct MainAppView: View {
                 .padding(.top, 12)
             }
             .onAppear {
+                TabBarDiagnosticsMonitor.shared.recordSnapshot(
+                    event: "tabbar.mainAppView.appeared",
+                    extra: ["hasResolvedController": "\(tabBarController != nil)"]
+                )
                 TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
                 reconcileTabBarAppearance()
                 primeActiveMemberBaseline()
@@ -82,6 +86,10 @@ struct MainAppView: View {
             }
             .onChange(of: activeTab) { _, _ in
                 TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
+                TabBarDiagnosticsMonitor.shared.recordSnapshot(
+                    event: "tabbar.selection.changed",
+                    extra: ["activeTab": activeTab.rawValue]
+                )
                 reconcileTabBarAppearance()
                 subscriptionManager.updateActiveTab(activeTab)
             }
@@ -345,6 +353,7 @@ private struct TabBarControllerAccessor: UIViewControllerRepresentable {
 
 private final class TabBarControllerReaderViewController: UIViewController {
     var onResolve: ((UITabBarController) -> Void)?
+    private var hasLoggedMissingResolution = false
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -362,7 +371,28 @@ private final class TabBarControllerReaderViewController: UIViewController {
     }
 
     func resolveTabBarControllerIfNeeded() {
-        guard let tabBarController = resolvedTabBarController else { return }
+        guard let tabBarController = resolvedTabBarController else {
+            if !hasLoggedMissingResolution {
+                hasLoggedMissingResolution = true
+                CloudKitDiagnosticsState.shared.recordTabBarEvent(
+                    operation: "tabbar.accessor.resolve.missed",
+                    payload: [
+                        "viewController=\(String(describing: type(of: self)))",
+                        "parent=\(parent.map { String(describing: type(of: $0)) } ?? "nil")",
+                    ].joined(separator: "\n")
+                )
+            }
+            return
+        }
+        hasLoggedMissingResolution = false
+        CloudKitDiagnosticsState.shared.recordTabBarEvent(
+            operation: "tabbar.accessor.resolved",
+            payload: [
+                "viewController=\(String(describing: type(of: self)))",
+                "tabBarController=\(String(describing: type(of: tabBarController)))",
+                "selectedIndex=\(tabBarController.selectedIndex)",
+            ].joined(separator: "\n")
+        )
         onResolve?(tabBarController)
     }
 
