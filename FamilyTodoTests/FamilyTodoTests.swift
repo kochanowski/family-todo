@@ -170,11 +170,12 @@ final class ThemeStoreTests: XCTestCase {
         store.unifiedTheme = .light
 
         let controller = makeTabBarController()
+        controller.selectedIndex = 1
 
         TabBarTypographyManager.reconcile(
             themeStore: store,
             tabBarController: controller,
-            selectedIndex: 1
+            reason: .initialAttach
         )
 
         controller.tabBar.unselectedItemTintColor = .gray
@@ -188,7 +189,7 @@ final class ThemeStoreTests: XCTestCase {
         TabBarTypographyManager.reconcile(
             themeStore: store,
             tabBarController: controller,
-            selectedIndex: 1
+            reason: .themeChanged
         )
 
         assertColor(controller.tabBar.unselectedItemTintColor ?? .clear, matches: .black)
@@ -204,11 +205,12 @@ final class ThemeStoreTests: XCTestCase {
         store.unifiedTheme = .dark
 
         let controller = makeTabBarController()
+        controller.selectedIndex = 2
 
         TabBarTypographyManager.reconcile(
             themeStore: store,
             tabBarController: controller,
-            selectedIndex: 2
+            reason: .initialAttach
         )
         let firstNormalColor = controller.tabBar.unselectedItemTintColor
         let firstSelectedColor = controller.tabBar.tintColor
@@ -216,12 +218,34 @@ final class ThemeStoreTests: XCTestCase {
         TabBarTypographyManager.reconcile(
             themeStore: store,
             tabBarController: controller,
-            selectedIndex: 2
+            reason: .themeChanged
         )
 
         assertColor(firstNormalColor ?? .clear, matches: controller.tabBar.unselectedItemTintColor ?? .clear)
         assertColor(firstSelectedColor ?? .clear, matches: controller.tabBar.tintColor ?? .clear)
         XCTAssertEqual(controller.selectedIndex, 2)
+    }
+
+    func testNeedsAppearanceRepairIgnoresSelectedTabChanges() {
+        let store = ThemeStore()
+        store.unifiedTheme = .dark
+
+        let controller = makeTabBarController()
+
+        TabBarTypographyManager.reconcile(
+            themeStore: store,
+            tabBarController: controller,
+            reason: .initialAttach
+        )
+
+        controller.selectedIndex = 3
+
+        XCTAssertFalse(
+            TabBarTypographyManager.needsAppearanceRepair(
+                themeStore: store,
+                tabBarController: controller
+            )
+        )
     }
 
     private func makeTabBarController() -> UITabBarController {

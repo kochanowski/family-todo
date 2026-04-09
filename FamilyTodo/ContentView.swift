@@ -31,11 +31,14 @@ struct MainAppView: View {
         legacyTabView
             .background(
                 TabBarControllerAccessor { controller in
-                    if tabBarController !== controller {
+                    let resolvedNewController = tabBarController !== controller
+                    if resolvedNewController {
                         tabBarController = controller
                     }
                     TabBarDiagnosticsMonitor.shared.attach(to: controller, selectedTab: activeTab)
-                    reconcileTabBarAppearance(using: controller)
+                    if resolvedNewController {
+                        reconcileTabBarAppearance(reason: .initialAttach, using: controller)
+                    }
                 }
             )
             .background(AppBackgroundView())
@@ -71,18 +74,17 @@ struct MainAppView: View {
                     extra: ["hasResolvedController": "\(tabBarController != nil)"]
                 )
                 TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
-                reconcileTabBarAppearance()
                 primeActiveMemberBaseline()
                 subscriptionManager.updateActiveTab(activeTab)
             }
             .onChange(of: themeStore.unifiedTheme) { _, _ in
-                reconcileTabBarAppearance()
+                reconcileTabBarAppearance(reason: .themeChanged)
             }
             .onChange(of: themeStore.tabTintColor) { _, _ in
-                reconcileTabBarAppearance()
+                reconcileTabBarAppearance(reason: .tabTintChanged)
             }
             .onChange(of: themeStore.retroFontScale) { _, _ in
-                reconcileTabBarAppearance()
+                reconcileTabBarAppearance(reason: .fontScaleChanged)
             }
             .onChange(of: activeTab) { _, _ in
                 TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
@@ -90,7 +92,6 @@ struct MainAppView: View {
                     event: "tabbar.selection.changed",
                     extra: ["activeTab": activeTab.rawValue]
                 )
-                reconcileTabBarAppearance()
                 subscriptionManager.updateActiveTab(activeTab)
             }
             .onChange(of: userSession.currentHouseholdID) { _, _ in
@@ -231,11 +232,14 @@ struct MainAppView: View {
         }
     }
 
-    private func reconcileTabBarAppearance(using controller: UITabBarController? = nil) {
+    private func reconcileTabBarAppearance(
+        reason: TabBarTypographyManager.ReconcileReason,
+        using controller: UITabBarController? = nil
+    ) {
         TabBarTypographyManager.reconcile(
             themeStore: themeStore,
             tabBarController: controller ?? tabBarController,
-            selectedIndex: AppTab.allCases.firstIndex(of: activeTab)
+            reason: reason
         )
     }
 

@@ -3,18 +3,24 @@ import UIKit
 
 @MainActor
 enum TabBarTypographyManager {
+    enum ReconcileReason: String {
+        case initialAttach
+        case themeChanged
+        case tabTintChanged
+        case fontScaleChanged
+        case forced
+    }
+
     private struct ResolvedTabBarStyle: Equatable {
         let normalColor: UIColor
         let selectedColor: UIColor
         let font: UIFont
-        let selectedIndex: Int
         let interfaceStyle: UIUserInterfaceStyle
 
         static func == (lhs: ResolvedTabBarStyle, rhs: ResolvedTabBarStyle) -> Bool {
             colorsMatch(lhs.normalColor, rhs.normalColor) &&
                 colorsMatch(lhs.selectedColor, rhs.selectedColor) &&
                 fontsMatch(lhs.font, rhs.font) &&
-                lhs.selectedIndex == rhs.selectedIndex &&
                 lhs.interfaceStyle == rhs.interfaceStyle
         }
     }
@@ -22,36 +28,15 @@ enum TabBarTypographyManager {
     static func reconcile(
         themeStore: ThemeStore,
         tabBarController: UITabBarController? = nil,
-        selectedIndex: Int? = nil,
+        reason: ReconcileReason,
         force: Bool = false
     ) {
         guard let tabBarController else { return }
 
-        let style = resolvedStyle(
-            themeStore: themeStore,
-            tabBarController: tabBarController,
-            selectedIndex: selectedIndex
-        )
-        let desiredIndex = style.selectedIndex
+        let style = resolvedStyle(themeStore: themeStore, tabBarController: tabBarController)
 
-        if !force {
-            let currentStyle = currentStyle(from: tabBarController)
-            let standardAppearanceMatches = appearanceMatches(
-                tabBarController.tabBar.standardAppearance,
-                style: style
-            )
-            let scrollEdgeAppearanceMatches: Bool = if #available(iOS 15.0, *) {
-                appearanceMatches(tabBarController.tabBar.scrollEdgeAppearance, style: style)
-            } else {
-                true
-            }
-            let needsAppearanceRepair = currentStyle != style ||
-                !standardAppearanceMatches ||
-                !scrollEdgeAppearanceMatches
-
-            guard needsAppearanceRepair || tabBarController.selectedIndex != desiredIndex else {
-                return
-            }
+        if !force, !needsAppearanceRepair(tabBarController: tabBarController, style: style) {
+            return
         }
 
         // Always create fresh appearance objects so UIKit sees a new assignment
@@ -68,14 +53,22 @@ enum TabBarTypographyManager {
             standardAppearance: standardAppearance,
             scrollEdgeAppearance: resolvedScrollEdgeAppearance,
             selectedColor: style.selectedColor,
-            normalColor: style.normalColor,
-            selectedIndex: desiredIndex
+            normalColor: style.normalColor
         )
 
         TabBarDiagnosticsMonitor.shared.recordSnapshot(
-            event: force ? "tabbar.appearance.reconciled.force" : "tabbar.appearance.reconciled",
-            on: tabBarController
+            event: "tabbar.appearance.reconciled",
+            on: tabBarController,
+            extra: ["reason": force ? ReconcileReason.forced.rawValue : reason.rawValue]
         )
+    }
+
+    static func needsAppearanceRepair(
+        themeStore: ThemeStore,
+        tabBarController: UITabBarController
+    ) -> Bool {
+        let style = resolvedStyle(themeStore: themeStore, tabBarController: tabBarController)
+        return needsAppearanceRepair(tabBarController: tabBarController, style: style)
     }
 
     static func inactiveItemColor(
@@ -98,19 +91,18 @@ enum TabBarTypographyManager {
     static func apply(
         themeStore: ThemeStore,
         tabBarController: UITabBarController? = nil,
-        selectedIndex: Int? = nil
+        reason: ReconcileReason = .themeChanged
     ) {
         reconcile(
             themeStore: themeStore,
             tabBarController: tabBarController,
-            selectedIndex: selectedIndex
+            reason: reason
         )
     }
 
     private static func resolvedStyle(
         themeStore: ThemeStore,
-        tabBarController: UITabBarController,
-        selectedIndex: Int?
+        tabBarController: UITabBarController
     ) -> ResolvedTabBarStyle {
         let traitCollection = tabBarController.traitCollection
         let normalColor = inactiveItemColor(
@@ -119,13 +111,11 @@ enum TabBarTypographyManager {
         )
         let selectedColor = UIColor(themeStore.resolvedTabTint)
         let font = themeStore.uiFont(for: .tabLabel)
-        let resolvedIndex = selectedIndex ?? tabBarController.selectedIndex
 
         return ResolvedTabBarStyle(
             normalColor: normalColor,
             selectedColor: selectedColor,
             font: font,
-            selectedIndex: resolvedIndex,
             interfaceStyle: traitCollection.userInterfaceStyle
         )
     }
@@ -145,9 +135,28 @@ enum TabBarTypographyManager {
             normalColor: normalColor,
             selectedColor: selectedColor,
             font: font,
-            selectedIndex: tabBarController.selectedIndex,
             interfaceStyle: tabBarController.traitCollection.userInterfaceStyle
         )
+    }
+
+    private static func needsAppearanceRepair(
+        tabBarController: UITabBarController,
+        style: ResolvedTabBarStyle
+    ) -> Bool {
+        let currentStyle = currentStyle(from: tabBarController)
+        let standardAppearanceMatches = appearanceMatches(
+            tabBarController.tabBar.standardAppearance,
+            style: style
+        )
+        let scrollEdgeAppearanceMatches: Bool = if #available(iOS 15.0, *) {
+            appearanceMatches(tabBarController.tabBar.scrollEdgeAppearance, style: style)
+        } else {
+            true
+        }
+
+        return currentStyle != style ||
+            !standardAppearanceMatches ||
+            !scrollEdgeAppearanceMatches
     }
 
     private static func makeAttributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
@@ -270,8 +279,7 @@ enum TabBarTypographyManager {
         standardAppearance: UITabBarAppearance,
         scrollEdgeAppearance: UITabBarAppearance?,
         selectedColor: UIColor,
-        normalColor: UIColor,
-        selectedIndex: Int?
+        normalColor: UIColor
     ) {
         let tabBar = tabBarController.tabBar
 
@@ -284,35 +292,5 @@ enum TabBarTypographyManager {
         tabBar.backgroundColor = nil
         tabBar.barTintColor = nil
         tabBar.isTranslucent = true
-
-        repairSelection(
-            on: tabBarController,
-            selectedIndex: selectedIndex ?? tabBarController.selectedIndex
-        )
-
-        DispatchQueue.main.async {
-            repairSelection(
-                on: tabBarController,
-                selectedIndex: selectedIndex ?? tabBarController.selectedIndex
-            )
-        }
-    }
-
-    private static func repairSelection(
-        on tabBarController: UITabBarController,
-        selectedIndex: Int
-    ) {
-        guard let viewControllers = tabBarController.viewControllers,
-              let items = tabBarController.tabBar.items,
-              !viewControllers.isEmpty,
-              !items.isEmpty
-        else {
-            return
-        }
-
-        let boundedIndex = min(max(selectedIndex, 0), min(viewControllers.count, items.count) - 1)
-        tabBarController.selectedIndex = boundedIndex
-        tabBarController.tabBar.setNeedsLayout()
-        tabBarController.tabBar.layoutIfNeeded()
     }
 }
