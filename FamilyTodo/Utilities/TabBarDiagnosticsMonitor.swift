@@ -101,6 +101,7 @@ final class TabBarDiagnosticsMonitor {
 
             presentedViewController.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self, weak controller] _ in
                 guard let self, let controller else { return }
+                refreshSelectedItem(on: controller, phase: "dismissComplete")
                 recordSnapshot(
                     event: "tabbar.sheet.dismiss.complete",
                     on: controller,
@@ -123,6 +124,10 @@ final class TabBarDiagnosticsMonitor {
             extra: ["frame": "\(postDismissFrameIndex)"]
         )
 
+        if postDismissFrameIndex == 1 {
+            refreshSelectedItem(on: controller, phase: "postFrame1")
+        }
+
         if remainingPostDismissFrames == 0 {
             removeDismissStabilizer(animated: true)
         }
@@ -130,7 +135,11 @@ final class TabBarDiagnosticsMonitor {
 
     private func installDismissStabilizer(for controller: UITabBarController) {
         guard let containerView = controller.tabBar.superview else { return }
-        guard let snapshotView = controller.tabBar.snapshotView(afterScreenUpdates: false) else {
+        guard let snapshotView = containerView.resizableSnapshotView(
+            from: controller.tabBar.frame,
+            afterScreenUpdates: false,
+            withCapInsets: .zero
+        ) else {
             return
         }
 
@@ -139,11 +148,10 @@ final class TabBarDiagnosticsMonitor {
         snapshotView.frame = controller.tabBar.frame
         snapshotView.isUserInteractionEnabled = false
         snapshotView.accessibilityElementsHidden = true
-        snapshotView.layer.zPosition = CGFloat.greatestFiniteMagnitude
+        snapshotView.layer.zPosition = controller.tabBar.layer.zPosition - 1
         snapshotView.alpha = 1
 
-        containerView.addSubview(snapshotView)
-        containerView.bringSubviewToFront(snapshotView)
+        containerView.insertSubview(snapshotView, belowSubview: controller.tabBar)
         dismissalSnapshotView = snapshotView
 
         recordSnapshot(event: "tabbar.dismiss.stabilizer.installed", on: controller)
@@ -184,6 +192,24 @@ final class TabBarDiagnosticsMonitor {
                 extra: ["animated": animated.description]
             )
         }
+    }
+
+    private func refreshSelectedItem(on controller: UITabBarController, phase: String) {
+        guard let items = controller.tabBar.items,
+              items.indices.contains(controller.selectedIndex)
+        else {
+            return
+        }
+
+        controller.tabBar.selectedItem = items[controller.selectedIndex]
+        controller.tabBar.setNeedsLayout()
+        controller.tabBar.layoutIfNeeded()
+
+        recordSnapshot(
+            event: "tabbar.selection.refreshed",
+            on: controller,
+            extra: ["phase": phase]
+        )
     }
 
     private func snapshotPayload(
