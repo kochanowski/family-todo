@@ -1450,6 +1450,128 @@ final class SharedShoppingNotificationAccumulatorTests: XCTestCase {
         XCTAssertEqual(trailingBatch.count, 1)
         XCTAssertEqual(trailingBatch.first?.itemTitles, ["Bread"])
     }
+
+    func testAccumulatorCoalescesBurstyShoppingEditsIntoSingleAlertWindow() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = SharedShoppingNotificationAccumulator(window: 8)
+
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: "Dom",
+                itemTitles: ["Milk", "Bread"],
+                at: start
+            )
+        )
+        XCTAssertNil(
+            accumulator.record(
+                householdId: householdId,
+                householdName: "Dom",
+                itemTitles: ["Eggs"],
+                at: start.addingTimeInterval(4)
+            )
+        )
+
+        let batch = accumulator.flushReady(at: start.addingTimeInterval(8.1))
+
+        XCTAssertEqual(batch.count, 1)
+        XCTAssertEqual(batch.first?.itemTitles, ["Bread", "Eggs", "Milk"])
+    }
+}
+
+final class PassiveSharedActivityAlertAccumulatorTests: XCTestCase {
+    func testAccumulatorBatchesTaskChangesPerDomainWithinWindow() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = PassiveSharedActivityAlertAccumulator(window: 8)
+
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .tasks,
+                    changeCount: 2
+                ),
+                at: start
+            ).isEmpty
+        )
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .tasks,
+                    changeCount: 3
+                ),
+                at: start.addingTimeInterval(4)
+            ).isEmpty
+        )
+
+        let readyBatches = accumulator.flushReady(at: start.addingTimeInterval(8.1))
+
+        XCTAssertEqual(
+            readyBatches,
+            [
+                PassiveSharedActivityAlertBatch(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .tasks,
+                    changeCount: 5,
+                    shoppingTitles: [],
+                    preservesShoppingTitles: false
+                ),
+            ]
+        )
+    }
+
+    func testAccumulatorDropsShoppingTitlesWhenWindowContainsMixedShoppingChanges() {
+        let householdId = UUID()
+        let start = Date(timeIntervalSince1970: 1_736_950_000)
+        var accumulator = PassiveSharedActivityAlertAccumulator(window: 8)
+
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .shopping,
+                    changeCount: 2,
+                    shoppingTitles: ["Milk", "Bread"],
+                    preservesShoppingTitles: true
+                ),
+                at: start
+            ).isEmpty
+        )
+        XCTAssertTrue(
+            accumulator.record(
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .shopping,
+                    changeCount: 1
+                ),
+                at: start.addingTimeInterval(3)
+            ).isEmpty
+        )
+
+        let readyBatches = accumulator.flushReady(at: start.addingTimeInterval(8.1))
+
+        XCTAssertEqual(
+            readyBatches,
+            [
+                PassiveSharedActivityAlertBatch(
+                    householdId: householdId,
+                    householdName: "Dom",
+                    domain: .shopping,
+                    changeCount: 3,
+                    shoppingTitles: [],
+                    preservesShoppingTitles: false
+                ),
+            ]
+        )
+    }
 }
 
 final class RemoteSyncAnimationSupportTests: XCTestCase {
@@ -1666,6 +1788,126 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         XCTAssertEqual(diff.addedTaskCount, 1)
         XCTAssertEqual(diff.removedTaskCount, 0)
         XCTAssertEqual(diff.changedTaskIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
+    }
+
+    func testTaskContentDiffTreatsTaskDemotionAsTaskRemoval() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Book flights", status: .next),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights someday",
+                    status: .idea,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.taskContentDiff(from: before)
+        XCTAssertEqual(diff.addedTaskCount, 0)
+        XCTAssertEqual(diff.removedTaskCount, 1)
+        XCTAssertEqual(diff.changedTaskIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
+    }
+
+    func testIdeaContentDiffIgnoresTaskOnlyChanges() {
+        let taskID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                taskID: makeWorkItemState(title: "Take out trash", status: .next),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                taskID: makeWorkItemState(
+                    title: "Take out the trash now",
+                    status: .next,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.ideaContentDiff(from: before)
+        XCTAssertEqual(diff.addedIdeaCount, 0)
+        XCTAssertEqual(diff.removedIdeaCount, 0)
+        XCTAssertEqual(diff.changedIdeaIDs, [])
+        XCTAssertFalse(diff.hasAnyChange)
+    }
+
+    func testIdeaContentDiffTreatsTaskDemotionAsIdeaAddition() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Book flights", status: .next),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights someday",
+                    status: .idea,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.ideaContentDiff(from: before)
+        XCTAssertEqual(diff.addedIdeaCount, 1)
+        XCTAssertEqual(diff.removedIdeaCount, 0)
+        XCTAssertEqual(diff.changedIdeaIDs, [])
+        XCTAssertTrue(diff.hasAnyChange)
+    }
+
+    func testIdeaContentDiffTreatsIdeaPromotionAsIdeaRemoval() {
+        let sharedID = UUID()
+        let before = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(title: "Plan trip", status: .idea),
+            ],
+            backlogCategoriesByID: [:]
+        )
+        let after = RemoteVisibleContentSnapshot(
+            shoppingItemsByID: [:],
+            shoppingBundlesByID: [:],
+            workItemsByID: [
+                sharedID: makeWorkItemState(
+                    title: "Book flights",
+                    status: .next,
+                    updatedAt: Date(timeIntervalSince1970: 2)
+                ),
+            ],
+            backlogCategoriesByID: [:]
+        )
+
+        let diff = after.ideaContentDiff(from: before)
+        XCTAssertEqual(diff.addedIdeaCount, 0)
+        XCTAssertEqual(diff.removedIdeaCount, 1)
+        XCTAssertEqual(diff.changedIdeaIDs, [])
         XCTAssertTrue(diff.hasAnyChange)
     }
 }

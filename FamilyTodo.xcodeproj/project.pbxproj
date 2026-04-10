@@ -48,7 +48,9 @@
 		58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */; };
 		HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */; };
 		HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */; };
+		HSYNCBATCHTESTBUILD01 /* HouseholdSyncBatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCBATCHTESTFILE01 /* HouseholdSyncBatchTests.swift */; };
 		HSYNCTESTBUILD000000001 /* HouseholdSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */; };
+		HSYNCVISCHGTESTBUILD1 /* HouseholdSyncCoordinatorVisibleChangesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCVISCHGTESTFILE1 /* HouseholdSyncCoordinatorVisibleChangesTests.swift */; };
 		HSNAPSHOTTESTBUILD0001 /* HouseholdCloudSnapshotLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSNAPSHOTTESTFILE0001 /* HouseholdCloudSnapshotLoaderTests.swift */; };
 		JOINBOOTTESTBUILD000001 /* CloudKitManagerJoinBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JOINBOOTTESTFILE0000001 /* CloudKitManagerJoinBootstrapTests.swift */; };
 		IPADTESTBUILD0000000001 /* ProjectConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */; };
@@ -84,6 +86,7 @@
 		F0B100000000000000000002 /* ShareAcceptanceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000002 /* ShareAcceptanceCoordinator.swift */; };
 		F0B100000000000000000003 /* AppDelegateBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A100000000000000000003 /* AppDelegateBridge.swift */; };
 		HSYNCCOORDBUILD0000001 /* HouseholdSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */; };
+		HSYNCBATCHPRESBUILD01 /* HouseholdSyncBatchPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCBATCHPRESFILE01 /* HouseholdSyncBatchPresentation.swift */; };
 		HSYNCENGINEBUILD0000001 /* HouseholdStoreSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */; };
 		HSNAPSHOTBUILD00000001 /* HouseholdCloudSnapshotLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */; };
 		HREPOSITORYBUILD000001 /* HouseholdRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = HREPOSITORYFILE000001 /* HouseholdRepository.swift */; };
@@ -188,7 +191,9 @@
 		3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdTests.swift; sourceTree = "<group>"; };
 		HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdJoinFlowTests.swift; sourceTree = "<group>"; };
 		HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdRemoteSyncTests.swift; sourceTree = "<group>"; };
+		HSYNCBATCHTESTFILE01 /* HouseholdSyncBatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncBatchTests.swift; sourceTree = "<group>"; };
 		HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinatorTests.swift; sourceTree = "<group>"; };
+		HSYNCVISCHGTESTFILE1 /* HouseholdSyncCoordinatorVisibleChangesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinatorVisibleChangesTests.swift; sourceTree = "<group>"; };
 		HSNAPSHOTTESTFILE0001 /* HouseholdCloudSnapshotLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdCloudSnapshotLoaderTests.swift; sourceTree = "<group>"; };
 		JOINBOOTTESTFILE0000001 /* CloudKitManagerJoinBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitManagerJoinBootstrapTests.swift; sourceTree = "<group>"; };
 		IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectConfigurationTests.swift; sourceTree = "<group>"; };
@@ -215,6 +220,7 @@
 		F0A100000000000000000002 /* ShareAcceptanceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareAcceptanceCoordinator.swift; sourceTree = "<group>"; };
 		F0A100000000000000000003 /* AppDelegateBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateBridge.swift; sourceTree = "<group>"; };
 		HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncCoordinator.swift; sourceTree = "<group>"; };
+		HSYNCBATCHPRESFILE01 /* HouseholdSyncBatchPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncBatchPresentation.swift; sourceTree = "<group>"; };
 		HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdStoreSyncEngine.swift; sourceTree = "<group>"; };
 		HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdCloudSnapshotLoader.swift; sourceTree = "<group>"; };
 		HREPOSITORYFILE000001 /* HouseholdRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdRepository.swift; sourceTree = "<group>"; };
@@ -402,7 +408,9 @@
 				3ED568B034B6469B9DEDB614 /* HouseholdTests.swift */,
 				HJOINFILE00000000000001 /* HouseholdJoinFlowTests.swift */,
 				HRSYNCFILE000000000001 /* HouseholdRemoteSyncTests.swift */,
+				HSYNCBATCHTESTFILE01 /* HouseholdSyncBatchTests.swift */,
 				HSYNCTESTFILE000000001 /* HouseholdSyncCoordinatorTests.swift */,
+				HSYNCVISCHGTESTFILE1 /* HouseholdSyncCoordinatorVisibleChangesTests.swift */,
 				HSNAPSHOTTESTFILE0001 /* HouseholdCloudSnapshotLoaderTests.swift */,
 				JOINBOOTTESTFILE0000001 /* CloudKitManagerJoinBootstrapTests.swift */,
 				IPADTESTFILE0000000001 /* ProjectConfigurationTests.swift */,
@@ -487,6 +495,7 @@
 				D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */,
 				CKTOKENFILE0000000001 /* CloudKitChangeTokenStore.swift */,
 				HSYNCCOORDFILE0000001 /* HouseholdSyncCoordinator.swift */,
+				HSYNCBATCHPRESFILE01 /* HouseholdSyncBatchPresentation.swift */,
 				HSYNCENGINEFILE0000001 /* HouseholdStoreSyncEngine.swift */,
 				HSNAPSHOTFILE00000001 /* HouseholdCloudSnapshotLoader.swift */,
 				HREPOSITORYFILE000001 /* HouseholdRepository.swift */,
@@ -716,6 +725,7 @@
 				F0B100000000000000000002 /* ShareAcceptanceCoordinator.swift in Sources */,
 				F0B100000000000000000003 /* AppDelegateBridge.swift in Sources */,
 				HSYNCCOORDBUILD0000001 /* HouseholdSyncCoordinator.swift in Sources */,
+				HSYNCBATCHPRESBUILD01 /* HouseholdSyncBatchPresentation.swift in Sources */,
 				HSYNCENGINEBUILD0000001 /* HouseholdStoreSyncEngine.swift in Sources */,
 				HSNAPSHOTBUILD00000001 /* HouseholdCloudSnapshotLoader.swift in Sources */,
 				HREPOSITORYBUILD000001 /* HouseholdRepository.swift in Sources */,
@@ -789,7 +799,9 @@
 				58EAF879003D4F968B10E438 /* HouseholdTests.swift in Sources */,
 				HJOINBUILD0000000000001 /* HouseholdJoinFlowTests.swift in Sources */,
 				HRSYNCBUILD000000000001 /* HouseholdRemoteSyncTests.swift in Sources */,
+				HSYNCBATCHTESTBUILD01 /* HouseholdSyncBatchTests.swift in Sources */,
 				HSYNCTESTBUILD000000001 /* HouseholdSyncCoordinatorTests.swift in Sources */,
+				HSYNCVISCHGTESTBUILD1 /* HouseholdSyncCoordinatorVisibleChangesTests.swift in Sources */,
 				HSNAPSHOTTESTBUILD0001 /* HouseholdCloudSnapshotLoaderTests.swift in Sources */,
 				JOINBOOTTESTBUILD000001 /* CloudKitManagerJoinBootstrapTests.swift in Sources */,
 				IPADTESTBUILD0000000001 /* ProjectConfigurationTests.swift in Sources */,

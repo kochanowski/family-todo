@@ -289,11 +289,79 @@ final class AppDelegateBridge: NSObject, UIApplicationDelegate, UNUserNotificati
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        if notification.request.content.sound != nil {
-            completionHandler([.banner, .list, .sound])
-        } else {
-            completionHandler([.banner, .list])
+        let categoryIdentifier = notification.request.content.categoryIdentifier
+        let hasSound = notification.request.content.sound != nil
+        let options = foregroundPresentationOptions(
+            categoryIdentifier: categoryIdentifier,
+            hasSound: hasSound
+        )
+        let operation = foregroundNotificationOperation(
+            categoryIdentifier: categoryIdentifier,
+            hasSound: hasSound,
+            options: options
+        )
+        _ = _Concurrency.Task { @MainActor in
+            CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
         }
+        completionHandler(options)
+    }
+
+    nonisolated func foregroundPresentationOptions(
+        categoryIdentifier: String,
+        hasSound: Bool
+    ) -> UNNotificationPresentationOptions {
+        if AppNotificationCategory.foregroundSuppressedCollaborationCategories.contains(
+            categoryIdentifier
+        ) {
+            return []
+        }
+
+        return hasSound ? [.banner, .list, .sound] : [.banner, .list]
+    }
+
+    nonisolated func foregroundNotificationOperation(
+        categoryIdentifier: String,
+        hasSound: Bool,
+        options: UNNotificationPresentationOptions
+    ) -> String {
+        let reason = if AppNotificationCategory.foregroundSuppressedCollaborationCategories.contains(
+            categoryIdentifier
+        ) {
+            "collaborationSuppressed"
+        } else {
+            "defaultPresentation"
+        }
+
+        return [
+            "notification.foregroundPresentation",
+            "category=\(categoryIdentifier.isEmpty ? "none" : categoryIdentifier)",
+            "hasSound=\(hasSound)",
+            "options=\(foregroundPresentationOptionsLabel(options))",
+            "reason=\(reason)",
+        ].joined(separator: " ")
+    }
+
+    nonisolated func foregroundPresentationOptionsLabel(
+        _ options: UNNotificationPresentationOptions
+    ) -> String {
+        if options.isEmpty {
+            return "none"
+        }
+
+        var labels: [String] = []
+        if options.contains(.banner) {
+            labels.append("banner")
+        }
+        if options.contains(.list) {
+            labels.append("list")
+        }
+        if options.contains(.sound) {
+            labels.append("sound")
+        }
+        if options.contains(.badge) {
+            labels.append("badge")
+        }
+        return labels.joined(separator: ",")
     }
 
     private func notificationTypeLabel(_ notification: CKNotification) -> String {

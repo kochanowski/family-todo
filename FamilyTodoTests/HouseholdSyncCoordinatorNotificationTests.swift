@@ -1,0 +1,361 @@
+import Foundation
+@testable import HousePulse
+import UIKit
+import XCTest
+
+@MainActor
+final class HouseholdSyncCoordinatorNotificationTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        CloudKitDiagnosticsState.shared.clear()
+    }
+
+    func testHouseholdSyncReasonMergedPrefersSharedRemotePushContext() {
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .privateDatabase).merged(
+                with: .remotePush(context: .sharedDatabase)
+            ),
+            .remotePush(context: .sharedDatabase)
+        )
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .unknown).merged(
+                with: .remotePush(context: .privateDatabase)
+            ),
+            .remotePush(context: .privateDatabase)
+        )
+    }
+
+    func testHouseholdSyncReasonMergedKeepsRemotePushAheadOfForegroundRepairWindow() {
+        XCTAssertEqual(
+            HouseholdSyncReason.remotePush(context: .sharedDatabase).merged(
+                with: .foregroundRepairWindow
+            ),
+            .remotePush(context: .sharedDatabase)
+        )
+        XCTAssertEqual(
+            HouseholdSyncReason.foregroundRepairWindow.merged(
+                with: .remotePush(context: .privateDatabase)
+            ),
+            .remotePush(context: .privateDatabase)
+        )
+    }
+
+    func testHouseholdSyncBatchClassificationTreatsMembershipChangeAsBootstrap() {
+        let batchID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .membersChanged(ids: Set([UUID()]))
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.members]),
+                changedIDsByDomain: [:],
+                activeMemberCount: 2
+            )
+        )
+
+        XCTAssertEqual(batch.classification, .bootstrap)
+        XCTAssertEqual(batch.domains, Set([.members]))
+    }
+
+    func testHouseholdSyncBatchClassificationTreatsRemoteTaskBatchAsSteadyStateRemote() {
+        let batchID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .tasksChanged(
+                        addedIDs: Set([UUID()]),
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.tasks]),
+                changedIDsByDomain: [:],
+                activeMemberCount: 2
+            )
+        )
+
+        XCTAssertEqual(batch.classification, .steadyStateRemote)
+        XCTAssertEqual(batch.domains, Set([.tasks]))
+    }
+
+    func testHouseholdSyncBatchTasksScreenRefreshUsesDiagnosticsChangedIDsAndTiming() {
+        let batchID = UUID()
+        let taskID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .ownerToParticipant,
+                    kind: .tasksChanged(
+                        addedIDs: [],
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .ownerToParticipant,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.tasks]),
+                changedIDsByDomain: [.tasks: Set([taskID])],
+                activeMemberCount: 2
+            )
+        )
+
+        let refresh = try? XCTUnwrap(batch.tasksScreenRefresh)
+
+        XCTAssertEqual(refresh?.classification, .steadyStateRemote)
+        XCTAssertEqual(refresh?.changedTaskIDs, Set([taskID]))
+        XCTAssertEqual(refresh?.animationPayload.batchToken, batchID)
+        XCTAssertEqual(refresh?.animationPayload.direction, HouseholdSyncDirection.ownerToParticipant.rawValue)
+        XCTAssertEqual(refresh?.animationPayload.pushReceivedAt, Date(timeIntervalSince1970: 99))
+        XCTAssertEqual(refresh?.animationPayload.cacheUpdatedAt, Date(timeIntervalSince1970: 101))
+    }
+
+    func testHouseholdSyncBatchBacklogScreenRefreshUsesDiagnosticsChangedIDsAndTiming() {
+        let batchID = UUID()
+        let categoryID = UUID()
+        let ideaID = UUID()
+        let batch = HouseholdSyncBatch(
+            events: [
+                HouseholdSyncEvent(
+                    householdId: UUID(),
+                    batchID: batchID,
+                    source: .remote,
+                    reason: .remotePush(context: .sharedDatabase),
+                    timestamp: Date(timeIntervalSince1970: 100),
+                    direction: .participantToOwner,
+                    kind: .ideasChanged(
+                        addedIDs: [],
+                        changedIDs: [],
+                        removedIDs: []
+                    )
+                ),
+            ],
+            diagnostics: HouseholdSyncDiagnostics(
+                batchID: batchID,
+                reason: .remotePush(context: .sharedDatabase),
+                direction: .participantToOwner,
+                triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                syncStartedAt: Date(timeIntervalSince1970: 100),
+                syncFinishedAt: Date(timeIntervalSince1970: 101),
+                changedDomains: Set([.ideas, .backlog]),
+                changedIDsByDomain: [
+                    .ideas: Set([ideaID]),
+                    .backlog: Set([categoryID]),
+                ],
+                activeMemberCount: 2
+            )
+        )
+
+        let refresh = try? XCTUnwrap(batch.backlogScreenRefresh)
+
+        XCTAssertEqual(refresh?.classification, .steadyStateRemote)
+        XCTAssertEqual(refresh?.changedCategoryIDs, Set([categoryID]))
+        XCTAssertEqual(refresh?.changedIdeaIDs, Set([ideaID]))
+        XCTAssertEqual(refresh?.animationPayload.batchToken, batchID)
+        XCTAssertEqual(
+            refresh?.animationPayload.direction,
+            HouseholdSyncDirection.participantToOwner.rawValue
+        )
+    }
+
+    func testPerformSyncDeliversPassiveTaskAlertForSteadyStateRemoteBatch() async {
+        let householdId = UUID()
+        let batchID = UUID()
+        let engine = PassiveAlertFakeHouseholdSyncEngine(
+            result: HouseholdSyncPassResult(
+                fetchResult: .newData,
+                events: [
+                    HouseholdSyncEvent(
+                        householdId: householdId,
+                        batchID: batchID,
+                        source: .remote,
+                        reason: .remotePush(context: .sharedDatabase),
+                        timestamp: Date(timeIntervalSince1970: 100),
+                        direction: .ownerToParticipant,
+                        kind: .tasksChanged(
+                            addedIDs: Set([UUID(), UUID()]),
+                            changedIDs: [],
+                            removedIDs: []
+                        )
+                    ),
+                ],
+                diagnostics: HouseholdSyncDiagnostics(
+                    batchID: batchID,
+                    reason: .remotePush(context: .sharedDatabase),
+                    direction: .ownerToParticipant,
+                    triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                    syncStartedAt: Date(timeIntervalSince1970: 100),
+                    syncFinishedAt: Date(timeIntervalSince1970: 101),
+                    changedDomains: Set([.tasks]),
+                    changedIDsByDomain: [:],
+                    activeMemberCount: 2
+                )
+            )
+        )
+        let alertRecorder = PassiveSharedActivityAlertRecorder()
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .background },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in },
+            passiveSharedActivityAlertDelivery: { descriptor in
+                await alertRecorder.record(descriptor)
+            }
+        )
+
+        _ = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
+
+        XCTAssertEqual(
+            alertRecorder.deliveries,
+            [
+                PassiveSharedActivityAlertDescriptor(
+                    householdId: householdId,
+                    householdName: nil,
+                    domain: .tasks,
+                    changeCount: 2
+                ),
+            ]
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains(
+                    "notification.sharedActivity.descriptorPrepared householdId=\(householdId.uuidString) domain=tasks changeCount=2"
+                )
+            }
+        )
+    }
+
+    func testLifecycleBatchSkipsPassiveSharedActivityDeliveryAndLogsWhy() async {
+        let householdId = UUID()
+        let batchID = UUID()
+        let engine = PassiveAlertFakeHouseholdSyncEngine(
+            result: HouseholdSyncPassResult(
+                fetchResult: .newData,
+                events: [
+                    HouseholdSyncEvent(
+                        householdId: householdId,
+                        batchID: batchID,
+                        source: .foregroundRepair,
+                        reason: .foregroundRepairWindow,
+                        timestamp: Date(timeIntervalSince1970: 100),
+                        direction: .unknown,
+                        kind: .shoppingAdded(
+                            ids: Set([UUID()]),
+                            titles: ["Milk"]
+                        )
+                    ),
+                ],
+                diagnostics: HouseholdSyncDiagnostics(
+                    batchID: batchID,
+                    reason: .foregroundRepairWindow,
+                    direction: .unknown,
+                    triggerReceivedAt: Date(timeIntervalSince1970: 99),
+                    syncStartedAt: Date(timeIntervalSince1970: 100),
+                    syncFinishedAt: Date(timeIntervalSince1970: 101),
+                    changedDomains: Set([.shopping]),
+                    changedIDsByDomain: [:],
+                    activeMemberCount: 2
+                )
+            )
+        )
+        let alertRecorder = PassiveSharedActivityAlertRecorder()
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .background },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in },
+            passiveSharedActivityAlertDelivery: { descriptor in
+                await alertRecorder.record(descriptor)
+            }
+        )
+
+        _ = await coordinator.performSync(reason: .foregroundRepairWindow)
+
+        XCTAssertTrue(alertRecorder.deliveries.isEmpty)
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains(
+                    "notification.sharedActivity.batchSkipped classification=steadyStateLifecycle"
+                )
+            }
+        )
+    }
+}
+
+@MainActor
+private final class PassiveAlertFakeHouseholdSyncEngine: HouseholdSyncEngine {
+    private let result: HouseholdSyncPassResult
+
+    init(result: HouseholdSyncPassResult) {
+        self.result = result
+    }
+
+    func runSync(for _: HouseholdSyncReason) async -> HouseholdSyncPassResult {
+        result
+    }
+}
+
+@MainActor
+private final class PassiveSharedActivityAlertRecorder {
+    private(set) var deliveries: [PassiveSharedActivityAlertDescriptor] = []
+
+    func record(_ descriptor: PassiveSharedActivityAlertDescriptor) {
+        deliveries.append(descriptor)
+    }
+}

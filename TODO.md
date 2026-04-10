@@ -20,6 +20,7 @@ Regression Risk: Partial hydrations, delayed owner-private propagation, stale me
 Description: Rework how remote sync feedback is shown in the app so it stays informative without breaking headers or bottom-tab labels.
 Acceptance Criteria: `Tasks`, `Shopping`, and `Ideas` use one consistent lightweight on-screen sync affordance; shopping off-screen additions can still surface a top banner; bottom-tab labels remain visually stable on narrow iPhones and never split awkwardly.
 Regression Risk: Sync looks invisible after changes, headers become too subtle, or navigation labels still wrap/truncate under theme typography.
+Future follow-up after MVP: split passive shared-activity notifications into separate Settings toggles for `Shopping`, `Tasks`, and `Ideas`.
 
 - [ ] **I1.2 Notification Permission Gating by Household Size** ([Details](TODO_DETAILS.md#i12))
 Description: Stop prompting for notification permission too early; request it only when notifications can provide real shared-household value.

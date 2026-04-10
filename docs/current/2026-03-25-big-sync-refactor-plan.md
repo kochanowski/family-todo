@@ -1,6 +1,6 @@
 # Big Sync Refactor Plan
 
-Last updated: 2026-03-25
+Last updated: 2026-04-04
 
 ## Why this plan exists
 
@@ -63,6 +63,74 @@ Rules:
 - one source of truth for remote diffs
 - one place that decides whether a follow-up refresh is needed
 - one event model for UI, notifications, and telemetry
+
+## 2026-04-04 code review notes for parallel execution
+
+Review outcome: the approved direction is still correct, and the main immediate need is tighter execution alignment rather than a new architecture branch.
+
+### Current landed baseline in code
+
+The following pieces are already real and should be extended instead of replaced:
+
+- `FamilyTodo/Services/HouseholdSyncCoordinator.swift`
+  - central reason/event/batch model
+  - batch classification used by the UI
+- `FamilyTodo/Services/HouseholdStoreSyncEngine.swift`
+  - coordinator-facing sync engine seam
+- `FamilyTodo/Services/AppDelegateBridge.swift`
+  - remote push intake
+  - missing-scope inference for record-zone notifications
+- `FamilyTodo/Services/HouseholdRepository.swift`
+  - household graph fetch contract
+- `FamilyTodo/Services/HouseholdCloudSnapshotLoader.swift`
+  - snapshot loading for sync passes
+- `FamilyTodo/Stores/HouseholdStore.swift`
+  - cache apply, remote refresh, follow-up planning, and visible-state updates
+- `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+  - sync presentation state and inline/banner feedback
+- `FamilyTodo/ContentView.swift`, `FamilyTodo/Views/ShoppingListView.swift`, `FamilyTodo/Views/TasksView.swift`, `FamilyTodo/Views/BacklogView.swift`
+  - current UI consumers of sync batches and compatibility behavior
+
+### Practical file map for the approved pipeline
+
+Use this mapping when assigning or reviewing work:
+
+1. `CloudKit signal`
+   - `FamilyTodo/Services/AppDelegateBridge.swift`
+   - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+2. `schedule / dedupe / reason merge`
+   - `FamilyTodo/Services/HouseholdSyncCoordinator.swift`
+   - `FamilyTodo/Services/HouseholdStoreSyncEngine.swift`
+3. `fetch snapshot / delta`
+   - `FamilyTodo/Services/HouseholdRepository.swift`
+   - `FamilyTodo/Services/HouseholdCloudSnapshotLoader.swift`
+   - `FamilyTodo/Managers/CloudKitManager.swift`
+4. `reconcile / apply cache`
+   - `FamilyTodo/Stores/HouseholdStore.swift`
+5. `semantic batch / classification`
+   - `FamilyTodo/Services/HouseholdSyncCoordinator.swift`
+   - `FamilyTodo/Stores/HouseholdStore.swift`
+6. `one feedback surface`
+   - `FamilyTodo/Managers/CloudKitSubscriptionManager.swift`
+   - `FamilyTodo/ContentView.swift`
+
+### Guardrails from review
+
+- Do not create a parallel `FamilyTodo/Sync/**` architecture lane unless the existing `Services`/`Stores` seams become provably unworkable.
+- Keep `AppDelegateBridge` declared-scope handling authoritative; inference is only a fallback for `recordZone` pushes with missing scope.
+- Keep one semantic batch per remote sync pass. Do not re-derive user-visible sync feedback independently in multiple views.
+- Treat `CloudKitSubscriptionManager` + `ContentView` as the current feedback choke point; new banners/toasts/indicators should flow through that path or intentionally replace it.
+- Preserve the owner/private + participant/shared model. Equalize behavior in coordination, fetch, reconciliation, and classification layers rather than forcing a scope migration mid-cut.
+
+### Recommended verification focus for future sync cuts
+
+Minimum regression set for any follow-up implementation touching this plan:
+
+- `FamilyTodoTests/AppDelegateBridgeTests.swift`
+- `FamilyTodoTests/HouseholdStoreSyncEngineTests.swift`
+- `FamilyTodoTests/HouseholdRemoteSyncTests.swift`
+- `FamilyTodoTests/HouseholdSyncCoordinatorTests.swift`
+- `FamilyTodoTests/HouseholdSyncCoordinatorNotificationTests.swift`
 
 ## Main new component
 

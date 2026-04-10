@@ -22,6 +22,7 @@ enum DiagnosticsFilter: String, CaseIterable, Identifiable {
     case all
     case tabBar
     case cloudKit
+    case notifications
     case errors
 
     var id: String {
@@ -36,6 +37,8 @@ enum DiagnosticsFilter: String, CaseIterable, Identifiable {
             "Tab Bar"
         case .cloudKit:
             "CloudKit"
+        case .notifications:
+            "Notifications"
         case .errors:
             "Errors"
         }
@@ -49,6 +52,8 @@ enum DiagnosticsFilter: String, CaseIterable, Identifiable {
             entry.source == .tabBar
         case .cloudKit:
             entry.source == .cloudKit
+        case .notifications:
+            CloudKitDiagnosticsState.isNotificationOperation(entry.operation)
         case .errors:
             entry.kind == .error
         }
@@ -66,6 +71,8 @@ enum DiagnosticsFilter: String, CaseIterable, Identifiable {
             "No tab bar diagnostics recorded."
         case .cloudKit:
             "No CloudKit diagnostics recorded."
+        case .notifications:
+            "No notification diagnostics recorded."
         case .errors:
             "No diagnostics errors recorded."
         }
@@ -289,8 +296,20 @@ final class CloudKitDiagnosticsState: ObservableObject {
         !entries.isEmpty || lastCloudKitError != nil || lastCloudKitProgressOperation != nil
     }
 
+    var hasNotificationDiagnostics: Bool {
+        !notificationEntries.isEmpty
+    }
+
+    var notificationEntries: [CloudKitDiagnosticsEntry] {
+        entries.filter { Self.isNotificationOperation($0.operation) }
+    }
+
     var diagnosticsReport: String {
         diagnosticsReport(filter: .all)
+    }
+
+    var notificationDiagnosticsReport: String {
+        diagnosticsReport(filter: .notifications)
     }
 
     func diagnosticsReport(filter: DiagnosticsFilter) -> String {
@@ -368,6 +387,10 @@ final class CloudKitDiagnosticsState: ObservableObject {
                 updateTriggerSummary(with: entry)
             }
         }
+    }
+
+    nonisolated static func isNotificationOperation(_ operation: String) -> Bool {
+        operation.hasPrefix("notification.")
     }
 
     private func updateTriggerSummary(with entry: CloudKitDiagnosticsEntry) {

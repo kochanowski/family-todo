@@ -161,6 +161,9 @@ struct SettingsView: View {
                 Toggle("Daily digest", isOn: $notificationSettings.dailyDigestEnabled)
                     .disabled(!notificationSettings.isEnabled)
 
+                Toggle("Shared activity", isOn: $notificationSettings.sharedActivityEnabled)
+                    .disabled(!notificationSettings.isEnabled)
+
                 if notificationSettings.isEnabled,
                    notificationSettings.taskRemindersEnabled || notificationSettings.dailyDigestEnabled
                 {

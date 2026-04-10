@@ -56,11 +56,18 @@ struct CloudKitDiagnosticsBanner: View {
                     .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.borderedProminent)
 
-                    Button("Copy log") {
+                    Button("Copy all") {
                         UIPasteboard.general.string = diagnostics.diagnosticsReport
                     }
                     .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.bordered)
+
+                    if diagnostics.hasNotificationDiagnostics {
+                        Button("Copy notifications") {
+                            UIPasteboard.general.string = diagnostics.notificationDiagnosticsReport
+                        }
+                        .buttonStyle(.bordered)
+                    }
 
                     Button("Clear") {
                         diagnostics.clear()
@@ -249,7 +256,7 @@ private struct CloudKitDiagnosticsSheet: View {
                     .font(themeStore.font(for: .buttonLabel))
                     .buttonStyle(.bordered)
 
-                    Button("Share diagnostics") {
+                    Button(shareButtonTitle) {
                         showShareSheet = true
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -268,9 +275,18 @@ private struct CloudKitDiagnosticsSheet: View {
                 .background(.ultraThinMaterial)
             }
         }
+        .onAppear {
+            if diagnostics.hasNotificationDiagnostics {
+                filter = .notifications
+            }
+        }
         .sheet(isPresented: $showShareSheet) {
             CloudKitDiagnosticsActivityView(activityItems: [filteredReport])
         }
+    }
+
+    private var shareButtonTitle: String {
+        filter == .notifications ? "Share notifications" : "Share diagnostics"
     }
 
     private var filterMenu: some View {
