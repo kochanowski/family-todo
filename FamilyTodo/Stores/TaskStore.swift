@@ -11,7 +11,6 @@ extension Notification.Name {
     static let backlogDataDidChange = Notification.Name("HousePulse.backlogDataDidChange")
     static let shoppingListDataDidChange = Notification.Name("HousePulse.shoppingListDataDidChange")
     static let householdDataDidChange = Notification.Name("HousePulse.householdDataDidChange")
-    static let tabBarAppearanceRefreshRequested = Notification.Name("HousePulse.tabBarAppearanceRefreshRequested")
 }
 
 struct StoreContextSaveError: LocalizedError {

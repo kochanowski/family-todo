@@ -85,6 +85,17 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(state.currentState, .mainApp)
     }
 
+    func testRestoreMainAppForRecoveredSessionSkipsAuthFlow() {
+        let state = OnboardingState()
+        state.completeOnboarding()
+
+        state.restoreMainAppForRecoveredSession(syncMethod: .iCloud)
+
+        XCTAssertEqual(state.currentState, .mainApp)
+        XCTAssertEqual(state.syncMethod, .iCloud)
+        XCTAssertEqual(state.householdStatus, .active)
+    }
+
     private func clearOnboardingKeys() {
         defaults.removeObject(forKey: "hasSeenOnboarding")
         defaults.removeObject(forKey: "hasCompletedOnboarding")

@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 // swiftlint:disable file_length
 struct ProfileView: View {
@@ -39,7 +40,7 @@ struct ProfileView: View {
                 }
             }
         }
-        .sheet(item: $householdBeingEdited, onDismiss: handleHouseholdEditDismiss) { household in
+        .sheet(item: $householdBeingEdited) { household in
             NavigationStack {
                 EditHouseholdView(household: household)
                     .id(household.id)
@@ -245,6 +246,10 @@ struct ProfileView: View {
                 }
             } header: {
                 sectionHeader("Invite")
+            } footer: {
+                if canCreateInvite {
+                    Text("Share the code or QR — the other person opens HousePulse and enters it to join.")
+                }
             }
         }
     }
@@ -405,15 +410,6 @@ struct ProfileView: View {
             }
         }
     }
-
-    private func handleHouseholdEditDismiss() {
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .tabBarAppearanceRefreshRequested,
-                object: nil
-            )
-        }
-    }
 }
 
 private struct InviteMemberView: View {
@@ -426,48 +422,16 @@ private struct InviteMemberView: View {
     @State private var isLoadingInviteCode = true
     @State private var isInviteLoadTakingLongerThanExpected = false
     @State private var errorMessage: String?
+    @State private var codeCopied = false
 
     private static let inviteSlowLoadThresholdNanoseconds: UInt64 = 12_000_000_000
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(themeStore.accentTabColor)
-                        .frame(width: 72, height: 72)
-                        .background(
-                            Circle()
-                                .fill(themeStore.surfaceElevatedColor)
-                        )
-
-                    VStack(spacing: 10) {
-                        Text("Invite Member")
-                            .font(themeStore.font(for: .screenHeader))
-                            .foregroundStyle(themeStore.contentPrimaryColor)
-                            .multilineTextAlignment(.center)
-
-                        Text("Share the 6-character invite code or let someone scan the QR code to join this household.")
-                            .font(themeStore.font(for: .bodyStrong))
-                            .foregroundStyle(themeStore.contentSecondaryColor)
-                            .multilineTextAlignment(.center)
-                    }
-
+                VStack(spacing: 20) {
                     if isLoadingInviteCode {
-                        VStack(spacing: 12) {
-                            ProgressView("Preparing invite code...")
-                                .font(themeStore.font(for: .bodyStrong))
-
-                            if isInviteLoadTakingLongerThanExpected {
-                                Text(
-                                    "The first invite can take a little longer while HousePulse finishes preparing iCloud sharing. Keep this screen open for a moment."
-                                )
-                                .font(themeStore.font(for: .bodySmall))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                                .multilineTextAlignment(.center)
-                            }
-                        }
+                        loadingView
                     } else if let errorMessage {
                         ThemedEmptyStateView(
                             title: "Invite unavailable",
@@ -475,39 +439,7 @@ private struct InviteMemberView: View {
                             description: errorMessage
                         )
                     } else if let inviteToken {
-                        VStack(spacing: 18) {
-                            InviteQRCodeCard(inviteCode: inviteToken.code)
-
-                            VStack(spacing: 8) {
-                                Text("Invite code")
-                                    .font(themeStore.font(for: .bodySmall))
-                                    .foregroundStyle(themeStore.contentSecondaryColor)
-                                Text(inviteToken.code)
-                                    .font(.system(size: 34, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(themeStore.contentPrimaryColor)
-                                    .textSelection(.enabled)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20)
-                            .padding(.horizontal, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(themeStore.surfaceElevatedColor)
-                            )
-                            .accessibilityElement(children: .combine)
-
-                            ShareLink(item: shareText(for: inviteToken.code)) {
-                                Label("Share Invite Code", systemImage: "square.and.arrow.up")
-                                    .font(themeStore.font(for: .buttonLabel))
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-
-                            Text("The other person can scan the QR code or type the code into HousePulse to join.")
-                                .font(themeStore.font(for: .bodySmall))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                                .multilineTextAlignment(.center)
-                        }
+                        inviteContentView(token: inviteToken)
                     }
                 }
                 .padding(24)
@@ -534,6 +466,81 @@ private struct InviteMemberView: View {
             .task {
                 await loadInviteCode()
             }
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView("Preparing invite code...")
+                .font(themeStore.font(for: .bodyStrong))
+                .padding(.top, 40)
+
+            if isInviteLoadTakingLongerThanExpected {
+                Text(
+                    "The first invite can take a little longer while HousePulse finishes preparing iCloud sharing. Keep this screen open for a moment."
+                )
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(themeStore.contentSecondaryColor)
+                .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func inviteContentView(token: InviteToken) -> some View {
+        VStack(spacing: 16) {
+            // QR code
+            InviteQRCodeCard(inviteCode: token.code)
+
+            // Code display
+            VStack(spacing: 6) {
+                Text("Invite code")
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+                Text(token.code)
+                    .font(.system(size: 34, weight: .bold, design: .monospaced))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("Invite code: \(token.code)")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .padding(.horizontal, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(themeStore.surfaceElevatedColor)
+            )
+
+            // Primary CTA: share
+            ShareLink(item: shareText(for: token.code)) {
+                Label("Share Invite", systemImage: "square.and.arrow.up")
+                    .font(themeStore.font(for: .buttonLabel))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            // Secondary CTA: copy code
+            Button {
+                UIPasteboard.general.string = token.code
+                codeCopied = true
+                _Concurrency.Task { @MainActor in
+                    try? await _Concurrency.Task.sleep(nanoseconds: 2_000_000_000)
+                    codeCopied = false
+                }
+            } label: {
+                Label(
+                    codeCopied ? "Copied!" : "Copy Code",
+                    systemImage: codeCopied ? "checkmark" : "doc.on.doc"
+                )
+                .font(themeStore.font(for: .buttonLabel))
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .animation(.easeInOut(duration: 0.2), value: codeCopied)
+
+            Text("The other person scans the QR code or types the code into HousePulse to join.")
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(themeStore.contentSecondaryColor)
+                .multilineTextAlignment(.center)
         }
     }
 

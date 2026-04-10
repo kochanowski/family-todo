@@ -132,6 +132,14 @@ final class OnboardingState: ObservableObject {
         lastLaunchStateRaw = LaunchState.mainApp.rawValue
     }
 
+    func restoreMainAppForRecoveredSession(syncMethod method: SyncMethod) {
+        hasSeenOnboarding = true
+        syncMethod = method
+        householdStatus = .active
+        currentState = .mainApp
+        persistLaunchState(.mainApp)
+    }
+
     func skipHouseholdSetup() {
         HapticManager.lightTap()
         hasSeenOnboarding = true

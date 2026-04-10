@@ -146,6 +146,14 @@ struct CreateHouseholdView: View {
                         .disabled(!canJoinViaInvite || isCreating || confirmedMembershipDisplayName == nil)
                     }
 
+                    if userSession.syncMode == .cloud, userSession.hasActiveSession {
+                        Text("After creating, invite members from your household settings.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+
                     if !userSession.hasActiveSession {
                         Text("Sign in or continue as guest before creating or joining household.")
                             .font(themeStore.font(for: .bodySmall))

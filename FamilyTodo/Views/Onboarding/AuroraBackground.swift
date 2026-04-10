@@ -6,6 +6,8 @@ enum AuroraPalette {
     case calmSync // Slide 1 - Blues
     case freshAction // Slide 2 - Greens
     case warmDreams // Slide 3 - Oranges/Roses
+    case dreamerPurple // Slide 4 - Violets/Purples
+    case togetherCyan // Slide 5 - Cyan/Teal
 
     func colors(for colorScheme: ColorScheme) -> [Color] {
         switch self {
@@ -51,6 +53,36 @@ enum AuroraPalette {
                     Color(hex: "FDBA74"), // Orange-300
                     Color(hex: "FDA4AF"), // Rose-300
                     Color(hex: "FDE68A"), // Amber-200
+                ]
+            }
+
+        case .dreamerPurple:
+            if colorScheme == .dark {
+                [
+                    Color(hex: "4C1D95"), // Violet-900
+                    Color(hex: "581C87"), // Purple-900
+                    Color(hex: "3B0764"), // Fuchsia-950
+                ]
+            } else {
+                [
+                    Color(hex: "C4B5FD"), // Violet-300
+                    Color(hex: "DDD6FE"), // Violet-200
+                    Color(hex: "E9D5FF"), // Purple-200
+                ]
+            }
+
+        case .togetherCyan:
+            if colorScheme == .dark {
+                [
+                    Color(hex: "164E63"), // Cyan-900
+                    Color(hex: "134E4A"), // Teal-900
+                    Color(hex: "0E7490"), // Cyan-700
+                ]
+            } else {
+                [
+                    Color(hex: "67E8F9"), // Cyan-300
+                    Color(hex: "A5F3FC"), // Cyan-200
+                    Color(hex: "99F6E4"), // Teal-200
                 ]
             }
         }
@@ -140,7 +172,9 @@ struct AnimatedAuroraBackground: View {
         switch currentSlide {
         case 0: .calmSync
         case 1: .freshAction
-        default: .warmDreams
+        case 2: .warmDreams
+        case 3: .dreamerPurple
+        default: .togetherCyan
         }
     }
 
@@ -154,6 +188,12 @@ struct AnimatedAuroraBackground: View {
 
             AuroraBackground(palette: .warmDreams)
                 .opacity(currentSlide == 2 ? 1 : 0)
+
+            AuroraBackground(palette: .dreamerPurple)
+                .opacity(currentSlide == 3 ? 1 : 0)
+
+            AuroraBackground(palette: .togetherCyan)
+                .opacity(currentSlide == 4 ? 1 : 0)
         }
         .animation(.easeInOut(duration: 0.5), value: currentSlide)
     }
@@ -169,4 +209,12 @@ struct AnimatedAuroraBackground: View {
 
 #Preview("Warm Dreams") {
     AuroraBackground(palette: .warmDreams)
+}
+
+#Preview("Dreamer Purple") {
+    AuroraBackground(palette: .dreamerPurple)
+}
+
+#Preview("Together Cyan") {
+    AuroraBackground(palette: .togetherCyan)
 }
