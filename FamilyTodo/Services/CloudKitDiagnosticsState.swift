@@ -389,7 +389,7 @@ final class CloudKitDiagnosticsState: ObservableObject {
         }
     }
 
-    static func isNotificationOperation(_ operation: String) -> Bool {
+    nonisolated static func isNotificationOperation(_ operation: String) -> Bool {
         operation.hasPrefix("notification.")
     }
 
