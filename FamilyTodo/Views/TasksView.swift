@@ -184,10 +184,6 @@ private struct TasksContent: View {
                     .background(Color.clear)
                     .padding(.bottom, listBottomInset)
                     .environment(\.editMode, $editMode)
-                    .refreshable {
-                        await performManualRefresh()
-                        markTasksTutorialAsSeenIfNeeded()
-                    }
                 }
             } else {
                 ProgressView("Loading tasks...")
@@ -632,6 +628,7 @@ private struct TasksContent: View {
             if activeFilter == .active {
                 if assigneeFilter == .all {
                     Button(editMode.isEditing ? "Done" : "Reorder") {
+                        HapticManager.lightTap()
                         withAnimation(.easeInOut(duration: 0.2)) {
                             editMode = editMode.isEditing ? .inactive : .active
                         }
@@ -1373,6 +1370,7 @@ private struct AssigneePickerSheet: View {
         NavigationStack {
             List(members) { member in
                 Button {
+                    HapticManager.lightTap()
                     selectedAssigneeId = member.id
                 } label: {
                     HStack {
@@ -1671,6 +1669,9 @@ private struct TaskDetailSheet: View {
                                 .font(themeStore.font(for: .bodyStrong))
                         }
                         .font(themeStore.font(for: .bodyStrong))
+                        .onChange(of: assigneeId) { _, _ in
+                            HapticManager.lightTap()
+                        }
                     }
 
                     Toggle(isOn: $hasDueDate) {

@@ -1,0 +1,1445 @@
+timestamp=2026-04-11T06:27:11Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:11Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:12Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:12Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:13Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:13Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:13Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:13Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=snapshot.cacheApplied householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+snapshot.cacheApplied householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=sync.batch.published reason=appBecameActive triggerSource=foregroundRepair direction=unknown changedDomains=shopping eventCount=1
+sync.batch.published reason=appBecameActive triggerSource=foregroundRepair direction=unknown changedDomains=shopping eventCount=1
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.batchSkipped classification=steadyStateLifecycle eventCount=1 reason=nonRemoteBatch
+notification.sharedActivity.batchSkipped classification=steadyStateLifecycle eventCount=1 reason=nonRemoteBatch
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=appBecameActive activeMembers=2 appState=active
+sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=appBecameActive activeMembers=2 appState=active
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.started reason=appBecameActive burstPasses=8 steadyPasses=20
+sync.scheduler.started reason=appBecameActive burstPasses=8 steadyPasses=20
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.scheduled kind=foregroundRepair mode=burst intervalNs=4000000000 remainingBurstPasses=8 remainingSteadyPasses=20
+sync.scheduler.scheduled kind=foregroundRepair mode=burst intervalNs=4000000000 remainingBurstPasses=8 remainingSteadyPasses=20
+
+---
+
+timestamp=2026-04-11T06:27:14Z
+source=cloudKit
+kind=progress
+operation=sync.pass.completed reason=appBecameActive triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1
+sync.pass.completed reason=appBecameActive triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1
+
+---
+
+timestamp=2026-04-11T06:27:19Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.fired kind=foregroundRepair mode=burst remainingBurstPasses=8 remainingSteadyPasses=20
+sync.scheduler.fired kind=foregroundRepair mode=burst remainingBurstPasses=8 remainingSteadyPasses=20
+
+---
+
+timestamp=2026-04-11T06:27:19Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=foregroundRepairWindow effectivePendingReason=foregroundRepairWindow activeTask=false
+sync.pass.enqueued requestedReason=foregroundRepairWindow effectivePendingReason=foregroundRepairWindow activeTask=false
+
+---
+
+timestamp=2026-04-11T06:27:19Z
+source=cloudKit
+kind=progress
+operation=sync.pass.started reason=foregroundRepairWindow triggerSource=foregroundRepair
+sync.pass.started reason=foregroundRepairWindow triggerSource=foregroundRepair
+
+---
+
+timestamp=2026-04-11T06:27:19Z
+source=cloudKit
+kind=progress
+operation=sync.engine.context reason=foregroundRepairWindow databaseScope=nil notificationType=3
+sync.engine.context reason=foregroundRepairWindow databaseScope=nil notificationType=3
+
+---
+
+timestamp=2026-04-11T06:27:22Z
+source=cloudKit
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.load.started scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:22Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:23Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=2
+
+---
+
+timestamp=2026-04-11T06:27:23Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:24Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=14
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=14
+
+---
+
+timestamp=2026-04-11T06:27:24Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:24Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:24Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:25Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:25Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:26Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:26Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:27Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:27Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:27Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=snapshot.cacheApplied householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+snapshot.cacheApplied householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=sync.batch.published reason=foregroundRepairWindow triggerSource=foregroundRepair direction=unknown changedDomains= eventCount=0
+sync.batch.published reason=foregroundRepairWindow triggerSource=foregroundRepair direction=unknown changedDomains= eventCount=0
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.batchSkipped classification=steadyStateLifecycle eventCount=0 reason=nonRemoteBatch
+notification.sharedActivity.batchSkipped classification=steadyStateLifecycle eventCount=0 reason=nonRemoteBatch
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=foregroundRepairWindow activeMembers=2 appState=active
+sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=foregroundRepairWindow activeMembers=2 appState=active
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.scheduled kind=foregroundRepair mode=burst intervalNs=4000000000 remainingBurstPasses=7 remainingSteadyPasses=20
+sync.scheduler.scheduled kind=foregroundRepair mode=burst intervalNs=4000000000 remainingBurstPasses=7 remainingSteadyPasses=20
+
+---
+
+timestamp=2026-04-11T06:27:28Z
+source=cloudKit
+kind=progress
+operation=sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=noData direction=unknown eventCount=0
+sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=noData direction=unknown eventCount=0
+
+---
+
+timestamp=2026-04-11T06:27:32Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.fired kind=foregroundRepair mode=burst remainingBurstPasses=7 remainingSteadyPasses=20
+sync.scheduler.fired kind=foregroundRepair mode=burst remainingBurstPasses=7 remainingSteadyPasses=20
+
+---
+
+timestamp=2026-04-11T06:27:32Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=foregroundRepairWindow effectivePendingReason=foregroundRepairWindow activeTask=false
+sync.pass.enqueued requestedReason=foregroundRepairWindow effectivePendingReason=foregroundRepairWindow activeTask=false
+
+---
+
+timestamp=2026-04-11T06:27:32Z
+source=cloudKit
+kind=progress
+operation=sync.pass.started reason=foregroundRepairWindow triggerSource=foregroundRepair
+sync.pass.started reason=foregroundRepairWindow triggerSource=foregroundRepair
+
+---
+
+timestamp=2026-04-11T06:27:32Z
+source=cloudKit
+kind=progress
+operation=sync.engine.context reason=foregroundRepairWindow databaseScope=nil notificationType=3
+sync.engine.context reason=foregroundRepairWindow databaseScope=nil notificationType=3
+
+---
+
+timestamp=2026-04-11T06:27:35Z
+source=cloudKit
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.load.started scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:35Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:36Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=2
+
+---
+
+timestamp=2026-04-11T06:27:36Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:36Z
+source=cloudKit
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-11T06:27:36Z
+source=cloudKit
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=false willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=false willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+
+---
+
+timestamp=2026-04-11T06:27:36Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.cancelled kind=foregroundRepair reason=remotePushPriority
+sync.scheduler.cancelled kind=foregroundRepair reason=remotePushPriority
+
+---
+
+timestamp=2026-04-11T06:27:36Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=remotePushShared effectivePendingReason=remotePushShared activeTask=true
+sync.pass.enqueued requestedReason=remotePushShared effectivePendingReason=remotePushShared activeTask=true
+
+---
+
+timestamp=2026-04-11T06:27:37Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=14
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=14
+
+---
+
+timestamp=2026-04-11T06:27:37Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:38Z
+source=cloudKit
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-11T06:27:38Z
+source=cloudKit
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+
+---
+
+timestamp=2026-04-11T06:27:38Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:38Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:39Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:39Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:40Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=backlogItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:40Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=tasks scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=workItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=snapshot.load.completed scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+snapshot.load.completed scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=snapshot.cacheApplied householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+snapshot.cacheApplied householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 members=2 shopping=14 bundles=0 workItems=0 categories=0 backlogItems=0
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=read declaredScope=nil effectiveScope=nil direction=unknown retryDelays= followUpPassIndex=nil didCaptureAdditionalChanges=nil note=emptyRetryDelaySet
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=sync.batch.published reason=foregroundRepairWindow triggerSource=foregroundRepair direction=unknown changedDomains=shopping eventCount=1
+sync.batch.published reason=foregroundRepairWindow triggerSource=foregroundRepair direction=unknown changedDomains=shopping eventCount=1
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.batchSkipped classification=steadyStateLifecycle eventCount=1 reason=nonRemoteBatch
+notification.sharedActivity.batchSkipped classification=steadyStateLifecycle eventCount=1 reason=nonRemoteBatch
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=foregroundRepairWindow activeMembers=2 appState=active
+sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=unknown reason=foregroundRepairWindow activeMembers=2 appState=active
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.scheduled kind=foregroundRepair mode=steady intervalNs=30000000000 remainingBurstPasses=0 remainingSteadyPasses=20
+sync.scheduler.scheduled kind=foregroundRepair mode=steady intervalNs=30000000000 remainingBurstPasses=0 remainingSteadyPasses=20
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1
+sync.pass.completed reason=foregroundRepairWindow triggerSource=foregroundRepair fetchResult=newData direction=unknown eventCount=1
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=sync.pass.started reason=remotePushShared triggerSource=push
+sync.pass.started reason=remotePushShared triggerSource=push
+
+---
+
+timestamp=2026-04-11T06:27:41Z
+source=cloudKit
+kind=progress
+operation=sync.engine.context reason=remotePushShared databaseScope=shared notificationType=4
+sync.engine.context reason=remotePushShared databaseScope=shared notificationType=4
+
+---
+
+timestamp=2026-04-11T06:27:42Z
+source=cloudKit
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-11T06:27:42Z
+source=cloudKit
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+
+---
+
+timestamp=2026-04-11T06:27:44Z
+source=cloudKit
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-11T06:27:44Z
+source=cloudKit
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=true willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+
+---
+
+timestamp=2026-04-11T06:27:46Z
+source=cloudKit
+kind=progress
+operation=delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed=ShoppingItem ignored= unknown=
+delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed=ShoppingItem ignored= unknown=
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=9 deletedRecords=0
+delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=9 deletedRecords=0
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems shopping=14 bundles=0 workItems=0 categories=0
+delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems shopping=14 bundles=0 workItems=0 categories=0
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-11T06:27:47Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+remoteSync stage=followUpPassStarted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPassCompleted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=refreshPath=delta
+remoteSync stage=followUpPassCompleted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=refreshPath=delta
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=stoppedAfterNoAdditionalChanges
+remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=stoppedAfterNoAdditionalChanges
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.batch.published reason=remotePushShared triggerSource=push direction=owner_to_participant changedDomains=shopping eventCount=1
+sync.batch.published reason=remotePushShared triggerSource=push direction=owner_to_participant changedDomains=shopping eventCount=1
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.descriptorPrepared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=3 preservesShoppingTitles=false titleCount=0
+notification.sharedActivity.descriptorPrepared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=3 preservesShoppingTitles=false titleCount=0
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=notification.authorization.checked status=authorized source=refresh isAuthorized=true
+notification.authorization.checked status=authorized source=refresh isAuthorized=true
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.candidate householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=3 titleCount=0 preservesShoppingTitles=false isAuthorized=true notificationsEnabled=true sharedActivityEnabled=true appState=active foregroundSuppressed=true
+notification.sharedActivity.candidate householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=3 titleCount=0 preservesShoppingTitles=false isAuthorized=true notificationsEnabled=true sharedActivityEnabled=true appState=active foregroundSuppressed=true
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.suppressed householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping reason=foregroundActive
+notification.sharedActivity.suppressed householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping reason=foregroundActive
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=owner_to_participant reason=remotePushShared activeMembers=2 appState=active
+sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=owner_to_participant reason=remotePushShared activeMembers=2 appState=active
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.cancelled kind=foregroundRepair reason=remotePushPriority
+sync.scheduler.cancelled kind=foregroundRepair reason=remotePushPriority
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=owner_to_participant
+sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=owner_to_participant
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.pass.completed reason=remotePushShared triggerSource=push fetchResult=newData direction=owner_to_participant eventCount=1
+sync.pass.completed reason=remotePushShared triggerSource=push fetchResult=newData direction=owner_to_participant eventCount=1
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=remotePushShared effectivePendingReason=remotePushShared activeTask=false
+sync.pass.enqueued requestedReason=remotePushShared effectivePendingReason=remotePushShared activeTask=false
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.pass.started reason=remotePushShared triggerSource=push
+sync.pass.started reason=remotePushShared triggerSource=push
+
+---
+
+timestamp=2026-04-11T06:27:48Z
+source=cloudKit
+kind=progress
+operation=sync.engine.context reason=remotePushShared databaseScope=shared notificationType=4
+sync.engine.context reason=remotePushShared databaseScope=shared notificationType=4
+
+---
+
+timestamp=2026-04-11T06:27:51Z
+source=cloudKit
+kind=progress
+operation=delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+remoteSync stage=followUpPassStarted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPassCompleted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=refreshPath=delta
+remoteSync stage=followUpPassCompleted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=refreshPath=delta
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=stoppedAfterNoAdditionalChanges
+remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=stoppedAfterNoAdditionalChanges
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=sync.batch.published reason=remotePushShared triggerSource=push direction=owner_to_participant changedDomains= eventCount=0
+sync.batch.published reason=remotePushShared triggerSource=push direction=owner_to_participant changedDomains= eventCount=0
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.batchSuppressed householdId=unknown eventCount=0 reason=noRemoteNonLocalChanges
+notification.sharedActivity.batchSuppressed householdId=unknown eventCount=0 reason=noRemoteNonLocalChanges
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=owner_to_participant reason=remotePushShared activeMembers=2 appState=active
+sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=owner_to_participant reason=remotePushShared activeMembers=2 appState=active
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=owner_to_participant
+sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=owner_to_participant
+
+---
+
+timestamp=2026-04-11T06:27:52Z
+source=cloudKit
+kind=progress
+operation=sync.pass.completed reason=remotePushShared triggerSource=push fetchResult=noData direction=owner_to_participant eventCount=0
+sync.pass.completed reason=remotePushShared triggerSource=push fetchResult=noData direction=owner_to_participant eventCount=0
+
+---
+
+timestamp=2026-04-11T06:28:14Z
+source=cloudKit
+kind=progress
+operation=push.received type=database
+push.received type=database
+
+---
+
+timestamp=2026-04-11T06:28:14Z
+source=cloudKit
+kind=progress
+operation=remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=false willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+remotePush type=4 declaredScope=shared effectiveScope=shared currentSyncContextAvailable=true inferredFromSyncContext=false handlerInstalled=true queuedBehindActiveRefresh=false willInvokeHandler=true role=participant householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 appState=active scopeResolution=declared
+
+---
+
+timestamp=2026-04-11T06:28:14Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=remotePushShared effectivePendingReason=remotePushShared activeTask=false
+sync.pass.enqueued requestedReason=remotePushShared effectivePendingReason=remotePushShared activeTask=false
+
+---
+
+timestamp=2026-04-11T06:28:14Z
+source=cloudKit
+kind=progress
+operation=sync.pass.started reason=remotePushShared triggerSource=push
+sync.pass.started reason=remotePushShared triggerSource=push
+
+---
+
+timestamp=2026-04-11T06:28:14Z
+source=cloudKit
+kind=progress
+operation=sync.engine.context reason=remotePushShared databaseScope=shared notificationType=4
+sync.engine.context reason=remotePushShared databaseScope=shared notificationType=4
+
+---
+
+timestamp=2026-04-11T06:28:17Z
+source=cloudKit
+kind=progress
+operation=delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:28:18Z
+source=cloudKit
+kind=progress
+operation=delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:28:18Z
+source=cloudKit
+kind=progress
+operation=delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed=ShoppingItem ignored= unknown=
+delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed=ShoppingItem ignored= unknown=
+
+---
+
+timestamp=2026-04-11T06:28:18Z
+source=cloudKit
+kind=progress
+operation=delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=8 deletedRecords=0
+delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=8 deletedRecords=0
+
+---
+
+timestamp=2026-04-11T06:28:18Z
+source=cloudKit
+kind=progress
+operation=delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+
+---
+
+timestamp=2026-04-11T06:28:19Z
+source=cloudKit
+kind=progress
+operation=delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems shopping=14 bundles=0 workItems=0 categories=0
+delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains=shoppingItems shopping=14 bundles=0 workItems=0 categories=0
+
+---
+
+timestamp=2026-04-11T06:28:19Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+remoteSync stage=followUpPlan householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=nil didCaptureAdditionalChanges=nil note=nil
+
+---
+
+timestamp=2026-04-11T06:28:19Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPassStarted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+remoteSync stage=followUpPassStarted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=nil note=delay=350000000
+
+---
+
+timestamp=2026-04-11T06:28:19Z
+source=cloudKit
+kind=progress
+operation=delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.zone.started scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+delta.token.updated scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+delta.recordTypes scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 observed= ignored= unknown=
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+delta.zone.completed scope=participantShared zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|_9f7a5eefe971a61cf175e9acbd0f6fe5 changedRecords=0 deletedRecords=0
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+delta.impact scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= ignoredRecordTypes= unknownRecordTypes= fallbackRequired=false
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+delta.cacheApplied scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domains= shopping=14 bundles=0 workItems=0 categories=0
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpPassCompleted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=refreshPath=delta
+remoteSync stage=followUpPassCompleted householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=refreshPath=delta
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=stoppedAfterNoAdditionalChanges
+remoteSync stage=followUpSkipped householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 userId=_d80860a6b4bb55aa2bfc04a1abb86f74 notificationType=database declaredScope=shared effectiveScope=shared direction=owner_to_participant retryDelays=350000000,1000000000,2500000000 followUpPassIndex=1 didCaptureAdditionalChanges=false note=stoppedAfterNoAdditionalChanges
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=sync.batch.published reason=remotePushShared triggerSource=push direction=owner_to_participant changedDomains=shopping eventCount=2
+sync.batch.published reason=remotePushShared triggerSource=push direction=owner_to_participant changedDomains=shopping eventCount=2
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.descriptorPrepared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=7 preservesShoppingTitles=false titleCount=0
+notification.sharedActivity.descriptorPrepared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=7 preservesShoppingTitles=false titleCount=0
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=notification.authorization.checked status=authorized source=refresh isAuthorized=true
+notification.authorization.checked status=authorized source=refresh isAuthorized=true
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.candidate householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=7 titleCount=0 preservesShoppingTitles=false isAuthorized=true notificationsEnabled=true sharedActivityEnabled=true appState=active foregroundSuppressed=true
+notification.sharedActivity.candidate householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping changeCount=7 titleCount=0 preservesShoppingTitles=false isAuthorized=true notificationsEnabled=true sharedActivityEnabled=true appState=active foregroundSuppressed=true
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=notification.sharedActivity.suppressed householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping reason=foregroundActive
+notification.sharedActivity.suppressed householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 domain=shopping reason=foregroundActive
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=owner_to_participant reason=remotePushShared activeMembers=2 appState=active
+sync.scheduler.ownerFallbackDecision eligible=false role=participant scope=participantShared direction=owner_to_participant reason=remotePushShared activeMembers=2 appState=active
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=owner_to_participant
+sync.scheduler.skipped reason=remotePush followUpAlreadyActive=true direction=owner_to_participant
+
+---
+
+timestamp=2026-04-11T06:28:20Z
+source=cloudKit
+kind=progress
+operation=sync.pass.completed reason=remotePushShared triggerSource=push fetchResult=newData direction=owner_to_participant eventCount=2
+sync.pass.completed reason=remotePushShared triggerSource=push fetchResult=newData direction=owner_to_participant eventCount=2
+
+---
+
+timestamp=2026-04-11T06:28:27Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=appBecameActive effectivePendingReason=appBecameActive activeTask=false
+sync.pass.enqueued requestedReason=appBecameActive effectivePendingReason=appBecameActive activeTask=false
+
+---
+
+timestamp=2026-04-11T06:28:27Z
+source=cloudKit
+kind=progress
+operation=sync.pass.started reason=appBecameActive triggerSource=foregroundRepair
+sync.pass.started reason=appBecameActive triggerSource=foregroundRepair
+
+---
+
+timestamp=2026-04-11T06:28:27Z
+source=cloudKit
+kind=progress
+operation=sync.engine.context reason=appBecameActive databaseScope=nil notificationType=3
+sync.engine.context reason=appBecameActive databaseScope=nil notificationType=3
+
+---
+
+timestamp=2026-04-11T07:38:49Z
+source=cloudKit
+kind=progress
+operation=sync.pass.enqueued requestedReason=appBecameActive effectivePendingReason=appBecameActive activeTask=true
+sync.pass.enqueued requestedReason=appBecameActive effectivePendingReason=appBecameActive activeTask=true
+
+---
+
+timestamp=2026-04-11T07:38:51Z
+source=cloudKit
+kind=progress
+operation=ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|__defaultOwner__
+ownerQuery.targetZone.started recordType=Member zone=HouseholdZone-DD0F55A1-B479-4782-92B3-337CA06799A0|__defaultOwner__
+
+---
+
+timestamp=2026-04-11T07:38:51Z
+source=cloudKit
+kind=progress
+operation=ownerQuery.targetZone.completed recordType=Member count=0
+ownerQuery.targetZone.completed recordType=Member count=0
+
+---
+
+timestamp=2026-04-11T07:38:53Z
+source=cloudKit
+kind=progress
+operation=snapshot.load.started scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.load.started scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T07:38:53Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T07:38:54Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=2
+snapshot.fetch.completed domain=members scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=2
+
+---
+
+timestamp=2026-04-11T07:38:54Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T07:38:55Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=14
+snapshot.fetch.completed domain=shoppingItems scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=14
+
+---
+
+timestamp=2026-04-11T07:38:55Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+
+---
+
+timestamp=2026-04-11T07:38:56Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+snapshot.fetch.completed domain=shoppingBundles scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0 count=0
+
+---
+
+timestamp=2026-04-11T07:38:56Z
+source=cloudKit
+kind=progress
+operation=snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0
+snapshot.fetch.started domain=backlogCategories scope=participantShared householdId=DD0F55A1-B479-4782-92B3-337CA06799A0

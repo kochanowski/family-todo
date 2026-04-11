@@ -249,9 +249,7 @@ struct CreateHouseholdView: View {
                     userSession.applyProfileUpdate(displayName: displayName)
                 }
                 userSession.setCurrentHousehold(newHousehold.id)
-                if userSession.syncMode == .cloud {
-                    await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
-                }
+                if userSession.syncMode == .cloud {}
                 onboardingState.completeHouseholdSetup(withHousehold: true)
                 if showsCloseButton {
                     dismiss()
@@ -321,9 +319,7 @@ struct CreateHouseholdView: View {
 
         joinInviteCode = ""
         showJoinSheet = false
-        if userSession.syncMode == .cloud {
-            await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
-        }
+        if userSession.syncMode == .cloud {}
         onboardingState.completeHouseholdSetup(withHousehold: true)
     }
 

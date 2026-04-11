@@ -339,9 +339,6 @@ private struct ShoppingListContent: View {
             .background(Color.clear)
             .padding(.bottom, listBottomInset)
             .scrollDismissesKeyboard(.interactively)
-            .refreshable {
-                await performManualRefresh()
-            }
             .onChange(of: rapidEntryFocused) { _, focused in
                 guard focused else { return }
                 withAnimation(WowAnimation.spring) {

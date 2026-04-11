@@ -235,7 +235,7 @@ final class TaskStore: ObservableObject {
     }
 
     private func syncReminder(for task: Task) async {
-        if task.dueDate != nil, !notificationService.isAuthorized {
+        if !notificationService.isAuthorized {
             await notificationService.requestAuthorization()
         }
 

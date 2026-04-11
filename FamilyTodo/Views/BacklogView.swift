@@ -455,10 +455,6 @@ private struct BacklogContent: View {
                     onEditCategory: { editingCategory = $0 },
                     onDeleteCategory: requestDeleteCategory(withID:)
                 )
-                .refreshable {
-                    await performManualRefresh()
-                    markIdeasTutorialAsSeenIfNeeded()
-                }
             }
 
             Spacer()
@@ -1508,6 +1504,7 @@ struct CategoryCard: View {
             } else {
                 Button {
                     HapticManager.lightTap()
+                    AppTips.donateIdeasFirstIdeaAdded()
                     onActivateComposer()
                 } label: {
                     HStack(spacing: 10) {
@@ -1720,8 +1717,7 @@ struct BacklogItemRow: View {
                 }
             }
             .modifier(BacklogAssignButtonChrome(
-                showsBackground: assignee == nil,
-                themeStore: themeStore
+                showsBackground: assignee == nil
             ))
         }
         .fixedSize(horizontal: true, vertical: false)
@@ -1751,7 +1747,9 @@ private struct BacklogTipAnchor: View {
 
 private struct BacklogAssignButtonChrome: ViewModifier {
     let showsBackground: Bool
-    let themeStore: ThemeStore
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         HStack(spacing: showsBackground ? 8 : 0) {

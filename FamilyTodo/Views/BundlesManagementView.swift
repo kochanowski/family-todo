@@ -44,10 +44,6 @@ struct BundlesManagementView: View {
             store.setSyncMode(userSession.syncMode)
             await store.loadBundlesForDisplay()
         }
-        .refreshable {
-            store.setSyncMode(userSession.syncMode)
-            await store.loadBundlesForDisplay()
-        }
         .onChange(of: userSession.syncMode) { _, mode in
             store.setSyncMode(mode)
             _ = _Concurrency.Task {

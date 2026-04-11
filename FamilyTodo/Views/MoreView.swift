@@ -318,6 +318,7 @@ struct CategoriesManagementView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(editMode.isEditing ? "Done" : "Reorder") {
+                    HapticManager.lightTap()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         editMode = editMode.isEditing ? .inactive : .active
                     }
