@@ -834,7 +834,7 @@ private struct ShoppingBundleComposerRow: View {
                 themeStore: themeStore,
                 onSubmit: onSubmit
             )
-            .submitLabel(.add)
+            .submitLabel(.continue)
             .frame(height: 24)
         }
         .padding(.horizontal, 16)
