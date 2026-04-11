@@ -55,7 +55,6 @@ private struct ShoppingListContent: View {
     @State private var didTriggerQuickAddGesture = false
     @State private var isQuickAddPressVisualActive = false
     @State private var quickAddPulseToken = 0
-    @State private var quickAddPressFeedbackTask: _Concurrency.Task<Void, Never>?
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
@@ -536,19 +535,6 @@ private struct ShoppingListContent: View {
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
-        addPillButtonBase
-            .onLongPressGesture(
-                minimumDuration: 0.45,
-                maximumDistance: 18,
-                pressing: handleQuickAddPressingChanged,
-                perform: handleQuickAddLongPress
-            )
-            .onDisappear {
-                cancelQuickAddPressFeedback(immediately: true)
-            }
-    }
-
-    private var addPillButtonBase: some View {
         let foreground = themeStore.foregroundOnAccent(
             for: themeStore.accentTabColor, colorScheme: colorScheme
         )
@@ -596,9 +582,26 @@ private struct ShoppingListContent: View {
                     )
             }
         }
-        .buttonStyle(.plain)
-        .scaleEffect(quickAddButtonScale)
-        .animation(WowAnimation.quickSpring, value: isQuickAddPressVisualActive)
+        .buttonStyle(ShoppingAddButtonStyle(
+            reduceMotion: reduceMotion,
+            isPressingChanged: { isPressing in
+                if isPressing {
+                    HapticManager.lightTap()
+                }
+                if isQuickAddPressVisualActive != isPressing {
+                    isQuickAddPressVisualActive = isPressing
+                }
+            }
+        ))
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5, maximumDistance: 18)
+                .onEnded { _ in
+                    guard quickAddFeedbackEnabled else { return }
+                    didTriggerQuickAddGesture = true
+                    HapticManager.success()
+                    handleQuickAddLongPress()
+                }
+        )
         .accessibilityIdentifier("shoppingAddItemButton")
         .accessibilityHint(
             quickAddBundles.isEmpty
@@ -1005,11 +1008,6 @@ private struct ShoppingListContent: View {
         !quickAddBundles.isEmpty
     }
 
-    private var quickAddButtonScale: CGFloat {
-        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive, !reduceMotion else { return 1 }
-        return 0.985
-    }
-
     private var quickAddInnerStrokeOpacity: Double {
         guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
         return 0.18
@@ -1048,58 +1046,17 @@ private struct ShoppingListContent: View {
         isQuickAddPressVisualActive ? 6 : 4
     }
 
-    private func handleQuickAddPressingChanged(_ isPressing: Bool) {
-        guard quickAddFeedbackEnabled else {
-            cancelQuickAddPressFeedback(immediately: true)
-            return
-        }
-
-        quickAddPressFeedbackTask?.cancel()
-
-        guard isPressing else {
-            cancelQuickAddPressFeedback(immediately: false)
-            return
-        }
-
-        quickAddPressFeedbackTask = _Concurrency.Task { @MainActor in
-            try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
-            guard !_Concurrency.Task.isCancelled else { return }
-            withAnimation(WowAnimation.quickSpring) {
-                isQuickAddPressVisualActive = true
-            }
-            quickAddPressFeedbackTask = nil
-        }
-    }
-
     private func handleQuickAddLongPress() {
         guard quickAddFeedbackEnabled else { return }
-        didTriggerQuickAddGesture = true
-        quickAddPressFeedbackTask?.cancel()
-        quickAddPressFeedbackTask = nil
 
         withAnimation(WowAnimation.easeOut) {
             isQuickAddPressVisualActive = false
         }
 
         quickAddPulseToken += 1
-        HapticManager.lightTap()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
             showQuickAddBundleChooser = true
-        }
-    }
-
-    private func cancelQuickAddPressFeedback(immediately: Bool) {
-        quickAddPressFeedbackTask?.cancel()
-        quickAddPressFeedbackTask = nil
-
-        if immediately {
-            isQuickAddPressVisualActive = false
-            return
-        }
-
-        withAnimation(WowAnimation.easeOut) {
-            isQuickAddPressVisualActive = false
         }
     }
 
@@ -1748,6 +1705,21 @@ private struct RestockItemRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+private struct ShoppingAddButtonStyle: ButtonStyle {
+    var reduceMotion: Bool
+    var isPressingChanged: (Bool) -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.92 : 1.0)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .animation(.spring(), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                isPressingChanged(isPressed)
+            }
     }
 }
 
