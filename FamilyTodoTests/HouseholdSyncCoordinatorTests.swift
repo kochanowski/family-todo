@@ -136,7 +136,9 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         )
         XCTAssertTrue(
             CloudKitDiagnosticsState.shared.entries.contains {
-                $0.operation.contains("sync.pass.completed reason=remotePushShared fetchResult=newData")
+                $0.operation.contains("sync.pass.completed reason=remotePushShared") &&
+                    $0.operation.contains("triggerSource=remotePush") &&
+                    $0.operation.contains("fetchResult=newData")
             }
         )
     }
