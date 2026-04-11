@@ -1,16 +1,16 @@
 # TESTING_CI_POLICY
 
-Last updated: 2026-02-26
+Last updated: 2026-04-11
 
 ## Why this policy exists
 Build time on macOS runners must stay short for rapid UI iteration. Tests are split between fast CI and full nightly/manual regression.
 
 ## CI behavior
 
-### `ios-ci.yml` (PR/push)
+### `ios-ci.yml` (PR/push + manual)
 - Build (no signing)
 - SwiftLint
-- No XCTest by default
+- XCTest (`FamilyTodoTests`)
 - Supports `cloud_sync_profile` override (`preview-local` / `sync-enabled`)
 - For release/TestFlight branches, runs CloudKit schema gate before deploy:
   - validate schema contract
@@ -20,15 +20,15 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 ### `nightly.yml` (scheduled + manual)
 - Full `xcodebuild test` suite
 - Scheduled nightly
-- Can also be triggered manually (`workflow_dispatch`)
+- Can also be triggered manually (`workflow_dispatch`) for an extra regression pass
 
 ## Test toggling
+- Default confidence comes from `ios-ci.yml`, which runs `FamilyTodoTests`.
 - Need extra confidence on a branch? Run `nightly.yml` manually.
-- Keep PR CI test steps disabled unless high-risk refactor.
-- Re-enable selected PR tests temporarily only for regression debugging.
+- Use nightly for broader reruns, regression sweeps, and flaky-test debugging.
 
 ## Expected usage
-- **Daily:** PR build + lint only
+- **Daily:** PR build + lint + `FamilyTodoTests`
 - **Regression:** nightly + manual dispatch before merges/releases
 - **Release/TestFlight:** schema gate must be green before deploy job starts
 

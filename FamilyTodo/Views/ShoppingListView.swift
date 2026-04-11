@@ -42,6 +42,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Rapid entry state
     @State private var isRapidEntryActive = false
@@ -52,6 +53,9 @@ private struct ShoppingListContent: View {
     @State private var showClearToBuyConfirmation = false
     @State private var showQuickAddBundleChooser = false
     @State private var didTriggerQuickAddGesture = false
+    @State private var isQuickAddPressVisualActive = false
+    @State private var quickAddPulseToken = 0
+    @State private var quickAddPressFeedbackTask: _Concurrency.Task<Void, Never>?
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
@@ -533,15 +537,15 @@ private struct ShoppingListContent: View {
 
     private var addPillButton: some View {
         addPillButtonBase
-            .highPriorityGesture(
-                LongPressGesture(minimumDuration: 0.45)
-                    .onEnded { _ in
-                        guard !quickAddBundles.isEmpty else { return }
-                        didTriggerQuickAddGesture = true
-                        HapticManager.lightTap()
-                        showQuickAddBundleChooser = true
-                    }
+            .onLongPressGesture(
+                minimumDuration: 0.45,
+                maximumDistance: 18,
+                pressing: handleQuickAddPressingChanged,
+                perform: handleQuickAddLongPress
             )
+            .onDisappear {
+                cancelQuickAddPressFeedback(immediately: true)
+            }
     }
 
     private var addPillButtonBase: some View {
@@ -566,10 +570,35 @@ private struct ShoppingListContent: View {
             .background {
                 Capsule()
                     .fill(themeStore.accentTabColor)
-                    .shadow(color: themeStore.accentTabColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .overlay {
+                        Capsule()
+                            .stroke(
+                                foreground.opacity(quickAddInnerStrokeOpacity),
+                                lineWidth: 1
+                            )
+                    }
+                    .overlay {
+                        Capsule()
+                            .stroke(
+                                themeStore.accentTabColor.opacity(quickAddHaloOpacity),
+                                lineWidth: quickAddHaloLineWidth
+                            )
+                            .scaleEffect(quickAddHaloScale)
+                            .blur(radius: quickAddHaloBlurRadius)
+                            .pulseAnimation(trigger: quickAddPulseToken)
+                            .allowsHitTesting(false)
+                    }
+                    .shadow(
+                        color: themeStore.accentTabColor.opacity(quickAddShadowOpacity),
+                        radius: quickAddShadowRadius,
+                        x: 0,
+                        y: quickAddShadowYOffset
+                    )
             }
         }
         .buttonStyle(.plain)
+        .scaleEffect(quickAddButtonScale)
+        .animation(WowAnimation.quickSpring, value: isQuickAddPressVisualActive)
         .accessibilityIdentifier("shoppingAddItemButton")
         .accessibilityHint(
             quickAddBundles.isEmpty
@@ -970,6 +999,108 @@ private struct ShoppingListContent: View {
 
     private var quickAddBundles: [ShoppingBundle] {
         bundleStore.quickAddBundles
+    }
+
+    private var quickAddFeedbackEnabled: Bool {
+        !quickAddBundles.isEmpty
+    }
+
+    private var quickAddButtonScale: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive, !reduceMotion else { return 1 }
+        return 0.985
+    }
+
+    private var quickAddInnerStrokeOpacity: Double {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return 0.18
+    }
+
+    private var quickAddHaloOpacity: Double {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return reduceMotion ? 0.18 : 0.26
+    }
+
+    private var quickAddHaloLineWidth: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return reduceMotion ? 4 : 6
+    }
+
+    private var quickAddHaloScale: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 1 }
+        return reduceMotion ? 1.01 : 1.03
+    }
+
+    private var quickAddHaloBlurRadius: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return reduceMotion ? 4 : 8
+    }
+
+    private var quickAddShadowOpacity: Double {
+        guard quickAddFeedbackEnabled else { return 0.3 }
+        return isQuickAddPressVisualActive ? 0.42 : 0.3
+    }
+
+    private var quickAddShadowRadius: CGFloat {
+        isQuickAddPressVisualActive ? 12 : 8
+    }
+
+    private var quickAddShadowYOffset: CGFloat {
+        isQuickAddPressVisualActive ? 6 : 4
+    }
+
+    private func handleQuickAddPressingChanged(_ isPressing: Bool) {
+        guard quickAddFeedbackEnabled else {
+            cancelQuickAddPressFeedback(immediately: true)
+            return
+        }
+
+        quickAddPressFeedbackTask?.cancel()
+
+        guard isPressing else {
+            cancelQuickAddPressFeedback(immediately: false)
+            return
+        }
+
+        quickAddPressFeedbackTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            withAnimation(WowAnimation.quickSpring) {
+                isQuickAddPressVisualActive = true
+            }
+            quickAddPressFeedbackTask = nil
+        }
+    }
+
+    private func handleQuickAddLongPress() {
+        guard quickAddFeedbackEnabled else { return }
+        didTriggerQuickAddGesture = true
+        quickAddPressFeedbackTask?.cancel()
+        quickAddPressFeedbackTask = nil
+
+        withAnimation(WowAnimation.easeOut) {
+            isQuickAddPressVisualActive = false
+        }
+
+        quickAddPulseToken += 1
+        HapticManager.lightTap()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            showQuickAddBundleChooser = true
+        }
+    }
+
+    private func cancelQuickAddPressFeedback(immediately: Bool) {
+        quickAddPressFeedbackTask?.cancel()
+        quickAddPressFeedbackTask = nil
+
+        if immediately {
+            isQuickAddPressVisualActive = false
+            return
+        }
+
+        withAnimation(WowAnimation.easeOut) {
+            isQuickAddPressVisualActive = false
+        }
     }
 
     private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
