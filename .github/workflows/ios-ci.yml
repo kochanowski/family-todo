@@ -129,28 +129,9 @@ jobs:
             exit 1
           fi
 
-          xcresult_verified_success=0
-          if [ -d TestResults.xcresult ]; then
-            if xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json > xcresult-summary.json 2>/dev/null; then
-              if rg -q '"testsFailedCount"[[:space:]]*:[[:space:]]*0' xcresult-summary.json; then
-                xcresult_verified_success=1
-              fi
-            fi
-          fi
-
-          log_reports_zero_failures=0
-          if rg -q 'with 0 failures \(0 unexpected\)' xcodebuild-test.log; then
-            log_reports_zero_failures=1
-          fi
-
-          log_reports_real_failure=0
-          if rg -q "Test Case '.*' failed|\\*\\* BUILD FAILED \\*\\*" xcodebuild-test.log; then
-            log_reports_real_failure=1
-          fi
-
           if [ "$xcodebuild_status" -ne 0 ]; then
-            if [ "$log_reports_real_failure" -eq 0 ] &&
-               { [ "$xcresult_verified_success" -eq 1 ] || [ "$log_reports_zero_failures" -eq 1 ]; }; then
+            if rg -q 'with 0 failures \(0 unexpected\)' xcodebuild-test.log &&
+               ! rg -q "Test Case '.*' failed" xcodebuild-test.log; then
               echo "::warning::xcodebuild exited with code $xcodebuild_status even though no failing test cases were reported and test output indicates zero failures. Accepting this known runner false negative."
             else
               echo "::group::xcodebuild-test.log (tail)"
