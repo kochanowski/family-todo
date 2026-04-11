@@ -391,6 +391,7 @@ struct BacklogItemEditSheet: View {
 
                 Section {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         showDeleteConfirmation = true
                     } label: {
                         Text("Delete Item")

@@ -1304,7 +1304,7 @@ private struct TasksContent: View {
             pendingDeletedTask = task
             hiddenPendingDeleteIds.insert(task.id)
         }
-        HapticManager.lightTap()
+        HapticManager.warning()
 
         pendingDeleteWork = _Concurrency.Task {
             try? await _Concurrency.Task.sleep(nanoseconds: 5_000_000_000)
@@ -1729,6 +1729,7 @@ private struct TaskDetailSheet: View {
 
                 Section {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         onDelete(task)
                         dismiss()
                     } label: {

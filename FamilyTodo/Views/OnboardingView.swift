@@ -168,6 +168,7 @@ struct CreateHouseholdSheet: View {
                     userId: userId,
                     displayName: resolvedDisplayName
                 )
+                HapticManager.success()
                 if isCloudSyncEnabled {}
                 dismiss()
             } catch {
@@ -273,6 +274,7 @@ struct JoinHouseholdSheet: View {
                     userId: userId,
                     displayName: resolvedDisplayName
                 )
+                HapticManager.success()
                 if isCloudSyncEnabled {}
                 dismiss()
             } catch {

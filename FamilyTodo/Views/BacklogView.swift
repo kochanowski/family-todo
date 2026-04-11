@@ -1157,7 +1157,7 @@ private struct BacklogContent: View {
             pendingDeletionItem = item
             hiddenPendingDeleteIds.insert(item.id)
         }
-        HapticManager.lightTap()
+        HapticManager.warning()
 
         deletionTask = _Concurrency.Task {
             try? await _Concurrency.Task.sleep(for: .seconds(5))

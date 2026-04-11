@@ -204,6 +204,7 @@ struct ProfileView: View {
                                         toggleRole(for: member)
                                     }
                                     Button("Remove", role: .destructive) {
+                                        HapticManager.warning()
                                         memberToDelete = member
                                         showDeleteMemberConfirmation = true
                                     }
@@ -257,12 +258,14 @@ struct ProfileView: View {
     private var actionsSection: some View {
         Section {
             Button("Leave Household", role: .destructive) {
+                HapticManager.warning()
                 showLeaveConfirmation = true
             }
             .disabled(!canLeaveHousehold)
 
             if currentUserIsOwner {
                 Button("Delete Household", role: .destructive) {
+                    HapticManager.warning()
                     showDeleteConfirmation = true
                 }
             }

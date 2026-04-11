@@ -335,6 +335,7 @@ struct SettingsView: View {
         .alert("Hard Reset App?", isPresented: $showHardResetConfirmation) {
             Button("Maybe Later", role: .cancel) {}
             Button("Hard Reset", role: .destructive) {
+                HapticManager.warning()
                 performHardReset()
             }
         } message: {
