@@ -90,9 +90,12 @@ struct CreateHouseholdView: View {
 
             if isJoining || isCreating {
                 Color.black.opacity(0.4).ignoresSafeArea()
-                JoiningHouseholdLoadingView(isActive: true)
-                    .environmentObject(themeStore)
-                    .transition(.opacity)
+                JoiningHouseholdLoadingView(
+                    isActive: true,
+                    title: isCreating ? "Creating household..." : "Joining household..."
+                )
+                .environmentObject(themeStore)
+                .transition(.opacity)
             }
         }
         .onAppear {
