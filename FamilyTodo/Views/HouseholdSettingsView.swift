@@ -414,8 +414,10 @@ struct ProfileView: View {
 
 private struct InviteMemberView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @EnvironmentObject private var themeStore: ThemeStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var inviteLoadGeneration = 0
     @State private var inviteToken: InviteToken?
@@ -466,6 +468,17 @@ private struct InviteMemberView: View {
             .task {
                 await loadInviteCode()
             }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard let householdId = inviteToken?.householdId else { return }
+                if newPhase == .active {
+                    syncCoordinator.startInviteAcceptanceWatch(for: householdId)
+                } else {
+                    syncCoordinator.stopInviteAcceptanceWatch(reason: "inviteSheetScenePhase")
+                }
+            }
+            .onDisappear {
+                syncCoordinator.stopInviteAcceptanceWatch(reason: "inviteSheetDismissed")
+            }
         }
     }
 
@@ -484,6 +497,13 @@ private struct InviteMemberView: View {
                 .multilineTextAlignment(.center)
             }
         }
+    }
+
+    private var syncTimingDisclaimer: some View {
+        Text("After they join, shared lists and tasks usually appear in seconds, but sync can take up to 1-2 minutes.")
+            .font(themeStore.font(for: .bodySmall))
+            .foregroundStyle(themeStore.contentSecondaryColor)
+            .multilineTextAlignment(.center)
     }
 
     private func inviteContentView(token: InviteToken) -> some View {
@@ -541,6 +561,8 @@ private struct InviteMemberView: View {
                 .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(themeStore.contentSecondaryColor)
                 .multilineTextAlignment(.center)
+
+            syncTimingDisclaimer
         }
     }
 
@@ -572,6 +594,9 @@ private struct InviteMemberView: View {
             inviteToken = token
             isInviteLoadTakingLongerThanExpected = false
             errorMessage = nil
+            if scenePhase == .active {
+                syncCoordinator.startInviteAcceptanceWatch(for: token.householdId)
+            }
         } catch {
             guard inviteLoadGeneration == generation else { return }
             inviteToken = nil

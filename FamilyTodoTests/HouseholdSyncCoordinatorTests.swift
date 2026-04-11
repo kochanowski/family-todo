@@ -897,6 +897,222 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastDiagnostics?.reason, .foregroundRepairWindow)
         XCTAssertEqual(coordinator.lastDiagnostics?.direction, .participantToOwner)
     }
+
+    func testInviteAcceptanceWatchRunsImmediateBurstAndSteadyPasses() async {
+        CloudKitDiagnosticsState.shared.clear()
+        let householdId = UUID()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                makeLifecycleNoDataPassResult(
+                    reason: .localMutationFollowUp,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 100,
+                    activeMemberCount: 1
+                ),
+                makeLifecycleNoDataPassResult(
+                    reason: .localMutationFollowUp,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 103,
+                    activeMemberCount: 1
+                ),
+                makeLifecycleNoDataPassResult(
+                    reason: .localMutationFollowUp,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 106,
+                    activeMemberCount: 1
+                ),
+                makeLifecycleNoDataPassResult(
+                    reason: .localMutationFollowUp,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 109,
+                    activeMemberCount: 1
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            currentHouseholdIDProvider: { householdId },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            inviteAcceptanceWatchConfiguration: InviteAcceptanceWatchConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 2,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 1
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        coordinator.startInviteAcceptanceWatch(for: householdId)
+        await waitUntil {
+            engine.recordedReasons.count == 4
+        }
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .localMutationFollowUp,
+                .localMutationFollowUp,
+                .localMutationFollowUp,
+                .localMutationFollowUp,
+            ]
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.inviteWatch.started householdId=\(householdId.uuidString)")
+            }
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.inviteWatch.completed householdId=\(householdId.uuidString)")
+            }
+        )
+    }
+
+    func testInviteAcceptanceWatchStopsAfterOwnerSeesSecondMember() async {
+        CloudKitDiagnosticsState.shared.clear()
+        let householdId = UUID()
+        let engine = FakeHouseholdSyncEngine(
+            results: [
+                makeLifecycleNoDataPassResult(
+                    reason: .localMutationFollowUp,
+                    direction: .unknown,
+                    syncRole: .owner,
+                    syncScope: .ownerPrivate,
+                    timelineStart: 100,
+                    activeMemberCount: 1
+                ),
+                HouseholdSyncPassResult(
+                    fetchResult: .newData,
+                    events: [],
+                    diagnostics: HouseholdSyncDiagnostics(
+                        batchID: UUID(),
+                        reason: .localMutationFollowUp,
+                        direction: .unknown,
+                        syncRole: .owner,
+                        syncScope: .ownerPrivate,
+                        triggerReceivedAt: Date(timeIntervalSince1970: 103),
+                        syncStartedAt: Date(timeIntervalSince1970: 104),
+                        syncFinishedAt: Date(timeIntervalSince1970: 105),
+                        changedDomains: Set([.members]),
+                        changedIDsByDomain: [:],
+                        activeMemberCount: 2
+                    )
+                ),
+            ]
+        )
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            currentHouseholdIDProvider: { householdId },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            inviteAcceptanceWatchConfiguration: InviteAcceptanceWatchConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 3,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        coordinator.startInviteAcceptanceWatch(for: householdId)
+        await waitUntil {
+            engine.recordedReasons.count == 2
+        }
+        try? await _Concurrency.Task.sleep(nanoseconds: 25_000_000)
+
+        XCTAssertEqual(
+            engine.recordedReasons,
+            [
+                .localMutationFollowUp,
+                .localMutationFollowUp,
+            ]
+        )
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.inviteWatch.cancelled reason=memberCountSatisfied")
+            }
+        )
+    }
+
+    func testInviteAcceptanceWatchDoesNotScheduleAdditionalPassesAfterStop() async {
+        CloudKitDiagnosticsState.shared.clear()
+        let householdId = UUID()
+        let engine = BlockingHouseholdSyncEngine()
+        let coordinator = HouseholdSyncCoordinator(
+            engine: engine,
+            applicationStateProvider: { .active },
+            currentHouseholdIDProvider: { householdId },
+            foregroundRepairConfiguration: ForegroundRepairConfiguration(
+                isEnabled: false,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 0,
+                maxConsecutiveNoDataBurstPasses: 0,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0,
+                ownerFallbackIntervalNanoseconds: 0,
+                ownerFallbackMaxPassCount: 0
+            ),
+            inviteAcceptanceWatchConfiguration: InviteAcceptanceWatchConfiguration(
+                isEnabled: true,
+                burstIntervalNanoseconds: 0,
+                burstMaxPassCount: 2,
+                steadyIntervalNanoseconds: 0,
+                steadyMaxPassCount: 0
+            ),
+            sharedShoppingAlertDelivery: { _, _, _ in }
+        )
+
+        coordinator.startInviteAcceptanceWatch(for: householdId)
+        await engine.waitForInvocationCount(1)
+        coordinator.stopInviteAcceptanceWatch(reason: "testStop")
+        engine.finishNextInvocation(
+            with: makeLifecycleNoDataPassResult(
+                reason: .localMutationFollowUp,
+                direction: .unknown,
+                syncRole: .owner,
+                syncScope: .ownerPrivate,
+                timelineStart: 100,
+                activeMemberCount: 1
+            )
+        )
+        try? await _Concurrency.Task.sleep(nanoseconds: 25_000_000)
+
+        XCTAssertEqual(engine.recordedReasons, [.localMutationFollowUp])
+        XCTAssertTrue(
+            CloudKitDiagnosticsState.shared.entries.contains {
+                $0.operation.contains("sync.scheduler.inviteWatch.cancelled reason=testStop")
+            }
+        )
+    }
 }
 
 private func makeLifecycleNoDataPassResult(

@@ -195,7 +195,7 @@ struct CreateHouseholdView: View {
                         joinInviteCode = UIPasteboard.general.string ?? ""
                     }
                 )
-                .presentationDetents([.medium])
+                .presentationDetents([.large])
             }
             .alert("Action failed", isPresented: Binding(
                 get: { joinErrorMessage != nil },
@@ -343,8 +343,7 @@ struct CreateHouseholdView: View {
             userSession.displayName ??
             userSession.user?.givenName
         if let rawName,
-           let validated = try? DisplayNameValidator.validate(rawName)
-        {
+           let validated = try? DisplayNameValidator.validate(rawName) {
             return "\(validated)'s Household"
         }
         return "My Household"
@@ -355,7 +354,7 @@ struct CreateHouseholdView: View {
         "star.fill",
         "heart.fill",
         "leaf.fill",
-        "pawprint.fill",
+        "pawprint.fill"
     ]
 }
 
@@ -397,6 +396,11 @@ struct HouseholdJoinSheet: View {
                             }
 
                         Text("Use the 6-character invite code (A-Z, 0-9). Older 8-character codes still work. QR codes fill this field automatically.")
+                            .font(themeStore.font(for: .bodySmall))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                            .multilineTextAlignment(.center)
+
+                        Text("Shared lists and tasks usually appear in seconds after you join, but sync can take up to 1-2 minutes.")
                             .font(themeStore.font(for: .bodySmall))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .multilineTextAlignment(.center)
