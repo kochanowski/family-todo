@@ -1489,6 +1489,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
 
         @objc
         private func doneTapped() {
+            HapticManager.success()
             parent.onDone()
         }
 

@@ -581,6 +581,7 @@ private struct BacklogContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
+                HapticManager.lightTap()
                 newCategoryColorHex = MemberColorToken.randomHex()
                 isAddingCategory = true
             } label: {
@@ -1506,6 +1507,7 @@ struct CategoryCard: View {
                 .padding(.vertical, 10)
             } else {
                 Button {
+                    HapticManager.lightTap()
                     onActivateComposer()
                 } label: {
                     HStack(spacing: 10) {
@@ -1670,6 +1672,13 @@ struct BacklogItemRow: View {
                     .opacity(isPromotionDisabled ? 0.45 : 1)
                     .accessibilityIdentifier("backlogPromoteButton_\(item.title)")
                     .transition(.opacity.combined(with: .scale))
+                    .contextualPopoverTip(
+                        showsIdeaPromotionTip,
+                        tipID: "ideas.promote",
+                        IdeaPromotionTip(),
+                        arrowEdge: .top,
+                        generation: appTipRuntimeGeneration
+                    )
                 }
 
                 Button(action: onDelete) {
@@ -1680,20 +1689,6 @@ struct BacklogItemRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("backlogDeleteButton_\(item.title)")
-            }
-            .overlay(alignment: .topTrailing) {
-                if canPromote {
-                    BacklogTipAnchor(width: 18, height: 18)
-                        .padding(.trailing, 48)
-                        .offset(y: -8)
-                        .contextualPopoverTip(
-                            showsIdeaPromotionTip,
-                            tipID: "ideas.promote",
-                            IdeaPromotionTip(),
-                            arrowEdge: .trailing,
-                            generation: appTipRuntimeGeneration
-                        )
-                }
             }
         }
         .padding(.horizontal, 14)
@@ -1759,13 +1754,13 @@ private struct BacklogAssignButtonChrome: ViewModifier {
     let themeStore: ThemeStore
 
     func body(content: Content) -> some View {
-        if showsBackground {
-            HStack(spacing: 8) {
-                content
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background {
+        HStack(spacing: showsBackground ? 8 : 0) {
+            content
+        }
+        .padding(.horizontal, showsBackground ? 12 : 0)
+        .padding(.vertical, showsBackground ? 8 : 0)
+        .background {
+            if showsBackground {
                 Capsule()
                     .fill(themeStore.surfaceElevatedColor)
                     .overlay {
@@ -1773,8 +1768,6 @@ private struct BacklogAssignButtonChrome: ViewModifier {
                             .stroke(themeStore.borderLightColor.opacity(0.35), lineWidth: 1)
                     }
             }
-        } else {
-            content
         }
     }
 }
