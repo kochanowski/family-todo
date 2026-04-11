@@ -8,11 +8,16 @@ struct CreateHouseholdView: View {
     @EnvironmentObject private var themeStore: ThemeStore
 
     private let allowsJoin: Bool
+    private let initialStep: SetupStep?
 
-    enum SetupStep: Int {
+    enum SetupStep: Int, Identifiable {
         case name = 0
         case household = 1
         case join = 2
+
+        var id: Int {
+            rawValue
+        }
     }
 
     @State private var currentStep: SetupStep = .household
@@ -36,8 +41,9 @@ struct CreateHouseholdView: View {
     @State private var joinErrorMessage: String?
     @State private var showScanner = false
 
-    init(allowsJoin: Bool = true, showsCloseButton _: Bool = false) {
+    init(allowsJoin: Bool = true, showsCloseButton _: Bool = false, initialStep: SetupStep? = nil) {
         self.allowsJoin = allowsJoin
+        self.initialStep = initialStep
         // showsCloseButton was ignored for full screen wizard, but kept for signature
     }
 
@@ -91,7 +97,16 @@ struct CreateHouseholdView: View {
         }
         .onAppear {
             if !initialized {
-                if userSession.needsDisplayNamePrompt {
+                if let initialStep {
+                    currentStep = initialStep
+                    initialized = true
+                    if initialStep == .name {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { isNameFocused = true }
+                    } else if initialStep == .household {
+                        householdName = defaultHouseholdName()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { isHouseholdNameFocused = true }
+                    }
+                } else if userSession.needsDisplayNamePrompt {
                     currentStep = .name
                     displayName = userSession.suggestedDisplayNameForPrompt
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
