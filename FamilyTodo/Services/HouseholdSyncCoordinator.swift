@@ -372,7 +372,8 @@ final class HouseholdSyncCoordinator: ObservableObject {
             passiveSharedActivityAlertDelivery ?? { descriptor in
                 if descriptor.domain == .shopping,
                    descriptor.preservesShoppingTitles,
-                   descriptor.changeCount == descriptor.shoppingTitles.count {
+                   descriptor.changeCount == descriptor.shoppingTitles.count
+                {
                     await sharedShoppingAlertDelivery(
                         descriptor.shoppingTitles,
                         descriptor.householdId,

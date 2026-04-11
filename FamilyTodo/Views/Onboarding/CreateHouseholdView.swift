@@ -343,7 +343,8 @@ struct CreateHouseholdView: View {
             userSession.displayName ??
             userSession.user?.givenName
         if let rawName,
-           let validated = try? DisplayNameValidator.validate(rawName) {
+           let validated = try? DisplayNameValidator.validate(rawName)
+        {
             return "\(validated)'s Household"
         }
         return "My Household"
@@ -354,7 +355,7 @@ struct CreateHouseholdView: View {
         "star.fill",
         "heart.fill",
         "leaf.fill",
-        "pawprint.fill"
+        "pawprint.fill",
     ]
 }
 
