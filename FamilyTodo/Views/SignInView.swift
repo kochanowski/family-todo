@@ -12,11 +12,7 @@ struct SignInView: View {
     @EnvironmentObject private var themeStore: ThemeStore
 
     @State private var showDiagnosticsSheet = false
-    @State private var showDisplayNamePrompt = false
-    @State private var pendingDisplayName = ""
-    @State private var pendingPostAuthHasHousehold = false
     @State private var isResolvingAuthRoute = false
-    @State private var displayNameErrorMessage: String?
 
     var body: some View {
         Group {
@@ -37,30 +33,6 @@ struct SignInView: View {
                 ) ?? "No startup bootstrap diagnostics recorded.",
                 onClearDiagnostics: clearDiagnostics
             )
-        }
-        .sheet(isPresented: $showDisplayNamePrompt) {
-            AppPromptSheet(
-                title: "Set your display name",
-                message: "This name is visible to your household members.",
-                placeholder: "Nickname",
-                text: $pendingDisplayName,
-                secondaryTitle: "Sign out",
-                primaryTitle: "Continue",
-                onCancel: {
-                    userSession.signOut()
-                },
-                onSubmit: { value in
-                    completeDisplayNamePrompt(with: value)
-                }
-            )
-        }
-        .alert("Display name", isPresented: Binding(
-            get: { displayNameErrorMessage != nil },
-            set: { if !$0 { displayNameErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(displayNameErrorMessage ?? "Invalid display name.")
         }
         .task(id: authRoutingKey) {
             await handleAuthRoutingIfNeeded()
@@ -133,7 +105,7 @@ struct SignInView: View {
             return false
         }
 
-        return !userSession.needsDisplayNamePrompt && !showDisplayNamePrompt
+        return !userSession.needsDisplayNamePrompt
     }
 
     private var housePulseLogo: some View {
@@ -301,49 +273,7 @@ struct SignInView: View {
         }
 
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
-        if userSession.needsDisplayNamePrompt {
-            if let userId = userSession.userId,
-               userSession.currentHouseholdID != nil ||
-               householdStore.hasTrustedLocalHouseholdContext(
-                   userId: userId,
-                   preferredHouseholdId: userSession.currentHouseholdID
-               ),
-               let restoredDisplayName = householdStore.resolveMembershipDisplayNameLocally(
-                   userId: userId,
-                   preferredHouseholdId: userSession.currentHouseholdID
-               )
-            {
-                userSession.applyProfileUpdate(displayName: restoredDisplayName)
-                onboardingState.completeAuth(
-                    syncMethod: .iCloud,
-                    isGuest: false,
-                    hasHousehold: hasHousehold
-                )
-                return
-            }
-
-            pendingPostAuthHasHousehold = hasHousehold
-            pendingDisplayName = userSession.suggestedDisplayNameForPrompt
-            showDisplayNamePrompt = true
-            return
-        }
-
         onboardingState.completeAuth(syncMethod: .iCloud, isGuest: false, hasHousehold: hasHousehold)
-    }
-
-    private func completeDisplayNamePrompt(with value: String) {
-        do {
-            let validatedDisplayName = try DisplayNameValidator.validate(value)
-            userSession.applyProfileUpdate(displayName: validatedDisplayName)
-            onboardingState.completeAuth(
-                syncMethod: .iCloud,
-                isGuest: false,
-                hasHousehold: pendingPostAuthHasHousehold
-            )
-        } catch {
-            displayNameErrorMessage = error.localizedDescription
-            showDisplayNamePrompt = true
-        }
     }
 }
 

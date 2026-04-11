@@ -258,9 +258,7 @@ struct RootView: View {
 
             case .householdSetup:
                 if userSession.hasActiveSession {
-                    if userSession.needsDisplayNamePrompt {
-                        SignInView()
-                    } else if shouldShowHouseholdSetupLoader {
+                    if shouldShowHouseholdSetupLoader {
                         HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
                     } else {
                         CreateHouseholdView()
