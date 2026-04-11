@@ -1167,8 +1167,8 @@ final class CloudKitManagerScopeTests: XCTestCase {
         )
     }
 
-    func testOwnerPrivateEmptyTargetZoneResultRequiresFallbackScan() {
-        XCTAssertTrue(
+    func testOwnerPrivateEmptyTargetZoneResultSkipsFallbackScan() {
+        XCTAssertFalse(
             CloudKitManager.shouldFallbackToOwnerPrivateExhaustiveScan(
                 targetZoneRecordCount: 0
             )

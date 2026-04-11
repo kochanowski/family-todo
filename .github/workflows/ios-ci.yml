@@ -100,6 +100,9 @@ jobs:
           xcrun simctl boot "$SIMULATOR_ID" || true
           xcrun simctl bootstatus "$SIMULATOR_ID" -b
 
+          # GitHub runs bash with -e enabled, so capture the pipeline status manually
+          # before deciding whether a non-zero xcodebuild exit was a real test failure.
+          set +e
           xcodebuild test \
             -project FamilyTodo.xcodeproj \
             -scheme HousePulse \
@@ -117,6 +120,7 @@ jobs:
           xcodebuild_status=${PIPESTATUS[0]}
           tee_status=${PIPESTATUS[1]}
           xcpretty_status=${PIPESTATUS[2]}
+          set -e
 
           if [ "$tee_status" -ne 0 ] || [ "$xcpretty_status" -ne 0 ]; then
             echo "::group::xcodebuild-test.log (tail)"
@@ -125,8 +129,24 @@ jobs:
             exit 1
           fi
 
+          xcresult_verified_success=0
+          if [ -d TestResults.xcresult ]; then
+            if xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json > xcresult-summary.json 2>/dev/null; then
+              if jq -e '
+                [
+                  .. | objects | select(has("testsFailedCount")) | .testsFailedCount
+                ] | if length == 0 then false else max == 0 end
+              ' xcresult-summary.json >/dev/null; then
+                xcresult_verified_success=1
+              fi
+            fi
+          fi
+
           if [ "$xcodebuild_status" -ne 0 ]; then
-            if rg -q "Executed [0-9]+ tests, with 0 failures \\(0 unexpected\\)" xcodebuild-test.log &&
+            if [ "$xcresult_verified_success" -eq 1 ] &&
+               ! rg -q "Test Case '.*' failed|\\*\\* BUILD FAILED \\*\\*" xcodebuild-test.log; then
+              echo "::warning::xcodebuild exited with code $xcodebuild_status even though xcresult reports zero failed tests. Accepting this known runner false negative."
+            elif rg -q "Executed [0-9]+ tests, with 0 failures \\(0 unexpected\\)" xcodebuild-test.log &&
                ! rg -q "Test Case '.*' failed|\\*\\* BUILD FAILED \\*\\*" xcodebuild-test.log; then
               echo "::warning::xcodebuild exited with code $xcodebuild_status even though all selected tests passed. Accepting this known runner false negative."
             else

@@ -12,6 +12,8 @@ Build time on macOS runners must stay short for rapid UI iteration. Tests are sp
 - SwiftLint
 - XCTest (`FamilyTodoTests`)
 - Supports `cloud_sync_profile` override (`preview-local` / `sync-enabled`)
+- The XCTest step tolerates the known runner case where `xcodebuild` exits `65`
+  even though `xcresult` and the test log both show zero failed tests
 - For release/TestFlight branches, runs CloudKit schema gate before deploy:
   - validate schema contract
   - apply Development schema
