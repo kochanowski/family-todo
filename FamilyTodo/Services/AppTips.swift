@@ -617,7 +617,7 @@ enum AppTipStorageKey {
         }
 
         var message: Text? {
-            Text("Swipe a task row for shortcuts like Poke, Move to Ideas, or Delete.")
+            Text("Swipe a task row for shortcuts like Move to Ideas or Delete.")
         }
 
         var image: Image? {
