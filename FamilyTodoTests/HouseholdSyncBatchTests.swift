@@ -161,7 +161,7 @@ final class HouseholdSyncBatchTests: XCTestCase {
             }
         }
 
-        HouseholdSyncDiagnostics(
+        return HouseholdSyncDiagnostics(
             batchID: batchId,
             reason: reason,
             direction: .participantToOwner,
