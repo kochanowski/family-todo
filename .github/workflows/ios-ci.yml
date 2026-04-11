@@ -83,6 +83,8 @@ jobs:
           echo "DerivedData cleaned successfully"
 
       - name: Run tests
+        id: run_tests
+        continue-on-error: true
         env:
           CLOUD_SYNC_PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cloud_sync_profile || 'preview-local' }}
         run: |
@@ -122,6 +124,10 @@ jobs:
           xcpretty_status=${PIPESTATUS[2]}
           set -e
 
+          echo "xcodebuild_status=$xcodebuild_status" >> "$GITHUB_OUTPUT"
+          echo "tee_status=$tee_status" >> "$GITHUB_OUTPUT"
+          echo "xcpretty_status=$xcpretty_status" >> "$GITHUB_OUTPUT"
+
           if [ "$tee_status" -ne 0 ] || [ "$xcpretty_status" -ne 0 ]; then
             echo "::group::xcodebuild-test.log (tail)"
             tail -n 200 xcodebuild-test.log || true
@@ -129,17 +135,25 @@ jobs:
             exit 1
           fi
 
-          if [ "$xcodebuild_status" -ne 0 ]; then
-            if rg -q 'with 0 failures \(0 unexpected\)' xcodebuild-test.log &&
-               ! rg -q "Test Case '.*' failed" xcodebuild-test.log; then
-              echo "::warning::xcodebuild exited with code $xcodebuild_status even though no failing test cases were reported and test output indicates zero failures. Accepting this known runner false negative."
-            else
-              echo "::group::xcodebuild-test.log (tail)"
-              tail -n 200 xcodebuild-test.log || true
-              echo "::endgroup::"
-              exit "$xcodebuild_status"
-            fi
+          exit "$xcodebuild_status"
+
+      - name: Verify test result
+        if: always()
+        run: |
+          if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
+            exit 0
           fi
+
+          if rg -q 'with 0 failures \(0 unexpected\)' xcodebuild-test.log &&
+             ! rg -q "Test Case '.*' failed" xcodebuild-test.log; then
+            echo "::warning::xcodebuild exited with code ${{ steps.run_tests.outputs.xcodebuild_status }} even though no failing test cases were reported and test output indicates zero failures. Accepting this known runner false negative."
+            exit 0
+          fi
+
+          echo "::group::xcodebuild-test.log (tail)"
+          tail -n 200 xcodebuild-test.log || true
+          echo "::endgroup::"
+          exit 1
 
       - name: Upload Test Results
         if: failure()
