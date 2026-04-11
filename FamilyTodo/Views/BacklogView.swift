@@ -1504,6 +1504,7 @@ struct CategoryCard: View {
             } else {
                 Button {
                     HapticManager.lightTap()
+                    if #available(iOS 17, *) { IdeasAddIdeaTip().invalidate(reason: .actionPerformed) }
                     AppTips.donateIdeasFirstIdeaAdded()
                     onActivateComposer()
                 } label: {
@@ -1642,7 +1643,10 @@ struct BacklogItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onEdit) {
+            Button {
+                HapticManager.lightTap()
+                onEdit()
+            } label: {
                 Text(item.title)
                     .font(themeStore.font(for: .listRowTitle))
                     .foregroundStyle(themeStore.contentPrimaryColor)
@@ -1658,12 +1662,17 @@ struct BacklogItemRow: View {
                 assignButton
 
                 if canPromote {
-                    Button(action: onPromote) {
+                    Button {
+                        HapticManager.lightTap()
+                        if #available(iOS 17, *) { IdeaPromotionTip().invalidate(reason: .actionPerformed) }
+                        onPromote()
+                    } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 14))
                             .foregroundStyle(themeStore.contentSecondaryColor)
                             .frame(width: 32, height: 32)
                     }
+                    .contentShape(Rectangle())
                     .buttonStyle(.plain)
                     .disabled(isPromotionDisabled)
                     .opacity(isPromotionDisabled ? 0.45 : 1)

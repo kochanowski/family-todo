@@ -1439,7 +1439,10 @@ struct TaskRow: View {
                 uncheckedColor: uncheckedColor
             )
 
-            Button(action: onOpenDetail) {
+            Button {
+                HapticManager.lightTap()
+                onOpenDetail()
+            } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
@@ -1748,6 +1751,7 @@ private struct TaskDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        HapticManager.lightTap()
                         dismiss()
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -1759,6 +1763,7 @@ private struct TaskDetailSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
+                        HapticManager.success()
                         save()
                     }
                     .font(themeStore.font(for: .buttonLabel))

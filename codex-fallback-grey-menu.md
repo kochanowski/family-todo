@@ -66,9 +66,9 @@ enum TabBarTypographyManager {
         guard let tabBarController else { return }
         insertCustomBlurIfNeeded(in: tabBarController)
         tabBarController.tabBar.backgroundColor = .clear   // ← added
-        
+
         // ... appearance match check (early return if no repair needed) ...
-        
+
         updateLiveTabBar(...)
     }
 

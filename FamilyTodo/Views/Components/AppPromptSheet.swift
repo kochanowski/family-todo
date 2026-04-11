@@ -290,7 +290,10 @@ struct BacklogAssigneePickerSheet: View {
         isSelected: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button {
+            HapticManager.lightTap()
+            action()
+        } label: {
             HStack {
                 Text(title)
                     .font(themeStore.font(for: .inlineTitle))
@@ -398,6 +401,7 @@ struct BacklogItemEditSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        HapticManager.lightTap()
                         dismiss()
                     } label: {
                         Text("Cancel")
@@ -411,6 +415,7 @@ struct BacklogItemEditSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        HapticManager.success()
                         commit()
                     } label: {
                         Text("Save")
