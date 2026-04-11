@@ -544,7 +544,9 @@ private struct ShoppingListContent: View {
                 didTriggerQuickAddGesture = false
                 return
             }
-            startRapidEntry()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                startRapidEntry()
+            }
         } label: {
             HStack(spacing: 0) {
                 Text("Add item")
@@ -1654,7 +1656,7 @@ private struct ShoppingQuickAddBundleSheet: View {
                 .buttonStyle(.plain)
             }
             .scrollContentBackground(.hidden)
-            .background(themeStore.canvasColor.ignoresSafeArea())
+            .background(themeStore.surfaceElevatedColor.ignoresSafeArea())
             .navigationTitle("Quick Add Bundle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1672,7 +1674,7 @@ private struct ShoppingQuickAddBundleSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .presentationBackground(themeStore.canvasColor)
+        .presentationBackground(themeStore.surfaceElevatedColor)
     }
 }
 
