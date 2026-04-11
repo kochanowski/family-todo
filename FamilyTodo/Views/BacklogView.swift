@@ -1769,7 +1769,7 @@ private struct BacklogAssignButtonChrome: ViewModifier {
         .background {
             if showsBackground {
                 Capsule()
-                    .fill(themeStore.surfaceElevatedColor)
+                    .fill(Color(uiColor: .tertiarySystemFill))
                     .overlay {
                         Capsule()
                             .stroke(themeStore.borderLightColor.opacity(0.35), lineWidth: 1)

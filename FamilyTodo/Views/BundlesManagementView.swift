@@ -6,6 +6,7 @@ struct BundlesManagementView: View {
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
     @State private var presentedEditor: PresentedBundleEditor?
     @State private var hasStartedInitialLoad = false
     @State private var lastAddedBundleId: UUID?
@@ -23,7 +24,20 @@ struct BundlesManagementView: View {
         .background(themeStore.canvasColor.ignoresSafeArea())
         .navigationTitle("Shopping Bundles")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    HapticManager.lightTap()
+                    dismiss()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                        Text("More")
+                    }
+                }
+            }
             ToolbarItem(placement: .principal) {
                 Text("Shopping Bundles")
                     .font(themeStore.font(for: .inlineTitle))
@@ -31,6 +45,7 @@ struct BundlesManagementView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    HapticManager.lightTap()
                     presentedEditor = .create
                 } label: {
                     Image(systemName: "plus")
@@ -64,6 +79,7 @@ struct BundlesManagementView: View {
             ForEach(store.bundles) { bundle in
                 HStack(spacing: 0) {
                     Button {
+                        HapticManager.lightTap()
                         presentedEditor = .edit(bundle)
                     } label: {
                         ShoppingBundleRow(bundle: bundle)
@@ -296,6 +312,7 @@ private struct ShoppingBundleEditorSheet: View {
 
                             if bundle == nil {
                                 Button {
+                                    HapticManager.success()
                                     _ = _Concurrency.Task {
                                         await saveBundle(andAddToShoppingList: true)
                                     }
@@ -334,6 +351,7 @@ private struct ShoppingBundleEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        HapticManager.lightTap()
                         dismiss()
                     } label: {
                         Text("Cancel")
@@ -350,6 +368,7 @@ private struct ShoppingBundleEditorSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
+                        HapticManager.success()
                         _ = _Concurrency.Task {
                             await saveBundle(andAddToShoppingList: false)
                         }
@@ -520,7 +539,10 @@ private struct ShoppingBundleHeaderRow: View {
             .focused(focusedField, equals: .name)
             .onSubmit(onSubmitName)
 
-            Button(action: onChooseIcon) {
+            Button {
+                HapticManager.lightTap()
+                onChooseIcon()
+            } label: {
                 HStack(spacing: 8) {
                     Image(systemName: selectedIcon)
                         .font(.system(size: 17, weight: .semibold))
@@ -576,6 +598,7 @@ private struct ShoppingBundleIconPickerSheet: View {
                             LazyVGrid(columns: columns, spacing: 12) {
                                 ForEach(group.icons, id: \.self) { icon in
                                     Button {
+                                        HapticManager.selection()
                                         selectedIcon = icon
                                         dismiss()
                                     } label: {
@@ -811,6 +834,7 @@ private struct ShoppingBundleComposerRow: View {
                 themeStore: themeStore,
                 onSubmit: onSubmit
             )
+            .submitLabel(.add)
             .frame(height: 24)
         }
         .padding(.horizontal, 16)

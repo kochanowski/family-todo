@@ -300,7 +300,9 @@ private struct TasksContent: View {
             )
         }
         .alert("Recommended Task Limit", isPresented: $showRecommendedLimitInfo) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) {
+                HapticManager.lightTap()
+            }
         } message: {
             Text(
                 "This is your daily recommended limit of active tasks to help you stay focused. You can adjust this limit in the More -> Settings tab."
@@ -609,6 +611,7 @@ private struct TasksContent: View {
             HStack(spacing: 8) {
                 if activeFilter == .active {
                     Button {
+                        HapticManager.lightTap()
                         showRecommendedLimitInfo = true
                     } label: {
                         TasksWIPBadge(count: wipBadgeCount, limit: normalizedWipLimit)

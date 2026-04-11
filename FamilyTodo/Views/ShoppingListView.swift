@@ -648,6 +648,7 @@ private struct ShoppingListContent: View {
                 onDone: commitOrDismissRapidEntry,
                 themeStore: themeStore
             )
+            .submitLabel(.add)
             .accessibilityIdentifier("shoppingRapidEntryField")
             .frame(maxWidth: .infinity, alignment: .leading)
 

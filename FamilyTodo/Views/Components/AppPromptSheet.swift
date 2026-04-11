@@ -154,6 +154,7 @@ struct CategoryEditorSheet: View {
                         ForEach(MemberColorToken.allCases, id: \.self) { token in
                             let hex = token.hex
                             Button {
+                                HapticManager.selection()
                                 selectedColorHex = hex
                             } label: {
                                 Circle()
@@ -182,6 +183,7 @@ struct CategoryEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        HapticManager.lightTap()
                         onCancel()
                         dismiss()
                     } label: {
@@ -196,6 +198,7 @@ struct CategoryEditorSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        HapticManager.success()
                         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmedName.isEmpty else { return }
                         onSubmit(trimmedName, selectedColorHex)
@@ -291,7 +294,7 @@ struct BacklogAssigneePickerSheet: View {
         action: @escaping () -> Void
     ) -> some View {
         Button {
-            HapticManager.lightTap()
+            HapticManager.selection()
             action()
         } label: {
             HStack {
