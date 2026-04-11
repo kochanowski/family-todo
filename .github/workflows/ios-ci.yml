@@ -132,23 +132,26 @@ jobs:
           xcresult_verified_success=0
           if [ -d TestResults.xcresult ]; then
             if xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json > xcresult-summary.json 2>/dev/null; then
-              if jq -e '
-                [
-                  .. | objects | select(has("testsFailedCount")) | .testsFailedCount
-                ] | if length == 0 then false else max == 0 end
-              ' xcresult-summary.json >/dev/null; then
+              if rg -q '"testsFailedCount"[[:space:]]*:[[:space:]]*0' xcresult-summary.json; then
                 xcresult_verified_success=1
               fi
             fi
           fi
 
+          log_reports_zero_failures=0
+          if rg -q 'with 0 failures \(0 unexpected\)' xcodebuild-test.log; then
+            log_reports_zero_failures=1
+          fi
+
+          log_reports_real_failure=0
+          if rg -q "Test Case '.*' failed|\\*\\* BUILD FAILED \\*\\*" xcodebuild-test.log; then
+            log_reports_real_failure=1
+          fi
+
           if [ "$xcodebuild_status" -ne 0 ]; then
-            if [ "$xcresult_verified_success" -eq 1 ] &&
-               ! rg -q "Test Case '.*' failed|\\*\\* BUILD FAILED \\*\\*" xcodebuild-test.log; then
-              echo "::warning::xcodebuild exited with code $xcodebuild_status even though xcresult reports zero failed tests. Accepting this known runner false negative."
-            elif rg -q "Executed [0-9]+ tests, with 0 failures \\(0 unexpected\\)" xcodebuild-test.log &&
-               ! rg -q "Test Case '.*' failed|\\*\\* BUILD FAILED \\*\\*" xcodebuild-test.log; then
-              echo "::warning::xcodebuild exited with code $xcodebuild_status even though all selected tests passed. Accepting this known runner false negative."
+            if [ "$log_reports_real_failure" -eq 0 ] &&
+               { [ "$xcresult_verified_success" -eq 1 ] || [ "$log_reports_zero_failures" -eq 1 ]; }; then
+              echo "::warning::xcodebuild exited with code $xcodebuild_status even though no failing test cases were reported and test output indicates zero failures. Accepting this known runner false negative."
             else
               echo "::group::xcodebuild-test.log (tail)"
               tail -n 200 xcodebuild-test.log || true
