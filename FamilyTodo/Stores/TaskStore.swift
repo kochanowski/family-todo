@@ -85,9 +85,15 @@ final class TaskStore: ObservableObject {
     private var isReplayingPendingMutations = false
     private var shouldReplayPendingMutationsAfterCurrentPass = false
     private var activeLoadTask: _Concurrency.Task<Void, Never>?
+    private var activeReplayTask: _Concurrency.Task<Void, Never>?
     private var shouldReloadAfterCurrentLoad = false
     private var hasHydratedVisibleSnapshot = false
     private var needsLocalRehydrate = false
+
+    deinit {
+        activeLoadTask?.cancel()
+        activeReplayTask?.cancel()
+    }
 
     func setSyncMode(_ mode: SyncMode) {
         syncMode = mode
@@ -229,7 +235,7 @@ final class TaskStore: ObservableObject {
     }
 
     private func syncReminder(for task: Task) async {
-        if task.dueDate != nil, !notificationService.isAuthorized {
+        if !notificationService.isAuthorized {
             await notificationService.requestAuthorization()
         }
 
@@ -562,7 +568,8 @@ final class TaskStore: ObservableObject {
         }
         isReplayingPendingMutations = true
 
-        _ = _Concurrency.Task(priority: .utility) { [self] in
+        activeReplayTask?.cancel()
+        activeReplayTask = _Concurrency.Task(priority: .utility) { [self] in
             while true {
                 shouldReplayPendingMutationsAfterCurrentPass = false
                 await flushPendingSync()
@@ -571,6 +578,7 @@ final class TaskStore: ObservableObject {
                 }
             }
             isReplayingPendingMutations = false
+            activeReplayTask = nil
         }
     }
 

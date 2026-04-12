@@ -328,8 +328,10 @@ final class HouseholdSyncCoordinator: ObservableObject {
     @Published private(set) var lastDiagnostics: HouseholdSyncDiagnostics?
 
     private let engine: HouseholdSyncEngine
-    private let applicationStateProvider: @MainActor () -> UIApplication.State
+    let applicationStateProvider: @MainActor () -> UIApplication.State
+    let currentHouseholdIDProvider: @MainActor () -> UUID?
     private let foregroundRepairConfiguration: ForegroundRepairConfiguration
+    let inviteAcceptanceWatchConfiguration: InviteAcceptanceWatchConfiguration
     private let interactiveManualRefreshBudgetNanoseconds: UInt64
     private let sharedShoppingAlertDelivery: @MainActor ([String], UUID, String?) async -> Void
     private let passiveSharedActivityAlertDelivery: @MainActor (PassiveSharedActivityAlertDescriptor) async -> Void
@@ -338,6 +340,8 @@ final class HouseholdSyncCoordinator: ObservableObject {
     private var lastLifecycleSyncedHouseholdID: UUID?
     private var scheduledForegroundRepairTask: _Concurrency.Task<Void, Never>?
     private var scheduledOwnerFallbackTask: _Concurrency.Task<Void, Never>?
+    var inviteAcceptanceWatchTask: _Concurrency.Task<Void, Never>?
+    var inviteAcceptanceWatchedHouseholdID: UUID?
     private var currentForegroundRepairMode: ForegroundRepairMode = .burst
     private var remainingForegroundRepairBurstPasses = 0
     private var remainingForegroundRepairSteadyPasses = 0
@@ -349,10 +353,13 @@ final class HouseholdSyncCoordinator: ObservableObject {
         applicationStateProvider: @escaping @MainActor () -> UIApplication.State = {
             UIApplication.shared.applicationState
         },
+        currentHouseholdIDProvider: @escaping @MainActor () -> UUID? = {
+            UserSession.shared.currentHouseholdID
+        },
         foregroundRepairConfiguration: ForegroundRepairConfiguration = .default,
+        inviteAcceptanceWatchConfiguration: InviteAcceptanceWatchConfiguration = .default,
         interactiveManualRefreshBudgetNanoseconds: UInt64 = 2_500_000_000,
-        sharedShoppingAlertDelivery: @escaping @MainActor ([String], UUID, String?) async -> Void = {
-            titles, householdId, householdName in
+        sharedShoppingAlertDelivery: @escaping @MainActor ([String], UUID, String?) async -> Void = { titles, householdId, householdName in
             await NotificationService.shared.deliverSharedShoppingItemsAddedAlert(
                 itemTitles: titles,
                 householdId: householdId,
@@ -378,7 +385,9 @@ final class HouseholdSyncCoordinator: ObservableObject {
             }
         self.engine = engine
         self.applicationStateProvider = applicationStateProvider
+        self.currentHouseholdIDProvider = currentHouseholdIDProvider
         self.foregroundRepairConfiguration = foregroundRepairConfiguration
+        self.inviteAcceptanceWatchConfiguration = inviteAcceptanceWatchConfiguration
         self.interactiveManualRefreshBudgetNanoseconds = interactiveManualRefreshBudgetNanoseconds
         self.sharedShoppingAlertDelivery = sharedShoppingAlertDelivery
         self.passiveSharedActivityAlertDelivery = resolvedPassiveSharedActivityAlertDelivery
@@ -479,6 +488,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
         recordSchedulerProgress(
             "sync.batch.published reason=\(schedulerReasonLabel(result.diagnostics.reason)) triggerSource=\(triggerSourceLabel(result.diagnostics.reason)) direction=\(result.diagnostics.direction.rawValue) changedDomains=\(changedDomainLabels) eventCount=\(batch.events.count)"
         )
+        stopInviteAcceptanceWatchIfSatisfied(after: batch)
         CloudKitSubscriptionManager.shared.consumeSyncBatch(batch)
         await deliverSystemAlerts(for: batch)
         scheduleForegroundRepairIfNeeded(for: batch, fetchResult: result.fetchResult)
@@ -769,7 +779,7 @@ final class HouseholdSyncCoordinator: ObservableObject {
         }
     }
 
-    private func recordSchedulerProgress(_ operation: String) {
+    func recordSchedulerProgress(_ operation: String) {
         CloudKitDiagnosticsState.shared.recordProgress(operation: operation)
     }
 

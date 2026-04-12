@@ -69,10 +69,10 @@ final class HouseholdSyncCoordinatorVisibleChangesTests: XCTestCase {
         let result = await coordinator.performSync(reason: .remotePush(context: .sharedDatabase))
 
         XCTAssertEqual(result, .newData)
-        XCTAssertEqual(coordinator.latestBatch?.memberChangedIDs, Set([memberID]))
-        XCTAssertEqual(coordinator.latestBatch?.taskChangedIDs, Set([taskID]))
-        XCTAssertEqual(coordinator.latestBatch?.ideaChangedIDs, Set([ideaID]))
-        XCTAssertEqual(coordinator.latestBatch?.backlogChangedCategoryIDs, Set([backlogCategoryID]))
+        XCTAssertEqual(coordinator.latestBatch?.visibleChanges.memberChangedIDs, Set([memberID]))
+        XCTAssertEqual(coordinator.latestBatch?.visibleChanges.taskChangedIDs, Set([taskID]))
+        XCTAssertEqual(coordinator.latestBatch?.visibleChanges.ideaChangedIDs, Set([ideaID]))
+        XCTAssertEqual(coordinator.latestBatch?.visibleChanges.backlogChangedCategoryIDs, Set([backlogCategoryID]))
     }
 }
 

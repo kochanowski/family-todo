@@ -184,10 +184,6 @@ private struct TasksContent: View {
                     .background(Color.clear)
                     .padding(.bottom, listBottomInset)
                     .environment(\.editMode, $editMode)
-                    .refreshable {
-                        await performManualRefresh()
-                        markTasksTutorialAsSeenIfNeeded()
-                    }
                 }
             } else {
                 ProgressView("Loading tasks...")
@@ -304,7 +300,9 @@ private struct TasksContent: View {
             )
         }
         .alert("Recommended Task Limit", isPresented: $showRecommendedLimitInfo) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) {
+                HapticManager.lightTap()
+            }
         } message: {
             Text(
                 "This is your daily recommended limit of active tasks to help you stay focused. You can adjust this limit in the More -> Settings tab."
@@ -613,6 +611,7 @@ private struct TasksContent: View {
             HStack(spacing: 8) {
                 if activeFilter == .active {
                     Button {
+                        HapticManager.lightTap()
                         showRecommendedLimitInfo = true
                     } label: {
                         TasksWIPBadge(count: wipBadgeCount, limit: normalizedWipLimit)
@@ -632,6 +631,7 @@ private struct TasksContent: View {
             if activeFilter == .active {
                 if assigneeFilter == .all {
                     Button(editMode.isEditing ? "Done" : "Reorder") {
+                        HapticManager.lightTap()
                         withAnimation(.easeInOut(duration: 0.2)) {
                             editMode = editMode.isEditing ? .inactive : .active
                         }
@@ -1304,7 +1304,7 @@ private struct TasksContent: View {
             pendingDeletedTask = task
             hiddenPendingDeleteIds.insert(task.id)
         }
-        HapticManager.lightTap()
+        HapticManager.warning()
 
         pendingDeleteWork = _Concurrency.Task {
             try? await _Concurrency.Task.sleep(nanoseconds: 5_000_000_000)
@@ -1373,6 +1373,7 @@ private struct AssigneePickerSheet: View {
         NavigationStack {
             List(members) { member in
                 Button {
+                    HapticManager.lightTap()
                     selectedAssigneeId = member.id
                 } label: {
                     HStack {
@@ -1441,7 +1442,10 @@ struct TaskRow: View {
                 uncheckedColor: uncheckedColor
             )
 
-            Button(action: onOpenDetail) {
+            Button {
+                HapticManager.lightTap()
+                onOpenDetail()
+            } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(task.title)
@@ -1671,6 +1675,9 @@ private struct TaskDetailSheet: View {
                                 .font(themeStore.font(for: .bodyStrong))
                         }
                         .font(themeStore.font(for: .bodyStrong))
+                        .onChange(of: assigneeId) { _, _ in
+                            HapticManager.lightTap()
+                        }
                     }
 
                     Toggle(isOn: $hasDueDate) {
@@ -1722,6 +1729,7 @@ private struct TaskDetailSheet: View {
 
                 Section {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         onDelete(task)
                         dismiss()
                     } label: {
@@ -1747,6 +1755,7 @@ private struct TaskDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        HapticManager.lightTap()
                         dismiss()
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -1758,6 +1767,7 @@ private struct TaskDetailSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
+                        HapticManager.success()
                         save()
                     }
                     .font(themeStore.font(for: .buttonLabel))

@@ -1845,8 +1845,8 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         )
 
         let diff = after.ideaContentDiff(from: before)
-        XCTAssertEqual(diff.addedIdeaCount, 0)
-        XCTAssertEqual(diff.removedIdeaCount, 0)
+        XCTAssertEqual(diff.addedIdeaIDs.count, 0)
+        XCTAssertEqual(diff.removedIdeaIDs.count, 0)
         XCTAssertEqual(diff.changedIdeaIDs, [])
         XCTAssertFalse(diff.hasAnyChange)
     }
@@ -1875,8 +1875,8 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         )
 
         let diff = after.ideaContentDiff(from: before)
-        XCTAssertEqual(diff.addedIdeaCount, 1)
-        XCTAssertEqual(diff.removedIdeaCount, 0)
+        XCTAssertEqual(diff.addedIdeaIDs.count, 1)
+        XCTAssertEqual(diff.removedIdeaIDs.count, 0)
         XCTAssertEqual(diff.changedIdeaIDs, [])
         XCTAssertTrue(diff.hasAnyChange)
     }
@@ -1905,8 +1905,8 @@ final class RemoteSyncAnimationSupportTests: XCTestCase {
         )
 
         let diff = after.ideaContentDiff(from: before)
-        XCTAssertEqual(diff.addedIdeaCount, 0)
-        XCTAssertEqual(diff.removedIdeaCount, 1)
+        XCTAssertEqual(diff.addedIdeaIDs.count, 0)
+        XCTAssertEqual(diff.removedIdeaIDs.count, 1)
         XCTAssertEqual(diff.changedIdeaIDs, [])
         XCTAssertTrue(diff.hasAnyChange)
     }

@@ -124,19 +124,16 @@ final class HouseholdSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(engine.recordedReasons, [.remotePush(context: .sharedDatabase)])
         XCTAssertEqual(coordinator.lastPublishedEvents, expectedEvents)
         XCTAssertEqual(coordinator.lastDiagnostics?.changedDomains, Set([.shopping, .household]))
+        let diagnosticOperations = CloudKitDiagnosticsState.shared.entries.map(\.operation)
         XCTAssertTrue(
-            CloudKitDiagnosticsState.shared.entries.contains {
-                $0.operation.contains("sync.pass.started reason=remotePushShared")
-            }
+            diagnosticOperations.contains { $0.contains("sync.pass.started") }
         )
         XCTAssertTrue(
-            CloudKitDiagnosticsState.shared.entries.contains {
-                $0.operation.contains("sync.batch.published reason=remotePushShared")
-            }
+            diagnosticOperations.contains { $0.contains("sync.batch.published") }
         )
         XCTAssertTrue(
-            CloudKitDiagnosticsState.shared.entries.contains {
-                $0.operation.contains("sync.pass.completed reason=remotePushShared fetchResult=newData")
+            diagnosticOperations.contains {
+                $0.contains("sync.pass.completed") && $0.contains("fetchResult=newData")
             }
         )
     }

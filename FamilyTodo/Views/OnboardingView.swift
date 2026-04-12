@@ -168,9 +168,8 @@ struct CreateHouseholdSheet: View {
                     userId: userId,
                     displayName: resolvedDisplayName
                 )
-                if isCloudSyncEnabled {
-                    await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
-                }
+                HapticManager.success()
+                if isCloudSyncEnabled {}
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -275,9 +274,8 @@ struct JoinHouseholdSheet: View {
                     userId: userId,
                     displayName: resolvedDisplayName
                 )
-                if isCloudSyncEnabled {
-                    await NotificationService.shared.requestCollaborationAuthorizationIfNeeded()
-                }
+                HapticManager.success()
+                if isCloudSyncEnabled {}
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

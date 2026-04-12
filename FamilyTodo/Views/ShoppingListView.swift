@@ -42,6 +42,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Rapid entry state
     @State private var isRapidEntryActive = false
@@ -52,6 +53,8 @@ private struct ShoppingListContent: View {
     @State private var showClearToBuyConfirmation = false
     @State private var showQuickAddBundleChooser = false
     @State private var didTriggerQuickAddGesture = false
+    @State private var isQuickAddPressVisualActive = false
+    @State private var quickAddPulseToken = 0
     @State private var itemBeingRemoved: UUID?
     @State private var editingItemId: UUID?
     @State private var editingItemText = ""
@@ -336,9 +339,6 @@ private struct ShoppingListContent: View {
             .background(Color.clear)
             .padding(.bottom, listBottomInset)
             .scrollDismissesKeyboard(.interactively)
-            .refreshable {
-                await performManualRefresh()
-            }
             .onChange(of: rapidEntryFocused) { _, focused in
                 guard focused else { return }
                 withAnimation(WowAnimation.spring) {
@@ -532,19 +532,6 @@ private struct ShoppingListContent: View {
     // MARK: - Add Pill Button
 
     private var addPillButton: some View {
-        addPillButtonBase
-            .highPriorityGesture(
-                LongPressGesture(minimumDuration: 0.45)
-                    .onEnded { _ in
-                        guard !quickAddBundles.isEmpty else { return }
-                        didTriggerQuickAddGesture = true
-                        HapticManager.lightTap()
-                        showQuickAddBundleChooser = true
-                    }
-            )
-    }
-
-    private var addPillButtonBase: some View {
         let foreground = themeStore.foregroundOnAccent(
             for: themeStore.accentTabColor, colorScheme: colorScheme
         )
@@ -554,7 +541,9 @@ private struct ShoppingListContent: View {
                 didTriggerQuickAddGesture = false
                 return
             }
-            startRapidEntry()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                startRapidEntry()
+            }
         } label: {
             HStack(spacing: 0) {
                 Text("Add item")
@@ -566,10 +555,52 @@ private struct ShoppingListContent: View {
             .background {
                 Capsule()
                     .fill(themeStore.accentTabColor)
-                    .shadow(color: themeStore.accentTabColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .overlay {
+                        Capsule()
+                            .stroke(
+                                foreground.opacity(quickAddInnerStrokeOpacity),
+                                lineWidth: 1
+                            )
+                    }
+                    .overlay {
+                        Capsule()
+                            .stroke(
+                                themeStore.accentTabColor.opacity(quickAddHaloOpacity),
+                                lineWidth: quickAddHaloLineWidth
+                            )
+                            .scaleEffect(quickAddHaloScale)
+                            .blur(radius: quickAddHaloBlurRadius)
+                            .pulseAnimation(trigger: quickAddPulseToken)
+                            .allowsHitTesting(false)
+                    }
+                    .shadow(
+                        color: themeStore.accentTabColor.opacity(quickAddShadowOpacity),
+                        radius: quickAddShadowRadius,
+                        x: 0,
+                        y: quickAddShadowYOffset
+                    )
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ShoppingAddButtonStyle(
+            reduceMotion: reduceMotion,
+            isPressingChanged: { isPressing in
+                if isPressing {
+                    HapticManager.lightTap()
+                }
+                if isQuickAddPressVisualActive != isPressing {
+                    isQuickAddPressVisualActive = isPressing
+                }
+            }
+        ))
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5, maximumDistance: 18)
+                .onEnded { _ in
+                    guard quickAddFeedbackEnabled else { return }
+                    didTriggerQuickAddGesture = true
+                    HapticManager.success()
+                    handleQuickAddLongPress()
+                }
+        )
         .accessibilityIdentifier("shoppingAddItemButton")
         .accessibilityHint(
             quickAddBundles.isEmpty
@@ -617,6 +648,7 @@ private struct ShoppingListContent: View {
                 onDone: commitOrDismissRapidEntry,
                 themeStore: themeStore
             )
+            .submitLabel(.continue)
             .accessibilityIdentifier("shoppingRapidEntryField")
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -970,6 +1002,62 @@ private struct ShoppingListContent: View {
 
     private var quickAddBundles: [ShoppingBundle] {
         bundleStore.quickAddBundles
+    }
+
+    private var quickAddFeedbackEnabled: Bool {
+        !quickAddBundles.isEmpty
+    }
+
+    private var quickAddInnerStrokeOpacity: Double {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return 0.18
+    }
+
+    private var quickAddHaloOpacity: Double {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return reduceMotion ? 0.18 : 0.26
+    }
+
+    private var quickAddHaloLineWidth: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return reduceMotion ? 4 : 6
+    }
+
+    private var quickAddHaloScale: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 1 }
+        return reduceMotion ? 1.01 : 1.03
+    }
+
+    private var quickAddHaloBlurRadius: CGFloat {
+        guard quickAddFeedbackEnabled, isQuickAddPressVisualActive else { return 0 }
+        return reduceMotion ? 4 : 8
+    }
+
+    private var quickAddShadowOpacity: Double {
+        guard quickAddFeedbackEnabled else { return 0.3 }
+        return isQuickAddPressVisualActive ? 0.42 : 0.3
+    }
+
+    private var quickAddShadowRadius: CGFloat {
+        isQuickAddPressVisualActive ? 12 : 8
+    }
+
+    private var quickAddShadowYOffset: CGFloat {
+        isQuickAddPressVisualActive ? 6 : 4
+    }
+
+    private func handleQuickAddLongPress() {
+        guard quickAddFeedbackEnabled else { return }
+
+        withAnimation(WowAnimation.easeOut) {
+            isQuickAddPressVisualActive = false
+        }
+
+        quickAddPulseToken += 1
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            showQuickAddBundleChooser = true
+        }
     }
 
     private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
@@ -1399,6 +1487,7 @@ private struct RapidEntryTextField: UIViewRepresentable {
 
         @objc
         private func doneTapped() {
+            HapticManager.success()
             parent.onDone()
         }
 
@@ -1566,7 +1655,7 @@ private struct ShoppingQuickAddBundleSheet: View {
                 .buttonStyle(.plain)
             }
             .scrollContentBackground(.hidden)
-            .background(themeStore.canvasColor.ignoresSafeArea())
+            .background(themeStore.surfaceElevatedColor.ignoresSafeArea())
             .navigationTitle("Quick Add Bundle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1584,7 +1673,7 @@ private struct ShoppingQuickAddBundleSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .presentationBackground(themeStore.canvasColor)
+        .presentationBackground(themeStore.surfaceElevatedColor)
     }
 }
 
@@ -1617,6 +1706,21 @@ private struct RestockItemRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+private struct ShoppingAddButtonStyle: ButtonStyle {
+    var reduceMotion: Bool
+    var isPressingChanged: (Bool) -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.92 : 1.0)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .animation(.spring(), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                isPressingChanged(isPressed)
+            }
     }
 }
 

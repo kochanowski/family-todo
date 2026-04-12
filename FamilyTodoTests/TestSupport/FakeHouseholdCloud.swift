@@ -142,7 +142,7 @@ actor FakeHouseholdCloud: HouseholdCloudSyncing {
             return
         }
 
-        try await Task.sleep(nanoseconds: delayNanoseconds)
+        try await _Concurrency.Task.sleep(nanoseconds: delayNanoseconds)
     }
 
     private func ensureParticipantSharedAccess(

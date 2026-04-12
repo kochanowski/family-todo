@@ -617,7 +617,7 @@ enum AppTipStorageKey {
         }
 
         var message: Text? {
-            Text("Swipe a task row for shortcuts like Poke, Move to Ideas, or Delete.")
+            Text("Swipe a task row for shortcuts like Move to Ideas or Delete.")
         }
 
         var image: Image? {
@@ -633,6 +633,20 @@ enum AppTipStorageKey {
         }
     }
 
+    @available(iOS 17, *)
+    private struct TipClosedHapticObserver<T: Tip>: ViewModifier {
+        let tip: T
+        func body(content: Content) -> some View {
+            content.task(id: tip.id) {
+                for await status in tip.statusUpdates {
+                    if case let .invalidated(reason) = status, reason == .tipClosed {
+                        HapticManager.lightTap()
+                    }
+                }
+            }
+        }
+    }
+
     extension View {
         @ViewBuilder
         func contextualPopoverTip(
@@ -645,6 +659,7 @@ enum AppTipStorageKey {
             if #available(iOS 17, *), isEnabled {
                 id("app-tip-\(tipID)-\(generation)")
                     .popoverTip(tip, arrowEdge: arrowEdge)
+                    .modifier(TipClosedHapticObserver(tip: tip))
             } else {
                 self
             }

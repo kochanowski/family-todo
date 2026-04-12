@@ -154,6 +154,7 @@ struct CategoryEditorSheet: View {
                         ForEach(MemberColorToken.allCases, id: \.self) { token in
                             let hex = token.hex
                             Button {
+                                HapticManager.selection()
                                 selectedColorHex = hex
                             } label: {
                                 Circle()
@@ -182,6 +183,7 @@ struct CategoryEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        HapticManager.lightTap()
                         onCancel()
                         dismiss()
                     } label: {
@@ -196,6 +198,7 @@ struct CategoryEditorSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        HapticManager.success()
                         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmedName.isEmpty else { return }
                         onSubmit(trimmedName, selectedColorHex)
@@ -290,7 +293,10 @@ struct BacklogAssigneePickerSheet: View {
         isSelected: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button {
+            HapticManager.selection()
+            action()
+        } label: {
             HStack {
                 Text(title)
                     .font(themeStore.font(for: .inlineTitle))
@@ -385,6 +391,7 @@ struct BacklogItemEditSheet: View {
 
                 Section {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         showDeleteConfirmation = true
                     } label: {
                         Text("Delete Item")
@@ -398,6 +405,7 @@ struct BacklogItemEditSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        HapticManager.lightTap()
                         dismiss()
                     } label: {
                         Text("Cancel")
@@ -411,6 +419,7 @@ struct BacklogItemEditSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        HapticManager.success()
                         commit()
                     } label: {
                         Text("Save")
