@@ -83,6 +83,7 @@ platform :ios do
         },
       },
       xcargs: [
+        "DEVELOPMENT_TEAM=#{team_id}",
         "INFOPLIST_KEY_HPCloudKitEnabled=#{hp_cloudkit_enabled}",
       ].join(" "),
       output_directory: "./build",
