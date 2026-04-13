@@ -75,6 +75,14 @@ jobs:
             echo "::error::Missing REVENUECAT_API_KEY secret"
             exit 1
           fi
+          if [[ "$REVENUECAT_API_KEY" == test_* ]]; then
+            echo "::error::REVENUECAT_API_KEY is a RevenueCat Test Store key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == sk_* ]]; then
+            echo "::error::REVENUECAT_API_KEY looks like a RevenueCat secret key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
 
           cat > FamilyTodo/Secrets.swift <<EOF
           struct Secrets {
@@ -203,6 +211,14 @@ jobs:
           set -euo pipefail
           if [ -z "$REVENUECAT_API_KEY" ]; then
             echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == test_* ]]; then
+            echo "::error::REVENUECAT_API_KEY is a RevenueCat Test Store key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == sk_* ]]; then
+            echo "::error::REVENUECAT_API_KEY looks like a RevenueCat secret key. Use the Apple public SDK key for iOS/TestFlight builds."
             exit 1
           fi
 
@@ -347,6 +363,14 @@ jobs:
           set -euo pipefail
           if [ -z "$REVENUECAT_API_KEY" ]; then
             echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == test_* ]]; then
+            echo "::error::REVENUECAT_API_KEY is a RevenueCat Test Store key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == sk_* ]]; then
+            echo "::error::REVENUECAT_API_KEY looks like a RevenueCat secret key. Use the Apple public SDK key for iOS/TestFlight builds."
             exit 1
           fi
 
