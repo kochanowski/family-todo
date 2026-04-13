@@ -270,140 +270,143 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        Group {
-            switch onboardingState.currentState {
-            case .onboarding:
-                OnboardingCarouselView()
-
-            case .auth:
-                SignInView()
-
-            case .householdSetup:
-                if userSession.hasActiveSession {
-                    if shouldShowHouseholdSetupLoader {
-                        HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
-                    } else {
-                        CreateHouseholdView()
-                    }
-                } else {
-                    SignInView()
-                }
-
-            case .mainApp:
-                if userSession.hasActiveSession {
-                    ContentView()
-                } else {
-                    SignInView()
+        rootContent
+            .onChange(of: userSession.hasActiveSession) { _, hasSession in
+                if !hasSession, onboardingState.currentState != .onboarding {
+                    householdStore.resetSetupResolution()
+                    onboardingState.openAuth()
                 }
             }
-        }
-        .onChange(of: userSession.hasActiveSession) { _, hasSession in
-            if !hasSession, onboardingState.currentState != .onboarding {
-                householdStore.resetSetupResolution()
-                onboardingState.openAuth()
+            .onChange(of: userSession.sessionMode) { _, _ in
+                _ = _Concurrency.Task {
+                    await premiumSubscriptionManager.handleSessionChange()
+                }
             }
-        }
-        .onChange(of: userSession.sessionMode) { _, _ in
-            _ = _Concurrency.Task {
-                await premiumSubscriptionManager.handleSessionChange()
+            .onChange(of: userSession.userId) { _, _ in
+                _ = _Concurrency.Task {
+                    await premiumSubscriptionManager.handleSessionChange()
+                }
             }
-        }
-        .onChange(of: userSession.userId) { _, _ in
-            _ = _Concurrency.Task {
-                await premiumSubscriptionManager.handleSessionChange()
+            .onChange(of: userSession.currentHouseholdID) { _, _ in
+                _ = _Concurrency.Task {
+                    await premiumSubscriptionManager.handleHouseholdChange()
+                }
             }
-        }
-        .onChange(of: userSession.currentHouseholdID) { _, _ in
-            _ = _Concurrency.Task {
-                await premiumSubscriptionManager.handleHouseholdChange()
+            .onChange(of: householdStore.currentHousehold?.id) { _, _ in
+                _ = _Concurrency.Task {
+                    await premiumSubscriptionManager.handleHouseholdChange()
+                }
             }
-        }
-        .onChange(of: householdStore.currentHousehold?.id) { _, _ in
-            _ = _Concurrency.Task {
-                await premiumSubscriptionManager.handleHouseholdChange()
+            .onChange(of: householdStore.currentHousehold?.isPremium) { _, _ in
+                _ = _Concurrency.Task {
+                    await premiumSubscriptionManager.handleHouseholdChange()
+                }
             }
-        }
-        .onChange(of: householdStore.currentHousehold?.isPremium) { _, _ in
-            _ = _Concurrency.Task {
-                await premiumSubscriptionManager.handleHouseholdChange()
+            .onChange(of: onboardingState.currentState) { _, newState in
+                if newState == .householdSetup {
+                    householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
+                } else {
+                    householdStore.resetSetupResolution()
+                }
             }
-        }
-        .onChange(of: onboardingState.currentState) { _, newState in
-            if newState == .householdSetup {
-                householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
+            .onChange(of: householdSetupResolutionKey) { _, newKey in
+                guard onboardingState.currentState == .householdSetup else { return }
+                guard userSession.hasActiveSession else { return }
+                householdStore.prepareForSetupResolution(key: newKey)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
+                _ = _Concurrency.Task {
+                    await handleHouseholdDataDidChange()
+                }
+            }
+            .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
+                guard batchID != nil else { return }
+                _ = _Concurrency.Task {
+                    await handleHouseholdDataDidChange()
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
+                _ = _Concurrency.Task {
+                    _ = await syncCoordinator.performSync(reason: .appBecameActive)
+                }
+            }
+            .task(id: pendingProcessingKey) {
+                await shareAcceptanceCoordinator.processPendingIfPossible(
+                    userSession: userSession,
+                    householdStore: householdStore,
+                    onboardingState: onboardingState
+                )
+            }
+            .task(id: tipContextKey) {
+                guard onboardingState.currentState == .mainApp else { return }
+                AppTips.configureIfNeeded()
+                AppTips.syncContextIfNeeded(
+                    sessionMode: userSession.sessionMode,
+                    userId: userSession.userId,
+                    householdId: userSession.currentHouseholdID
+                )
+            }
+            .task(id: subscriptionConfigurationKey) {
+                configureSubscriptionsIfNeeded()
+            }
+            .task {
+                await premiumSubscriptionManager.connect(
+                    userSession: userSession,
+                    householdStore: householdStore
+                )
+            }
+            .task(id: householdLifecycleSyncKey) {
+                await syncCurrentHouseholdLifecycleIfNeeded()
+            }
+            .task(id: householdRecoveryKey) {
+                await recoverHouseholdRouteIfNeeded()
+            }
+            .alert(
+                "Invitation Error",
+                isPresented: Binding(
+                    get: {
+                        onboardingState.currentState == .mainApp
+                            && shareAcceptanceCoordinator.lastErrorMessage != nil
+                    },
+                    set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    shareAcceptanceCoordinator.clearError()
+                }
+            } message: {
+                Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
+            }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        switch onboardingState.currentState {
+        case .onboarding:
+            OnboardingCarouselView()
+
+        case .auth:
+            SignInView()
+
+        case .householdSetup:
+            if userSession.hasActiveSession {
+                if shouldShowHouseholdSetupLoader {
+                    HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
+                } else {
+                    CreateHouseholdView()
+                }
             } else {
-                householdStore.resetSetupResolution()
+                SignInView()
             }
-        }
-        .onChange(of: householdSetupResolutionKey) { _, newKey in
-            guard onboardingState.currentState == .householdSetup else { return }
-            guard userSession.hasActiveSession else { return }
-            householdStore.prepareForSetupResolution(key: newKey)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
-            _ = _Concurrency.Task {
-                await handleHouseholdDataDidChange()
+
+        case .mainApp:
+            if userSession.hasActiveSession {
+                ContentView()
+            } else {
+                SignInView()
             }
-        }
-        .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
-            guard batchID != nil else { return }
-            _ = _Concurrency.Task {
-                await handleHouseholdDataDidChange()
-            }
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
-            _ = _Concurrency.Task {
-                _ = await syncCoordinator.performSync(reason: .appBecameActive)
-            }
-        }
-        .task(id: pendingProcessingKey) {
-            await shareAcceptanceCoordinator.processPendingIfPossible(
-                userSession: userSession,
-                householdStore: householdStore,
-                onboardingState: onboardingState
-            )
-        }
-        .task(id: tipContextKey) {
-            guard onboardingState.currentState == .mainApp else { return }
-            AppTips.configureIfNeeded()
-            AppTips.syncContextIfNeeded(
-                sessionMode: userSession.sessionMode,
-                userId: userSession.userId,
-                householdId: userSession.currentHouseholdID
-            )
-        }
-        .task(id: subscriptionConfigurationKey) {
-            configureSubscriptionsIfNeeded()
-        }
-        .task {
-            await premiumSubscriptionManager.connect(
-                userSession: userSession,
-                householdStore: householdStore
-            )
-        }
-        .task(id: householdLifecycleSyncKey) {
-            await syncCurrentHouseholdLifecycleIfNeeded()
-        }
-        .task(id: householdRecoveryKey) {
-            await recoverHouseholdRouteIfNeeded()
-        }
-        .alert(
-            "Invitation Error",
-            isPresented: Binding(
-                get: {
-                    onboardingState.currentState == .mainApp
-                        && shareAcceptanceCoordinator.lastErrorMessage != nil
-                },
-                set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                shareAcceptanceCoordinator.clearError()
-            }
-        } message: {
-            Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
         }
     }
 

@@ -116,13 +116,13 @@ final class SubscriptionManager: NSObject, ObservableObject {
     }
 
     func handlePurchaseCompleted(customerInfo: CustomerInfo) {
-        Task { @MainActor in
+        _ = _Concurrency.Task { @MainActor in
             await apply(customerInfo: customerInfo)
         }
     }
 
     func handleRestoreCompleted(customerInfo: CustomerInfo) {
-        Task { @MainActor in
+        _ = _Concurrency.Task { @MainActor in
             await apply(customerInfo: customerInfo)
         }
     }
@@ -192,8 +192,8 @@ final class SubscriptionManager: NSObject, ObservableObject {
 }
 
 extension SubscriptionManager: PurchasesDelegate {
-    nonisolated func purchases(_ purchases: Purchases, receivedUpdated customerInfo: CustomerInfo) {
-        Task { @MainActor in
+    nonisolated func purchases(_: Purchases, receivedUpdated customerInfo: CustomerInfo) {
+        _ = _Concurrency.Task { @MainActor in
             await apply(customerInfo: customerInfo)
         }
     }
