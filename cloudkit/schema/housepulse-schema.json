@@ -42,6 +42,7 @@
     {
       "name": "Area",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "name", "type": "String", "queryable": false, "sortable": false },
@@ -50,13 +51,14 @@
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["householdId"],
+        "query": ["___recordID", "householdId"],
         "sort": ["sortOrder"]
       }
     },
     {
       "name": "Task",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "title", "type": "String", "queryable": false, "sortable": false },
@@ -77,13 +79,14 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": true }
       ],
       "indexes": {
-        "query": ["householdId", "status", "assigneeId"],
+        "query": ["___recordID", "householdId", "status", "assigneeId"],
         "sort": ["updatedAt"]
       }
     },
     {
       "name": "WorkItem",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "logicalItemId", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
@@ -105,7 +108,7 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": true }
       ],
       "indexes": {
-        "query": ["householdId"],
+        "query": ["___recordID", "householdId"],
         "sort": ["updatedAt"]
       }
     },
@@ -138,6 +141,7 @@
     {
       "name": "ShoppingItem",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "title", "type": "String", "queryable": false, "sortable": false },
@@ -151,13 +155,14 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["householdId"],
+        "query": ["___recordID", "householdId"],
         "sort": ["sortOrder"]
       }
     },
     {
       "name": "ShoppingBundle",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "name", "type": "String", "queryable": false, "sortable": false },
@@ -168,13 +173,14 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["householdId"],
+        "query": ["___recordID", "householdId"],
         "sort": ["sortOrder"]
       }
     },
     {
       "name": "BacklogCategory",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "title", "type": "String", "queryable": false, "sortable": false },
@@ -184,13 +190,14 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["householdId"],
+        "query": ["___recordID", "householdId"],
         "sort": ["sortOrder"]
       }
     },
     {
       "name": "BacklogItem",
       "fields": [
+        { "name": "___recordID", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "id", "type": "String", "queryable": false, "sortable": false },
         { "name": "categoryId", "type": "Reference", "queryable": true, "sortable": false },
         { "name": "householdId", "type": "Reference", "queryable": true, "sortable": false },
@@ -201,7 +208,7 @@
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
       ],
       "indexes": {
-        "query": ["householdId", "categoryId"],
+        "query": ["___recordID", "householdId", "categoryId"],
         "sort": ["createdAt"]
       }
     },
