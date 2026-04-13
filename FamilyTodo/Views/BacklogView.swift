@@ -1489,7 +1489,6 @@ struct CategoryCard: View {
                             focusedComposerCategoryId.wrappedValue = category.id
                         }
                     }
-                    .submitLabel(.done)
                     .autocorrectionDisabled()
 
                     Button {

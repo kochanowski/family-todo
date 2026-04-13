@@ -535,7 +535,6 @@ private struct ShoppingBundleHeaderRow: View {
             .fixedSize(horizontal: false, vertical: true)
             .textInputAutocapitalization(.words)
             .autocorrectionDisabled()
-            .submitLabel(.next)
             .focused(focusedField, equals: .name)
             .onSubmit(onSubmitName)
 
@@ -802,7 +801,6 @@ private struct ShoppingBundleItemRow: View {
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.sentences)
                 .autocorrectionDisabled()
-                .submitLabel(.next)
                 .focused(focusedField, equals: focusID)
                 .onSubmit(onSubmit)
 
@@ -834,7 +832,6 @@ private struct ShoppingBundleComposerRow: View {
                 themeStore: themeStore,
                 onSubmit: onSubmit
             )
-            .submitLabel(.continue)
             .frame(height: 24)
         }
         .padding(.horizontal, 16)
