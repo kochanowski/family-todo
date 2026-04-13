@@ -60,7 +60,22 @@ struct SettingsView: View {
                     await syncNotificationSchedules()
                 }
             }
-            .modifier(SettingsRevenueCatPresentation(subscriptionManager: premiumSubscriptionManager))
+            .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
+                PaywallView()
+                    .onDisappear {
+                        _ = _Concurrency.Task {
+                            await premiumSubscriptionManager.refreshCustomerInfo()
+                        }
+                    }
+            }
+            .sheet(isPresented: $premiumSubscriptionManager.displayCustomerCenter) {
+                CustomerCenterView()
+                    .onDisappear {
+                        _ = _Concurrency.Task {
+                            await premiumSubscriptionManager.refreshCustomerInfo()
+                        }
+                    }
+            }
             .alert("Hard Reset App?", isPresented: $showHardResetConfirmation) {
                 Button("Maybe Later", role: .cancel) {}
                 Button("Hard Reset", role: .destructive) {
@@ -520,32 +535,6 @@ struct SettingsView: View {
             return "You are the owner of this household. Deleting your account will permanently delete the entire household, all tasks, shopping items, and ideas for ALL members. This action cannot be undone."
         }
         return "Deleting your account will remove you from this household and delete your personal data. The household will remain active for other members."
-    }
-}
-
-private struct SettingsRevenueCatPresentation: ViewModifier {
-    @ObservedObject var subscriptionManager: SubscriptionManager
-
-    func body(content: Content) -> some View {
-        content
-            .sheet(isPresented: $subscriptionManager.displayPaywall) {
-                PaywallView()
-                    .onPurchaseCompleted { customerInfo in
-                        subscriptionManager.handlePurchaseCompleted(customerInfo: customerInfo)
-                    }
-                    .onRestoreCompleted { customerInfo in
-                        subscriptionManager.handleRestoreCompleted(customerInfo: customerInfo)
-                    }
-                    .onDismiss {
-                        subscriptionManager.displayPaywall = false
-                    }
-            }
-            .presentCustomerCenter(isPresented: $subscriptionManager.displayCustomerCenter) {
-                subscriptionManager.displayCustomerCenter = false
-                _ = _Concurrency.Task {
-                    await subscriptionManager.refreshCustomerInfo()
-                }
-            }
     }
 }
 
