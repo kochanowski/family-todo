@@ -11,7 +11,6 @@ struct SignInView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
 
-    @State private var showDiagnosticsSheet = false
     @State private var isResolvingAuthRoute = false
 
     var body: some View {
@@ -21,18 +20,6 @@ struct SignInView: View {
             } else {
                 signInContent
             }
-        }
-        .sheet(isPresented: $showDiagnosticsSheet) {
-            SignInDiagnosticsSheet(
-                authDiagnosticsJSON: userSession.authService.diagnosticsReportJSON(),
-                startupRecoveryEvent: UserDefaults.standard.string(
-                    forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey
-                ) ?? "No startup recovery event recorded.",
-                startupBootstrapDiagnostics: UserDefaults.standard.string(
-                    forKey: SwiftDataContainerFactory.bootstrapDiagnosticsUserDefaultsKey
-                ) ?? "No startup bootstrap diagnostics recorded.",
-                onClearDiagnostics: clearDiagnostics
-            )
         }
         .task(id: authRoutingKey) {
             await handleAuthRoutingIfNeeded()
@@ -89,15 +76,6 @@ struct SignInView: View {
             alignment: .top
         )
         .ignoresSafeArea(edges: .bottom)
-        #if DEBUG
-            .overlay(alignment: .topTrailing) {
-                Button("Debug") {
-                    showDiagnosticsSheet = true
-                }
-                .buttonStyle(.bordered)
-                .padding(.top, 8)
-            }
-        #endif
     }
 
     private var shouldShowLaunchContinuation: Bool {
@@ -142,19 +120,11 @@ struct SignInView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            HStack(spacing: 12) {
-                Button("Try again") {
-                    userSession.signIn()
-                }
-                .font(themeStore.font(for: .buttonLabel))
-                .buttonStyle(.borderedProminent)
-
-                Button("Open diagnostics") {
-                    showDiagnosticsSheet = true
-                }
-                .font(themeStore.font(for: .buttonLabel))
-                .buttonStyle(.bordered)
+            Button("Try again") {
+                userSession.signIn()
             }
+            .font(themeStore.font(for: .buttonLabel))
+            .buttonStyle(.borderedProminent)
 
             guestButton
             guestFootnote
@@ -201,17 +171,10 @@ struct SignInView: View {
         case .userNotFound:
             "Sign in succeeded, but no CloudKit user was found. Please try again."
         case .failed:
-            "Sign in with Apple failed. Please try again or open diagnostics."
+            "Sign in with Apple failed. Please try again."
         case .cancelled:
             ""
         }
-    }
-
-    private func clearDiagnostics() {
-        userSession.authService.clearDiagnosticsHistory()
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: SwiftDataContainerFactory.recoveryUserDefaultsKey)
-        defaults.removeObject(forKey: SwiftDataContainerFactory.bootstrapDiagnosticsUserDefaultsKey)
     }
 
     private var authRoutingKey: String {
@@ -259,15 +222,13 @@ struct SignInView: View {
             }
 
             if let household = householdStore.currentHousehold,
-               userSession.currentHouseholdID != household.id
-            {
+               userSession.currentHouseholdID != household.id {
                 userSession.setCurrentHousehold(household.id)
             }
         }
 
         if let householdId = userSession.currentHouseholdID,
-           householdStore.isRecoverySuppressed(for: householdId)
-        {
+           householdStore.isRecoverySuppressed(for: householdId) {
             householdStore.clearCurrentHousehold()
             userSession.clearCurrentHousehold()
         }
@@ -275,132 +236,6 @@ struct SignInView: View {
         let hasHousehold = userSession.currentHouseholdID != nil || householdStore.currentHousehold != nil
         onboardingState.completeAuth(syncMethod: .iCloud, isGuest: false, hasHousehold: hasHousehold)
     }
-}
-
-private struct SignInDiagnosticsSheet: View {
-    let authDiagnosticsJSON: String
-    let startupRecoveryEvent: String
-    let startupBootstrapDiagnostics: String
-    let onClearDiagnostics: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var showShareSheet = false
-    @State private var copied = false
-    @State private var cleared = false
-
-    private var diagnosticsReport: String {
-        [
-            "=== Auth/CloudKit diagnostics ===",
-            authDiagnosticsJSON,
-            "",
-            "=== Startup store diagnostics: lastStoreRecoveryEvent ===",
-            startupRecoveryEvent,
-            "",
-            "=== Startup store diagnostics: lastStoreBootstrapDiagnostics ===",
-            startupBootstrapDiagnostics,
-        ].joined(separator: "\n")
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    diagnosticsSection(
-                        title: "Auth/CloudKit diagnostics",
-                        value: authDiagnosticsJSON
-                    )
-
-                    diagnosticsSection(
-                        title: "Startup store diagnostics",
-                        value: [
-                            "lastStoreRecoveryEvent:",
-                            startupRecoveryEvent,
-                            "",
-                            "lastStoreBootstrapDiagnostics:",
-                            startupBootstrapDiagnostics,
-                        ].joined(separator: "\n")
-                    )
-
-                    if copied {
-                        Text("Diagnostics copied to clipboard.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if cleared {
-                        Text("Diagnostics history cleared.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 120)
-            }
-            .navigationTitle("Diagnostics")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 10) {
-                    Button("Copy diagnostics") {
-                        UIPasteboard.general.string = diagnosticsReport
-                        copied = true
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button("Share diagnostics") {
-                        showShareSheet = true
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("Clear diagnostics") {
-                        onClearDiagnostics()
-                        cleared = true
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-                .background(.ultraThinMaterial)
-            }
-        }
-        .sheet(isPresented: $showShareSheet) {
-            ActivityView(activityItems: [diagnosticsReport])
-        }
-    }
-
-    private func diagnosticsSection(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-
-            Text(value)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-    }
-}
-
-private struct ActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context _: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
 }
 
 // Custom Sign in with Apple button using ASAuthorizationAppleIDButton

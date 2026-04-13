@@ -8,348 +8,380 @@ struct SettingsView: View {
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @EnvironmentObject private var developerModeState: DeveloperModeState
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var notificationSettings = NotificationSettingsStore()
     @AppStorage("recommendedWipLimit") private var recommendedWipLimit = TaskStore.defaultRecommendedWipLimit
+
+    // Hard reset state
     @State private var showHardResetConfirmation = false
-    @State private var showCloudDeleteConfirmation = false
     @State private var isPerformingHardReset = false
-    @State private var isDeletingCloudHousehold = false
-    @State private var didJustResetTipKit = false
-    @State private var tipKitResetFeedbackTask: _Concurrency.Task<Void, Never>?
-    @State private var isForcingCloudSync = false
-    @State private var didJustForceCloudSync = false
-    @State private var forceCloudSyncFeedbackTask: _Concurrency.Task<Void, Never>?
+
+    // Delete account state
+    @State private var showDeleteAccountConfirmation = false
+    @State private var isDeletingAccount = false
+
+    // Developer backdoor state
+    @State private var devTapCount = 0
+    @State private var devTapResetTask: _Concurrency.Task<Void, Never>?
+    @State private var showDevToast = false
+    @State private var devToastTask: _Concurrency.Task<Void, Never>?
 
     var body: some View {
-        List {
-            // MARK: - Theme + Appearance Section
+        ZStack(alignment: .top) {
+            List {
+                // MARK: - Theme + Appearance Section
 
-            Section {
-                ThemeMiniatureCarousel(selectedTheme: Binding(
-                    get: { themeStore.unifiedTheme },
-                    set: {
-                        HapticManager.selection()
-                        themeStore.unifiedTheme = $0
-                    }
-                ))
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                .listRowBackground(Color.clear)
-            } header: {
-                Text("Appearance")
-            }
-
-            // MARK: - Font Management Settings Section
-
-            Section {
-                Picker("System Font Size", selection: selectedFontScaleBinding) {
-                    ForEach(FontSizeScale.allCases) { scale in
-                        Text(scale.displayName)
-                            .font(themeStore.font(for: .bodyStrong))
-                            .tag(scale)
-                    }
-                }
-                .font(themeStore.font(for: .bodyStrong))
-                .pickerStyle(.segmented)
-                .controlSize(.large)
-                .padding(.vertical, 6)
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                .listRowBackground(Color.clear)
-            } header: {
-                Text("System Font Size")
-            } footer: {
-                if themeStore.isRetroFamily {
-                    Text("Regular is the default font size.")
-                }
-            }
-
-            // MARK: - Tab Color Section
-
-            if !themeStore.isRetroFamily {
                 Section {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible()),
-                            GridItem(.flexible()),
-                        ],
-                        spacing: 12
-                    ) {
-                        ForEach(TabTintColor.allCases) { tint in
-                            Button {
-                                HapticManager.selection()
-                                themeStore.tabTintColor = tint
-                            } label: {
-                                VStack(spacing: 6) {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(tint.color)
-                                        .frame(height: 34)
-                                        .overlay {
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(
-                                                    themeStore.tabTintColor == tint ? Color.primary : Color.secondary.opacity(0.2),
-                                                    lineWidth: themeStore.tabTintColor == tint ? 2.5 : 1
-                                                )
-                                        }
-                                        .shadow(
-                                            color: tint.color.opacity(0.28),
-                                            radius: 4,
-                                            x: 0,
-                                            y: 2
-                                        )
-                                    Text(tint.displayName)
-                                        .font(themeStore.font(for: .tabLabel))
-                                        .foregroundStyle(
-                                            themeStore.tabTintColor == tint ? .primary : .secondary
-                                        )
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.plain)
+                    ThemeMiniatureCarousel(selectedTheme: Binding(
+                        get: { themeStore.unifiedTheme },
+                        set: {
+                            HapticManager.selection()
+                            themeStore.unifiedTheme = $0
+                        }
+                    ))
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(Color.clear)
+                } header: {
+                    Text("Appearance")
+                }
+
+                // MARK: - Font Management Settings Section
+
+                Section {
+                    Picker("System Font Size", selection: selectedFontScaleBinding) {
+                        ForEach(FontSizeScale.allCases) { scale in
+                            Text(scale.displayName)
+                                .font(themeStore.font(for: .bodyStrong))
+                                .tag(scale)
                         }
                     }
+                    .font(themeStore.font(for: .bodyStrong))
+                    .pickerStyle(.segmented)
+                    .controlSize(.large)
+                    .padding(.vertical, 6)
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowBackground(Color.clear)
                 } header: {
-                    Text("Accent Color")
+                    Text("System Font Size")
+                } footer: {
+                    if themeStore.isRetroFamily {
+                        Text("Regular is the default font size.")
+                    }
                 }
-            }
 
-            // MARK: - Toggles Section
+                // MARK: - Tab Color Section
 
-            Section {
-                Toggle(isOn: Binding(
-                    get: { themeStore.celebrationsEnabled },
-                    set: { themeStore.celebrationsEnabled = $0 }
-                )) {
-                    Label("Celebrations", systemImage: "party.popper.fill")
-                        .foregroundStyle(.primary)
+                if !themeStore.isRetroFamily {
+                    Section {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible()),
+                                GridItem(.flexible()),
+                                GridItem(.flexible())
+                            ],
+                            spacing: 12
+                        ) {
+                            ForEach(TabTintColor.allCases) { tint in
+                                Button {
+                                    HapticManager.selection()
+                                    themeStore.tabTintColor = tint
+                                } label: {
+                                    VStack(spacing: 6) {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(tint.color)
+                                            .frame(height: 34)
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .stroke(
+                                                        themeStore.tabTintColor == tint ? Color.primary : Color.secondary.opacity(0.2),
+                                                        lineWidth: themeStore.tabTintColor == tint ? 2.5 : 1
+                                                    )
+                                            }
+                                            .shadow(
+                                                color: tint.color.opacity(0.28),
+                                                radius: 4,
+                                                x: 0,
+                                                y: 2
+                                            )
+                                        Text(tint.displayName)
+                                            .font(themeStore.font(for: .tabLabel))
+                                            .foregroundStyle(
+                                                themeStore.tabTintColor == tint ? .primary : .secondary
+                                            )
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    } header: {
+                        Text("Accent Color")
+                    }
+                }
+
+                // MARK: - Toggles Section
+
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { themeStore.celebrationsEnabled },
+                        set: { themeStore.celebrationsEnabled = $0 }
+                    )) {
+                        Label("Celebrations", systemImage: "party.popper.fill")
+                            .foregroundStyle(.primary)
+                    }
+                    .tint(themeStore.settingsToggleTint(for: colorScheme))
+                    .accessibilityIdentifier("settingsToggle_celebrations")
+                }
+
+                Section("Tasks") {
+                    HStack {
+                        Label("Recommended task limit", systemImage: "target")
+                            .foregroundStyle(.primary)
+
+                        Spacer()
+
+                        Stepper(value: $recommendedWipLimit, in: 1 ... 7) {
+                            Text("\(recommendedWipLimit)")
+                                .font(themeStore.font(for: .bodyStrong))
+                        }
+                        .frame(width: 130)
+                    }
+                }
+
+                Section("Notifications") {
+                    Toggle("Enable notifications", isOn: $notificationSettings.isEnabled)
+                        .onChange(of: notificationSettings.isEnabled) { _, enabled in
+                            if enabled {
+                                _ = _Concurrency.Task {
+                                    await NotificationService.shared.requestAuthorization()
+                                    await syncNotificationSchedules()
+                                }
+                            }
+                        }
+
+                    Toggle("Task reminders", isOn: $notificationSettings.taskRemindersEnabled)
+                        .disabled(!notificationSettings.isEnabled)
+
+                    Toggle("Daily digest", isOn: $notificationSettings.dailyDigestEnabled)
+                        .disabled(!notificationSettings.isEnabled)
+
+                    Toggle("Shared activity", isOn: $notificationSettings.sharedActivityEnabled)
+                        .disabled(!notificationSettings.isEnabled)
+
+                    if notificationSettings.isEnabled,
+                       notificationSettings.taskRemindersEnabled || notificationSettings.dailyDigestEnabled {
+                        DatePicker(
+                            "Default reminder time",
+                            selection: Binding(
+                                get: { notificationSettings.reminderTime },
+                                set: { notificationSettings.reminderTime = $0 }
+                            ),
+                            displayedComponents: [.hourAndMinute]
+                        )
+                        .font(themeStore.font(for: .bodyStrong))
+                        .disabled(!notificationSettings.isEnabled)
+                    }
+
+                    Toggle("Notification sound", isOn: $notificationSettings.soundEnabled)
+                        .disabled(!notificationSettings.isEnabled)
                 }
                 .tint(themeStore.settingsToggleTint(for: colorScheme))
-                .accessibilityIdentifier("settingsToggle_celebrations")
-            }
 
-            Section("Tasks") {
-                HStack {
-                    Label("Recommended task limit", systemImage: "target")
-                        .foregroundStyle(.primary)
+                // MARK: - Delete Account
 
-                    Spacer()
-
-                    Stepper(value: $recommendedWipLimit, in: 1 ... 7) {
-                        Text("\(recommendedWipLimit)")
-                            .font(themeStore.font(for: .bodyStrong))
-                    }
-                    .frame(width: 130)
-                }
-            }
-
-            Section("Notifications") {
-                Toggle("Enable notifications", isOn: $notificationSettings.isEnabled)
-                    .onChange(of: notificationSettings.isEnabled) { _, enabled in
-                        if enabled {
-                            _ = _Concurrency.Task {
-                                await NotificationService.shared.requestAuthorization()
-                                await syncNotificationSchedules()
-                            }
-                        }
-                    }
-
-                Toggle("Task reminders", isOn: $notificationSettings.taskRemindersEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-
-                Toggle("Daily digest", isOn: $notificationSettings.dailyDigestEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-
-                Toggle("Shared activity", isOn: $notificationSettings.sharedActivityEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-
-                if notificationSettings.isEnabled,
-                   notificationSettings.taskRemindersEnabled || notificationSettings.dailyDigestEnabled
-                {
-                    DatePicker(
-                        "Default reminder time",
-                        selection: Binding(
-                            get: { notificationSettings.reminderTime },
-                            set: { notificationSettings.reminderTime = $0 }
-                        ),
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .font(themeStore.font(for: .bodyStrong))
-                    .disabled(!notificationSettings.isEnabled)
-                }
-
-                Toggle("Notification sound", isOn: $notificationSettings.soundEnabled)
-                    .disabled(!notificationSettings.isEnabled)
-            }
-            .tint(themeStore.settingsToggleTint(for: colorScheme))
-
-            // MARK: - Sign Out
-
-            Section {
-                Button(role: .destructive) {
-                    signOut()
-                } label: {
-                    HStack {
-                        Spacer()
-                        Text("Sign Out")
-                        Spacer()
-                    }
-                }
-            }
-
-            Section {
-                Button(role: .destructive) {
-                    showHardResetConfirmation = true
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isPerformingHardReset {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Resetting app...")
-                        } else {
-                            Text("Hard Reset App")
-                        }
-                        Spacer()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                }
-                .disabled(isPerformingHardReset)
-            } footer: {
-                Text("Clears local cache, app defaults, TipKit/tutorial progress, and signs out locally.")
-                    .font(themeStore.font(for: .bodySmall))
-            }
-
-            if userSession.syncMode == .cloud, householdStore.currentHousehold != nil {
                 Section {
                     Button(role: .destructive) {
-                        showCloudDeleteConfirmation = true
+                        showDeleteAccountConfirmation = true
                     } label: {
                         HStack {
                             Spacer()
-                            if isDeletingCloudHousehold {
+                            if isDeletingAccount {
                                 ProgressView()
                                     .controlSize(.small)
-                                Text("Deleting iCloud household...")
+                                Text("Deleting account...")
                             } else {
-                                Text("Delete Current Household in iCloud")
+                                Text("Delete Account")
                             }
                             Spacer()
                         }
                         .font(themeStore.font(for: .buttonLabel))
                     }
-                    .disabled(isDeletingCloudHousehold || isPerformingHardReset)
+                    .disabled(isDeletingAccount)
                 } footer: {
-                    Text("Debug only. Deletes the current household remotely, then resets the app locally.")
+                    Text("Removes your household from iCloud (if you are the owner), clears all local app data, and signs you out. Your Apple ID is not affected. This cannot be undone.")
                         .font(themeStore.font(for: .bodySmall))
                 }
-            }
 
-            if userSession.syncMode == .cloud, householdStore.currentHousehold != nil {
+                // MARK: - Sign Out
+
                 Section {
-                    Button {
-                        forceCloudSyncNow()
+                    Button(role: .destructive) {
+                        signOut()
                     } label: {
                         HStack {
                             Spacer()
-                            if isForcingCloudSync {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Syncing iCloud data...")
-                            } else {
-                                Image(systemName: didJustForceCloudSync ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
-                                Text(didJustForceCloudSync ? "Cloud Sync Complete" : "Force Cloud Sync")
-                            }
+                            Text("Sign Out")
                             Spacer()
                         }
-                        .font(themeStore.font(for: .buttonLabel))
-                        .foregroundStyle(didJustForceCloudSync ? themeStore.accentTabColor : themeStore.contentPrimaryColor)
                     }
-                    .disabled(isForcingCloudSync || isDeletingCloudHousehold || isPerformingHardReset)
-                } footer: {
-                    Text(
-                        didJustForceCloudSync
-                            ? "Debug pull finished. Household, members, tasks, ideas, and shopping caches were refreshed."
-                            : "Debug only. Saves the local cache and re-runs household plus shared-data hydration."
-                    )
-                    .font(themeStore.font(for: .bodySmall))
                 }
+
+                // MARK: - Hard Reset (developer only)
+
+                if developerModeState.isUnlocked {
+                    Section {
+                        Button(role: .destructive) {
+                            showHardResetConfirmation = true
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isPerformingHardReset {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("Resetting app...")
+                                } else {
+                                    Text("Hard Reset App")
+                                }
+                                Spacer()
+                            }
+                            .font(themeStore.font(for: .buttonLabel))
+                        }
+                        .disabled(isPerformingHardReset)
+                    } header: {
+                        Label("Developer", systemImage: "hammer.fill")
+                            .foregroundStyle(.orange)
+                    } footer: {
+                        Text("Clears local cache, app defaults, TipKit/tutorial progress, and signs out locally.")
+                            .font(themeStore.font(for: .bodySmall))
+                    }
+                }
+            }
+            .environment(\.font, themeStore.font(for: .inlineTitle))
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Settings")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .onTapGesture {
+                            handleDevTap()
+                        }
+                }
+            }
+            .task {
+                NotificationService.shared.setSettingsStore(notificationSettings)
+                await NotificationService.shared.checkAuthorizationStatus()
+                await syncNotificationSchedules()
+            }
+            .onChange(of: notificationSettings.isEnabled) { _, _ in
+                _ = _Concurrency.Task {
+                    await syncNotificationSchedules()
+                }
+            }
+            .onChange(of: notificationSettings.taskRemindersEnabled) { _, _ in
+                _ = _Concurrency.Task {
+                    await syncNotificationSchedules()
+                }
+            }
+            .onChange(of: notificationSettings.dailyDigestEnabled) { _, _ in
+                _ = _Concurrency.Task {
+                    await syncNotificationSchedules()
+                }
+            }
+            .onChange(of: notificationSettings.reminderTime) { _, _ in
+                _ = _Concurrency.Task {
+                    await syncNotificationSchedules()
+                }
+            }
+            .onChange(of: notificationSettings.soundEnabled) { _, _ in
+                _ = _Concurrency.Task {
+                    await syncNotificationSchedules()
+                }
+            }
+            .alert("Hard Reset App?", isPresented: $showHardResetConfirmation) {
+                Button("Maybe Later", role: .cancel) {}
+                Button("Hard Reset", role: .destructive) {
+                    HapticManager.warning()
+                    performHardReset()
+                }
+            } message: {
+                Text("This clears local cache, resets app state, and signs you out locally. Your iCloud household stays untouched.")
+            }
+            .alert("Delete Account?", isPresented: $showDeleteAccountConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    HapticManager.warning()
+                    performDeleteAccount()
+                }
+            } message: {
+                Text("This will delete your household from iCloud (if you are the owner), remove all local data, and sign you out. Your Apple ID is not affected. This cannot be undone.")
             }
 
-            Section {
-                Button {
-                    resetTipKitOnly()
-                } label: {
-                    HStack {
-                        Spacer()
-                        Image(systemName: didJustResetTipKit ? "checkmark.circle.fill" : "arrow.counterclockwise.circle")
-                        Text(didJustResetTipKit ? "TipKit Reset" : "Reset TipKit")
-                        Spacer()
-                    }
-                    .font(themeStore.font(for: .buttonLabel))
-                    .foregroundStyle(didJustResetTipKit ? themeStore.accentTabColor : themeStore.contentPrimaryColor)
-                }
-            } footer: {
-                Text(
-                    didJustResetTipKit
-                        ? "TipKit/tutorial progress reset. Reopen Shopping, Ideas, or Tasks to retest tips."
-                        : "Temporary debug action. Resets TipKit/tutorial progress without clearing app data."
-                )
-                .font(themeStore.font(for: .bodySmall))
+            // MARK: - Developer mode toast
+
+            if showDevToast {
+                devModeToast
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
+                    .padding(.top, 8)
             }
         }
-        .environment(\.font, themeStore.font(for: .inlineTitle))
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            NotificationService.shared.setSettingsStore(notificationSettings)
-            await NotificationService.shared.checkAuthorizationStatus()
-            await syncNotificationSchedules()
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showDevToast)
+    }
+
+    // MARK: - Developer mode toast view
+
+    private var devModeToast: some View {
+        HStack(spacing: 8) {
+            Image(systemName: developerModeState.isUnlocked ? "hammer.fill" : "lock.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(developerModeState.isUnlocked ? .orange : .secondary)
+            Text(developerModeState.isUnlocked ? "Developer Mode Unlocked" : "Developer Mode Hidden")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
         }
-        .onChange(of: notificationSettings.isEnabled) { _, _ in
-            _ = _Concurrency.Task {
-                await syncNotificationSchedules()
-            }
-        }
-        .onChange(of: notificationSettings.taskRemindersEnabled) { _, _ in
-            _ = _Concurrency.Task {
-                await syncNotificationSchedules()
-            }
-        }
-        .onChange(of: notificationSettings.dailyDigestEnabled) { _, _ in
-            _ = _Concurrency.Task {
-                await syncNotificationSchedules()
-            }
-        }
-        .onChange(of: notificationSettings.reminderTime) { _, _ in
-            _ = _Concurrency.Task {
-                await syncNotificationSchedules()
-            }
-        }
-        .onChange(of: notificationSettings.soundEnabled) { _, _ in
-            _ = _Concurrency.Task {
-                await syncNotificationSchedules()
-            }
-        }
-        .alert("Hard Reset App?", isPresented: $showHardResetConfirmation) {
-            Button("Maybe Later", role: .cancel) {}
-            Button("Hard Reset", role: .destructive) {
-                HapticManager.warning()
-                performHardReset()
-            }
-        } message: {
-            Text("This clears local cache, resets app state, and signs you out locally. Your iCloud household stays untouched.")
-        }
-        .alert("Delete Current Household in iCloud?", isPresented: $showCloudDeleteConfirmation) {
-            Button("Maybe Later", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                performRemoteCloudHouseholdDelete()
-            }
-        } message: {
-            Text("This debug action removes the current household from iCloud and then resets the app locally.")
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
         }
     }
+
+    // MARK: - Developer backdoor
+
+    private func handleDevTap() {
+        devTapResetTask?.cancel()
+        devTapCount += 1
+
+        if devTapCount >= 5 {
+            devTapCount = 0
+            developerModeState.toggle()
+            HapticManager.success()
+            showDevToast = true
+
+            devToastTask?.cancel()
+            devToastTask = _Concurrency.Task { @MainActor in
+                try? await _Concurrency.Task.sleep(nanoseconds: 2_000_000_000)
+                guard !_Concurrency.Task.isCancelled else { return }
+                showDevToast = false
+            }
+            return
+        }
+
+        // Auto-reset tap count after 1.2 s of inactivity
+        devTapResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 1_200_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            devTapCount = 0
+        }
+    }
+
+    // MARK: - Private helpers
 
     private func signOut() {
         _Concurrency.Task {
@@ -387,52 +419,18 @@ struct SettingsView: View {
         }
     }
 
-    private func resetTipKitOnly() {
-        tipKitResetFeedbackTask?.cancel()
-        AppTips.resetForDevelopment()
-        HapticManager.success()
-        didJustResetTipKit = true
-
-        tipKitResetFeedbackTask = _Concurrency.Task { @MainActor in
-            try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
-            guard !_Concurrency.Task.isCancelled else { return }
-            didJustResetTipKit = false
-            tipKitResetFeedbackTask = nil
-        }
-    }
-
-    private func forceCloudSyncNow() {
-        guard !isForcingCloudSync else { return }
-        guard let userId = userSession.userId else { return }
-
-        forceCloudSyncFeedbackTask?.cancel()
-        didJustForceCloudSync = false
-        isForcingCloudSync = true
+    private func performDeleteAccount() {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
 
         _Concurrency.Task { @MainActor in
-            try? modelContext.save()
-            await householdStore.forceCloudSyncDebug(userId: userId)
-            HapticManager.success()
-            isForcingCloudSync = false
-            didJustForceCloudSync = true
-
-            forceCloudSyncFeedbackTask = _Concurrency.Task { @MainActor in
-                try? await _Concurrency.Task.sleep(nanoseconds: 1_500_000_000)
-                guard !_Concurrency.Task.isCancelled else { return }
-                didJustForceCloudSync = false
-                forceCloudSyncFeedbackTask = nil
+            // If the current user owns the household, delete it from iCloud first
+            if userSession.syncMode == .cloud,
+               householdStore.currentHousehold != nil,
+               let userId = userSession.userId {
+                await householdStore.hardResetCloudHousehold(userId: userId)
             }
-        }
-    }
 
-    private func performRemoteCloudHouseholdDelete() {
-        guard !isDeletingCloudHousehold else { return }
-        guard let userId = userSession.userId else { return }
-
-        isDeletingCloudHousehold = true
-
-        _Concurrency.Task { @MainActor in
-            await householdStore.hardResetCloudHousehold(userId: userId)
             await LocalAppReset.performHardReset(
                 modelContext: modelContext,
                 userSession: userSession,
@@ -440,10 +438,9 @@ struct SettingsView: View {
                 onboardingState: onboardingState,
                 subscriptionManager: subscriptionManager,
                 shareAcceptanceCoordinator: shareAcceptanceCoordinator,
-                celebrationManager: celebrationManager,
-                resetReason: .debugCloudHouseholdDelete
+                celebrationManager: celebrationManager
             )
-            isDeletingCloudHousehold = false
+            isDeletingAccount = false
         }
     }
 

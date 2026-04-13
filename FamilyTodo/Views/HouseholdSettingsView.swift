@@ -9,6 +9,7 @@ struct ProfileView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
+    @EnvironmentObject private var developerModeState: DeveloperModeState
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var memberStore = MemberStore(householdId: nil)
@@ -111,7 +112,7 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var diagnosticsSection: some View {
-        if cloudKitDiagnostics.hasVisibleDiagnostics {
+        if developerModeState.isUnlocked, cloudKitDiagnostics.hasVisibleDiagnostics {
             Section {
                 CloudKitDiagnosticsBanner()
                     .environmentObject(themeStore)

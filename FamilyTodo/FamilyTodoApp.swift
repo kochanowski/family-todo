@@ -2,6 +2,20 @@ import CloudKit
 import SwiftData
 import SwiftUI
 
+/// Session-scoped developer mode toggle. Unlocked with a secret 5-tap gesture on the
+/// "Settings" navigation title. Resets to locked on every cold start.
+final class DeveloperModeState: ObservableObject {
+    static let shared = DeveloperModeState()
+
+    @Published private(set) var isUnlocked = false
+
+    private init() {}
+
+    func toggle() {
+        isUnlocked.toggle()
+    }
+}
+
 @main
 struct FamilyTodoApp: App {
     @UIApplicationDelegateAdaptor(AppDelegateBridge.self) private var appDelegate
@@ -13,6 +27,7 @@ struct FamilyTodoApp: App {
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
+    @StateObject private var developerModeState = DeveloperModeState.shared
     @StateObject private var syncCoordinator: HouseholdSyncCoordinator
     @State private var startupRecoveryMessage: String?
     @State private var startupBootstrapState: StartupBootstrapState
@@ -132,6 +147,7 @@ struct FamilyTodoApp: App {
                             .environmentObject(shareAcceptanceCoordinator)
                             .environmentObject(cloudKitDiagnostics)
                             .environmentObject(syncCoordinator)
+                            .environmentObject(developerModeState)
                             .modelContainer(sharedModelContainer)
                             .overlay {
                                 if onboardingState.currentState == .mainApp {

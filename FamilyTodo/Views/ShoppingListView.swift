@@ -648,7 +648,6 @@ private struct ShoppingListContent: View {
                 onDone: commitOrDismissRapidEntry,
                 themeStore: themeStore
             )
-            .submitLabel(.continue)
             .accessibilityIdentifier("shoppingRapidEntryField")
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1232,7 +1231,6 @@ private struct ShoppingItemInlineEditRow: View {
 
             TextField("Item name", text: $text)
                 .font(themeStore.font(for: .listRowTitle))
-                .submitLabel(.next)
                 .focused($isFocused)
                 .onSubmit(onSubmit)
                 .onChange(of: isFocused) { _, focused in
@@ -1283,7 +1281,6 @@ private struct ShoppingItemInlineComposerRow: View {
 
             TextField("Add item", text: $text)
                 .font(themeStore.font(for: .listRowTitle))
-                .submitLabel(.next)
                 .focused($isFocused)
                 .onSubmit(onSubmit)
                 .onChange(of: isFocused) { _, focused in
