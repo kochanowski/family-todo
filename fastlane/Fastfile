@@ -69,6 +69,17 @@ platform :ios do
       build_number: ENV["BUILD_NUMBER"] || Time.now.strftime("%Y%m%d%H%M")
     )
 
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: PROJECT,
+      team_id: team_id,
+      bundle_identifier: app_identifier,
+      profile_name: profile_name,
+      code_sign_identity: "Apple Distribution",
+      targets: ["HousePulse"],
+      build_configurations: ["Release"]
+    )
+
     # Build
     build_app(
       project: PROJECT,
@@ -83,8 +94,6 @@ platform :ios do
         },
       },
       xcargs: [
-        "PRODUCT_BUNDLE_IDENTIFIER=#{app_identifier}",
-        "DEVELOPMENT_TEAM=#{team_id}",
         "INFOPLIST_KEY_HPCloudKitEnabled=#{hp_cloudkit_enabled}",
       ].join(" "),
       output_directory: "./build",
