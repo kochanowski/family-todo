@@ -1,6 +1,7 @@
 import Foundation
 import RevenueCat
 
+@MainActor
 enum RevenueCatRuntime {
     private(set) static var isConfigured = false
 
