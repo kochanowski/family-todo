@@ -1,9 +1,10 @@
 import CloudKit
+import RevenueCat
 import SwiftData
 import SwiftUI
 
 /// Session-scoped developer mode toggle. Unlocked with a secret 5-tap gesture on the
-/// "Settings" navigation title. Resets to locked on every cold start.
+/// household settings navigation title. Resets to locked on every cold start.
 final class DeveloperModeState: ObservableObject {
     static let shared = DeveloperModeState()
 
@@ -23,7 +24,8 @@ struct FamilyTodoApp: App {
     @StateObject private var themeStore: ThemeStore
     @StateObject private var householdStore: HouseholdStore
     @StateObject private var onboardingState: OnboardingState
-    @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
+    @StateObject private var cloudSubscriptionManager = CloudKitSubscriptionManager.shared
+    @StateObject private var premiumSubscriptionManager: SubscriptionManager
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
@@ -52,6 +54,7 @@ struct FamilyTodoApp: App {
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
         UITestHelper.prepareForLaunch(arguments: launchArguments)
+        Purchases.configure(withAPIKey: Secrets.revenueCatApiKey)
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
 
@@ -75,6 +78,7 @@ struct FamilyTodoApp: App {
         sharedModelContainer = bootstrapResult.container
         let householdStore = HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
         _householdStore = StateObject(wrappedValue: householdStore)
+        _premiumSubscriptionManager = StateObject(wrappedValue: SubscriptionManager())
         StartupLaunchDirector.primeLocalLaunchRoute(
             userSession: userSession,
             householdStore: householdStore,
@@ -142,7 +146,8 @@ struct FamilyTodoApp: App {
                             .environmentObject(themeStore)
                             .environmentObject(householdStore)
                             .environmentObject(onboardingState)
-                            .environmentObject(subscriptionManager)
+                            .environmentObject(cloudSubscriptionManager)
+                            .environmentObject(premiumSubscriptionManager)
                             .environmentObject(celebrationManager)
                             .environmentObject(shareAcceptanceCoordinator)
                             .environmentObject(cloudKitDiagnostics)
@@ -259,7 +264,8 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
-    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var cloudSubscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @Environment(\.scenePhase) private var scenePhase
 
@@ -295,6 +301,31 @@ struct RootView: View {
             if !hasSession, onboardingState.currentState != .onboarding {
                 householdStore.resetSetupResolution()
                 onboardingState.openAuth()
+            }
+        }
+        .onChange(of: userSession.sessionMode) { _, _ in
+            _ = _Concurrency.Task {
+                await premiumSubscriptionManager.handleSessionChange()
+            }
+        }
+        .onChange(of: userSession.userId) { _, _ in
+            _ = _Concurrency.Task {
+                await premiumSubscriptionManager.handleSessionChange()
+            }
+        }
+        .onChange(of: userSession.currentHouseholdID) { _, _ in
+            _ = _Concurrency.Task {
+                await premiumSubscriptionManager.handleHouseholdChange()
+            }
+        }
+        .onChange(of: householdStore.currentHousehold?.id) { _, _ in
+            _ = _Concurrency.Task {
+                await premiumSubscriptionManager.handleHouseholdChange()
+            }
+        }
+        .onChange(of: householdStore.currentHousehold?.isPremium) { _, _ in
+            _ = _Concurrency.Task {
+                await premiumSubscriptionManager.handleHouseholdChange()
             }
         }
         .onChange(of: onboardingState.currentState) { _, newState in
@@ -345,6 +376,12 @@ struct RootView: View {
         }
         .task(id: subscriptionConfigurationKey) {
             configureSubscriptionsIfNeeded()
+        }
+        .task {
+            await premiumSubscriptionManager.connect(
+                userSession: userSession,
+                householdStore: householdStore
+            )
         }
         .task(id: householdLifecycleSyncKey) {
             await syncCurrentHouseholdLifecycleIfNeeded()
@@ -576,7 +613,7 @@ struct RootView: View {
         CloudKitDiagnosticsState.shared.recordProgress(
             operation: "subscription.configure.request source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
         )
-        subscriptionManager.configure(syncContext: syncContext)
+        cloudSubscriptionManager.configure(syncContext: syncContext)
         CloudKitDiagnosticsState.shared.recordProgress(
             operation: "subscription.configure.completed source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
         )
@@ -709,9 +746,6 @@ enum LocalAppReset {
         // destructive debug action so startup/onboarding is never blocked by network work.
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
-        if userSession.syncMode == .cloud, let userId = userSession.userId {
-            await householdStore.hardResetCloudHousehold(userId: userId)
-        }
         NotificationService.shared.cancelDailyDigest()
         NotificationService.shared.removeAllDeliveredNotifications()
         NotificationService.shared.removeAllTaskReminders()

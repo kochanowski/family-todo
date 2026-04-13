@@ -66,6 +66,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Generate Secrets.swift
+        env:
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REVENUECAT_API_KEY" ]; then
+            echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+
+          cat > FamilyTodo/Secrets.swift <<EOF
+          struct Secrets {
+              static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+          }
+          EOF
+
       - name: Verify Xcode version
         run: |
           echo "DEVELOPER_DIR=$DEVELOPER_DIR"
@@ -179,6 +195,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate Secrets.swift
+        env:
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REVENUECAT_API_KEY" ]; then
+            echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+
+          cat > FamilyTodo/Secrets.swift <<EOF
+          struct Secrets {
+              static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+          }
+          EOF
 
       - name: Verify Xcode version
         run: |
@@ -307,6 +339,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate Secrets.swift
+        env:
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REVENUECAT_API_KEY" ]; then
+            echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+
+          cat > FamilyTodo/Secrets.swift <<EOF
+          struct Secrets {
+              static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+          }
+          EOF
 
       - name: Verify Xcode version
         run: |

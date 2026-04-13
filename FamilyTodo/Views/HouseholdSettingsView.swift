@@ -10,9 +10,12 @@ struct ProfileView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var cloudKitDiagnostics: CloudKitDiagnosticsState
     @EnvironmentObject private var developerModeState: DeveloperModeState
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var memberStore = MemberStore(householdId: nil)
+    @AppStorage(SubscriptionManager.Constants.developerPremiumOverrideKey)
+    private var developerPremiumOverride = false
 
     @State private var showEditProfile = false
     @State private var householdBeingEdited: Household?
@@ -22,18 +25,41 @@ struct ProfileView: View {
     @State private var showDeleteMemberConfirmation = false
     @State private var memberToDelete: Member?
     @State private var actionErrorMessage: String?
+    @State private var developerTapCount = 0
+    @State private var developerTapResetTask: _Concurrency.Task<Void, Never>?
+    @State private var showDeveloperToast = false
+    @State private var developerToastDismissTask: _Concurrency.Task<Void, Never>?
 
     var body: some View {
-        List {
-            diagnosticsSection
-            householdSection
-            membersSection
-            inviteSection
-            actionsSection
+        ZStack(alignment: .top) {
+            List {
+                diagnosticsSection
+                householdSection
+                membersSection
+                inviteSection
+                actionsSection
+            }
+            if showDeveloperToast {
+                ToastView(message: "Developer Mode Unlocked")
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
+            }
         }
         .environment(\.font, themeStore.font(for: .inlineTitle))
         .navigationTitle("Household Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Household Settings")
+                    .font(themeStore.font(for: .inlineTitle))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        handleDeveloperUnlockTap()
+                    }
+            }
+        }
         .sheet(isPresented: $showEditProfile) {
             if let householdId = householdStore.currentHousehold?.id {
                 NavigationStack {
@@ -108,6 +134,7 @@ struct ProfileView: View {
                 await memberStore.loadMembers()
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: showDeveloperToast)
     }
 
     @ViewBuilder
@@ -318,6 +345,36 @@ struct ProfileView: View {
             .font(themeStore.font(for: .sectionHeader))
             .foregroundStyle(themeStore.contentSecondaryColor)
             .textCase(nil)
+    }
+
+    private func handleDeveloperUnlockTap() {
+        developerTapResetTask?.cancel()
+        developerTapCount += 1
+
+        if developerTapCount >= 5 {
+            developerTapCount = 0
+            developerPremiumOverride = true
+            premiumSubscriptionManager.refreshDeveloperPremiumOverride()
+            if !developerModeState.isUnlocked {
+                developerModeState.toggle()
+            }
+            HapticManager.success()
+            showDeveloperToast = true
+
+            developerToastDismissTask?.cancel()
+            developerToastDismissTask = _Concurrency.Task { @MainActor in
+                try? await _Concurrency.Task.sleep(nanoseconds: 2_000_000_000)
+                guard !_Concurrency.Task.isCancelled else { return }
+                showDeveloperToast = false
+            }
+            return
+        }
+
+        developerTapResetTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(nanoseconds: 1_200_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            developerTapCount = 0
+        }
     }
 
     private func memberRowContent(

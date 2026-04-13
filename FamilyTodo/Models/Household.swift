@@ -4,6 +4,7 @@ struct Household: Identifiable, Codable {
     let id: UUID
     var name: String
     var iconSymbol: String
+    var isPremium: Bool
     let ownerId: String
     let createdAt: Date
     var updatedAt: Date
@@ -15,6 +16,7 @@ struct Household: Identifiable, Codable {
         id: UUID = UUID(),
         name: String = "",
         iconSymbol: String = "house.fill",
+        isPremium: Bool = false,
         ownerId: String = "",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -22,6 +24,7 @@ struct Household: Identifiable, Codable {
         self.id = id
         self.name = name
         self.iconSymbol = iconSymbol
+        self.isPremium = isPremium
         self.ownerId = ownerId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -31,6 +34,7 @@ struct Household: Identifiable, Codable {
         case id
         case name
         case iconSymbol
+        case isPremium
         case ownerId
         case createdAt
         case updatedAt
@@ -41,6 +45,7 @@ struct Household: Identifiable, Codable {
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol) ?? "house.fill"
+        isPremium = try container.decodeIfPresent(Bool.self, forKey: .isPremium) ?? false
         ownerId = try container.decode(String.self, forKey: .ownerId)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
@@ -51,6 +56,7 @@ struct Household: Identifiable, Codable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(iconSymbol, forKey: .iconSymbol)
+        try container.encode(isPremium, forKey: .isPremium)
         try container.encode(ownerId, forKey: .ownerId)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)

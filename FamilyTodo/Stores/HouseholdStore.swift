@@ -1604,6 +1604,48 @@ class HouseholdStore: ObservableObject {
         queueHouseholdMetadataSync(updatedHousehold, userId: userId)
     }
 
+    func syncCurrentHouseholdPremiumStatus(
+        _ isPremium: Bool,
+        userId: String
+    ) async throws {
+        guard let household = currentHousehold else {
+            throw HouseholdError.householdNotFound
+        }
+
+        guard household.isPremium != isPremium else { return }
+
+        let previousHousehold = household
+        var updatedHousehold = household
+        updatedHousehold.isPremium = isPremium
+        updatedHousehold.updatedAt = Date()
+
+        currentHousehold = updatedHousehold
+        guard updateCache(with: updatedHousehold) else {
+            currentHousehold = previousHousehold
+            _ = updateCache(with: previousHousehold)
+            throw error ?? HouseholdError.cacheNotAvailable
+        }
+
+        guard syncMode == .cloud else { return }
+
+        do {
+            let scope = cloudScope(for: updatedHousehold, userId: userId)
+            await setCloudScope(for: updatedHousehold, userId: userId)
+            _ = try await cloudKit.saveHousehold(updatedHousehold, scope: scope)
+        } catch {
+            currentHousehold = previousHousehold
+            _ = updateCache(with: previousHousehold)
+            throw error
+        }
+    }
+
+    /// Deletes or removes the current user's CloudKit household data as part of the
+    /// App Store account deletion flow. Owner deletes the entire household, while a
+    /// participant only removes their own access.
+    func deleteAccountRemotely(userId: String) async {
+        await hardResetCloudHousehold(userId: userId)
+    }
+
     private func queueHouseholdMetadataSync(_ household: Household, userId: String) {
         guard syncMode == .cloud else { return }
         pendingHouseholdMetadataSync = PendingHouseholdMetadataSync(
