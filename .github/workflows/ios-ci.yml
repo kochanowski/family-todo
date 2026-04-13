@@ -301,9 +301,8 @@ jobs:
   cloudkit-schema:
     name: CloudKit Schema Gate
     needs: [swiftlint]
-    # On the sync-fix branch, keep schema validation in push CI but avoid re-applying dev schema,
-    # because InviteToken security roles are still manually managed in CloudKit Console.
-    # Use workflow_dispatch when you intentionally want to run a development apply on this branch.
+    # Push CI applies Development schema and verifies Dev/Prod parity from the schema contract.
+    # Production promotion stays manual-only via workflow_dispatch on cloudkit-schema.yml.
     if: >
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/v') ||
@@ -318,7 +317,7 @@ jobs:
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
       promote_to_production: false
-      dry_run: true
+      dry_run: false
       schema_source: cloudkit/schema/housepulse-schema.json
     secrets: inherit
 

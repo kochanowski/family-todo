@@ -74,7 +74,7 @@ if [[ -n "$duplicate_fields" ]]; then
 fi
 
 required_map='{
-  "Household": ["___recordID", "id", "name", "colorHex", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
+  "Household": ["___recordID", "id", "name", "colorHex", "icon", "iconSymbol", "isPremium", "ownerId", "createdAt", "updatedAt"],
   "Member": ["___recordID", "id", "householdId", "userId", "displayName", "colorHex", "role", "joinedAt", "isActive"],
   "Area": ["id", "householdId", "name", "icon", "sortOrder", "createdAt"],
   "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],

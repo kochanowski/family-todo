@@ -98,6 +98,43 @@ jobs:
           path: cloudkit/artifacts
           retention-days: 14
 
+  verify-parity:
+    name: Verify Dev/Prod Schema Parity
+    runs-on: macos-15
+    needs: [apply-development, promote-production]
+    if: >
+      always() &&
+      needs.apply-development.result == 'success' &&
+      (needs.promote-production.result == 'success' || needs.promote-production.result == 'skipped')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode and cktool availability
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun cktool --help | head -n 20
+
+      - name: Verify Development and Production parity
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          CONTAINER_ID: iCloud.com.kochanowski.housepulse
+          CLOUDKIT_MANAGEMENT_TOKEN: ${{ secrets.CLOUDKIT_MANAGEMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p cloudkit/artifacts
+          scripts/cloudkit/verify_schema_parity.sh "${{ inputs.schema_source }}" 2>&1 | tee cloudkit/artifacts/workflow-verify-parity.log
+
+      - name: Upload parity logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudkit-schema-verify-parity
+          path: cloudkit/artifacts
+          retention-days: 14
+
   promote-production:
     name: Verify Schema (Production + System Share Types)
     runs-on: macos-15
@@ -137,7 +174,7 @@ jobs:
     name: CloudKit Schema Report
     runs-on: ubuntu-latest
     if: always()
-    needs: [validate-schema, apply-development, promote-production]
+    needs: [validate-schema, apply-development, promote-production, verify-parity]
 
     steps:
       - name: Write schema report
@@ -153,4 +190,5 @@ jobs:
             echo "- validate-schema: **${{ needs.validate-schema.result }}**"
             echo "- apply-development: **${{ needs.apply-development.result }}**"
             echo "- promote-production: **${{ needs.promote-production.result }}**"
+            echo "- verify-parity: **${{ needs.verify-parity.result }}**"
           } >> "$GITHUB_STEP_SUMMARY"
