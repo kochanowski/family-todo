@@ -13,6 +13,7 @@ struct FamilyTodoApp: App {
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
+    @StateObject private var developerModeState = DeveloperModeState.shared
     @StateObject private var syncCoordinator: HouseholdSyncCoordinator
     @State private var startupRecoveryMessage: String?
     @State private var startupBootstrapState: StartupBootstrapState
@@ -132,6 +133,7 @@ struct FamilyTodoApp: App {
                             .environmentObject(shareAcceptanceCoordinator)
                             .environmentObject(cloudKitDiagnostics)
                             .environmentObject(syncCoordinator)
+                            .environmentObject(developerModeState)
                             .modelContainer(sharedModelContainer)
                             .overlay {
                                 if onboardingState.currentState == .mainApp {
