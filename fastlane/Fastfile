@@ -83,11 +83,6 @@ platform :ios do
         },
       },
       xcargs: [
-        "PRODUCT_BUNDLE_IDENTIFIER=#{app_identifier}",
-        "DEVELOPMENT_TEAM=#{team_id}",
-        "CODE_SIGN_STYLE=Manual",
-        "PROVISIONING_PROFILE_SPECIFIER=\"#{profile_name_escaped}\"",
-        "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
         "INFOPLIST_KEY_HPCloudKitEnabled=#{hp_cloudkit_enabled}",
       ].join(" "),
       output_directory: "./build",
