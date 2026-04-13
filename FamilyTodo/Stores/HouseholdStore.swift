@@ -11,6 +11,11 @@ struct AcceptedShareContext {
     let shareURL: URL?
 }
 
+enum DeleteAccountRemoteResult: Equatable {
+    case success
+    case failure(String)
+}
+
 struct RemoteShoppingItemState: Equatable {
     let title: String
     let isBought: Bool
@@ -1642,8 +1647,28 @@ class HouseholdStore: ObservableObject {
     /// Deletes or removes the current user's CloudKit household data as part of the
     /// App Store account deletion flow. Owner deletes the entire household, while a
     /// participant only removes their own access.
-    func deleteAccountRemotely(userId: String) async {
-        await hardResetCloudHousehold(userId: userId)
+    func deleteAccountRemotely(userId: String) async -> DeleteAccountRemoteResult {
+        guard syncMode == .cloud, let household = currentHousehold else {
+            return .success
+        }
+
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "deleteAccount.remote.started householdId=\(household.id.uuidString) userId=\(userId)"
+        )
+
+        do {
+            try await performRemoteHouseholdDeletion(household: household, userId: userId)
+            CloudKitDiagnosticsState.shared.recordProgress(
+                operation: "deleteAccount.remote.completed householdId=\(household.id.uuidString) userId=\(userId)"
+            )
+            return .success
+        } catch {
+            CloudKitDiagnosticsState.shared.record(
+                error: error,
+                operation: "deleteAccount.remote.failed householdId=\(household.id.uuidString) userId=\(userId)"
+            )
+            return .failure(error.localizedDescription)
+        }
     }
 
     private func queueHouseholdMetadataSync(_ household: Household, userId: String) {
@@ -1808,19 +1833,26 @@ class HouseholdStore: ObservableObject {
         guard syncMode == .cloud, let household = currentHousehold else { return }
 
         do {
-            await cloudKit.ensureReady()
-            try await cloudKit.checkAvailability()
-
-            if household.ownerId == userId {
-                try await deleteRemoteOwnedHousehold(householdId: household.id)
-            } else {
-                try await leaveSharedHouseholdRemotely(
-                    householdId: household.id,
-                    userId: userId
-                )
-            }
+            try await performRemoteHouseholdDeletion(household: household, userId: userId)
         } catch {
             print("[HouseholdStore] Hard reset cloud cleanup non-fatal: \(error)")
+        }
+    }
+
+    private func performRemoteHouseholdDeletion(
+        household: Household,
+        userId: String
+    ) async throws {
+        await cloudKit.ensureReady()
+        try await cloudKit.checkAvailability()
+
+        if household.ownerId == userId {
+            try await deleteRemoteOwnedHousehold(householdId: household.id)
+        } else {
+            try await leaveSharedHouseholdRemotely(
+                householdId: household.id,
+                userId: userId
+            )
         }
     }
 

@@ -1,6 +1,60 @@
 import Foundation
 import RevenueCat
 
+enum RevenueCatRuntime {
+    private(set) static var isConfigured = false
+
+    static func configureIfNeeded(
+        apiKey rawAPIKey: String,
+        diagnostics: CloudKitDiagnosticsState = .shared
+    ) {
+        let apiKey = rawAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Purchases.logLevel = .debug
+        Purchases.logHandler = { level, message in
+            _ = _Concurrency.Task { @MainActor in
+                diagnostics.recordMessage(
+                    operation: "revenuecat.log.\(level)",
+                    payload: message,
+                    source: .revenueCat
+                )
+            }
+        }
+
+        guard !apiKey.isEmpty else {
+            diagnostics.recordMessage(
+                operation: "revenuecat.configure.skipped",
+                payload: "RevenueCat API key is empty. Premium features remain unavailable.",
+                source: .revenueCat,
+                kind: .error
+            )
+            isConfigured = false
+            return
+        }
+
+        #if !DEBUG
+            if apiKey.hasPrefix("test_") || apiKey.hasPrefix("sk_") {
+                diagnostics.recordMessage(
+                    operation: "revenuecat.configure.invalidReleaseKey",
+                    payload: "RevenueCat release build received an invalid API key prefix.",
+                    source: .revenueCat,
+                    kind: .error
+                )
+                isConfigured = false
+                return
+            }
+        #endif
+
+        Purchases.configure(withAPIKey: apiKey)
+        isConfigured = true
+        diagnostics.recordMessage(
+            operation: "revenuecat.configure.success",
+            payload: "RevenueCat configured successfully.",
+            source: .revenueCat
+        )
+    }
+}
+
 @MainActor
 final class SubscriptionManager: NSObject, ObservableObject {
     enum Constants {
@@ -27,7 +81,9 @@ final class SubscriptionManager: NSObject, ObservableObject {
         self.userDefaults = userDefaults
         developerPremiumOverride = userDefaults.bool(forKey: Constants.developerPremiumOverrideKey)
         super.init()
-        Purchases.shared.delegate = self
+        if RevenueCatRuntime.isConfigured {
+            Purchases.shared.delegate = self
+        }
         recomputePremiumState()
     }
 
@@ -38,6 +94,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
         self.userSession = userSession
         self.householdStore = householdStore
         syncHouseholdPremiumFromStore()
+        guard RevenueCatRuntime.isConfigured else { return }
         await refreshOfferings()
         await syncRevenueCatIdentity()
         await refreshCustomerInfo()
@@ -54,6 +111,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     }
 
     func refreshOfferings() async {
+        guard RevenueCatRuntime.isConfigured else { return }
         do {
             currentOffering = try await Purchases.shared.offerings().current
             lastErrorMessage = nil
@@ -64,6 +122,10 @@ final class SubscriptionManager: NSObject, ObservableObject {
     }
 
     func refreshCustomerInfo() async {
+        guard RevenueCatRuntime.isConfigured else {
+            syncHouseholdPremiumFromStore()
+            return
+        }
         isLoading = true
         defer { isLoading = false }
         await checkEntitlement()
@@ -71,6 +133,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     }
 
     func checkEntitlement() async {
+        guard RevenueCatRuntime.isConfigured else { return }
         do {
             let customerInfo = try await Purchases.shared.customerInfo()
             if customerInfo.entitlements.all[Constants.entitlementID]?.isActive == true {
@@ -87,6 +150,13 @@ final class SubscriptionManager: NSObject, ObservableObject {
         displayPaywall = false
         displayCustomerCenter = false
         lastErrorMessage = nil
+
+        guard RevenueCatRuntime.isConfigured else {
+            hasRevenueCatEntitlement = false
+            syncHouseholdPremiumFromStore()
+            recomputePremiumState()
+            return
+        }
 
         do {
             _ = try await Purchases.shared.logOut()
@@ -128,6 +198,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     }
 
     private func syncRevenueCatIdentity() async {
+        guard RevenueCatRuntime.isConfigured else { return }
         guard let userSession else { return }
 
         let targetUserID = userSession.isAuthenticated ? userSession.userId : nil

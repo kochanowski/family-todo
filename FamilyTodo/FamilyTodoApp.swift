@@ -54,7 +54,7 @@ struct FamilyTodoApp: App {
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
         UITestHelper.prepareForLaunch(arguments: launchArguments)
-        Purchases.configure(withAPIKey: Secrets.revenueCatApiKey)
+        RevenueCatRuntime.configureIfNeeded(apiKey: Secrets.revenueCatApiKey)
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
 
@@ -769,17 +769,19 @@ enum LocalAppReset {
         resetReason: StoreResetReason = .hardResetApp,
         userDefaults: UserDefaults = .standard
     ) async {
-        // Local-only fresh-start reset. Remote CloudKit cleanup is exposed as a separate
-        // destructive debug action so startup/onboarding is never blocked by network work.
+        // Local-only fresh-start reset. Keep the existing persistent store and wipe
+        // cached entities through SwiftData so the next launch can open the store cleanly.
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
         NotificationService.shared.cancelDailyDigest()
         NotificationService.shared.removeAllDeliveredNotifications()
         NotificationService.shared.removeAllTaskReminders()
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "localReset.started reason=\(resetReason.rawValue)"
+        )
 
         clearAllData(context: modelContext)
         clearUserDefaults(userDefaults)
-        SwiftDataContainerFactory.requestStoreReset(reason: resetReason, userDefaults)
         shareAcceptanceCoordinator.resetForDevelopment()
         celebrationManager.resetForDevelopment()
         AppTips.resetForHardReset(userDefaults: userDefaults)
@@ -790,6 +792,9 @@ enum LocalAppReset {
 
         userSession.signOut()
         onboardingState.resetOnboarding()
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "localReset.completed reason=\(resetReason.rawValue)"
+        )
     }
 }
 

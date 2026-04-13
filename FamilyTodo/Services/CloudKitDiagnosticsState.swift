@@ -3,6 +3,7 @@ import Foundation
 enum DiagnosticsSource: String, CaseIterable, Codable, Identifiable {
     case cloudKit
     case tabBar
+    case revenueCat
 
     var id: String {
         rawValue
@@ -14,6 +15,8 @@ enum DiagnosticsSource: String, CaseIterable, Codable, Identifiable {
             "CloudKit"
         case .tabBar:
             "Tab Bar"
+        case .revenueCat:
+            "RevenueCat"
         }
     }
 }
@@ -273,6 +276,29 @@ final class CloudKitDiagnosticsState: ObservableObject {
 
     func recordTabBarEvent(operation: String, payload: String) {
         recordProgress(operation: operation, source: .tabBar, payload: payload)
+    }
+
+    func recordMessage(
+        operation: String,
+        payload: String,
+        source: DiagnosticsSource,
+        kind: CloudKitDiagnosticsEntry.Kind = .progress
+    ) {
+        switch kind {
+        case .progress:
+            recordProgress(operation: operation, source: source, payload: payload)
+        case .error:
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            appendEntry(
+                CloudKitDiagnosticsEntry(
+                    source: source,
+                    kind: .error,
+                    timestampISO8601: timestamp,
+                    operation: operation,
+                    payload: payload
+                )
+            )
+        }
     }
 
     func clear() {

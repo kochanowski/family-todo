@@ -23,6 +23,8 @@ struct SettingsView: View {
     // Delete account state
     @State private var showDeleteAccountConfirmation = false
     @State private var isDeletingAccount = false
+    @State private var deleteAccountProgressMessage = "Deleting account..."
+    @State private var deleteAccountErrorMessage: String?
 
     var body: some View {
         settingsContent
@@ -93,6 +95,19 @@ struct SettingsView: View {
                 }
             } message: {
                 Text(deleteAccountMessageText)
+            }
+            .alert(
+                "Delete Account Failed",
+                isPresented: Binding(
+                    get: { deleteAccountErrorMessage != nil },
+                    set: { if !$0 { deleteAccountErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    deleteAccountErrorMessage = nil
+                }
+            } message: {
+                Text(deleteAccountErrorMessage ?? "Unknown error")
             }
     }
 
@@ -263,7 +278,7 @@ struct SettingsView: View {
                 destructiveActionLabel(
                     title: "Delete Account",
                     isProcessing: isDeletingAccount,
-                    processingTitle: "Deleting account..."
+                    processingTitle: deleteAccountProgressMessage
                 )
             }
             .disabled(isDeletingAccount)
@@ -410,12 +425,24 @@ struct SettingsView: View {
     private func performDeleteAccount() {
         guard !isDeletingAccount else { return }
         isDeletingAccount = true
+        deleteAccountProgressMessage = "Deleting data from iCloud..."
+        deleteAccountErrorMessage = nil
 
         _Concurrency.Task { @MainActor in
             if userSession.syncMode == .cloud, let userId = userSession.userId {
-                await householdStore.deleteAccountRemotely(userId: userId)
+                let remoteResult = await householdStore.deleteAccountRemotely(userId: userId)
+                switch remoteResult {
+                case .success:
+                    break
+                case let .failure(message):
+                    deleteAccountErrorMessage = "We couldn't delete your iCloud data yet. \(message)"
+                    isDeletingAccount = false
+                    deleteAccountProgressMessage = "Deleting account..."
+                    return
+                }
             }
 
+            deleteAccountProgressMessage = "Clearing local app data..."
             await premiumSubscriptionManager.prepareForSignOut()
             await LocalAppReset.performHardReset(
                 modelContext: modelContext,
@@ -428,6 +455,7 @@ struct SettingsView: View {
             )
             premiumSubscriptionManager.refreshDeveloperPremiumOverride()
             isDeletingAccount = false
+            deleteAccountProgressMessage = "Deleting account..."
         }
     }
 
