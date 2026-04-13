@@ -37,30 +37,6 @@ render_ckdb() {
           )[]
       ];
 
-    def security_role_blocks($root):
-      [ $root.recordTypes[].name ] as $record_names
-      | [
-          ($root.securityRoles // [])[] as $role
-          | (
-              ($role.recordTypePermissions // [])
-              | map(
-                  . as $permission
-                  | select($record_names | index($permission.recordType))
-                  | [
-                      if ($permission.write // false) then "WRITE" else empty end,
-                      if ($permission.create // false) then "CREATE" else empty end,
-                      if ($permission.read // false) then "READ" else empty end
-                    ] as $permissions
-                  | select(($permissions | length) > 0)
-                  | "  RECORD TYPE \"\($permission.recordType)\" \($permissions | join(", "))"
-                )
-            ) as $role_entries
-          | select(($role_entries | length) > 0)
-          | "SECURITY ROLE \"\($role.name)\" (\n"
-            + ($role_entries | join(",\n"))
-            + "\n);"
-        ];
-
     "DEFINE SCHEMA\n"
     + (
       $schema.recordTypes
@@ -83,10 +59,6 @@ render_ckdb() {
           + "\n);"
         )
       | join("\n\n")
-      )
-    + (
-        security_role_blocks($schema) as $role_blocks
-        | if ($role_blocks | length) > 0 then "\n\n" + ($role_blocks | join("\n\n")) else "" end
       )
   ' "$input_json" > "$output_ckdb"
 }
@@ -142,12 +114,16 @@ verify_contract_grants_rendered_in_ckdb() {
       gsub(/\r/, "", line)
       sub(/^[[:space:]]*GRANT[[:space:]]+/, "", line)
       split(line, segments, /[[:space:]]+TO[[:space:]]+"/)
-      permission = toupper(trim(segments[1]))
+      permissions_blob = toupper(trim(segments[1]))
       role = trim(segments[2])
       sub(/".*$/, "", role)
       gsub(/[,)]/, "", role)
-      if (permission != "" && role != "" && record_type != "") {
-        print record_type "|" role "|" permission
+      split_count = split(permissions_blob, permissions, ",")
+      for (idx = 1; idx <= split_count; idx++) {
+        permission = trim(permissions[idx])
+        if (permission != "" && role != "" && record_type != "") {
+          print record_type "|" role "|" permission
+        }
       }
     }
   ' "$ckdb_file" | sort -u > "$rendered_grants_file"
@@ -493,12 +469,16 @@ list_security_role_permissions_from_ckdb() {
       gsub(/\r/, "", line)
       sub(/^[[:space:]]*GRANT[[:space:]]+/, "", line)
       split(line, segments, /[[:space:]]+TO[[:space:]]+"/)
-      permission = toupper(trim(segments[1]))
+      permissions_blob = toupper(trim(segments[1]))
       role = trim(segments[2])
       sub(/".*$/, "", role)
       gsub(/[,)]/, "", role)
-      if (permission != "" && role != "") {
-        print role "|" record_type "|" permission
+      split_count = split(permissions_blob, permissions, ",")
+      for (idx = 1; idx <= split_count; idx++) {
+        permission = trim(permissions[idx])
+        if (permission != "" && role != "") {
+          print role "|" record_type "|" permission
+        }
       }
     }
   ' "$ckdb_file" | sort -u
