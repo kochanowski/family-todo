@@ -83,6 +83,7 @@ platform :ios do
         },
       },
       xcargs: [
+        "PRODUCT_BUNDLE_IDENTIFIER=#{app_identifier}",
         "DEVELOPMENT_TEAM=#{team_id}",
         "INFOPLIST_KEY_HPCloudKitEnabled=#{hp_cloudkit_enabled}",
       ].join(" "),
