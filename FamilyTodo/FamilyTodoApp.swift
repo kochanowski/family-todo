@@ -270,68 +270,25 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        rootContent
-            .onChange(of: userSession.hasActiveSession) { _, hasSession in
-                if !hasSession, onboardingState.currentState != .onboarding {
-                    householdStore.resetSetupResolution()
-                    onboardingState.openAuth()
+        rootContentWithAlerts
+    }
+
+    private var rootContentWithAlerts: some View {
+        rootContentWithTasks
+            .alert(
+                "Invitation Error",
+                isPresented: invitationErrorBinding
+            ) {
+                Button("OK", role: .cancel) {
+                    shareAcceptanceCoordinator.clearError()
                 }
+            } message: {
+                Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
             }
-            .onChange(of: userSession.sessionMode) { _, _ in
-                _ = _Concurrency.Task {
-                    await premiumSubscriptionManager.handleSessionChange()
-                }
-            }
-            .onChange(of: userSession.userId) { _, _ in
-                _ = _Concurrency.Task {
-                    await premiumSubscriptionManager.handleSessionChange()
-                }
-            }
-            .onChange(of: userSession.currentHouseholdID) { _, _ in
-                _ = _Concurrency.Task {
-                    await premiumSubscriptionManager.handleHouseholdChange()
-                }
-            }
-            .onChange(of: householdStore.currentHousehold?.id) { _, _ in
-                _ = _Concurrency.Task {
-                    await premiumSubscriptionManager.handleHouseholdChange()
-                }
-            }
-            .onChange(of: householdStore.currentHousehold?.isPremium) { _, _ in
-                _ = _Concurrency.Task {
-                    await premiumSubscriptionManager.handleHouseholdChange()
-                }
-            }
-            .onChange(of: onboardingState.currentState) { _, newState in
-                if newState == .householdSetup {
-                    householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
-                } else {
-                    householdStore.resetSetupResolution()
-                }
-            }
-            .onChange(of: householdSetupResolutionKey) { _, newKey in
-                guard onboardingState.currentState == .householdSetup else { return }
-                guard userSession.hasActiveSession else { return }
-                householdStore.prepareForSetupResolution(key: newKey)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
-                _ = _Concurrency.Task {
-                    await handleHouseholdDataDidChange()
-                }
-            }
-            .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
-                guard batchID != nil else { return }
-                _ = _Concurrency.Task {
-                    await handleHouseholdDataDidChange()
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .active else { return }
-                guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
-                _ = _Concurrency.Task {
-                    _ = await syncCoordinator.performSync(reason: .appBecameActive)
-                }
-            }
+    }
+
+    private var rootContentWithTasks: some View {
+        rootContentWithLifecycleHandlers
             .task(id: pendingProcessingKey) {
                 await shareAcceptanceCoordinator.processPendingIfPossible(
                     userSession: userSession,
@@ -363,21 +320,56 @@ struct RootView: View {
             .task(id: householdRecoveryKey) {
                 await recoverHouseholdRouteIfNeeded()
             }
-            .alert(
-                "Invitation Error",
-                isPresented: Binding(
-                    get: {
-                        onboardingState.currentState == .mainApp
-                            && shareAcceptanceCoordinator.lastErrorMessage != nil
-                    },
-                    set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
-                )
-            ) {
-                Button("OK", role: .cancel) {
-                    shareAcceptanceCoordinator.clearError()
+    }
+
+    private var rootContentWithLifecycleHandlers: some View {
+        rootContent
+            .onChange(of: userSession.hasActiveSession) { _, hasSession in
+                if !hasSession, onboardingState.currentState != .onboarding {
+                    householdStore.resetSetupResolution()
+                    onboardingState.openAuth()
                 }
-            } message: {
-                Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
+            }
+            .onChange(of: userSession.sessionMode) { _, _ in
+                refreshPremiumSessionState()
+            }
+            .onChange(of: userSession.userId) { _, _ in
+                refreshPremiumSessionState()
+            }
+            .onChange(of: userSession.currentHouseholdID) { _, _ in
+                refreshPremiumHouseholdState()
+            }
+            .onChange(of: householdStore.currentHousehold?.id) { _, _ in
+                refreshPremiumHouseholdState()
+            }
+            .onChange(of: householdStore.currentHousehold?.isPremium) { _, _ in
+                refreshPremiumHouseholdState()
+            }
+            .onChange(of: onboardingState.currentState) { _, newState in
+                if newState == .householdSetup {
+                    householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
+                } else {
+                    householdStore.resetSetupResolution()
+                }
+            }
+            .onChange(of: householdSetupResolutionKey) { _, newKey in
+                guard onboardingState.currentState == .householdSetup else { return }
+                guard userSession.hasActiveSession else { return }
+                householdStore.prepareForSetupResolution(key: newKey)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
+                runHouseholdDataRefresh()
+            }
+            .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
+                guard batchID != nil else { return }
+                runHouseholdDataRefresh()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
+                _ = _Concurrency.Task {
+                    _ = await syncCoordinator.performSync(reason: .appBecameActive)
+                }
             }
     }
 
@@ -478,6 +470,38 @@ struct RootView: View {
         shareAcceptanceCoordinator.pendingInviteCode != nil ||
             shareAcceptanceCoordinator.pendingMetadata != nil ||
             shareAcceptanceCoordinator.isProcessing
+    }
+
+    private var invitationErrorBinding: Binding<Bool> {
+        Binding(
+            get: {
+                onboardingState.currentState == .mainApp &&
+                    shareAcceptanceCoordinator.lastErrorMessage != nil
+            },
+            set: { isPresented in
+                if !isPresented {
+                    shareAcceptanceCoordinator.clearError()
+                }
+            }
+        )
+    }
+
+    private func refreshPremiumSessionState() {
+        _ = _Concurrency.Task {
+            await premiumSubscriptionManager.handleSessionChange()
+        }
+    }
+
+    private func refreshPremiumHouseholdState() {
+        _ = _Concurrency.Task {
+            await premiumSubscriptionManager.handleHouseholdChange()
+        }
+    }
+
+    private func runHouseholdDataRefresh() {
+        _ = _Concurrency.Task {
+            await handleHouseholdDataDidChange()
+        }
     }
 
     private func recoverHouseholdRouteIfNeeded() async {
