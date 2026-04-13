@@ -37,6 +37,30 @@ render_ckdb() {
           )[]
       ];
 
+    def security_role_blocks($root):
+      [ $root.recordTypes[].name ] as $record_names
+      | [
+          ($root.securityRoles // [])[] as $role
+          | (
+              ($role.recordTypePermissions // [])
+              | map(
+                  . as $permission
+                  | select($record_names | index($permission.recordType))
+                  | [
+                      if ($permission.write // false) then "WRITE" else empty end,
+                      if ($permission.create // false) then "CREATE" else empty end,
+                      if ($permission.read // false) then "READ" else empty end
+                    ] as $permissions
+                  | select(($permissions | length) > 0)
+                  | "  RECORD TYPE \"\($permission.recordType)\" \($permissions | join(", "))"
+                )
+            ) as $role_entries
+          | select(($role_entries | length) > 0)
+          | "SECURITY ROLE \"\($role.name)\" (\n"
+            + ($role_entries | join(",\n"))
+            + "\n);"
+        ];
+
     "DEFINE SCHEMA\n"
     + (
       $schema.recordTypes
@@ -59,6 +83,10 @@ render_ckdb() {
           + "\n);"
         )
       | join("\n\n")
+      )
+    + (
+        security_role_blocks($schema) as $role_blocks
+        | if ($role_blocks | length) > 0 then "\n\n" + ($role_blocks | join("\n\n")) else "" end
       )
   ' "$input_json" > "$output_ckdb"
 }
