@@ -598,11 +598,11 @@ private struct BacklogContent: View {
     private var emptyState: some View {
         Group {
             if #available(iOS 17, *) {
-                ContentUnavailableView(
-                    "No Categories Yet",
-                    systemImage: "folder.badge.plus",
-                    description: Text("Create a category to start organizing your ideas.")
-                ) {
+                ContentUnavailableView {
+                    Label("No Categories Yet", systemImage: "folder.badge.plus")
+                } description: {
+                    Text("Create a category to start organizing your ideas.")
+                } actions: {
                     Button("Create your first category") {
                         presentNewCategorySheet()
                     }
