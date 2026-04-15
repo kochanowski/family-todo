@@ -88,8 +88,6 @@ private struct BacklogContent: View {
     @State private var hasStartedInitialLoad = false
     @FocusState private var focusedComposerCategoryId: UUID?
     @AppStorage(AppTipProgressKey.ideasTutorialSeen) private var hasSeenIdeasTutorial = false
-    @AppStorage(AppTipProgressKey.ideasCreateCategoryCompleted)
-    private var hasCompletedIdeasCreateCategoryTip = false
     @AppStorage(AppTipProgressKey.ideasAddIdeaCompleted)
     private var hasCompletedIdeasAddIdeaTip = false
     @AppStorage(AppTipProgressKey.ideasAssignOwnerCompleted)
@@ -577,9 +575,7 @@ private struct BacklogContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
-                HapticManager.lightTap()
-                newCategoryColorHex = MemberColorToken.randomHex()
-                isAddingCategory = true
+                presentNewCategorySheet()
             } label: {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 20))
@@ -601,22 +597,45 @@ private struct BacklogContent: View {
 
     private var emptyState: some View {
         Group {
-            if hasSeenIdeasTutorial {
-                ThemedEmptyStateView(
-                    title: "No Ideas Yet",
-                    systemImage: "lightbulb",
-                    description: "Capture home improvement projects, wishlists, or future plans here."
-                )
+            if #available(iOS 17, *) {
+                ContentUnavailableView(
+                    "No Categories Yet",
+                    systemImage: "folder.badge.plus",
+                    description: Text("Create a category to start organizing your ideas.")
+                ) {
+                    Button("Create your first category") {
+                        presentNewCategorySheet()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
+                }
             } else {
-                ThemedEmptyStateView(
-                    title: "Your Home's Brainstorming Hub",
-                    systemImage: "lightbulb.fill",
-                    description: "Planning a renovation? Want a new sofa? Drop your ideas here. When ready, turn them into Tasks."
-                )
+                VStack(spacing: 12) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 40))
+                        .foregroundStyle(themeStore.accentTabColor)
+
+                    Text("No Categories Yet")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+
+                    Text("Create a category to start organizing your ideas.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+                        .multilineTextAlignment(.center)
+
+                    Button("Create your first category") {
+                        presentNewCategorySheet()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .buttonStyle(.borderedProminent)
+                    .tint(themeStore.accentTabColor)
+                }
+                .frame(maxWidth: 320)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .offset(y: -40)
     }
 
     private func markIdeasTutorialAsSeenIfNeeded() {
@@ -967,11 +986,16 @@ private struct BacklogContent: View {
             hasActiveBanner: activeBanner != nil,
             hasPresentedSheet: hasPresentedIdeasSheet,
             hasPendingDeletionToast: pendingDeletionItem != nil,
-            hasCompletedCreateCategory: hasCompletedIdeasCreateCategoryTip,
             hasCompletedAddIdea: hasCompletedIdeasAddIdeaTip,
             hasCompletedAssignOwner: hasCompletedIdeasAssignOwnerTip,
             hasCompletedPromote: hasCompletedIdeasPromoteTip
         )
+    }
+
+    private func presentNewCategorySheet() {
+        HapticManager.lightTap()
+        newCategoryColorHex = MemberColorToken.randomHex()
+        isAddingCategory = true
     }
 
     private var hasVisibleIdeas: Bool {

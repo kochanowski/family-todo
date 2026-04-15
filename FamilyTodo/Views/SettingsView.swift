@@ -1,4 +1,3 @@
-import RevenueCatUI
 import SwiftUI
 
 struct SettingsView: View {
@@ -62,22 +61,6 @@ struct SettingsView: View {
                     await syncNotificationSchedules()
                 }
             }
-            .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
-                PaywallView()
-                    .onDisappear {
-                        _ = _Concurrency.Task {
-                            await premiumSubscriptionManager.refreshCustomerInfo()
-                        }
-                    }
-            }
-            .sheet(isPresented: $premiumSubscriptionManager.displayCustomerCenter) {
-                CustomerCenterView()
-                    .onDisappear {
-                        _ = _Concurrency.Task {
-                            await premiumSubscriptionManager.refreshCustomerInfo()
-                        }
-                    }
-            }
             .alert("Hard Reset App?", isPresented: $showHardResetConfirmation) {
                 Button("Maybe Later", role: .cancel) {}
                 Button("Hard Reset", role: .destructive) {
@@ -113,7 +96,6 @@ struct SettingsView: View {
 
     private var settingsContent: some View {
         List {
-            subscriptionSection
             appearanceSection
             fontScaleSection
             accentColorSection
@@ -123,16 +105,6 @@ struct SettingsView: View {
             deleteAccountSection
             signOutSection
             developerSection
-        }
-    }
-
-    private var subscriptionSection: some View {
-        Section {
-            premiumStatusCard
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                .listRowBackground(Color.clear)
-        } header: {
-            Text("Subscription Status")
         }
     }
 
@@ -477,78 +449,6 @@ struct SettingsView: View {
                 set: { HapticManager.selection(); themeStore.systemFontScale = $0 }
             )
         }
-    }
-
-    private var premiumStatusCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: premiumSubscriptionManager.isPremium ? "crown.fill" : "sparkles")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(themeStore.accentTabColor)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(premiumSubscriptionManager.isPremium ? "HousePulse Pro Active" : "Unlock HousePulse Pro")
-                        .font(themeStore.font(for: .inlineTitle))
-                        .foregroundStyle(themeStore.contentPrimaryColor)
-
-                    Text(premiumSubtitleText)
-                        .font(themeStore.font(for: .bodySmall))
-                        .foregroundStyle(themeStore.contentSecondaryColor)
-                }
-
-                Spacer()
-            }
-
-            if premiumSubscriptionManager.isPremium {
-                Button {
-                    premiumSubscriptionManager.displayCustomerCenter = true
-                } label: {
-                    Text("Manage Subscription")
-                        .frame(maxWidth: .infinity)
-                }
-                .font(themeStore.font(for: .buttonLabel))
-                .buttonStyle(.bordered)
-            } else {
-                Button {
-                    premiumSubscriptionManager.displayPaywall = true
-                } label: {
-                    HStack {
-                        Spacer()
-                        if premiumSubscriptionManager.isLoading {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text("Upgrade to HousePulse Pro")
-                        Spacer()
-                    }
-                }
-                .font(themeStore.font(for: .buttonLabel))
-                .buttonStyle(.borderedProminent)
-                .tint(themeStore.accentTabColor)
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(themeStore.surfaceElevatedColor)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(themeStore.borderLightColor.opacity(0.55), lineWidth: 1)
-        }
-    }
-
-    private var premiumSubtitleText: String {
-        if premiumSubscriptionManager.developerPremiumOverride {
-            return "Developer override is currently granting premium access."
-        }
-        if premiumSubscriptionManager.hasHouseholdPremium {
-            return "Your household already has premium access."
-        }
-        if premiumSubscriptionManager.hasRevenueCatEntitlement {
-            return "Your subscription entitlement is active."
-        }
-        return "Premium unlocks your production subscription tier for this household."
     }
 
     private var deleteAccountFooterText: String {
