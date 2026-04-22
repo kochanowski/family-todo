@@ -15,6 +15,8 @@ render_ckdb() {
   local output_ckdb="$2"
 
   jq -r '
+    . as $schema
+    |
     def to_type:
       if . == "String" then "STRING"
       elif . == "Int64" then "INT64"
@@ -24,9 +26,9 @@ render_ckdb() {
       else error("Unsupported type: \(.)")
       end;
 
-    def grant_lines($record_name):
+    def grant_lines($root; $record_name):
       [
-        (.securityRoles // [])[] as $role
+        ($root.securityRoles // [])[] as $role
         | ($role.recordTypePermissions // [])[] as $permission
         | select($permission.recordType == $record_name)
         | (
@@ -38,7 +40,7 @@ render_ckdb() {
 
     "DEFINE SCHEMA\n"
     + (
-      .recordTypes
+      $schema.recordTypes
       | map(. as $record |
           "RECORD TYPE \($record.name) (\n"
           + (
@@ -51,7 +53,7 @@ render_ckdb() {
                     + (if .sortable then " SORTABLE" else "" end)
                   )
               )
-              + grant_lines($record.name)
+              + grant_lines($schema; $record.name)
               | map("  " + .)
               | join(",\n")
             )
@@ -60,6 +62,76 @@ render_ckdb() {
       | join("\n\n")
       )
   ' "$input_json" > "$output_ckdb"
+}
+
+verify_contract_grants_rendered_in_ckdb() {
+  local schema_json="$1"
+  local ckdb_file="$2"
+  local tmp_dir="$3"
+
+  local expected_grants_file="$tmp_dir/expected-contract-grants.txt"
+  local rendered_grants_file="$tmp_dir/rendered-contract-grants.txt"
+
+  jq -r '
+    [ .recordTypes[].name ] as $record_names
+    | (.securityRoles // [])[] as $role
+    | ($role.recordTypePermissions // [])[] as $permission
+    | select($record_names | index($permission.recordType))
+    | [
+        if ($permission.create // false) then "CREATE" else empty end,
+        if ($permission.read // false) then "READ" else empty end,
+        if ($permission.write // false) then "WRITE" else empty end
+      ][]
+    | "\($permission.recordType)|\($role.name)|\(.)"
+  ' "$schema_json" | sort -u > "$expected_grants_file"
+
+  if [[ ! -s "$expected_grants_file" ]]; then
+    return 0
+  fi
+
+  awk '
+    function trim(value) {
+      gsub(/^[[:space:]]+/, "", value)
+      gsub(/[[:space:]]+$/, "", value)
+      return value
+    }
+
+    /^[[:space:]]*RECORD TYPE[[:space:]]+/ {
+      in_record = 1
+      record_type = $3
+      gsub(/"/, "", record_type)
+      gsub(/\r/, "", record_type)
+      next
+    }
+
+    in_record && /^[[:space:]]*\);[[:space:]]*$/ {
+      in_record = 0
+      record_type = ""
+      next
+    }
+
+    in_record && /^[[:space:]]*GRANT[[:space:]]+/ {
+      line = $0
+      gsub(/\r/, "", line)
+      sub(/^[[:space:]]*GRANT[[:space:]]+/, "", line)
+      split(line, segments, /[[:space:]]+TO[[:space:]]+"/)
+      permission = toupper(trim(segments[1]))
+      role = trim(segments[2])
+      sub(/".*$/, "", role)
+      gsub(/[,)]/, "", role)
+      if (permission != "" && role != "" && record_type != "") {
+        print record_type "|" role "|" permission
+      }
+    }
+  ' "$ckdb_file" | sort -u > "$rendered_grants_file"
+
+  local missing_grants
+  missing_grants="$(comm -23 "$expected_grants_file" "$rendered_grants_file" || true)"
+  if [[ -n "$missing_grants" ]]; then
+    echo "CloudKitSchema: generated ckdb is missing required contract grant line(s):" >&2
+    echo "$missing_grants" | sed 's/^/ - /' >&2
+    return 1
+  fi
 }
 
 run_import() {
@@ -327,12 +399,16 @@ list_security_role_permissions_from_ckdb() {
       gsub(/\r/, "", line)
       sub(/^[[:space:]]*GRANT[[:space:]]+/, "", line)
       split(line, segments, /[[:space:]]+TO[[:space:]]+"/)
-      permission = toupper(trim(segments[1]))
+      permissions_blob = toupper(trim(segments[1]))
       role = trim(segments[2])
       sub(/".*$/, "", role)
       gsub(/[,)]/, "", role)
-      if (permission != "" && role != "") {
-        print role "|" record_type "|" permission
+      split_count = split(permissions_blob, permissions, ",")
+      for (idx = 1; idx <= split_count; idx++) {
+        permission = trim(permissions[idx])
+        if (permission != "" && role != "") {
+          print role "|" record_type "|" permission
+        }
       }
     }
   ' "$ckdb_file" | sort -u
@@ -409,6 +485,7 @@ dev_log_file="$tmp_dir/cktool-development-schema-after.log"
 
 mkdir -p "$REPO_ROOT/cloudkit/artifacts"
 render_ckdb "$SCHEMA_JSON" "$contract_ckdb_file"
+verify_contract_grants_rendered_in_ckdb "$SCHEMA_JSON" "$contract_ckdb_file" "$tmp_dir"
 
 echo "CloudKitSchema: applying schema to production environment for container=$CONTAINER_ID"
 if [[ "$DRY_RUN" == "true" ]]; then

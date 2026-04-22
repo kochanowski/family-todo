@@ -1,9 +1,10 @@
 import CloudKit
+import RevenueCat
 import SwiftData
 import SwiftUI
 
 /// Session-scoped developer mode toggle. Unlocked with a secret 5-tap gesture on the
-/// "Settings" navigation title. Resets to locked on every cold start.
+/// household settings navigation title. Resets to locked on every cold start.
 final class DeveloperModeState: ObservableObject {
     static let shared = DeveloperModeState()
 
@@ -23,7 +24,8 @@ struct FamilyTodoApp: App {
     @StateObject private var themeStore: ThemeStore
     @StateObject private var householdStore: HouseholdStore
     @StateObject private var onboardingState: OnboardingState
-    @StateObject private var subscriptionManager = CloudKitSubscriptionManager.shared
+    @StateObject private var cloudSubscriptionManager = CloudKitSubscriptionManager.shared
+    @StateObject private var premiumSubscriptionManager: SubscriptionManager
     @StateObject private var celebrationManager = CelebrationManager.shared
     @StateObject private var shareAcceptanceCoordinator = ShareAcceptanceCoordinator()
     @StateObject private var cloudKitDiagnostics = CloudKitDiagnosticsState.shared
@@ -52,6 +54,7 @@ struct FamilyTodoApp: App {
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
         UITestHelper.prepareForLaunch(arguments: launchArguments)
+        RevenueCatRuntime.configureIfNeeded(apiKey: Secrets.revenueCatApiKey)
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
 
@@ -75,6 +78,7 @@ struct FamilyTodoApp: App {
         sharedModelContainer = bootstrapResult.container
         let householdStore = HouseholdStore(modelContext: bootstrapResult.container?.mainContext)
         _householdStore = StateObject(wrappedValue: householdStore)
+        _premiumSubscriptionManager = StateObject(wrappedValue: SubscriptionManager())
         StartupLaunchDirector.primeLocalLaunchRoute(
             userSession: userSession,
             householdStore: householdStore,
@@ -142,7 +146,8 @@ struct FamilyTodoApp: App {
                             .environmentObject(themeStore)
                             .environmentObject(householdStore)
                             .environmentObject(onboardingState)
-                            .environmentObject(subscriptionManager)
+                            .environmentObject(cloudSubscriptionManager)
+                            .environmentObject(premiumSubscriptionManager)
                             .environmentObject(celebrationManager)
                             .environmentObject(shareAcceptanceCoordinator)
                             .environmentObject(cloudKitDiagnostics)
@@ -259,114 +264,141 @@ struct RootView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
-    @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var cloudSubscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        Group {
-            switch onboardingState.currentState {
-            case .onboarding:
-                OnboardingCarouselView()
+        rootContentWithAlerts
+    }
 
-            case .auth:
-                SignInView()
-
-            case .householdSetup:
-                if userSession.hasActiveSession {
-                    if shouldShowHouseholdSetupLoader {
-                        HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
-                    } else {
-                        CreateHouseholdView()
-                    }
-                } else {
-                    SignInView()
+    private var rootContentWithAlerts: some View {
+        rootContentWithTasks
+            .alert(
+                "Invitation Error",
+                isPresented: invitationErrorBinding
+            ) {
+                Button("OK", role: .cancel) {
+                    shareAcceptanceCoordinator.clearError()
                 }
+            } message: {
+                Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
+            }
+    }
 
-            case .mainApp:
-                if userSession.hasActiveSession {
-                    ContentView()
-                } else {
-                    SignInView()
+    private var rootContentWithTasks: some View {
+        rootContentWithLifecycleHandlers
+            .task(id: pendingProcessingKey) {
+                await shareAcceptanceCoordinator.processPendingIfPossible(
+                    userSession: userSession,
+                    householdStore: householdStore,
+                    onboardingState: onboardingState
+                )
+            }
+            .task(id: tipContextKey) {
+                guard onboardingState.currentState == .mainApp else { return }
+                AppTips.configureIfNeeded()
+                AppTips.syncContextIfNeeded(
+                    sessionMode: userSession.sessionMode,
+                    userId: userSession.userId,
+                    householdId: userSession.currentHouseholdID
+                )
+            }
+            .task(id: subscriptionConfigurationKey) {
+                configureSubscriptionsIfNeeded()
+            }
+            .task {
+                await premiumSubscriptionManager.connect(
+                    userSession: userSession,
+                    householdStore: householdStore
+                )
+            }
+            .task(id: householdLifecycleSyncKey) {
+                await syncCurrentHouseholdLifecycleIfNeeded()
+            }
+            .task(id: householdRecoveryKey) {
+                await recoverHouseholdRouteIfNeeded()
+            }
+    }
+
+    private var rootContentWithLifecycleHandlers: some View {
+        rootContent
+            .onChange(of: userSession.hasActiveSession) { _, hasSession in
+                if !hasSession, onboardingState.currentState != .onboarding {
+                    householdStore.resetSetupResolution()
+                    onboardingState.openAuth()
                 }
             }
-        }
-        .onChange(of: userSession.hasActiveSession) { _, hasSession in
-            if !hasSession, onboardingState.currentState != .onboarding {
-                householdStore.resetSetupResolution()
-                onboardingState.openAuth()
+            .onChange(of: userSession.sessionMode) { _, _ in
+                refreshPremiumSessionState()
             }
-        }
-        .onChange(of: onboardingState.currentState) { _, newState in
-            if newState == .householdSetup {
-                householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
+            .onChange(of: userSession.userId) { _, _ in
+                refreshPremiumSessionState()
+            }
+            .onChange(of: userSession.currentHouseholdID) { _, _ in
+                refreshPremiumHouseholdState()
+            }
+            .onChange(of: householdStore.currentHousehold?.id) { _, _ in
+                refreshPremiumHouseholdState()
+            }
+            .onChange(of: householdStore.currentHousehold?.isPremium) { _, _ in
+                refreshPremiumHouseholdState()
+            }
+            .onChange(of: onboardingState.currentState) { _, newState in
+                if newState == .householdSetup {
+                    householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
+                } else {
+                    householdStore.resetSetupResolution()
+                }
+            }
+            .onChange(of: householdSetupResolutionKey) { _, newKey in
+                guard onboardingState.currentState == .householdSetup else { return }
+                guard userSession.hasActiveSession else { return }
+                householdStore.prepareForSetupResolution(key: newKey)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
+                runHouseholdDataRefresh()
+            }
+            .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
+                guard batchID != nil else { return }
+                runHouseholdDataRefresh()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
+                _ = _Concurrency.Task {
+                    _ = await syncCoordinator.performSync(reason: .appBecameActive)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        switch onboardingState.currentState {
+        case .onboarding:
+            OnboardingCarouselView()
+
+        case .auth:
+            SignInView()
+
+        case .householdSetup:
+            if userSession.hasActiveSession {
+                if shouldShowHouseholdSetupLoader {
+                    HouseholdSetupLoadingView(isJoiningHousehold: hasPendingShareAcceptance)
+                } else {
+                    CreateHouseholdView()
+                }
             } else {
-                householdStore.resetSetupResolution()
+                SignInView()
             }
-        }
-        .onChange(of: householdSetupResolutionKey) { _, newKey in
-            guard onboardingState.currentState == .householdSetup else { return }
-            guard userSession.hasActiveSession else { return }
-            householdStore.prepareForSetupResolution(key: newKey)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .householdDataDidChange)) { _ in
-            _ = _Concurrency.Task {
-                await handleHouseholdDataDidChange()
+
+        case .mainApp:
+            if userSession.hasActiveSession {
+                ContentView()
+            } else {
+                SignInView()
             }
-        }
-        .onChange(of: syncCoordinator.latestBatch?.id) { _, batchID in
-            guard batchID != nil else { return }
-            _ = _Concurrency.Task {
-                await handleHouseholdDataDidChange()
-            }
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            guard userSession.syncMode == .cloud, userSession.hasActiveSession else { return }
-            _ = _Concurrency.Task {
-                _ = await syncCoordinator.performSync(reason: .appBecameActive)
-            }
-        }
-        .task(id: pendingProcessingKey) {
-            await shareAcceptanceCoordinator.processPendingIfPossible(
-                userSession: userSession,
-                householdStore: householdStore,
-                onboardingState: onboardingState
-            )
-        }
-        .task(id: tipContextKey) {
-            guard onboardingState.currentState == .mainApp else { return }
-            AppTips.configureIfNeeded()
-            AppTips.syncContextIfNeeded(
-                sessionMode: userSession.sessionMode,
-                userId: userSession.userId,
-                householdId: userSession.currentHouseholdID
-            )
-        }
-        .task(id: subscriptionConfigurationKey) {
-            configureSubscriptionsIfNeeded()
-        }
-        .task(id: householdLifecycleSyncKey) {
-            await syncCurrentHouseholdLifecycleIfNeeded()
-        }
-        .task(id: householdRecoveryKey) {
-            await recoverHouseholdRouteIfNeeded()
-        }
-        .alert(
-            "Invitation Error",
-            isPresented: Binding(
-                get: {
-                    onboardingState.currentState == .mainApp
-                        && shareAcceptanceCoordinator.lastErrorMessage != nil
-                },
-                set: { if !$0 { shareAcceptanceCoordinator.clearError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                shareAcceptanceCoordinator.clearError()
-            }
-        } message: {
-            Text(shareAcceptanceCoordinator.lastErrorMessage ?? "Unknown error")
         }
     }
 
@@ -438,6 +470,38 @@ struct RootView: View {
         shareAcceptanceCoordinator.pendingInviteCode != nil ||
             shareAcceptanceCoordinator.pendingMetadata != nil ||
             shareAcceptanceCoordinator.isProcessing
+    }
+
+    private var invitationErrorBinding: Binding<Bool> {
+        Binding(
+            get: {
+                onboardingState.currentState == .mainApp &&
+                    shareAcceptanceCoordinator.lastErrorMessage != nil
+            },
+            set: { isPresented in
+                if !isPresented {
+                    shareAcceptanceCoordinator.clearError()
+                }
+            }
+        )
+    }
+
+    private func refreshPremiumSessionState() {
+        _ = _Concurrency.Task {
+            await premiumSubscriptionManager.handleSessionChange()
+        }
+    }
+
+    private func refreshPremiumHouseholdState() {
+        _ = _Concurrency.Task {
+            await premiumSubscriptionManager.handleHouseholdChange()
+        }
+    }
+
+    private func runHouseholdDataRefresh() {
+        _ = _Concurrency.Task {
+            await handleHouseholdDataDidChange()
+        }
     }
 
     private func recoverHouseholdRouteIfNeeded() async {
@@ -576,7 +640,7 @@ struct RootView: View {
         CloudKitDiagnosticsState.shared.recordProgress(
             operation: "subscription.configure.request source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
         )
-        subscriptionManager.configure(syncContext: syncContext)
+        cloudSubscriptionManager.configure(syncContext: syncContext)
         CloudKitDiagnosticsState.shared.recordProgress(
             operation: "subscription.configure.completed source=taskKey role=\(syncContext.role == .owner ? "owner" : "participant") scope=\(syncContext.scope == .ownerPrivate ? "ownerPrivate" : "participantShared") householdId=\(syncContext.householdId.uuidString)"
         )
@@ -705,20 +769,19 @@ enum LocalAppReset {
         resetReason: StoreResetReason = .hardResetApp,
         userDefaults: UserDefaults = .standard
     ) async {
-        // Local-only fresh-start reset. Remote CloudKit cleanup is exposed as a separate
-        // destructive debug action so startup/onboarding is never blocked by network work.
+        // Local-only fresh-start reset. Keep the existing persistent store and wipe
+        // cached entities through SwiftData so the next launch can open the store cleanly.
         await subscriptionManager.removeSubscriptions()
         await CloudKitManager.shared.resetAvailabilityCache()
-        if userSession.syncMode == .cloud, let userId = userSession.userId {
-            await householdStore.hardResetCloudHousehold(userId: userId)
-        }
         NotificationService.shared.cancelDailyDigest()
         NotificationService.shared.removeAllDeliveredNotifications()
         NotificationService.shared.removeAllTaskReminders()
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "localReset.started reason=\(resetReason.rawValue)"
+        )
 
         clearAllData(context: modelContext)
         clearUserDefaults(userDefaults)
-        SwiftDataContainerFactory.requestStoreReset(reason: resetReason, userDefaults)
         shareAcceptanceCoordinator.resetForDevelopment()
         celebrationManager.resetForDevelopment()
         AppTips.resetForHardReset(userDefaults: userDefaults)
@@ -729,6 +792,9 @@ enum LocalAppReset {
 
         userSession.signOut()
         onboardingState.resetOnboarding()
+        CloudKitDiagnosticsState.shared.recordProgress(
+            operation: "localReset.completed reason=\(resetReason.rawValue)"
+        )
     }
 }
 

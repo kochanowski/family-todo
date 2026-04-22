@@ -54,6 +54,7 @@ extension CloudKitManager {
         record["id"] = household.id.uuidString as CKRecordValue
         record["name"] = household.name as CKRecordValue
         record["iconSymbol"] = household.iconSymbol as CKRecordValue
+        record["isPremium"] = (household.isPremium ? 1 : 0) as CKRecordValue
         record["ownerId"] = household.ownerId as CKRecordValue
         record["createdAt"] = household.createdAt as CKRecordValue
         record["updatedAt"] = household.updatedAt as CKRecordValue
@@ -76,6 +77,7 @@ extension CloudKitManager {
             id: id,
             name: name,
             iconSymbol: (record["iconSymbol"] as? String) ?? "house.fill",
+            isPremium: (record["isPremium"] as? Int64 ?? 0) == 1,
             ownerId: ownerId,
             createdAt: createdAt,
             updatedAt: updatedAt

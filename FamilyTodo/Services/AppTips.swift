@@ -372,7 +372,6 @@ enum AppTipStorageKey {
             hasActiveBanner: Bool,
             hasPresentedSheet: Bool,
             hasPendingDeletionToast: Bool,
-            hasCompletedCreateCategory: Bool,
             hasCompletedAddIdea: Bool,
             hasCompletedAssignOwner: Bool,
             hasCompletedPromote: Bool
@@ -384,7 +383,7 @@ enum AppTipStorageKey {
                 return nil
             }
 
-            if !hasCategories, !hasCompletedCreateCategory {
+            if !hasCategories {
                 return .createCategory
             }
 
@@ -530,14 +529,6 @@ enum AppTipStorageKey {
 
         var image: Image? {
             Image(systemName: "folder.badge.plus")
-        }
-
-        var rules: [Rule] {
-            [
-                #Rule(AppTipEvents.ideasCategoryCreated) {
-                    $0.donations.count < 1
-                },
-            ]
         }
     }
 
@@ -819,7 +810,6 @@ enum AppTipStorageKey {
             hasActiveBanner: Bool,
             hasPresentedSheet: Bool,
             hasPendingDeletionToast: Bool,
-            hasCompletedCreateCategory: Bool,
             hasCompletedAddIdea: Bool,
             hasCompletedAssignOwner: Bool,
             hasCompletedPromote: Bool
@@ -831,7 +821,7 @@ enum AppTipStorageKey {
                 return nil
             }
 
-            if !hasCategories, !hasCompletedCreateCategory {
+            if !hasCategories {
                 return .createCategory
             }
 

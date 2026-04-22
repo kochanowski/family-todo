@@ -1,4 +1,5 @@
 import Foundation
+import RevenueCatUI
 import SwiftData
 import SwiftUI
 import UIKit
@@ -9,7 +10,9 @@ struct MoreView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +25,8 @@ struct MoreView: View {
             // Menu items
             ScrollView {
                 VStack(spacing: 16) {
+                    premiumStatusBanner
+
                     // Household hero card
                     NavigationLink {
                         ProfileView()
@@ -77,6 +82,25 @@ struct MoreView: View {
             alignment: .topLeading
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task {
+            await premiumSubscriptionManager.refreshCustomerInfo()
+        }
+        .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
+            PaywallView()
+                .onDisappear {
+                    _ = _Concurrency.Task {
+                        await premiumSubscriptionManager.refreshCustomerInfo()
+                    }
+                }
+        }
+        .sheet(isPresented: $premiumSubscriptionManager.displayCustomerCenter) {
+            CustomerCenterView()
+                .onDisappear {
+                    _ = _Concurrency.Task {
+                        await premiumSubscriptionManager.refreshCustomerInfo()
+                    }
+                }
+        }
     }
 
     // MARK: - Header
@@ -93,6 +117,104 @@ struct MoreView: View {
 
     private var cardBackground: Color {
         themeStore.surfaceColor
+    }
+
+    private var premiumStatusBanner: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: premiumSubscriptionManager.isPremium ? "crown.fill" : "sparkles")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(premiumSubscriptionManager.isPremium ? "HousePulse Pro Active" : "HousePulse Pro")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(.white)
+
+                    Text(premiumBannerSubtitle)
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+
+                Spacer(minLength: 8)
+            }
+
+            if premiumSubscriptionManager.isPremium {
+                Button {
+                    premiumSubscriptionManager.displayCustomerCenter = true
+                } label: {
+                    Text("Manage Subscription")
+                        .frame(maxWidth: .infinity)
+                }
+                .font(themeStore.font(for: .buttonLabel))
+                .buttonStyle(.bordered)
+                .tint(.white.opacity(0.2))
+                .foregroundStyle(.white)
+            } else {
+                Button {
+                    premiumSubscriptionManager.displayPaywall = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        if premiumSubscriptionManager.isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(themeStore.accentTabColor)
+                        }
+                        Text("Upgrade to HousePulse Pro")
+                        Spacer()
+                    }
+                }
+                .font(themeStore.font(for: .buttonLabel))
+                .buttonStyle(.borderedProminent)
+                .tint(.white)
+                .foregroundStyle(themeStore.foregroundOnAccent(
+                    for: .white,
+                    colorScheme: colorScheme
+                ))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(
+                    LinearGradient(
+                        colors: premiumBannerGradientColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                }
+        }
+    }
+
+    private var premiumBannerSubtitle: String {
+        if premiumSubscriptionManager.developerPremiumOverride {
+            return "Developer mode currently grants premium access."
+        }
+        if premiumSubscriptionManager.isPremium {
+            return "Your premium benefits are active for this household."
+        }
+        return "Unlock premium features and full household access."
+    }
+
+    private var premiumBannerGradientColors: [Color] {
+        if premiumSubscriptionManager.isPremium {
+            return [
+                themeStore.accentTabColor.opacity(0.78),
+                themeStore.accentTabColor.opacity(0.56),
+            ]
+        }
+
+        return [
+            themeStore.accentTabColor,
+            themeStore.accentTabColor.opacity(0.72),
+            Color(hex: "C89A2B"),
+        ]
     }
 }
 
@@ -552,4 +674,5 @@ private struct CompletedTasksContent: View {
         .environmentObject(HouseholdStore())
         .environmentObject(OnboardingState())
         .environmentObject(ThemeStore())
+        .environmentObject(SubscriptionManager())
 }

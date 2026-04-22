@@ -26,7 +26,6 @@ struct SignInView: View {
         }
     }
 
-    @ViewBuilder
     private var signInContent: some View {
         VStack(spacing: 32) {
             Spacer()
@@ -222,13 +221,15 @@ struct SignInView: View {
             }
 
             if let household = householdStore.currentHousehold,
-               userSession.currentHouseholdID != household.id {
+               userSession.currentHouseholdID != household.id
+            {
                 userSession.setCurrentHousehold(household.id)
             }
         }
 
         if let householdId = userSession.currentHouseholdID,
-           householdStore.isRecoverySuppressed(for: householdId) {
+           householdStore.isRecoverySuppressed(for: householdId)
+        {
             householdStore.clearCurrentHousehold()
             userSession.clearCurrentHousehold()
         }

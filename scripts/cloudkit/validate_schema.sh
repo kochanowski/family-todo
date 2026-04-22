@@ -74,30 +74,30 @@ if [[ -n "$duplicate_fields" ]]; then
 fi
 
 required_map='{
-  "Household": ["___recordID", "id", "name", "colorHex", "iconSymbol", "ownerId", "createdAt", "updatedAt"],
+  "Household": ["___recordID", "id", "name", "colorHex", "icon", "iconSymbol", "isPremium", "ownerId", "createdAt", "updatedAt"],
   "Member": ["___recordID", "id", "householdId", "userId", "displayName", "colorHex", "role", "joinedAt", "isActive"],
-  "Area": ["id", "householdId", "name", "icon", "sortOrder", "createdAt"],
-  "Task": ["id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
-  "WorkItem": ["id", "logicalItemId", "householdId", "title", "status", "assigneeId", "assigneeIds", "categoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
+  "Area": ["___recordID", "id", "householdId", "name", "icon", "sortOrder", "createdAt"],
+  "Task": ["___recordID", "id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
+  "WorkItem": ["___recordID", "id", "logicalItemId", "householdId", "title", "status", "assigneeId", "assigneeIds", "categoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
   "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
-  "ShoppingItem": ["id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
-  "ShoppingBundle": ["id", "householdId", "name", "icon", "itemsJSON", "sortOrder", "createdAt", "updatedAt"],
-  "BacklogCategory": ["id", "householdId", "title", "colorHex", "sortOrder", "createdAt", "updatedAt"],
-  "BacklogItem": ["id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"],
+  "ShoppingItem": ["___recordID", "id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
+  "ShoppingBundle": ["___recordID", "id", "householdId", "name", "icon", "itemsJSON", "sortOrder", "createdAt", "updatedAt"],
+  "BacklogCategory": ["___recordID", "id", "householdId", "title", "colorHex", "sortOrder", "createdAt", "updatedAt"],
+  "BacklogItem": ["___recordID", "id", "categoryId", "householdId", "title", "assigneeId", "notes", "createdAt", "updatedAt"],
   "InviteToken": ["code", "householdId", "shareURL", "createdAt", "expiresAt", "isRevoked", "usesCount", "failedAttempts", "lastAttemptAt", "lastRedeemedAt"]
 }'
 
 required_indexes='{
   "Household": { "query": ["___recordID", "id"], "sort": [] },
   "Member": { "query": ["___recordID", "householdId", "userId"], "sort": ["joinedAt"] },
-  "Area": { "query": ["householdId"], "sort": ["sortOrder"] },
-  "Task": { "query": ["householdId", "status", "assigneeId"], "sort": ["updatedAt"] },
-  "WorkItem": { "query": ["householdId"], "sort": ["updatedAt"] },
+  "Area": { "query": ["___recordID", "householdId"], "sort": ["sortOrder"] },
+  "Task": { "query": ["___recordID", "householdId", "status", "assigneeId"], "sort": ["updatedAt"] },
+  "WorkItem": { "query": ["___recordID", "householdId"], "sort": ["updatedAt"] },
   "RecurringChore": { "query": ["householdId"], "sort": ["title"] },
-  "ShoppingItem": { "query": ["householdId"], "sort": ["sortOrder"] },
-  "ShoppingBundle": { "query": ["householdId"], "sort": ["sortOrder"] },
-  "BacklogCategory": { "query": ["householdId"], "sort": ["sortOrder"] },
-  "BacklogItem": { "query": ["householdId", "categoryId"], "sort": ["createdAt"] },
+  "ShoppingItem": { "query": ["___recordID", "householdId"], "sort": ["sortOrder"] },
+  "ShoppingBundle": { "query": ["___recordID", "householdId"], "sort": ["sortOrder"] },
+  "BacklogCategory": { "query": ["___recordID", "householdId"], "sort": ["sortOrder"] },
+  "BacklogItem": { "query": ["___recordID", "householdId", "categoryId"], "sort": ["createdAt"] },
   "InviteToken": { "query": ["code", "householdId", "isRevoked", "expiresAt"], "sort": ["createdAt"] }
 }'
 

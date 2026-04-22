@@ -66,6 +66,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Generate Secrets.swift
+        env:
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REVENUECAT_API_KEY" ]; then
+            echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == test_* ]]; then
+            echo "::error::REVENUECAT_API_KEY is a RevenueCat Test Store key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == sk_* ]]; then
+            echo "::error::REVENUECAT_API_KEY looks like a RevenueCat secret key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+
+          cat > FamilyTodo/Secrets.swift <<EOF
+          struct Secrets {
+              static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+          }
+          EOF
+
       - name: Verify Xcode version
         run: |
           echo "DEVELOPER_DIR=$DEVELOPER_DIR"
@@ -168,10 +192,12 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────
   build:
     name: Build
-    needs: [test]
+    needs: [test, swiftlint, cloudkit-schema]
     if: >
       always() &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped')
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.swiftlint.result == 'success' &&
+      (needs['cloudkit-schema'].result == 'success' || needs['cloudkit-schema'].result == 'skipped')
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
@@ -179,6 +205,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate Secrets.swift
+        env:
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REVENUECAT_API_KEY" ]; then
+            echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == test_* ]]; then
+            echo "::error::REVENUECAT_API_KEY is a RevenueCat Test Store key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == sk_* ]]; then
+            echo "::error::REVENUECAT_API_KEY looks like a RevenueCat secret key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+
+          cat > FamilyTodo/Secrets.swift <<EOF
+          struct Secrets {
+              static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+          }
+          EOF
 
       - name: Verify Xcode version
         run: |
@@ -253,9 +303,8 @@ jobs:
   cloudkit-schema:
     name: CloudKit Schema Gate
     needs: [swiftlint]
-    # On the sync-fix branch, keep schema validation in push CI but avoid re-applying dev schema,
-    # because InviteToken security roles are still manually managed in CloudKit Console.
-    # Use workflow_dispatch when you intentionally want to run a development apply on this branch.
+    # Push CI applies Development schema and verifies Dev/Prod parity from the schema contract.
+    # Production promotion stays manual-only via workflow_dispatch on cloudkit-schema.yml.
     if: >
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/v') ||
@@ -270,7 +319,7 @@ jobs:
     uses: ./.github/workflows/cloudkit-schema.yml
     with:
       promote_to_production: false
-      dry_run: true
+      dry_run: false
       schema_source: cloudkit/schema/housepulse-schema.json
     secrets: inherit
 
@@ -307,6 +356,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate Secrets.swift
+        env:
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REVENUECAT_API_KEY" ]; then
+            echo "::error::Missing REVENUECAT_API_KEY secret"
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == test_* ]]; then
+            echo "::error::REVENUECAT_API_KEY is a RevenueCat Test Store key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+          if [[ "$REVENUECAT_API_KEY" == sk_* ]]; then
+            echo "::error::REVENUECAT_API_KEY looks like a RevenueCat secret key. Use the Apple public SDK key for iOS/TestFlight builds."
+            exit 1
+          fi
+
+          cat > FamilyTodo/Secrets.swift <<EOF
+          struct Secrets {
+              static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+          }
+          EOF
 
       - name: Verify Xcode version
         run: |

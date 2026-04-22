@@ -8,6 +8,7 @@ final class CachedHousehold {
     // Legacy field kept for non-breaking SwiftData migrations.
     var colorHex: String
     var iconSymbol: String
+    var isPremium: Bool
     var ownerId: String
     var createdAt: Date
     var updatedAt: Date
@@ -17,6 +18,7 @@ final class CachedHousehold {
         name: String = "",
         colorHex: String = MemberColorToken.fallbackHex,
         iconSymbol: String = "house.fill",
+        isPremium: Bool = false,
         ownerId: String = "",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -25,6 +27,7 @@ final class CachedHousehold {
         self.name = name
         self.colorHex = colorHex
         self.iconSymbol = iconSymbol
+        self.isPremium = isPremium
         self.ownerId = ownerId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -35,6 +38,7 @@ final class CachedHousehold {
         name = household.name
         colorHex = MemberColorToken.fallbackHex
         iconSymbol = household.iconSymbol
+        isPremium = household.isPremium
         ownerId = household.ownerId
         createdAt = household.createdAt
         updatedAt = household.updatedAt
@@ -45,6 +49,7 @@ final class CachedHousehold {
             id: id,
             name: name,
             iconSymbol: iconSymbol,
+            isPremium: isPremium,
             ownerId: ownerId,
             createdAt: createdAt,
             updatedAt: updatedAt
@@ -54,6 +59,7 @@ final class CachedHousehold {
     func update(from household: Household) {
         name = household.name
         iconSymbol = household.iconSymbol
+        isPremium = household.isPremium
         ownerId = household.ownerId
         updatedAt = household.updatedAt
     }

@@ -99,6 +99,7 @@ iOSInjectionProject/
 *.certSigningRequest
 AuthKey_*.p8
 GoogleService-Info.plist
+FamilyTodo/Secrets.swift
 
 # Temporary files
 *.swp
