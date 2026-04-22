@@ -1,4 +1,7 @@
 #!/usr/bin/env ruby
+# Legacy helper: manual use only.
+# Modifies FamilyTodo.xcodeproj/project.pbxproj directly.
+# Not used by CI or pre-commit.
 
 # Simple script to add new Swift files to Xcode project
 # This reads project.pbxproj and adds file references

@@ -1,4 +1,8 @@
 #!/bin/bash
+# Legacy helper: manual use only.
+# Modifies FamilyTodo.xcodeproj/project.pbxproj directly.
+# Not used by CI or pre-commit.
+
 # Script to add FamilyTodoUITests target to Xcode project
 
 set -e

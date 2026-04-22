@@ -104,6 +104,7 @@ GoogleService-Info.plist
 *.swp
 *.swo
 *~
+*.log
 
 # Backup files
 *.backup

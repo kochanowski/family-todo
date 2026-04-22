@@ -1,4 +1,4 @@
-# Family To-Do - Master Action Plan
+# HousePulse Master Action Plan
 
 ## Rules of Engagement
 1. Strictly Sequential: implement EXACTLY ONE task at a time.
@@ -28,7 +28,7 @@ Acceptance Criteria: Solo households are never asked during early `Add Item` flo
 Regression Risk: Missing the best permission moment, delaying useful reminders too long, or showing the prompt multiple times around membership changes.
 
 - [ ] **I1.3 Welcome Carousel Refresh** ([Details](TODO_DETAILS.md#i13))
-Description: Refresh the opening carousel using the recommendations already captured in `onboarding-flow-claude-analysis.md`.
+Description: Refresh the opening carousel using the recommendations already captured in `docs/active/engineering/onboarding-flow-claude-analysis.md`.
 Acceptance Criteria: Carousel content, visual hierarchy, and adaptive layout follow the new analysis; onboarding better explains real app value before auth; no legacy layout problems such as fixed screen-height assumptions remain.
 Regression Risk: Carousel churn delays launch work, introduces theme/layout regressions, or weakens the polished first impression we already have.
 
