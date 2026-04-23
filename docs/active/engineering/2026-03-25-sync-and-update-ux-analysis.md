@@ -27,7 +27,7 @@ Current working direction:
 
 Relevant background:
 
-- `docs/current/owner-participant-sync-plan.md`
+- `docs/active/engineering/owner-participant-sync-plan.md`
 
 ## Current remote-update UI behavior
 

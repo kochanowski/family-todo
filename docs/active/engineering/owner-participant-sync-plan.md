@@ -74,7 +74,7 @@ Goal: replace per-screen mini sync flows with one household sync engine.
 
 Detailed execution plan:
 
-- `docs/current/2026-03-25-big-sync-refactor-plan.md`
+- `docs/active/engineering/2026-03-25-big-sync-refactor-plan.md`
 
 Tasks:
 

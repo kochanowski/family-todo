@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Legacy helper: manual use only.
+# Modifies FamilyTodo.xcodeproj/project.pbxproj directly.
+# Not used by CI or pre-commit.
+
 """Add MVP files to Xcode project"""
 
 import re

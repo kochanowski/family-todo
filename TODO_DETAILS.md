@@ -23,8 +23,8 @@ Use it together with the one-task-at-a-time workflow.
     - owner uses `ownerPrivate`
     - participant uses `participantShared`
   - the near-term goal is not to migrate owner to shared DB, but to make app behavior feel close to symmetric
-  - see `docs/current/owner-participant-sync-plan.md`
-  - detailed next-step refactor plan: `docs/current/2026-03-25-big-sync-refactor-plan.md`
+  - see `docs/active/engineering/owner-participant-sync-plan.md`
+  - detailed next-step refactor plan: `docs/active/engineering/2026-03-25-big-sync-refactor-plan.md`
 - In scope:
   - continue phase-2 hardening of the current model
   - verify remote push intake, dedupe, and follow-up refresh behavior for:
@@ -172,7 +172,7 @@ Use it together with the one-task-at-a-time workflow.
     - `Tasks`: inline header pill such as `Tasks updated`
     - `Shopping`: inline header pill while visible, top banner for off-screen additions
     - `Ideas`: no dedicated sync indicator, only refreshed content/animation
-  - current analysis is saved in `docs/current/2026-03-25-sync-and-update-ux-analysis.md`
+  - current analysis is saved in `docs/active/engineering/2026-03-25-sync-and-update-ux-analysis.md`
 - In scope:
   - unify on-screen remote update UX across the three core tabs
   - strongly prefer an icon-led, short-lived header indicator over text-heavy pills
@@ -223,7 +223,7 @@ Use it together with the one-task-at-a-time workflow.
 ## <a id="i13"></a>I1.3 Welcome Carousel Refresh
 - Objective: refresh the first-launch carousel using the already-prepared product and HIG analysis.
 - Source:
-  - `onboarding-flow-claude-analysis.md`
+  - `docs/active/engineering/onboarding-flow-claude-analysis.md`
 - In scope:
   - update carousel slides to map more directly to actual app value:
     - household organization
