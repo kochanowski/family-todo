@@ -31,11 +31,8 @@ struct BundlesManagementView: View {
                     HapticManager.lightTap()
                     dismiss()
                 } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
-                        Text("More")
-                    }
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
                 }
             }
             ToolbarItem(placement: .principal) {
