@@ -33,11 +33,11 @@ struct SignInView: View {
             VStack(spacing: 16) {
                 housePulseLogo
 
-                Text("HousePulse")
+                Text("Dwello")
                     .font(themeStore.font(for: .screenHeader))
                     .foregroundStyle(themeStore.contentPrimaryColor)
 
-                Text("Share tasks, stay organized, live better together")
+                Text("Shared home lists for calmer household coordination")
                     .font(themeStore.font(for: .listRowTitle))
                     .foregroundStyle(themeStore.contentSecondaryColor)
                     .multilineTextAlignment(.center)

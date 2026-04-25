@@ -127,7 +127,7 @@ struct MoreView: View {
                     .foregroundStyle(.white.opacity(0.95))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(premiumSubscriptionManager.isPremium ? "HousePulse Pro Active" : "HousePulse Pro")
+                    Text(premiumSubscriptionManager.isPremium ? "Dwello Plus Active" : "Dwello Plus")
                         .font(themeStore.font(for: .inlineTitle))
                         .foregroundStyle(.white)
 
@@ -161,7 +161,7 @@ struct MoreView: View {
                                 .controlSize(.small)
                                 .tint(themeStore.accentTabColor)
                         }
-                        Text("Upgrade to HousePulse Pro")
+                        Text("Upgrade to Dwello Plus")
                         Spacer()
                     }
                 }

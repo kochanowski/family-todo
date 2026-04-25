@@ -455,7 +455,7 @@ struct SettingsView: View {
         if householdStore.currentHousehold?.ownerId == userSession.userId {
             return "You own this household. Deleting your account will permanently remove the entire household and all shared data for every member."
         }
-        return "Deletes your personal HousePulse data, removes you from the household, clears local app data, and signs you out. Your Apple ID is not affected."
+        return "Deletes your personal Dwello data, removes you from the household, clears local app data, and signs you out. Your Apple ID is not affected."
     }
 
     private var deleteAccountMessageText: String {
