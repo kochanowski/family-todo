@@ -1511,70 +1511,119 @@ struct RestockSheet: View {
     @State private var showClearAllConfirmation = false
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                restockHeader
+        ZStack(alignment: .bottom) {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    restockHeader
 
-                Group {
-                    if store.recentItems.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "cart")
-                                .font(.system(size: 40, weight: .regular))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
+                    Group {
+                        if store.recentItems.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "cart")
+                                    .font(.system(size: 40, weight: .regular))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
 
-                            Text("No Recent Purchases")
-                                .font(themeStore.font(for: .inlineTitle))
-                                .foregroundStyle(themeStore.contentPrimaryColor)
+                                Text("No Recent Purchases")
+                                    .font(themeStore.font(for: .inlineTitle))
+                                    .foregroundStyle(themeStore.contentPrimaryColor)
 
-                            Text("Items marked as bought appear here for one-tap restore.")
-                                .font(themeStore.font(for: .bodyStrong))
-                                .foregroundStyle(themeStore.contentSecondaryColor)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 60)
-                    } else {
-                        List {
-                            ForEach(store.recentItems) { item in
-                                RestockItemRow(
-                                    item: item,
-                                    onRestore: { onRestore(item) },
-                                    onDelete: { onDeleteItem(item) }
-                                )
-                                .listRowInsets(
-                                    EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
-                                )
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
+                                Text("Items marked as bought appear here for one-tap restore.")
+                                    .font(themeStore.font(for: .bodyStrong))
+                                    .foregroundStyle(themeStore.contentSecondaryColor)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 32)
                             }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                        } else {
+                            List {
+                                ForEach(store.recentItems) { item in
+                                    RestockItemRow(
+                                        item: item,
+                                        onRestore: { onRestore(item) },
+                                        onDelete: { onDeleteItem(item) }
+                                    )
+                                    .listRowInsets(
+                                        EdgeInsets(top: -4, leading: 20, bottom: -4, trailing: 20)
+                                    )
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
+                                }
+                            }
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .background(themeStore.surfaceElevatedColor)
+                            .environment(\.font, themeStore.font(for: .listRowTitle))
                         }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        .background(themeStore.surfaceElevatedColor)
-                        .environment(\.font, themeStore.font(for: .listRowTitle))
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(
+                    themeStore.surfaceElevatedColor.ignoresSafeArea()
+                )
+                .toolbar(.hidden, for: .navigationBar)
             }
-            .background(
-                themeStore.surfaceElevatedColor.ignoresSafeArea()
-            )
-            .toolbar(.hidden, for: .navigationBar)
+            .allowsHitTesting(!showClearAllConfirmation)
+
+            if showClearAllConfirmation {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture {
+                        showClearAllConfirmation = false
+                    }
+
+                restockClearConfirmationOverlay
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1)
+            }
         }
-        .sheet(isPresented: $showClearAllConfirmation) {
-            AppConfirmationSheet(
-                title: "Clear all recently purchased?",
-                message: "This permanently removes all items from the recently purchased list.",
-                primaryTitle: "Clear All",
-                primaryStyle: .destructive,
-                onPrimary: onClearAll
-            )
-        }
+        .animation(.easeInOut(duration: 0.2), value: showClearAllConfirmation)
         .background(themeStore.surfaceElevatedColor.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(themeStore.surfaceElevatedColor)
+    }
+
+    private var restockClearConfirmationOverlay: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Clear all recently purchased?")
+                .font(themeStore.font(for: .inlineTitle))
+                .foregroundStyle(.primary)
+
+            Text("This permanently removes all items from the recently purchased list.")
+                .font(themeStore.font(for: .bodySmall))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            AppModalActionRow(
+                secondaryTitle: "Cancel",
+                primaryTitle: "Clear All",
+                primaryStyle: .destructive,
+                onSecondary: {
+                    showClearAllConfirmation = false
+                },
+                onPrimary: {
+                    showClearAllConfirmation = false
+                    onClearAll()
+                }
+            )
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 18, y: 8)
     }
 
     private var restockHeader: some View {
