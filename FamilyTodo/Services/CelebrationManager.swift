@@ -50,7 +50,7 @@ final class CelebrationManager: ObservableObject {
 
     private static let milestoneMessages: [(emoji: String, message: String)] = [
         ("🎉", "Weekly milestone hit! Home is glowing."),
-        ("🏡", "Big win this week. HousePulse is strong."),
+        ("🏡", "Big win this week. Dwello is strong."),
         ("✨", "Milestone unlocked. Nice household teamwork!"),
     ]
 

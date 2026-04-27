@@ -22,7 +22,7 @@ struct OnboardingView: View {
                         .font(.system(size: 60))
                         .foregroundStyle(.blue)
 
-                    Text("Welcome to HousePulse")
+                    Text("Welcome to Dwello")
                         .font(themeStore.font(for: .screenHeader))
                         .foregroundStyle(themeStore.contentPrimaryColor)
 

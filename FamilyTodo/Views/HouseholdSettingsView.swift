@@ -277,7 +277,7 @@ struct ProfileView: View {
                 sectionHeader("Invite")
             } footer: {
                 if canCreateInvite {
-                    Text("Share the code or QR — the other person opens HousePulse and enters it to join.")
+                    Text("Share the code or QR — the other person opens Dwello and enters it to join.")
                 }
             }
         }
@@ -551,7 +551,7 @@ private struct InviteMemberView: View {
 
             if isInviteLoadTakingLongerThanExpected {
                 Text(
-                    "The first invite can take a little longer while HousePulse finishes preparing iCloud sharing. Keep this screen open for a moment."
+                    "The first invite can take a little longer while Dwello finishes preparing iCloud sharing. Keep this screen open for a moment."
                 )
                 .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(themeStore.contentSecondaryColor)
@@ -618,7 +618,7 @@ private struct InviteMemberView: View {
             .buttonStyle(.bordered)
             .animation(.easeInOut(duration: 0.2), value: codeCopied)
 
-            Text("The other person scans the QR code or types the code into HousePulse to join.")
+            Text("The other person scans the QR code or types the code into Dwello to join.")
                 .font(themeStore.font(for: .bodySmall))
                 .foregroundStyle(themeStore.contentSecondaryColor)
                 .multilineTextAlignment(.center)
@@ -679,7 +679,7 @@ private struct InviteMemberView: View {
     }
 
     private func shareText(for inviteCode: String) -> String {
-        "Join my household in HousePulse with code: \(inviteCode)"
+        "Join my household in Dwello with code: \(inviteCode)"
     }
 }
 

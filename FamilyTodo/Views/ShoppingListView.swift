@@ -187,6 +187,14 @@ private struct ShoppingListContent: View {
                     onPrimary: clearToBuy
                 )
             }
+            .sheet(isPresented: $showRestock) {
+                RestockSheet(
+                    store: store,
+                    onRestore: restoreRecentItem,
+                    onDeleteItem: deleteRecentItem,
+                    onClearAll: clearRecentItems
+                )
+            }
             .sheet(isPresented: $showQuickAddBundleChooser) {
                 ShoppingQuickAddBundleSheet(
                     bundles: quickAddBundles,
@@ -517,14 +525,6 @@ private struct ShoppingListContent: View {
                     arrowEdge: .top,
                     generation: appTipRuntimeGeneration
                 )
-                .sheet(isPresented: $showRestock) {
-                    RestockSheet(
-                        store: store,
-                        onRestore: restoreRecentItem,
-                        onDeleteItem: deleteRecentItem,
-                        onClearAll: clearRecentItems
-                    )
-                }
             }
         }
     }
@@ -1561,15 +1561,15 @@ struct RestockSheet: View {
                 themeStore.surfaceElevatedColor.ignoresSafeArea()
             )
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showClearAllConfirmation) {
-                AppConfirmationSheet(
-                    title: "Clear all recently purchased?",
-                    message: "This permanently removes all items from the recently purchased list.",
-                    primaryTitle: "Clear All",
-                    primaryStyle: .destructive,
-                    onPrimary: onClearAll
-                )
-            }
+        }
+        .sheet(isPresented: $showClearAllConfirmation) {
+            AppConfirmationSheet(
+                title: "Clear all recently purchased?",
+                message: "This permanently removes all items from the recently purchased list.",
+                primaryTitle: "Clear All",
+                primaryStyle: .destructive,
+                onPrimary: onClearAll
+            )
         }
         .background(themeStore.surfaceElevatedColor.ignoresSafeArea())
         .presentationDetents([.medium, .large])

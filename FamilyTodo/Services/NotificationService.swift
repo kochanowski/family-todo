@@ -635,7 +635,7 @@ enum NotificationSchedulePlanner {
             let resolvedTitle: String = if let householdName = batch.householdName, !householdName.isEmpty {
                 householdName
             } else {
-                "HousePulse"
+                "Dwello"
             }
             content.title = resolvedTitle
             content.body = passiveSharedActivityBody(for: batch)
