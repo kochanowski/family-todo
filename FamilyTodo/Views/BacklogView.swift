@@ -59,6 +59,7 @@ private struct BacklogContent: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -74,6 +75,7 @@ private struct BacklogContent: View {
     @State private var composerText = ""
     @State private var pendingDeleteConfirmationTarget: DeleteConfirmationTarget?
     @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
+    @State private var premiumFeaturePrompt: PremiumFeature?
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var remoteHighlightedItemIDs: Set<UUID> = []
@@ -149,6 +151,23 @@ private struct BacklogContent: View {
                     } message: {
                         Text(categoryDeletionBlockReason?.alertDetail ?? "")
                     }
+                    .alert(
+                        premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
+                        isPresented: Binding(
+                            get: { premiumFeaturePrompt != nil },
+                            set: { if !$0 { premiumFeaturePrompt = nil } }
+                        )
+                    ) {
+                        Button("Upgrade") {
+                            premiumSubscriptionManager.displayPaywall = true
+                            premiumFeaturePrompt = nil
+                        }
+                        Button("Not Now", role: .cancel) {
+                            premiumFeaturePrompt = nil
+                        }
+                    } message: {
+                        Text(premiumFeaturePrompt?.alertMessage ?? "")
+                    }
             }
             .overlay(alignment: .bottom) {
                 if let pendingDeletionItem {
@@ -184,10 +203,19 @@ private struct BacklogContent: View {
                         HapticManager.lightTap()
                         _ = _Concurrency.Task {
                             let previousCategoryCount = store.categories.count
-                            await store.addCategory(name, colorHex: colorHex)
+                            let result = await store.addCategory(
+                                name,
+                                colorHex: colorHex,
+                                isPremium: premiumSubscriptionManager.isPremium
+                            )
                             await MainActor.run {
-                                if store.categories.count > previousCategoryCount {
+                                switch result {
+                                case .created where store.categories.count > previousCategoryCount:
                                     AppTips.donateIdeasCategoryCreated()
+                                case let .blocked(feature):
+                                    premiumFeaturePrompt = feature
+                                case .created, .ignored:
+                                    break
                                 }
                             }
                         }

@@ -33,8 +33,13 @@ final class OnboardingState: ObservableObject {
     @AppStorage("syncMethod") private var syncMethodRaw = SyncMethod.none.rawValue
     @AppStorage("householdStatus") private var householdStatusRaw = HouseholdStatus.none.rawValue
     @AppStorage("lastLaunchState") private var lastLaunchStateRaw = LaunchState.onboarding.rawValue
+    @AppStorage("shouldPresentPostSetupPaywall") private var shouldPresentPostSetupPaywallRaw = false
 
     @Published var currentState: LaunchState = .onboarding
+
+    var shouldPresentPostSetupPaywall: Bool {
+        shouldPresentPostSetupPaywallRaw
+    }
 
     var syncMethod: SyncMethod {
         get { SyncMethod(rawValue: syncMethodRaw) ?? .none }
@@ -128,8 +133,17 @@ final class OnboardingState: ObservableObject {
         HapticManager.success()
         hasSeenOnboarding = true
         householdStatus = withHousehold ? .active : .none
+        if withHousehold {
+            shouldPresentPostSetupPaywallRaw = true
+        }
         currentState = .mainApp
         lastLaunchStateRaw = LaunchState.mainApp.rawValue
+    }
+
+    func consumePostSetupPaywall() {
+        guard shouldPresentPostSetupPaywallRaw else { return }
+        shouldPresentPostSetupPaywallRaw = false
+        objectWillChange.send()
     }
 
     func restoreMainAppForRecoveredSession(syncMethod method: SyncMethod) {
@@ -178,6 +192,7 @@ final class OnboardingState: ObservableObject {
         legacyHasCompletedOnboarding = false
         syncMethodRaw = SyncMethod.none.rawValue
         householdStatusRaw = HouseholdStatus.none.rawValue
+        shouldPresentPostSetupPaywallRaw = false
         lastLaunchStateRaw = LaunchState.onboarding.rawValue
         currentState = .onboarding
     }

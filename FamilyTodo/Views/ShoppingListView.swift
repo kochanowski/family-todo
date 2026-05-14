@@ -41,6 +41,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -68,6 +69,7 @@ private struct ShoppingListContent: View {
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
     @State private var remoteHighlightedItemIDs: Set<UUID> = []
+    @State private var premiumFeaturePrompt: PremiumFeature?
     @State private var isApplyingRemoteSyncAnimation = false
     @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var shouldRearmBundleQuickAddTipOnNextAppear = false
@@ -203,6 +205,23 @@ private struct ShoppingListContent: View {
                         handleBundleQuickAdd(bundle)
                     }
                 )
+            }
+            .alert(
+                premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
+                isPresented: Binding(
+                    get: { premiumFeaturePrompt != nil },
+                    set: { if !$0 { premiumFeaturePrompt = nil } }
+                )
+            ) {
+                Button("Upgrade") {
+                    premiumSubscriptionManager.displayPaywall = true
+                    premiumFeaturePrompt = nil
+                }
+                Button("Not Now", role: .cancel) {
+                    premiumFeaturePrompt = nil
+                }
+            } message: {
+                Text(premiumFeaturePrompt?.alertMessage ?? "")
             }
             .overlay(alignment: .bottom) {
                 if let activeToast {
@@ -1047,6 +1066,12 @@ private struct ShoppingListContent: View {
 
     private func handleQuickAddLongPress() {
         guard quickAddFeedbackEnabled else { return }
+        guard PremiumAccessPolicy.canUseShoppingBundles(
+            isPremium: premiumSubscriptionManager.isPremium
+        ) else {
+            premiumFeaturePrompt = .shoppingBundles
+            return
+        }
 
         withAnimation(WowAnimation.easeOut) {
             isQuickAddPressVisualActive = false
@@ -1060,6 +1085,12 @@ private struct ShoppingListContent: View {
     }
 
     private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
+        guard PremiumAccessPolicy.canUseShoppingBundles(
+            isPremium: premiumSubscriptionManager.isPremium
+        ) else {
+            premiumFeaturePrompt = .shoppingBundles
+            return
+        }
         cancelEditingItem()
         dismissRapidEntry()
         dismissInlineInsert()

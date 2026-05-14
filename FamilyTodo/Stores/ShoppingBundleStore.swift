@@ -4,6 +4,12 @@ import SwiftUI
 
 @MainActor
 final class ShoppingBundleStore: ObservableObject {
+    enum BundleMutationResult: Equatable {
+        case saved
+        case blocked(PremiumFeature)
+        case ignored
+    }
+
     private enum BundleSyncStatus {
         static let synced = "synced"
         static let pendingUpload = "pendingUpload"
@@ -339,16 +345,21 @@ final class ShoppingBundleStore: ObservableObject {
         }
     }
 
+    @discardableResult
     func createBundle(
         name: String,
         icon: String = ShoppingBundle.creationDefaultIcon,
-        items: [String]
-    ) async {
-        guard let householdId else { return }
+        items: [String],
+        isPremium: Bool
+    ) async -> BundleMutationResult {
+        guard PremiumAccessPolicy.canUseShoppingBundles(isPremium: isPremium) else {
+            return .blocked(.shoppingBundles)
+        }
+        guard let householdId else { return .ignored }
 
         let cleanedName = ShoppingBundle.sanitizedName(name)
         let cleanedItems = ShoppingBundle.sanitizedItems(items)
-        guard !cleanedName.isEmpty, !cleanedItems.isEmpty else { return }
+        guard !cleanedName.isEmpty, !cleanedItems.isEmpty else { return .ignored }
 
         let bundle = ShoppingBundle(
             householdId: householdId,
@@ -369,16 +380,21 @@ final class ShoppingBundleStore: ObservableObject {
             lastSyncedAt: isCloudSyncEnabled ? nil : Date()
         )
 
-        guard isCloudSyncEnabled else { return }
+        guard isCloudSyncEnabled else { return .saved }
         replayPendingMutationsInBackground()
+        return .saved
     }
 
-    func updateBundle(_ bundle: ShoppingBundle) async {
-        guard let index = bundles.firstIndex(where: { $0.id == bundle.id }) else { return }
+    @discardableResult
+    func updateBundle(_ bundle: ShoppingBundle, isPremium: Bool) async -> BundleMutationResult {
+        guard PremiumAccessPolicy.canUseShoppingBundles(isPremium: isPremium) else {
+            return .blocked(.shoppingBundles)
+        }
+        guard let index = bundles.firstIndex(where: { $0.id == bundle.id }) else { return .ignored }
 
         let cleanedName = bundle.normalizedName
         let cleanedItems = bundle.normalizedItems
-        guard !cleanedName.isEmpty, !cleanedItems.isEmpty else { return }
+        guard !cleanedName.isEmpty, !cleanedItems.isEmpty else { return .ignored }
 
         var updatedBundle = bundle
         updatedBundle.name = cleanedName
@@ -397,8 +413,9 @@ final class ShoppingBundleStore: ObservableObject {
             lastSyncedAt: isCloudSyncEnabled ? nil : Date()
         )
 
-        guard isCloudSyncEnabled else { return }
+        guard isCloudSyncEnabled else { return .saved }
         replayPendingMutationsInBackground()
+        return .saved
     }
 
     func deleteBundle(_ bundle: ShoppingBundle) async {

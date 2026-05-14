@@ -116,6 +116,28 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(foreground, matches: .black)
     }
 
+    func testPremiumAccessFallbackResetsPremiumThemeAndAccentForFreeUsers() {
+        let store = ThemeStore()
+        store.unifiedTheme = .paper
+        store.tabTintColor = .purple
+
+        store.applyPremiumAccess(isPremium: false)
+
+        XCTAssertEqual(store.unifiedTheme, .auto)
+        XCTAssertEqual(store.tabTintColor, .defaultGreen)
+    }
+
+    func testPremiumAccessKeepsPremiumThemeAndAccentForPremiumUsers() {
+        let store = ThemeStore()
+        store.unifiedTheme = .retroDark
+        store.tabTintColor = .pink
+
+        store.applyPremiumAccess(isPremium: true)
+
+        XCTAssertEqual(store.unifiedTheme, .retroDark)
+        XCTAssertEqual(store.tabTintColor, .pink)
+    }
+
     func testInactiveTabBarColorUsesBlackForLightTheme() {
         let store = ThemeStore()
         store.unifiedTheme = .light

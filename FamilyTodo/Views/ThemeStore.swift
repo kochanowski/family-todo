@@ -576,6 +576,15 @@ enum UnifiedTheme: String, CaseIterable, Identifiable {
         case .paper: "newspaper.fill"
         }
     }
+
+    var isPremium: Bool {
+        switch self {
+        case .retroDark, .retroLight, .paper:
+            true
+        case .light, .dark, .auto:
+            false
+        }
+    }
 }
 
 // MARK: - Theme Store
@@ -713,6 +722,26 @@ final class ThemeStore: ObservableObject {
             case .paper:
                 preset = .paper
             }
+        }
+    }
+
+    func applyPremiumAccess(isPremium: Bool) {
+        guard !isPremium else { return }
+        var didChange = false
+
+        if preset == .retroDark || preset == .retroLight || preset == .paper {
+            presetRawValue = ThemePreset.system.rawValue
+            appearanceModeRawValue = AppearanceMode.system.rawValue
+            didChange = true
+        }
+
+        if tabTintColor != .defaultGreen {
+            tabTintColorRawValue = TabTintColor.defaultGreen.rawValue
+            didChange = true
+        }
+
+        if didChange {
+            objectWillChange.send()
         }
     }
 

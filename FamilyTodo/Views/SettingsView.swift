@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var isDeletingAccount = false
     @State private var deleteAccountProgressMessage = "Deleting account..."
     @State private var deleteAccountErrorMessage: String?
+    @State private var premiumFeaturePrompt: PremiumFeature?
 
     var body: some View {
         settingsContent
@@ -92,6 +93,23 @@ struct SettingsView: View {
             } message: {
                 Text(deleteAccountErrorMessage ?? "Unknown error")
             }
+            .alert(
+                premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
+                isPresented: Binding(
+                    get: { premiumFeaturePrompt != nil },
+                    set: { if !$0 { premiumFeaturePrompt = nil } }
+                )
+            ) {
+                Button("Upgrade") {
+                    premiumSubscriptionManager.displayPaywall = true
+                    premiumFeaturePrompt = nil
+                }
+                Button("Not Now", role: .cancel) {
+                    premiumFeaturePrompt = nil
+                }
+            } message: {
+                Text(premiumFeaturePrompt?.alertMessage ?? "")
+            }
     }
 
     private var settingsContent: some View {
@@ -112,9 +130,16 @@ struct SettingsView: View {
         Section {
             ThemeMiniatureCarousel(selectedTheme: Binding(
                 get: { themeStore.unifiedTheme },
-                set: {
+                set: { newTheme in
                     HapticManager.selection()
-                    themeStore.unifiedTheme = $0
+                    guard PremiumAccessPolicy.canUseTheme(
+                        newTheme,
+                        isPremium: premiumSubscriptionManager.isPremium
+                    ) else {
+                        premiumFeaturePrompt = .premiumTheme
+                        return
+                    }
+                    themeStore.unifiedTheme = newTheme
                 }
             ))
             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
@@ -306,6 +331,13 @@ struct SettingsView: View {
     private func tabTintButton(for tint: TabTintColor) -> some View {
         Button {
             HapticManager.selection()
+            guard PremiumAccessPolicy.canUseAccentColor(
+                tint,
+                isPremium: premiumSubscriptionManager.isPremium
+            ) else {
+                premiumFeaturePrompt = .accentColor
+                return
+            }
             themeStore.tabTintColor = tint
         } label: {
             VStack(spacing: 6) {

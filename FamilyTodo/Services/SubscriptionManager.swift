@@ -1,5 +1,117 @@
 import Foundation
 import RevenueCat
+import RevenueCatUI
+import SwiftUI
+
+enum PremiumFeature: Identifiable, Equatable {
+    case premiumTheme
+    case accentColor
+    case backlogCategoryLimit
+    case householdMemberLimit
+    case shoppingBundles
+
+    var id: String {
+        switch self {
+        case .premiumTheme:
+            "premiumTheme"
+        case .accentColor:
+            "accentColor"
+        case .backlogCategoryLimit:
+            "backlogCategoryLimit"
+        case .householdMemberLimit:
+            "householdMemberLimit"
+        case .shoppingBundles:
+            "shoppingBundles"
+        }
+    }
+
+    var alertTitle: String {
+        switch self {
+        case .premiumTheme:
+            "Dwello Pro theme"
+        case .accentColor:
+            "Dwello Pro accent"
+        case .backlogCategoryLimit:
+            "Category limit reached"
+        case .householdMemberLimit:
+            "Member limit reached"
+        case .shoppingBundles:
+            "Dwello Pro bundles"
+        }
+    }
+
+    var alertMessage: String {
+        switch self {
+        case .premiumTheme:
+            "Retro and Paper themes are included with Dwello Pro."
+        case .accentColor:
+            "Custom accent colors are included with Dwello Pro."
+        case .backlogCategoryLimit:
+            "Free households can create up to \(PremiumAccessPolicy.freeBacklogCategoryLimit) idea categories. Existing categories stay available."
+        case .householdMemberLimit:
+            "Free households can include up to \(PremiumAccessPolicy.freeHouseholdMemberLimit) members. Existing members stay connected."
+        case .shoppingBundles:
+            "Shopping bundles are included with Dwello Pro."
+        }
+    }
+}
+
+enum PremiumAccessPolicy {
+    static let freeHouseholdMemberLimit = 2
+    static let freeBacklogCategoryLimit = 4
+
+    static func canUseTheme(_ theme: UnifiedTheme, isPremium: Bool) -> Bool {
+        isPremium || !theme.isPremium
+    }
+
+    static func canUseAccentColor(_ tint: TabTintColor, isPremium: Bool) -> Bool {
+        isPremium || tint == .defaultGreen
+    }
+
+    static func canCreateBacklogCategory(currentCount: Int, isPremium: Bool) -> Bool {
+        isPremium || currentCount < freeBacklogCategoryLimit
+    }
+
+    static func canAddHouseholdMember(activeMemberCount: Int, isPremium: Bool) -> Bool {
+        isPremium || activeMemberCount < freeHouseholdMemberLimit
+    }
+
+    static func canUseShoppingBundles(isPremium: Bool) -> Bool {
+        isPremium
+    }
+}
+
+private struct PremiumSheetsHost: ViewModifier {
+    @EnvironmentObject private var onboardingState: OnboardingState
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
+                PaywallView(displayCloseButton: true)
+                    .onDisappear {
+                        onboardingState.consumePostSetupPaywall()
+                        _ = _Concurrency.Task {
+                            await premiumSubscriptionManager.refreshCustomerInfo()
+                        }
+                    }
+            }
+            .sheet(isPresented: $premiumSubscriptionManager.displayCustomerCenter) {
+                CustomerCenterView()
+                    .onDisappear {
+                        _ = _Concurrency.Task {
+                            await premiumSubscriptionManager.refreshCustomerInfo()
+                        }
+                    }
+            }
+    }
+}
+
+extension View {
+    func premiumSheetsHost() -> some View {
+        modifier(PremiumSheetsHost())
+    }
+}
 
 @MainActor
 enum RevenueCatRuntime {

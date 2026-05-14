@@ -6,10 +6,12 @@ struct BundlesManagementView: View {
 
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @Environment(\.dismiss) private var dismiss
     @State private var presentedEditor: PresentedBundleEditor?
     @State private var hasStartedInitialLoad = false
     @State private var lastAddedBundleId: UUID?
+    @State private var premiumFeaturePrompt: PremiumFeature?
 
     var body: some View {
         Group {
@@ -43,6 +45,12 @@ struct BundlesManagementView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     HapticManager.lightTap()
+                    guard PremiumAccessPolicy.canUseShoppingBundles(
+                        isPremium: premiumSubscriptionManager.isPremium
+                    ) else {
+                        premiumFeaturePrompt = .shoppingBundles
+                        return
+                    }
                     presentedEditor = .create
                 } label: {
                     Image(systemName: "plus")
@@ -66,8 +74,29 @@ struct BundlesManagementView: View {
             ShoppingBundleEditorSheet(
                 store: store,
                 shoppingStore: shoppingStore,
-                bundle: destination.bundle
+                bundle: destination.bundle,
+                isPremium: premiumSubscriptionManager.isPremium,
+                onBlocked: { feature in
+                    premiumFeaturePrompt = feature
+                }
             )
+        }
+        .alert(
+            premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
+            isPresented: Binding(
+                get: { premiumFeaturePrompt != nil },
+                set: { if !$0 { premiumFeaturePrompt = nil } }
+            )
+        ) {
+            Button("Upgrade") {
+                premiumSubscriptionManager.displayPaywall = true
+                premiumFeaturePrompt = nil
+            }
+            Button("Not Now", role: .cancel) {
+                premiumFeaturePrompt = nil
+            }
+        } message: {
+            Text(premiumFeaturePrompt?.alertMessage ?? "")
         }
     }
 
@@ -77,6 +106,12 @@ struct BundlesManagementView: View {
                 HStack(spacing: 0) {
                     Button {
                         HapticManager.lightTap()
+                        guard PremiumAccessPolicy.canUseShoppingBundles(
+                            isPremium: premiumSubscriptionManager.isPremium
+                        ) else {
+                            premiumFeaturePrompt = .shoppingBundles
+                            return
+                        }
                         presentedEditor = .edit(bundle)
                     } label: {
                         ShoppingBundleRow(bundle: bundle)
@@ -137,6 +172,12 @@ struct BundlesManagementView: View {
             description: "Create reusable shopping sets for faster planning here"
         ) {
             Button {
+                guard PremiumAccessPolicy.canUseShoppingBundles(
+                    isPremium: premiumSubscriptionManager.isPremium
+                ) else {
+                    premiumFeaturePrompt = .shoppingBundles
+                    return
+                }
                 presentedEditor = .create
             } label: {
                 Text("Create your first bundle")
@@ -149,6 +190,12 @@ struct BundlesManagementView: View {
 
     private func addBundleToShopping(_ bundle: ShoppingBundle) {
         guard let shoppingStore else { return }
+        guard PremiumAccessPolicy.canUseShoppingBundles(
+            isPremium: premiumSubscriptionManager.isPremium
+        ) else {
+            premiumFeaturePrompt = .shoppingBundles
+            return
+        }
         lastAddedBundleId = bundle.id
         _ = _Concurrency.Task {
             _ = await shoppingStore.createItems(fromTitles: bundle.normalizedItems)
@@ -227,6 +274,8 @@ private struct ShoppingBundleEditorSheet: View {
     @ObservedObject var store: ShoppingBundleStore
     let shoppingStore: ShoppingListStore?
     let bundle: ShoppingBundle?
+    let isPremium: Bool
+    let onBlocked: (PremiumFeature) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var themeStore: ThemeStore
@@ -242,10 +291,18 @@ private struct ShoppingBundleEditorSheet: View {
     @State private var composerFocused = false
     @FocusState private var focusedField: BundleEditorFocus?
 
-    init(store: ShoppingBundleStore, shoppingStore: ShoppingListStore?, bundle: ShoppingBundle?) {
+    init(
+        store: ShoppingBundleStore,
+        shoppingStore: ShoppingListStore?,
+        bundle: ShoppingBundle?,
+        isPremium: Bool,
+        onBlocked: @escaping (PremiumFeature) -> Void
+    ) {
         self.store = store
         self.shoppingStore = shoppingStore
         self.bundle = bundle
+        self.isPremium = isPremium
+        self.onBlocked = onBlocked
         _name = State(initialValue: bundle?.name ?? "")
         _selectedIcon = State(initialValue: bundle?.resolvedIcon ?? ShoppingBundle.creationDefaultIcon)
 
@@ -442,13 +499,16 @@ private struct ShoppingBundleEditorSheet: View {
             bundle.name = name
             bundle.icon = selectedIcon
             bundle.items = cleanedItems
-            await store.updateBundle(bundle)
+            let result = await store.updateBundle(bundle, isPremium: isPremium)
+            guard handleMutationResult(result) else { return }
         } else {
-            await store.createBundle(
+            let result = await store.createBundle(
                 name: name,
                 icon: selectedIcon,
-                items: cleanedItems
+                items: cleanedItems,
+                isPremium: isPremium
             )
+            guard handleMutationResult(result) else { return }
 
             if andAddToShoppingList {
                 _ = await shoppingStore?.createItems(fromTitles: cleanedItems)
@@ -456,6 +516,19 @@ private struct ShoppingBundleEditorSheet: View {
         }
 
         dismiss()
+    }
+
+    private func handleMutationResult(_ result: ShoppingBundleStore.BundleMutationResult) -> Bool {
+        switch result {
+        case .saved:
+            return true
+        case let .blocked(feature):
+            onBlocked(feature)
+            dismiss()
+            return false
+        case .ignored:
+            return false
+        }
     }
 
     private func deleteBundle() async {

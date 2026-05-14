@@ -1,5 +1,4 @@
 import Foundation
-import RevenueCatUI
 import SwiftData
 import SwiftUI
 import UIKit
@@ -85,22 +84,6 @@ struct MoreView: View {
         .task {
             await premiumSubscriptionManager.refreshCustomerInfo()
         }
-        .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
-            PaywallView()
-                .onDisappear {
-                    _ = _Concurrency.Task {
-                        await premiumSubscriptionManager.refreshCustomerInfo()
-                    }
-                }
-        }
-        .sheet(isPresented: $premiumSubscriptionManager.displayCustomerCenter) {
-            CustomerCenterView()
-                .onDisappear {
-                    _ = _Concurrency.Task {
-                        await premiumSubscriptionManager.refreshCustomerInfo()
-                    }
-                }
-        }
     }
 
     // MARK: - Header
@@ -127,7 +110,7 @@ struct MoreView: View {
                     .foregroundStyle(.white.opacity(0.95))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(premiumSubscriptionManager.isPremium ? "Dwello Plus Active" : "Dwello Plus")
+                    Text(premiumSubscriptionManager.isPremium ? "Dwello Pro Active" : "Dwello Pro")
                         .font(themeStore.font(for: .inlineTitle))
                         .foregroundStyle(.white)
 
@@ -161,7 +144,7 @@ struct MoreView: View {
                                 .controlSize(.small)
                                 .tint(themeStore.accentTabColor)
                         }
-                        Text("Upgrade to Dwello Plus")
+                        Text("Upgrade to Dwello Pro")
                         Spacer()
                     }
                 }
@@ -369,11 +352,13 @@ struct CategoriesManagementView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @State private var selectedCategory: BacklogCategory?
     @State private var isAddingCategory = false
     @State private var newCategoryColorHex = MemberColorToken.randomHex()
     @State private var editMode: EditMode = .inactive
     @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
+    @State private var premiumFeaturePrompt: PremiumFeature?
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
@@ -461,6 +446,23 @@ struct CategoriesManagementView: View {
         } message: {
             Text(categoryDeletionBlockReason?.alertDetail ?? "")
         }
+        .alert(
+            premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
+            isPresented: Binding(
+                get: { premiumFeaturePrompt != nil },
+                set: { if !$0 { premiumFeaturePrompt = nil } }
+            )
+        ) {
+            Button("Upgrade") {
+                premiumSubscriptionManager.displayPaywall = true
+                premiumFeaturePrompt = nil
+            }
+            Button("Not Now", role: .cancel) {
+                premiumFeaturePrompt = nil
+            }
+        } message: {
+            Text(premiumFeaturePrompt?.alertMessage ?? "")
+        }
         .task {
             store.setCloudContext(householdStore.currentSyncContext(userId: userSession.userId))
             store.setSyncMode(userSession.syncMode)
@@ -496,7 +498,14 @@ struct CategoriesManagementView: View {
                 onSubmit: { name, colorHex in
                     newCategoryColorHex = MemberColorToken.randomHex()
                     _ = _Concurrency.Task {
-                        await store.addCategory(name, colorHex: colorHex)
+                        let result = await store.addCategory(
+                            name,
+                            colorHex: colorHex,
+                            isPremium: premiumSubscriptionManager.isPremium
+                        )
+                        if case let .blocked(feature) = result {
+                            premiumFeaturePrompt = feature
+                        }
                     }
                 }
             )

@@ -1,4 +1,4 @@
-# Dwello / HousePulse Monetization & Paywall Strategy
+# Dwello Monetization & Paywall Strategy
 
 ## 1. Product Philosophy
 Based on `AGENTS.md` rules: "no pressure mechanics", "low-friction", "shared-first".
@@ -8,7 +8,7 @@ We use a **Freemium model with a 14-day Free Trial**.
 - **Contextual Paywalls:** Display the paywall when a user attempts to use a premium feature or exceed a free tier limit, rather than at random times.
 
 ## 2. Onboarding & Trial Flow
-1. **Soft Paywall at Onboarding:** At the end of the initial onboarding/setup flow, present a "Soft Paywall" offering a 14-day free trial of Dwello Plus. Ensure there is a clear "Skip" or "X" button so users aren't forced to subscribe.
+1. **Soft Paywall at Onboarding:** At the end of the initial onboarding/setup flow, present a "Soft Paywall" offering a 14-day free trial of Dwello Pro. Ensure there is a clear "Skip" or "X" button so users aren't forced to subscribe.
 2. **Apple Managed Trial:** The 14-day trial is configured via App Store Connect (Introductory Offer) and RevenueCat. The app does not need custom date-math logic for this; RevenueCat's `isPremium` flag will automatically handle the trial period and expiration.
 
 ## 3. Feature Breakdown
@@ -23,7 +23,7 @@ The Free tier must be highly functional for a standard couple/pair.
 - **Notifications:** Standard push notifications.
 - **Task History:** Standard history access.
 
-### 💎 Premium Tier (Dwello Plus)
+### 💎 Premium Tier (Dwello Pro)
 Aesthetics, advanced organization, and scalability.
 - **Household Members:** Unlimited (or >2, suitable for families/roommates).
 - **Categories:** Unlimited categories in Backlog/Ideas.

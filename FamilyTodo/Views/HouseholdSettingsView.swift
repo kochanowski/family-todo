@@ -29,6 +29,7 @@ struct ProfileView: View {
     @State private var developerTapResetTask: _Concurrency.Task<Void, Never>?
     @State private var showDeveloperToast = false
     @State private var developerToastDismissTask: _Concurrency.Task<Void, Never>?
+    @State private var premiumFeaturePrompt: PremiumFeature?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -116,6 +117,23 @@ struct ProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(actionErrorMessage ?? "Unknown error")
+        }
+        .alert(
+            premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
+            isPresented: Binding(
+                get: { premiumFeaturePrompt != nil },
+                set: { if !$0 { premiumFeaturePrompt = nil } }
+            )
+        ) {
+            Button("Upgrade") {
+                premiumSubscriptionManager.displayPaywall = true
+                premiumFeaturePrompt = nil
+            }
+            Button("Not Now", role: .cancel) {
+                premiumFeaturePrompt = nil
+            }
+        } message: {
+            Text(premiumFeaturePrompt?.alertMessage ?? "")
         }
         .task(id: householdStore.currentHousehold?.id) {
             memberStore.setModelContext(modelContext)
@@ -257,6 +275,12 @@ struct ProfileView: View {
         if householdStore.currentHousehold != nil {
             Section {
                 Button {
+                    guard canCreateInvite else {
+                        if isAtFreeMemberLimit {
+                            premiumFeaturePrompt = .householdMemberLimit
+                        }
+                        return
+                    }
                     showInviteMember = true
                 } label: {
                     Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
@@ -272,11 +296,20 @@ struct ProfileView: View {
                     Text("Invites are available only when iCloud sync is enabled.")
                         .font(themeStore.font(for: .bodySmall))
                         .foregroundStyle(themeStore.contentSecondaryColor)
+                } else if isAtFreeMemberLimit {
+                    Text("Free households include up to \(PremiumAccessPolicy.freeHouseholdMemberLimit) members. Upgrade to Dwello Pro to invite more people.")
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
                 }
             } header: {
                 sectionHeader("Invite")
             } footer: {
-                if canCreateInvite {
+                if isAtFreeMemberLimit {
+                    Button("Upgrade to Dwello Pro") {
+                        premiumSubscriptionManager.displayPaywall = true
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                } else if canCreateInvite {
                     Text("Share the code or QR — the other person opens Dwello and enters it to join.")
                 }
             }
@@ -337,7 +370,17 @@ struct ProfileView: View {
     }
 
     private var canCreateInvite: Bool {
-        currentUserIsOwner && userSession.syncMode == .cloud
+        currentUserIsOwner && userSession.syncMode == .cloud && !isAtFreeMemberLimit
+    }
+
+    private var isAtFreeMemberLimit: Bool {
+        currentUserIsOwner &&
+            userSession.syncMode == .cloud &&
+            !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canAddHouseholdMember(
+                activeMemberCount: activeMembers.count,
+                isPremium: false
+            )
     }
 
     private func sectionHeader(_ title: String) -> some View {

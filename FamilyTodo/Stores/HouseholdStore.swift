@@ -1461,9 +1461,13 @@ class HouseholdStore: ObservableObject {
                 userId: userId,
                 displayName: validatedDisplayName,
                 role: target.household.ownerId == userId ? .owner : .member,
+                isHouseholdPremium: target.household.isPremium,
                 scope: .participantShared
             )
         } catch {
+            if (error as? HouseholdError) == .householdMemberLimitReached {
+                throw error
+            }
             logJoinError(stage: "memberUpsert", householdId: target.householdId, error: error)
             throw debugJoinFailure(
                 prefix: "Member upsert failed",
@@ -1525,9 +1529,13 @@ class HouseholdStore: ObservableObject {
                 userId: userId,
                 displayName: validatedDisplayName,
                 role: target.household.ownerId == userId ? .owner : .member,
+                isHouseholdPremium: target.household.isPremium,
                 scope: .participantShared
             )
         } catch {
+            if (error as? HouseholdError) == .householdMemberLimitReached {
+                throw error
+            }
             logJoinError(stage: "memberUpsert", householdId: target.householdId, error: error)
             throw debugJoinFailure(
                 prefix: "Member upsert failed",
@@ -2488,10 +2496,27 @@ class HouseholdStore: ObservableObject {
         userId: String,
         displayName: String,
         role: Member.MemberRole,
+        isHouseholdPremium: Bool = true,
         scope: CloudKitManager.HouseholdDatabaseScope
     ) async throws -> Member {
         let normalizedKey = DisplayNameValidator.normalizedKey(displayName)
         let allMembers = try await cloudKit.fetchMembers(householdId: householdId, scope: scope)
+        let existingMember = try await cloudKit.fetchMemberByUserId(
+            userId,
+            householdId: householdId,
+            scope: scope
+        )
+
+        if existingMember?.isActive != true {
+            let activeMemberCount = allMembers.filter(\.isActive).count
+            guard PremiumAccessPolicy.canAddHouseholdMember(
+                activeMemberCount: activeMemberCount,
+                isPremium: isHouseholdPremium
+            ) else {
+                throw HouseholdError.householdMemberLimitReached
+            }
+        }
+
         if allMembers.contains(where: {
             $0.isActive &&
                 $0.userId != userId &&
@@ -2500,11 +2525,7 @@ class HouseholdStore: ObservableObject {
             throw HouseholdError.displayNameAlreadyTaken
         }
 
-        if let existing = try await cloudKit.fetchMemberByUserId(
-            userId,
-            householdId: householdId,
-            scope: scope
-        ) {
+        if let existing = existingMember {
             let resolvedRole: Member.MemberRole = existing.role == .owner ? .owner : role
             let shouldUpdate =
                 existing.displayName != displayName ||

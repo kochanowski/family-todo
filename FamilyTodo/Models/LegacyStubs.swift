@@ -185,6 +185,7 @@ enum HouseholdError: Error, Equatable {
     case cacheNotAvailable
     case notAuthorized
     case transferOwnershipRequired
+    case householdMemberLimitReached
 }
 
 extension HouseholdError: LocalizedError {
@@ -214,6 +215,8 @@ extension HouseholdError: LocalizedError {
             "You are not allowed to perform this action."
         case .transferOwnershipRequired:
             "Transfer ownership before leaving the household."
+        case .householdMemberLimitReached:
+            "This free household is already at the member limit. Upgrade to Dwello Pro to add more people."
         }
     }
 }

@@ -275,6 +275,7 @@ struct RootView: View {
 
     private var rootContentWithAlerts: some View {
         rootContentWithTasks
+            .premiumSheetsHost()
             .alert(
                 "Invitation Error",
                 isPresented: invitationErrorBinding
@@ -313,12 +314,16 @@ struct RootView: View {
                     userSession: userSession,
                     householdStore: householdStore
                 )
+                themeStore.applyPremiumAccess(isPremium: premiumSubscriptionManager.isPremium)
             }
             .task(id: householdLifecycleSyncKey) {
                 await syncCurrentHouseholdLifecycleIfNeeded()
             }
             .task(id: householdRecoveryKey) {
                 await recoverHouseholdRouteIfNeeded()
+            }
+            .task(id: postSetupPaywallKey) {
+                presentPostSetupPaywallIfNeeded()
             }
     }
 
@@ -338,6 +343,9 @@ struct RootView: View {
             }
             .onChange(of: userSession.currentHouseholdID) { _, _ in
                 refreshPremiumHouseholdState()
+            }
+            .onChange(of: premiumSubscriptionManager.isPremium) { _, isPremium in
+                themeStore.applyPremiumAccess(isPremium: isPremium)
             }
             .onChange(of: householdStore.currentHousehold?.id) { _, _ in
                 refreshPremiumHouseholdState()
@@ -446,6 +454,31 @@ struct RootView: View {
             userSession.currentHouseholdID?.uuidString ?? "none",
             householdStore.currentHousehold?.ownerId ?? "unknownOwner",
         ].joined(separator: "|")
+    }
+
+    private var postSetupPaywallKey: String {
+        [
+            onboardingState.currentState.rawValue,
+            onboardingState.shouldPresentPostSetupPaywall ? "pending" : "idle",
+            premiumSubscriptionManager.isPremium ? "premium" : "free",
+        ].joined(separator: "|")
+    }
+
+    private func presentPostSetupPaywallIfNeeded() {
+        if onboardingState.shouldPresentPostSetupPaywall, premiumSubscriptionManager.isPremium {
+            onboardingState.consumePostSetupPaywall()
+            return
+        }
+
+        guard onboardingState.currentState == .mainApp,
+              onboardingState.shouldPresentPostSetupPaywall,
+              !premiumSubscriptionManager.isPremium,
+              !premiumSubscriptionManager.displayPaywall
+        else {
+            return
+        }
+
+        premiumSubscriptionManager.displayPaywall = true
     }
 
     private var householdLifecycleSyncKey: String {
