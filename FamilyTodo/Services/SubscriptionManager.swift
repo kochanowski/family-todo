@@ -111,6 +111,29 @@ extension View {
     func premiumSheetsHost() -> some View {
         modifier(PremiumSheetsHost())
     }
+
+    func premiumFeaturePromptAlert(
+        feature: Binding<PremiumFeature?>,
+        onUpgrade: @escaping () -> Void
+    ) -> some View {
+        alert(
+            feature.wrappedValue?.alertTitle ?? "Dwello Pro",
+            isPresented: Binding(
+                get: { feature.wrappedValue != nil },
+                set: { if !$0 { feature.wrappedValue = nil } }
+            )
+        ) {
+            Button("Upgrade") {
+                onUpgrade()
+                feature.wrappedValue = nil
+            }
+            Button("Not Now", role: .cancel) {
+                feature.wrappedValue = nil
+            }
+        } message: {
+            Text(feature.wrappedValue?.alertMessage ?? "")
+        }
+    }
 }
 
 @MainActor
@@ -119,7 +142,7 @@ enum RevenueCatRuntime {
 
     static func configureIfNeeded(
         apiKey rawAPIKey: String,
-        diagnostics: CloudKitDiagnosticsState = .shared
+        diagnostics: CloudKitDiagnosticsState
     ) {
         let apiKey = rawAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
 

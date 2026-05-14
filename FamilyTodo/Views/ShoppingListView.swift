@@ -96,6 +96,62 @@ private struct ShoppingListContent: View {
     }
 
     var body: some View {
+        shoppingRootWithFeedback
+    }
+
+    private var shoppingRootWithFeedback: some View {
+        shoppingRootWithSheets
+            .premiumFeaturePromptAlert(
+                feature: $premiumFeaturePrompt,
+                onUpgrade: {
+                    premiumSubscriptionManager.displayPaywall = true
+                }
+            )
+            .overlay(alignment: .bottom) {
+                if let activeToast {
+                    ToastView(message: activeToast.message)
+                        .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                        .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                        .transition(ToastView.AnimationTokens.transition)
+                        .id(activeToast.id)
+                }
+            }
+            .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
+    }
+
+    private var shoppingRootWithSheets: some View {
+        shoppingRootWithLifecycle
+            .sheet(isPresented: $showClearToBuyConfirmation) {
+                AppConfirmationSheet(
+                    title: "Clear shopping list?",
+                    message: "This removes current To Buy items. Recently Purchased stays unchanged.",
+                    primaryTitle: "Clear",
+                    titleFontToken: .profileName,
+                    messageFontToken: .bodyStrong,
+                    primaryStyle: .destructive,
+                    onPrimary: clearToBuy
+                )
+            }
+            .sheet(isPresented: $showRestock) {
+                RestockSheet(
+                    store: store,
+                    onRestore: restoreRecentItem,
+                    onDeleteItem: deleteRecentItem,
+                    onClearAll: clearRecentItems
+                )
+            }
+            .sheet(isPresented: $showQuickAddBundleChooser) {
+                ShoppingQuickAddBundleSheet(
+                    bundles: quickAddBundles,
+                    onSelectBundle: { bundle in
+                        showQuickAddBundleChooser = false
+                        handleBundleQuickAdd(bundle)
+                    }
+                )
+            }
+    }
+
+    private var shoppingRootWithLifecycle: some View {
         GeometryReader(content: shoppingGeometryContent)
             .task {
                 guard !didPerformInitialLoad else { return }
@@ -178,61 +234,6 @@ private struct ShoppingListContent: View {
             ) { _ in
                 isKeyboardVisible = false
             }
-            .sheet(isPresented: $showClearToBuyConfirmation) {
-                AppConfirmationSheet(
-                    title: "Clear shopping list?",
-                    message: "This removes current To Buy items. Recently Purchased stays unchanged.",
-                    primaryTitle: "Clear",
-                    titleFontToken: .profileName,
-                    messageFontToken: .bodyStrong,
-                    primaryStyle: .destructive,
-                    onPrimary: clearToBuy
-                )
-            }
-            .sheet(isPresented: $showRestock) {
-                RestockSheet(
-                    store: store,
-                    onRestore: restoreRecentItem,
-                    onDeleteItem: deleteRecentItem,
-                    onClearAll: clearRecentItems
-                )
-            }
-            .sheet(isPresented: $showQuickAddBundleChooser) {
-                ShoppingQuickAddBundleSheet(
-                    bundles: quickAddBundles,
-                    onSelectBundle: { bundle in
-                        showQuickAddBundleChooser = false
-                        handleBundleQuickAdd(bundle)
-                    }
-                )
-            }
-            .alert(
-                premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
-                isPresented: Binding(
-                    get: { premiumFeaturePrompt != nil },
-                    set: { if !$0 { premiumFeaturePrompt = nil } }
-                )
-            ) {
-                Button("Upgrade") {
-                    premiumSubscriptionManager.displayPaywall = true
-                    premiumFeaturePrompt = nil
-                }
-                Button("Not Now", role: .cancel) {
-                    premiumFeaturePrompt = nil
-                }
-            } message: {
-                Text(premiumFeaturePrompt?.alertMessage ?? "")
-            }
-            .overlay(alignment: .bottom) {
-                if let activeToast {
-                    ToastView(message: activeToast.message)
-                        .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                        .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
-                        .transition(ToastView.AnimationTokens.transition)
-                        .id(activeToast.id)
-                }
-            }
-            .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
             .onAppear {
                 isScreenVisible = true
                 if didPerformInitialLoad {

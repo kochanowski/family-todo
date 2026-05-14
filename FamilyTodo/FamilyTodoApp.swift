@@ -54,7 +54,10 @@ struct FamilyTodoApp: App {
     init() {
         let launchArguments = ProcessInfo.processInfo.arguments
         UITestHelper.prepareForLaunch(arguments: launchArguments)
-        RevenueCatRuntime.configureIfNeeded(apiKey: Secrets.revenueCatApiKey)
+        RevenueCatRuntime.configureIfNeeded(
+            apiKey: Secrets.revenueCatApiKey,
+            diagnostics: CloudKitDiagnosticsState.shared
+        )
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
 
@@ -262,6 +265,7 @@ private struct AppChromeContainer<Content: View>: View {
 struct RootView: View {
     @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var userSession: UserSession
+    @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var shareAcceptanceCoordinator: ShareAcceptanceCoordinator
     @EnvironmentObject private var cloudSubscriptionManager: CloudKitSubscriptionManager
