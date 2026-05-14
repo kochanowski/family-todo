@@ -24,7 +24,6 @@ struct SettingsView: View {
     @State private var isDeletingAccount = false
     @State private var deleteAccountProgressMessage = "Deleting account..."
     @State private var deleteAccountErrorMessage: String?
-    @State private var premiumFeaturePrompt: PremiumFeature?
 
     var body: some View {
         settingsContent
@@ -93,23 +92,6 @@ struct SettingsView: View {
             } message: {
                 Text(deleteAccountErrorMessage ?? "Unknown error")
             }
-            .alert(
-                premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
-                isPresented: Binding(
-                    get: { premiumFeaturePrompt != nil },
-                    set: { if !$0 { premiumFeaturePrompt = nil } }
-                )
-            ) {
-                Button("Upgrade") {
-                    premiumSubscriptionManager.displayPaywall = true
-                    premiumFeaturePrompt = nil
-                }
-                Button("Not Now", role: .cancel) {
-                    premiumFeaturePrompt = nil
-                }
-            } message: {
-                Text(premiumFeaturePrompt?.alertMessage ?? "")
-            }
     }
 
     private var settingsContent: some View {
@@ -136,14 +118,14 @@ struct SettingsView: View {
                         newTheme,
                         isPremium: premiumSubscriptionManager.isPremium
                     ) else {
-                        premiumFeaturePrompt = .premiumTheme
+                        premiumSubscriptionManager.presentUpsell(.premiumTheme)
                         return
                     }
                     themeStore.unifiedTheme = newTheme
                 }
-            ))
-            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-            .listRowBackground(Color.clear)
+            ), isPremium: premiumSubscriptionManager.isPremium)
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.clear)
         } header: {
             Text("Appearance")
         }
@@ -335,7 +317,7 @@ struct SettingsView: View {
                 tint,
                 isPremium: premiumSubscriptionManager.isPremium
             ) else {
-                premiumFeaturePrompt = .accentColor
+                premiumSubscriptionManager.presentUpsell(.accentColor)
                 return
             }
             themeStore.tabTintColor = tint
@@ -357,6 +339,12 @@ struct SettingsView: View {
                         x: 0,
                         y: 2
                     )
+                    .overlay(alignment: .topTrailing) {
+                        if shouldShowProBadge(for: tint) {
+                            ProBadgeView()
+                                .offset(x: 7, y: -7)
+                        }
+                    }
                 Text(tint.displayName)
                     .font(themeStore.font(for: .tabLabel))
                     .foregroundStyle(themeStore.tabTintColor == tint ? .primary : .secondary)
@@ -364,6 +352,11 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+    }
+
+    private func shouldShowProBadge(for tint: TabTintColor) -> Bool {
+        !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canUseAccentColor(tint, isPremium: false)
     }
 
     private func destructiveActionLabel(
@@ -503,6 +496,7 @@ struct SettingsView: View {
 private struct ThemeMiniatureCarousel: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Binding var selectedTheme: UnifiedTheme
+    let isPremium: Bool
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -510,7 +504,8 @@ private struct ThemeMiniatureCarousel: View {
                 ForEach(UnifiedTheme.allCases) { theme in
                     ThemeMiniatureCard(
                         theme: theme,
-                        isSelected: selectedTheme == theme
+                        isSelected: selectedTheme == theme,
+                        showsProBadge: shouldShowProBadge(for: theme)
                     ) {
                         selectedTheme = theme
                     }
@@ -522,12 +517,17 @@ private struct ThemeMiniatureCarousel: View {
         }
         .scrollTargetBehavior(.viewAligned)
     }
+
+    private func shouldShowProBadge(for theme: UnifiedTheme) -> Bool {
+        !isPremium && !PremiumAccessPolicy.canUseTheme(theme, isPremium: false)
+    }
 }
 
 private struct ThemeMiniatureCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
     let theme: UnifiedTheme
     let isSelected: Bool
+    let showsProBadge: Bool
     let action: () -> Void
 
     var body: some View {
@@ -542,6 +542,12 @@ private struct ThemeMiniatureCard: View {
                                 isSelected ? themeStore.accentTabColor : Color.primary.opacity(0.12),
                                 lineWidth: isSelected ? 2 : 1
                             )
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if showsProBadge {
+                            ProBadgeView()
+                                .offset(x: 7, y: -7)
+                        }
                     }
 
                 Group {

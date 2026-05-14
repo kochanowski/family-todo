@@ -69,7 +69,6 @@ private struct ShoppingListContent: View {
     @State private var activeToast: ShoppingToastState?
     @State private var activeToastDismissTask: _Concurrency.Task<Void, Never>?
     @State private var remoteHighlightedItemIDs: Set<UUID> = []
-    @State private var premiumFeaturePrompt: PremiumFeature?
     @State private var isApplyingRemoteSyncAnimation = false
     @State private var remoteSyncResetTask: _Concurrency.Task<Void, Never>?
     @State private var shouldRearmBundleQuickAddTipOnNextAppear = false
@@ -101,12 +100,6 @@ private struct ShoppingListContent: View {
 
     private var shoppingRootWithFeedback: some View {
         shoppingRootWithSheets
-            .premiumFeaturePromptAlert(
-                feature: $premiumFeaturePrompt,
-                onUpgrade: {
-                    premiumSubscriptionManager.displayPaywall = true
-                }
-            )
             .overlay(alignment: .bottom) {
                 if let activeToast {
                     ToastView(message: activeToast.message)
@@ -568,6 +561,10 @@ private struct ShoppingListContent: View {
             HStack(spacing: 0) {
                 Text("Add item")
                     .font(themeStore.font(for: .buttonLabel))
+                if shouldShowLockedQuickAddBadge {
+                    ProBadgeView()
+                        .padding(.leading, 7)
+                }
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
@@ -1023,6 +1020,10 @@ private struct ShoppingListContent: View {
         bundleStore.quickAddBundles
     }
 
+    private var shouldShowLockedQuickAddBadge: Bool {
+        !premiumSubscriptionManager.isPremium && !quickAddBundles.isEmpty
+    }
+
     private var quickAddFeedbackEnabled: Bool {
         !quickAddBundles.isEmpty
     }
@@ -1070,7 +1071,7 @@ private struct ShoppingListContent: View {
         guard PremiumAccessPolicy.canUseShoppingBundles(
             isPremium: premiumSubscriptionManager.isPremium
         ) else {
-            premiumFeaturePrompt = .shoppingBundles
+            premiumSubscriptionManager.presentUpsell(.shoppingBundles)
             return
         }
 
@@ -1089,7 +1090,8 @@ private struct ShoppingListContent: View {
         guard PremiumAccessPolicy.canUseShoppingBundles(
             isPremium: premiumSubscriptionManager.isPremium
         ) else {
-            premiumFeaturePrompt = .shoppingBundles
+            showQuickAddBundleChooser = false
+            premiumSubscriptionManager.presentUpsell(.shoppingBundles)
             return
         }
         cancelEditingItem()

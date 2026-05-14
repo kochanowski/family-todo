@@ -52,6 +52,8 @@ final class ProjectConfigurationTests: XCTestCase {
             "FamilyTodo/Views/BundlesManagementView.swift",
             "FamilyTodo/Views/ShoppingListView.swift",
             "FamilyTodo/Views/HouseholdSettingsView.swift",
+            "FamilyTodo/Views/Components/PremiumUpsellSheet.swift",
+            "FamilyTodo/Views/Components/ProBadgeView.swift",
         ]
 
         let combinedCopy = try visibleSourceFiles
@@ -63,6 +65,29 @@ final class ProjectConfigurationTests: XCTestCase {
         XCTAssertTrue(combinedCopy.contains("Dwello Pro"))
         XCTAssertFalse(combinedCopy.contains("Dwello Plus"))
         XCTAssertFalse(combinedCopy.contains("HousePulse"))
+    }
+
+    func testPremiumLimitUIUsesContextualUpsellInsteadOfNativeAlertHelper() throws {
+        let repoRootURL = repoRootURL()
+        let sourceFiles = [
+            "FamilyTodo/Services/SubscriptionManager.swift",
+            "FamilyTodo/Views/MoreView.swift",
+            "FamilyTodo/Views/SettingsView.swift",
+            "FamilyTodo/Views/BacklogView.swift",
+            "FamilyTodo/Views/BundlesManagementView.swift",
+            "FamilyTodo/Views/ShoppingListView.swift",
+            "FamilyTodo/Views/HouseholdSettingsView.swift",
+        ]
+
+        let combinedSource = try sourceFiles
+            .map { path in
+                try String(contentsOf: repoRootURL.appendingPathComponent(path), encoding: .utf8)
+            }
+            .joined(separator: "\n")
+
+        XCTAssertTrue(combinedSource.contains("presentUpsell"))
+        XCTAssertFalse(combinedSource.contains("premiumFeaturePrompt"))
+        XCTAssertFalse(combinedSource.contains("premiumFeaturePromptAlert"))
     }
 
     private func loadProjectFile() throws -> String {

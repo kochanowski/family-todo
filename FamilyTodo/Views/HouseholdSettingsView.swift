@@ -29,7 +29,6 @@ struct ProfileView: View {
     @State private var developerTapResetTask: _Concurrency.Task<Void, Never>?
     @State private var showDeveloperToast = false
     @State private var developerToastDismissTask: _Concurrency.Task<Void, Never>?
-    @State private var premiumFeaturePrompt: PremiumFeature?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -117,23 +116,6 @@ struct ProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(actionErrorMessage ?? "Unknown error")
-        }
-        .alert(
-            premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
-            isPresented: Binding(
-                get: { premiumFeaturePrompt != nil },
-                set: { if !$0 { premiumFeaturePrompt = nil } }
-            )
-        ) {
-            Button("Upgrade") {
-                premiumSubscriptionManager.displayPaywall = true
-                premiumFeaturePrompt = nil
-            }
-            Button("Not Now", role: .cancel) {
-                premiumFeaturePrompt = nil
-            }
-        } message: {
-            Text(premiumFeaturePrompt?.alertMessage ?? "")
         }
         .task(id: householdStore.currentHousehold?.id) {
             memberStore.setModelContext(modelContext)
@@ -277,16 +259,21 @@ struct ProfileView: View {
                 Button {
                     guard canCreateInvite else {
                         if isAtFreeMemberLimit {
-                            premiumFeaturePrompt = .householdMemberLimit
+                            premiumSubscriptionManager.presentUpsell(.householdMemberLimit)
                         }
                         return
                     }
                     showInviteMember = true
                 } label: {
-                    Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
-                        .font(themeStore.font(for: .bodyStrong))
+                    HStack(spacing: 8) {
+                        Label("Invite Member", systemImage: "person.crop.circle.badge.plus")
+                            .font(themeStore.font(for: .bodyStrong))
+                        if isAtFreeMemberLimit {
+                            ProBadgeView(size: .inline)
+                        }
+                    }
                 }
-                .disabled(!canCreateInvite)
+                .disabled(!canTapInviteAction)
 
                 if !currentUserIsOwner {
                     Text("Only the household owner can create invites.")
@@ -306,7 +293,7 @@ struct ProfileView: View {
             } footer: {
                 if isAtFreeMemberLimit {
                     Button("Upgrade to Dwello Pro") {
-                        premiumSubscriptionManager.displayPaywall = true
+                        premiumSubscriptionManager.presentUpsell(.householdMemberLimit)
                     }
                     .font(themeStore.font(for: .buttonLabel))
                 } else if canCreateInvite {
@@ -371,6 +358,10 @@ struct ProfileView: View {
 
     private var canCreateInvite: Bool {
         currentUserIsOwner && userSession.syncMode == .cloud && !isAtFreeMemberLimit
+    }
+
+    private var canTapInviteAction: Bool {
+        currentUserIsOwner && userSession.syncMode == .cloud
     }
 
     private var isAtFreeMemberLimit: Bool {

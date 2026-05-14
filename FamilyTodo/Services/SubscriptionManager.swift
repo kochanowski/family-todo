@@ -24,35 +24,96 @@ enum PremiumFeature: Identifiable, Equatable {
             "shoppingBundles"
         }
     }
+}
 
-    var alertTitle: String {
-        switch self {
+enum UpsellContext: Identifiable, Equatable {
+    case premiumTheme
+    case accentColor
+    case backlogCategoryLimit
+    case householdMemberLimit
+    case shoppingBundles
+
+    init(feature: PremiumFeature) {
+        switch feature {
         case .premiumTheme:
-            "Dwello Pro theme"
+            self = .premiumTheme
         case .accentColor:
-            "Dwello Pro accent"
+            self = .accentColor
         case .backlogCategoryLimit:
-            "Category limit reached"
+            self = .backlogCategoryLimit
         case .householdMemberLimit:
-            "Member limit reached"
+            self = .householdMemberLimit
         case .shoppingBundles:
-            "Dwello Pro bundles"
+            self = .shoppingBundles
         }
     }
 
-    var alertMessage: String {
+    var id: String {
         switch self {
         case .premiumTheme:
-            "Retro and Paper themes are included with Dwello Pro."
+            "premiumTheme"
         case .accentColor:
-            "Custom accent colors are included with Dwello Pro."
+            "accentColor"
         case .backlogCategoryLimit:
-            "Free households can create up to \(PremiumAccessPolicy.freeBacklogCategoryLimit) idea categories. Existing categories stay available."
+            "backlogCategoryLimit"
         case .householdMemberLimit:
-            "Free households can include up to \(PremiumAccessPolicy.freeHouseholdMemberLimit) members. Existing members stay connected."
+            "householdMemberLimit"
         case .shoppingBundles:
-            "Shopping bundles are included with Dwello Pro."
+            "shoppingBundles"
         }
+    }
+
+    var iconName: String {
+        switch self {
+        case .premiumTheme:
+            "sparkles"
+        case .accentColor:
+            "paintpalette.fill"
+        case .backlogCategoryLimit:
+            "folder.badge.plus"
+        case .householdMemberLimit:
+            "person.2.badge.plus.fill"
+        case .shoppingBundles:
+            "shippingbox.fill"
+        }
+    }
+
+    var eyebrow: String {
+        "Dwello Pro"
+    }
+
+    var title: String {
+        switch self {
+        case .premiumTheme:
+            "Make Dwello feel like home"
+        case .accentColor:
+            "Personalize your accent"
+        case .backlogCategoryLimit:
+            "Unlimited idea categories"
+        case .householdMemberLimit:
+            "Invite the whole household"
+        case .shoppingBundles:
+            "Shop faster with bundles"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .premiumTheme:
+            "Retro and Paper themes are included with Dwello Pro, with richer typography and calmer surfaces for your shared space."
+        case .accentColor:
+            "Custom accent colors are a Dwello Pro feature, so every household can tune Dwello to its own style."
+        case .backlogCategoryLimit:
+            "Free households can create up to \(PremiumAccessPolicy.freeBacklogCategoryLimit) idea categories. Dwello Pro lets you keep planning without trimming your setup."
+        case .householdMemberLimit:
+            "Free households include up to \(PremiumAccessPolicy.freeHouseholdMemberLimit) members. Dwello Pro unlocks room for everyone who coordinates at home."
+        case .shoppingBundles:
+            "Shopping bundles are included with Dwello Pro, so repeated lists like breakfast, cleaning, and weekly staples take one tap."
+        }
+    }
+
+    var primaryCTATitle: String {
+        "See Dwello Pro"
     }
 }
 
@@ -104,35 +165,17 @@ private struct PremiumSheetsHost: ViewModifier {
                         }
                     }
             }
+            .sheet(item: $premiumSubscriptionManager.activeUpsellContext) { context in
+                PremiumUpsellSheet(context: context)
+                    .presentationDetents([.fraction(0.35), .medium])
+                    .presentationDragIndicator(.visible)
+            }
     }
 }
 
 extension View {
     func premiumSheetsHost() -> some View {
         modifier(PremiumSheetsHost())
-    }
-
-    func premiumFeaturePromptAlert(
-        feature: Binding<PremiumFeature?>,
-        onUpgrade: @escaping () -> Void
-    ) -> some View {
-        alert(
-            feature.wrappedValue?.alertTitle ?? "Dwello Pro",
-            isPresented: Binding(
-                get: { feature.wrappedValue != nil },
-                set: { if !$0 { feature.wrappedValue = nil } }
-            )
-        ) {
-            Button("Upgrade") {
-                onUpgrade()
-                feature.wrappedValue = nil
-            }
-            Button("Not Now", role: .cancel) {
-                feature.wrappedValue = nil
-            }
-        } message: {
-            Text(feature.wrappedValue?.alertMessage ?? "")
-        }
     }
 }
 
@@ -206,6 +249,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     @Published private(set) var developerPremiumOverride: Bool
     @Published var displayPaywall = false
     @Published var displayCustomerCenter = false
+    @Published var activeUpsellContext: UpsellContext?
     @Published var lastErrorMessage: String?
 
     private weak var userSession: UserSession?
@@ -285,6 +329,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     func prepareForSignOut() async {
         displayPaywall = false
         displayCustomerCenter = false
+        activeUpsellContext = nil
         lastErrorMessage = nil
 
         guard RevenueCatRuntime.isConfigured else {
@@ -319,6 +364,16 @@ final class SubscriptionManager: NSObject, ObservableObject {
 
     func package(matching identifier: String) -> Package? {
         currentOffering?.availablePackages.first(where: { $0.identifier == identifier })
+    }
+
+    func presentUpsell(_ context: UpsellContext) {
+        HapticManager.lightTap()
+        activeUpsellContext = context
+    }
+
+    func presentPaywallFromUpsell() {
+        activeUpsellContext = nil
+        displayPaywall = true
     }
 
     func handlePurchaseCompleted(customerInfo: CustomerInfo) {

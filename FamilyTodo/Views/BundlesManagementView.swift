@@ -11,7 +11,6 @@ struct BundlesManagementView: View {
     @State private var presentedEditor: PresentedBundleEditor?
     @State private var hasStartedInitialLoad = false
     @State private var lastAddedBundleId: UUID?
-    @State private var premiumFeaturePrompt: PremiumFeature?
 
     var body: some View {
         Group {
@@ -48,12 +47,19 @@ struct BundlesManagementView: View {
                     guard PremiumAccessPolicy.canUseShoppingBundles(
                         isPremium: premiumSubscriptionManager.isPremium
                     ) else {
-                        premiumFeaturePrompt = .shoppingBundles
+                        premiumSubscriptionManager.presentUpsell(.shoppingBundles)
                         return
                     }
                     presentedEditor = .create
                 } label: {
-                    Image(systemName: "plus")
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "plus")
+                            .frame(width: 34, height: 34)
+                        if isBundleFeatureLocked {
+                            ProBadgeView()
+                                .offset(x: 8, y: -7)
+                        }
+                    }
                 }
                 .accessibilityIdentifier("shoppingBundlesAddButton")
             }
@@ -77,26 +83,9 @@ struct BundlesManagementView: View {
                 bundle: destination.bundle,
                 isPremium: premiumSubscriptionManager.isPremium,
                 onBlocked: { feature in
-                    premiumFeaturePrompt = feature
+                    premiumSubscriptionManager.presentUpsell(UpsellContext(feature: feature))
                 }
             )
-        }
-        .alert(
-            premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
-            isPresented: Binding(
-                get: { premiumFeaturePrompt != nil },
-                set: { if !$0 { premiumFeaturePrompt = nil } }
-            )
-        ) {
-            Button("Upgrade") {
-                premiumSubscriptionManager.displayPaywall = true
-                premiumFeaturePrompt = nil
-            }
-            Button("Not Now", role: .cancel) {
-                premiumFeaturePrompt = nil
-            }
-        } message: {
-            Text(premiumFeaturePrompt?.alertMessage ?? "")
         }
     }
 
@@ -109,7 +98,7 @@ struct BundlesManagementView: View {
                         guard PremiumAccessPolicy.canUseShoppingBundles(
                             isPremium: premiumSubscriptionManager.isPremium
                         ) else {
-                            premiumFeaturePrompt = .shoppingBundles
+                            premiumSubscriptionManager.presentUpsell(.shoppingBundles)
                             return
                         }
                         presentedEditor = .edit(bundle)
@@ -123,12 +112,18 @@ struct BundlesManagementView: View {
                         Button {
                             addBundleToShopping(bundle)
                         } label: {
-                            Image(systemName: added ? "checkmark.circle.fill" : "cart.badge.plus")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(added ? .green : themeStore.accentTabColor)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                                .animation(.easeInOut(duration: 0.2), value: added)
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: added ? "checkmark.circle.fill" : "cart.badge.plus")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(added ? .green : themeStore.accentTabColor)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                                    .animation(.easeInOut(duration: 0.2), value: added)
+                                if isBundleFeatureLocked {
+                                    ProBadgeView()
+                                        .offset(x: 3, y: -1)
+                                }
+                            }
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Add \(bundle.name) to shopping list")
@@ -175,13 +170,18 @@ struct BundlesManagementView: View {
                 guard PremiumAccessPolicy.canUseShoppingBundles(
                     isPremium: premiumSubscriptionManager.isPremium
                 ) else {
-                    premiumFeaturePrompt = .shoppingBundles
+                    premiumSubscriptionManager.presentUpsell(.shoppingBundles)
                     return
                 }
                 presentedEditor = .create
             } label: {
-                Text("Create your first bundle")
-                    .font(themeStore.font(for: .buttonLabel))
+                HStack(spacing: 8) {
+                    Text("Create your first bundle")
+                        .font(themeStore.font(for: .buttonLabel))
+                    if isBundleFeatureLocked {
+                        ProBadgeView(size: .inline)
+                    }
+                }
             }
             .buttonStyle(.borderedProminent)
         }
@@ -193,7 +193,7 @@ struct BundlesManagementView: View {
         guard PremiumAccessPolicy.canUseShoppingBundles(
             isPremium: premiumSubscriptionManager.isPremium
         ) else {
-            premiumFeaturePrompt = .shoppingBundles
+            premiumSubscriptionManager.presentUpsell(.shoppingBundles)
             return
         }
         lastAddedBundleId = bundle.id
@@ -206,6 +206,10 @@ struct BundlesManagementView: View {
                 lastAddedBundleId = nil
             }
         }
+    }
+
+    private var isBundleFeatureLocked: Bool {
+        !PremiumAccessPolicy.canUseShoppingBundles(isPremium: premiumSubscriptionManager.isPremium)
     }
 }
 

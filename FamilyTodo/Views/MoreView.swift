@@ -358,7 +358,6 @@ struct CategoriesManagementView: View {
     @State private var newCategoryColorHex = MemberColorToken.randomHex()
     @State private var editMode: EditMode = .inactive
     @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
-    @State private var premiumFeaturePrompt: PremiumFeature?
 
     init(householdId: UUID, modelContext: ModelContext) {
         _store = StateObject(wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext))
@@ -406,10 +405,19 @@ struct CategoriesManagementView: View {
 
             Section {
                 Button {
+                    guard canCreateCategory else {
+                        premiumSubscriptionManager.presentUpsell(.backlogCategoryLimit)
+                        return
+                    }
                     newCategoryColorHex = MemberColorToken.randomHex()
                     isAddingCategory = true
                 } label: {
-                    Label("New category", systemImage: "plus.circle")
+                    HStack(spacing: 8) {
+                        Label("New category", systemImage: "plus.circle")
+                        if isAtFreeCategoryLimit {
+                            ProBadgeView(size: .inline)
+                        }
+                    }
                 }
             }
         }
@@ -445,23 +453,6 @@ struct CategoriesManagementView: View {
             }
         } message: {
             Text(categoryDeletionBlockReason?.alertDetail ?? "")
-        }
-        .alert(
-            premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
-            isPresented: Binding(
-                get: { premiumFeaturePrompt != nil },
-                set: { if !$0 { premiumFeaturePrompt = nil } }
-            )
-        ) {
-            Button("Upgrade") {
-                premiumSubscriptionManager.displayPaywall = true
-                premiumFeaturePrompt = nil
-            }
-            Button("Not Now", role: .cancel) {
-                premiumFeaturePrompt = nil
-            }
-        } message: {
-            Text(premiumFeaturePrompt?.alertMessage ?? "")
         }
         .task {
             store.setCloudContext(householdStore.currentSyncContext(userId: userSession.userId))
@@ -504,12 +495,27 @@ struct CategoriesManagementView: View {
                             isPremium: premiumSubscriptionManager.isPremium
                         )
                         if case let .blocked(feature) = result {
-                            premiumFeaturePrompt = feature
+                            premiumSubscriptionManager.presentUpsell(UpsellContext(feature: feature))
                         }
                     }
                 }
             )
         }
+    }
+
+    private var canCreateCategory: Bool {
+        PremiumAccessPolicy.canCreateBacklogCategory(
+            currentCount: store.categories.count,
+            isPremium: premiumSubscriptionManager.isPremium
+        )
+    }
+
+    private var isAtFreeCategoryLimit: Bool {
+        !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canCreateBacklogCategory(
+                currentCount: store.categories.count,
+                isPremium: false
+            )
     }
 }
 

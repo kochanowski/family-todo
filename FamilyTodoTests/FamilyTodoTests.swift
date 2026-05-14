@@ -323,6 +323,55 @@ final class ThemeStoreTests: XCTestCase {
 }
 
 @MainActor
+final class PremiumUpsellTests: XCTestCase {
+    func testUpsellContextProvidesDwelloProCopyForEveryPremiumGate() {
+        let contexts: [UpsellContext] = [
+            .premiumTheme,
+            .accentColor,
+            .backlogCategoryLimit,
+            .householdMemberLimit,
+            .shoppingBundles,
+        ]
+
+        for context in contexts {
+            XCTAssertFalse(context.id.isEmpty)
+            XCTAssertEqual(context.eyebrow, "Dwello Pro")
+            XCTAssertFalse(context.title.isEmpty)
+            XCTAssertTrue(context.message.contains("Dwello Pro"))
+            XCTAssertEqual(context.primaryCTATitle, "See Dwello Pro")
+            XCTAssertFalse(context.iconName.isEmpty)
+        }
+    }
+
+    func testUpsellContextMapsFromPremiumFeature() {
+        XCTAssertEqual(UpsellContext(feature: .premiumTheme), .premiumTheme)
+        XCTAssertEqual(UpsellContext(feature: .accentColor), .accentColor)
+        XCTAssertEqual(UpsellContext(feature: .backlogCategoryLimit), .backlogCategoryLimit)
+        XCTAssertEqual(UpsellContext(feature: .householdMemberLimit), .householdMemberLimit)
+        XCTAssertEqual(UpsellContext(feature: .shoppingBundles), .shoppingBundles)
+    }
+
+    func testPresentUpsellStoresActiveContext() {
+        let manager = SubscriptionManager()
+
+        manager.presentUpsell(.shoppingBundles)
+
+        XCTAssertEqual(manager.activeUpsellContext, .shoppingBundles)
+        XCTAssertFalse(manager.displayPaywall)
+    }
+
+    func testPresentPaywallFromUpsellClearsContextAndShowsPaywall() {
+        let manager = SubscriptionManager()
+        manager.activeUpsellContext = .accentColor
+
+        manager.presentPaywallFromUpsell()
+
+        XCTAssertNil(manager.activeUpsellContext)
+        XCTAssertTrue(manager.displayPaywall)
+    }
+}
+
+@MainActor
 final class UserSessionTests: XCTestCase {
     @MainActor
     private final class TestAuthenticationService: AuthenticationServiceType {

@@ -75,7 +75,6 @@ private struct BacklogContent: View {
     @State private var composerText = ""
     @State private var pendingDeleteConfirmationTarget: DeleteConfirmationTarget?
     @State private var categoryDeletionBlockReason: BacklogStore.CategoryDeletionBlockReason?
-    @State private var premiumFeaturePrompt: PremiumFeature?
     @State private var pendingDeletionItem: BacklogItem?
     @State private var deletionTask: _Concurrency.Task<Void, Never>?
     @State private var remoteHighlightedItemIDs: Set<UUID> = []
@@ -151,23 +150,6 @@ private struct BacklogContent: View {
                     } message: {
                         Text(categoryDeletionBlockReason?.alertDetail ?? "")
                     }
-                    .alert(
-                        premiumFeaturePrompt?.alertTitle ?? "Dwello Pro",
-                        isPresented: Binding(
-                            get: { premiumFeaturePrompt != nil },
-                            set: { if !$0 { premiumFeaturePrompt = nil } }
-                        )
-                    ) {
-                        Button("Upgrade") {
-                            premiumSubscriptionManager.displayPaywall = true
-                            premiumFeaturePrompt = nil
-                        }
-                        Button("Not Now", role: .cancel) {
-                            premiumFeaturePrompt = nil
-                        }
-                    } message: {
-                        Text(premiumFeaturePrompt?.alertMessage ?? "")
-                    }
             }
             .overlay(alignment: .bottom) {
                 if let pendingDeletionItem {
@@ -213,7 +195,7 @@ private struct BacklogContent: View {
                                 case .created where store.categories.count > previousCategoryCount:
                                     AppTips.donateIdeasCategoryCreated()
                                 case let .blocked(feature):
-                                    premiumFeaturePrompt = feature
+                                    premiumSubscriptionManager.presentUpsell(UpsellContext(feature: feature))
                                 case .created, .ignored:
                                     break
                                 }
@@ -605,10 +587,17 @@ private struct BacklogContent: View {
             Button {
                 presentNewCategorySheet()
             } label: {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 20))
-                    .foregroundStyle(themeStore.accentTabColor)
-                    .frame(width: 44, height: 44)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 20))
+                        .foregroundStyle(themeStore.accentTabColor)
+                        .frame(width: 44, height: 44)
+
+                    if isAtFreeCategoryLimit {
+                        ProBadgeView()
+                            .offset(x: 2, y: -2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("backlogAddCategoryButton")
@@ -1022,8 +1011,27 @@ private struct BacklogContent: View {
 
     private func presentNewCategorySheet() {
         HapticManager.lightTap()
+        guard canCreateCategory else {
+            premiumSubscriptionManager.presentUpsell(.backlogCategoryLimit)
+            return
+        }
         newCategoryColorHex = MemberColorToken.randomHex()
         isAddingCategory = true
+    }
+
+    private var canCreateCategory: Bool {
+        PremiumAccessPolicy.canCreateBacklogCategory(
+            currentCount: store.categories.count,
+            isPremium: premiumSubscriptionManager.isPremium
+        )
+    }
+
+    private var isAtFreeCategoryLimit: Bool {
+        !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canCreateBacklogCategory(
+                currentCount: store.categories.count,
+                isPremium: false
+            )
     }
 
     private var hasVisibleIdeas: Bool {
