@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ProBadgeView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     enum Size {
         case compact
         case inline
@@ -33,40 +35,86 @@ struct ProBadgeView: View {
     var body: some View {
         Image(systemName: "sparkles")
             .font(.system(size: size.iconSize, weight: .bold))
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [
-                        Color(hex: "FFF2A8"),
-                        Color(hex: "F6B84B"),
-                        Color(hex: "D98B19"),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: size.dimension, height: size.dimension)
+            .foregroundStyle(iconForegroundStyle)
+            .frame(width: size.dimension + 8, height: size.dimension)
             .background {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(hex: "FFD66B").opacity(0.26),
-                                        Color(hex: "8B5CF6").opacity(0.12),
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
+                badgeBackground
             }
             .overlay {
-                Circle()
-                    .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+                Capsule()
+                    .stroke(badgeStrokeColor, lineWidth: 0.9)
             }
-            .shadow(color: Color(hex: "F6B84B").opacity(0.35), radius: 7, y: 3)
+            .shadow(color: badgeShadowColor, radius: colorScheme == .dark ? 8 : 6, x: 0, y: 2)
             .accessibilityLabel("Dwello Pro")
+    }
+
+    @ViewBuilder
+    private var badgeBackground: some View {
+        if colorScheme == .dark {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: "FFF2A8").opacity(0.34),
+                                    Color(hex: "F6B84B").opacity(0.18),
+                                    Color(hex: "8B5CF6").opacity(0.10),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+        } else {
+            Capsule()
+                .fill(Color.black.opacity(0.84))
+                .overlay {
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.08),
+                                    Color.black.opacity(0.14),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+        }
+    }
+
+    private var iconForegroundStyle: some ShapeStyle {
+        if colorScheme == .dark {
+            LinearGradient(
+                colors: [
+                    Color(hex: "FFF7C7"),
+                    Color(hex: "F6B84B"),
+                    Color(hex: "D97706"),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            LinearGradient(
+                colors: [
+                    Color.white,
+                    Color(hex: "FDE68A"),
+                    Color(hex: "F59E0B"),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    private var badgeStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.22) : Color.white.opacity(0.08)
+    }
+
+    private var badgeShadowColor: Color {
+        colorScheme == .dark ? Color(hex: "F6B84B").opacity(0.34) : Color.black.opacity(0.28)
     }
 }

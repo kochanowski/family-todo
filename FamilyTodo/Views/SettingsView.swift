@@ -512,7 +512,8 @@ private struct ThemeMiniatureCarousel: View {
                     .environmentObject(themeStore)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 10)
+            .padding(.trailing, 10)
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.viewAligned)
@@ -533,22 +534,26 @@ private struct ThemeMiniatureCard: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                ThemeMiniatureContent(theme: theme)
-                    .frame(width: 85, height: 150)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                isSelected ? themeStore.accentTabColor : Color.primary.opacity(0.12),
-                                lineWidth: isSelected ? 2 : 1
-                            )
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        if showsProBadge {
-                            ProBadgeView()
-                                .offset(x: 7, y: -7)
+                ZStack(alignment: .topTrailing) {
+                    ThemeMiniatureContent(theme: theme)
+                        .frame(width: 85, height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(
+                                    isSelected ? themeStore.accentTabColor : Color.primary.opacity(0.12),
+                                    lineWidth: isSelected ? 2 : 1
+                                )
                         }
+
+                    if showsProBadge {
+                        ProBadgeView()
+                            .offset(x: 7, y: -7)
+                            .allowsHitTesting(false)
                     }
+                }
+                .padding(.top, showsProBadge ? 8 : 0)
+                .padding(.trailing, showsProBadge ? 8 : 0)
 
                 Group {
                     if isSelected {
