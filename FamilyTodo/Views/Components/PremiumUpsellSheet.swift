@@ -65,6 +65,7 @@ struct PremiumUpsellSheet: View {
             .padding(.horizontal, 28)
             .padding(.top, 54)
             .padding(.bottom, 24)
+            .safeAreaPadding(.top, 24)
         }
         .presentationBackground(.clear)
     }
@@ -97,7 +98,7 @@ struct PremiumUpsellSheet: View {
             )
             .blur(radius: 20)
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .bottom)
     }
 
     private var heroIcon: some View {

@@ -52,16 +52,18 @@ struct BundlesManagementView: View {
                     }
                     presentedEditor = .create
                 } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "plus")
-                            .frame(width: 34, height: 34)
-                        if isBundleFeatureLocked {
-                            ProBadgeView()
-                                .allowsHitTesting(false)
+                    Image(systemName: "plus")
+                        .frame(width: 34, height: 34)
+                        .overlay(alignment: .topTrailing) {
+                            if isBundleFeatureLocked {
+                                ProBadgeView()
+                                    .scaleEffect(0.82)
+                                    .offset(x: 8, y: -8)
+                                    .allowsHitTesting(false)
+                            }
                         }
-                    }
-                    .frame(width: 46, height: 42)
-                    .contentShape(Rectangle())
+                        .frame(width: 50, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("shoppingBundlesAddButton")
             }

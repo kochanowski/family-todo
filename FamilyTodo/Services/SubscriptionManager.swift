@@ -167,7 +167,7 @@ private struct PremiumSheetsHost: ViewModifier {
             }
             .sheet(item: $premiumSubscriptionManager.activeUpsellContext) { context in
                 PremiumUpsellSheet(context: context)
-                    .presentationDetents([.fraction(0.35), .medium])
+                    .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
     }
