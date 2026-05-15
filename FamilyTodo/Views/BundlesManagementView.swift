@@ -57,9 +57,11 @@ struct BundlesManagementView: View {
                             .frame(width: 34, height: 34)
                         if isBundleFeatureLocked {
                             ProBadgeView()
-                                .offset(x: 8, y: -7)
+                                .allowsHitTesting(false)
                         }
                     }
+                    .frame(width: 46, height: 42)
+                    .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("shoppingBundlesAddButton")
             }
