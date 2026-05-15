@@ -12,6 +12,7 @@ struct PremiumUpsellSheet: View {
 
             VStack(spacing: 20) {
                 heroIcon
+                    .padding(.top, 24)
 
                 VStack(spacing: 8) {
                     Text(context.eyebrow)

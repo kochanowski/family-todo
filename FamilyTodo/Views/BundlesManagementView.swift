@@ -54,11 +54,11 @@ struct BundlesManagementView: View {
                 } label: {
                     Image(systemName: "plus")
                         .frame(width: 34, height: 34)
-                        .overlay(alignment: .topTrailing) {
+                        .overlay(alignment: .bottomTrailing) {
                             if isBundleFeatureLocked {
                                 ProBadgeView()
                                     .scaleEffect(0.82)
-                                    .offset(x: 8, y: -8)
+                                    .offset(x: 4, y: 8)
                                     .allowsHitTesting(false)
                             }
                         }
