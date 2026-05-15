@@ -54,11 +54,10 @@ struct BundlesManagementView: View {
                 } label: {
                     Image(systemName: "plus")
                         .frame(width: 34, height: 34)
-                        .overlay(alignment: .bottomTrailing) {
+                        .overlay(alignment: .topTrailing) {
                             if isBundleFeatureLocked {
-                                ProBadgeView()
-                                    .scaleEffect(0.82)
-                                    .offset(x: 4, y: 8)
+                                ProBadgeView(size: .toolbarIcon, style: .iconOnly)
+                                    .offset(x: 5, y: 5)
                                     .allowsHitTesting(false)
                             }
                         }
@@ -124,8 +123,8 @@ struct BundlesManagementView: View {
                                     .contentShape(Rectangle())
                                     .animation(.easeInOut(duration: 0.2), value: added)
                                 if isBundleFeatureLocked {
-                                    ProBadgeView()
-                                        .offset(x: 3, y: -1)
+                                    ProBadgeView(size: .toolbarIcon, style: .iconOnly)
+                                        .offset(x: 2, y: 1)
                                 }
                             }
                         }
