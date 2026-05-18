@@ -74,6 +74,7 @@ struct RecurringChore: Identifiable, Codable {
     var recurrenceDay: Int?
     var recurrenceDayOfMonth: Int?
     var recurrenceInterval: Int?
+    var assigneeId: UUID?
     var defaultAssigneeIds: [UUID]
     var areaId: UUID?
     var categoryId: UUID?
@@ -96,6 +97,7 @@ struct RecurringChore: Identifiable, Codable {
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
         recurrenceInterval: Int? = 1,
+        assigneeId: UUID? = nil,
         defaultAssigneeIds: [UUID] = [],
         areaId: UUID? = nil,
         categoryId: UUID? = nil,
@@ -117,6 +119,7 @@ struct RecurringChore: Identifiable, Codable {
         self.recurrenceDay = recurrenceDay
         self.recurrenceDayOfMonth = recurrenceDayOfMonth
         self.recurrenceInterval = recurrenceInterval
+        self.assigneeId = assigneeId ?? defaultAssigneeIds.first
         self.defaultAssigneeIds = defaultAssigneeIds
         self.areaId = areaId
         self.categoryId = categoryId
@@ -424,7 +427,7 @@ final class RecurringChoreStore: ObservableObject {
                 scope: scope
             )
             chores = fetched
-            syncToCache(fetched)
+            syncToCache(fetched, cloudChoreIDs: Set(fetched.map(\.id)))
         } catch {
             self.error = error
         }
@@ -436,8 +439,11 @@ final class RecurringChoreStore: ObservableObject {
         recurrenceInterval: Int? = 1,
         recurrenceDay: Int? = nil,
         recurrenceDayOfMonth: Int? = nil,
+        assigneeId: UUID? = nil,
         defaultAssigneeIds: [UUID] = [],
-        categoryId: UUID? = nil
+        categoryId: UUID? = nil,
+        notes: String? = nil,
+        isActive: Bool = true
     ) async {
         guard let householdId else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -450,8 +456,11 @@ final class RecurringChoreStore: ObservableObject {
             recurrenceDay: recurrenceDay,
             recurrenceDayOfMonth: recurrenceDayOfMonth,
             recurrenceInterval: recurrenceInterval,
-            defaultAssigneeIds: defaultAssigneeIds,
-            categoryId: categoryId
+            assigneeId: assigneeId ?? defaultAssigneeIds.first,
+            defaultAssigneeIds: defaultAssigneeIds.isEmpty ? assigneeId.map { [$0] } ?? [] : defaultAssigneeIds,
+            categoryId: categoryId,
+            isActive: isActive,
+            notes: notes
         )
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
         chores.append(chore)
@@ -512,10 +521,23 @@ final class RecurringChoreStore: ObservableObject {
         }
     }
 
-    private func syncToCache(_ chores: [RecurringChore]) {
+    func syncToCache(_ chores: [RecurringChore]) {
         for chore in chores {
             upsertCachedChore(chore)
         }
+    }
+
+    func syncToCache(_ chores: [RecurringChore], cloudChoreIDs: Set<UUID>) {
+        syncToCache(chores)
+        guard let householdId, let modelContext else { return }
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.householdId == householdId }
+        )
+        guard let cached = try? modelContext.fetch(descriptor) else { return }
+        for chore in cached where !cloudChoreIDs.contains(chore.id) {
+            modelContext.delete(chore)
+        }
+        try? modelContext.save()
     }
 
     private func upsertCachedChore(_ chore: RecurringChore) {
@@ -552,6 +574,7 @@ final class ChoreScheduler {
     func runIfNeeded(
         householdId: UUID?,
         modelContext: ModelContext,
+        taskStore: TaskStore? = nil,
         syncMode: SyncMode
     ) async {
         guard let householdId else { return }
@@ -560,10 +583,16 @@ final class ChoreScheduler {
         recurringStore.setSyncMode(syncMode)
         await recurringStore.loadChores()
 
-        let taskStore = TaskStore(modelContext: modelContext)
-        taskStore.setHousehold(householdId)
-        taskStore.setSyncMode(syncMode)
-        await taskStore.loadTasks()
+        let resolvedTaskStore: TaskStore
+        if let taskStore {
+            resolvedTaskStore = taskStore
+        } else {
+            let createdTaskStore = TaskStore(modelContext: modelContext)
+            createdTaskStore.setHousehold(householdId)
+            createdTaskStore.setSyncMode(syncMode)
+            resolvedTaskStore = createdTaskStore
+        }
+        await resolvedTaskStore.loadTasks()
 
         let now = Date()
         for chore in recurringStore.chores where chore.isActive {
@@ -571,16 +600,16 @@ final class ChoreScheduler {
                 continue
             }
             if nextDate <= now {
-                if Self.hasGeneratedTask(for: chore, dueDate: nextDate, tasks: taskStore.tasks) {
+                if Self.hasGeneratedTask(for: chore, dueDate: nextDate, tasks: resolvedTaskStore.tasks) {
                     await recurringStore.markGenerated(chore, at: now)
                     continue
                 }
 
-                await taskStore.createTask(
+                await resolvedTaskStore.createTask(
                     title: chore.title,
                     status: .backlog,
-                    assigneeId: chore.defaultAssigneeIds.first,
-                    assigneeIds: chore.defaultAssigneeIds,
+                    assigneeId: chore.assigneeId,
+                    assigneeIds: chore.assigneeId.map { [$0] } ?? chore.defaultAssigneeIds,
                     backlogCategoryId: chore.categoryId,
                     areaId: chore.areaId,
                     dueDate: nextDate,
@@ -597,6 +626,7 @@ final class ChoreScheduler {
         let calendar = Calendar.current
         return tasks.contains { task in
             task.recurringChoreId == chore.id &&
+                task.status != .done &&
                 task.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
         }
     }
@@ -706,6 +736,15 @@ final class CachedRecurringChore {
     var title: String
     var categoryId: UUID?
     var frequencyDays: Int
+    var recurrenceTypeRaw: String = RecurringChore.RecurrenceType.custom.rawValue
+    var recurrenceDay: Int?
+    var recurrenceDayOfMonth: Int?
+    var recurrenceInterval: Int = 1
+    var assigneeId: UUID?
+    var isActive: Bool = true
+    var lastGeneratedDate: Date?
+    var nextScheduledDate: Date?
+    var notes: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -715,6 +754,15 @@ final class CachedRecurringChore {
         title: String = "",
         categoryId: UUID? = nil,
         frequencyDays: Int = 7,
+        recurrenceTypeRaw: String = RecurringChore.RecurrenceType.custom.rawValue,
+        recurrenceDay: Int? = nil,
+        recurrenceDayOfMonth: Int? = nil,
+        recurrenceInterval: Int = 1,
+        assigneeId: UUID? = nil,
+        isActive: Bool = true,
+        lastGeneratedDate: Date? = nil,
+        nextScheduledDate: Date? = nil,
+        notes: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -723,6 +771,15 @@ final class CachedRecurringChore {
         self.title = title
         self.categoryId = categoryId
         self.frequencyDays = frequencyDays
+        self.recurrenceTypeRaw = recurrenceTypeRaw
+        self.recurrenceDay = recurrenceDay
+        self.recurrenceDayOfMonth = recurrenceDayOfMonth
+        self.recurrenceInterval = recurrenceInterval
+        self.assigneeId = assigneeId
+        self.isActive = isActive
+        self.lastGeneratedDate = lastGeneratedDate
+        self.nextScheduledDate = nextScheduledDate
+        self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -734,6 +791,15 @@ final class CachedRecurringChore {
             title: chore.title,
             categoryId: chore.categoryId,
             frequencyDays: max(chore.recurrenceInterval ?? 1, 1),
+            recurrenceTypeRaw: chore.recurrenceType.rawValue,
+            recurrenceDay: chore.recurrenceDay,
+            recurrenceDayOfMonth: chore.recurrenceDayOfMonth,
+            recurrenceInterval: max(chore.recurrenceInterval ?? 1, 1),
+            assigneeId: chore.assigneeId ?? chore.defaultAssigneeIds.first,
+            isActive: chore.isActive,
+            lastGeneratedDate: chore.lastGeneratedDate,
+            nextScheduledDate: chore.nextScheduledDate,
+            notes: chore.notes,
             createdAt: chore.createdAt,
             updatedAt: chore.updatedAt
         )
@@ -744,20 +810,40 @@ final class CachedRecurringChore {
         title = chore.title
         categoryId = chore.categoryId
         frequencyDays = max(chore.recurrenceInterval ?? 1, 1)
+        recurrenceTypeRaw = chore.recurrenceType.rawValue
+        recurrenceDay = chore.recurrenceDay
+        recurrenceDayOfMonth = chore.recurrenceDayOfMonth
+        recurrenceInterval = max(chore.recurrenceInterval ?? 1, 1)
+        assigneeId = chore.assigneeId ?? chore.defaultAssigneeIds.first
+        isActive = chore.isActive
+        lastGeneratedDate = chore.lastGeneratedDate
+        nextScheduledDate = chore.nextScheduledDate
+        notes = chore.notes
         createdAt = chore.createdAt
         updatedAt = chore.updatedAt
     }
 
     func toRecurringChore() -> RecurringChore {
+        let resolvedAssigneeIds = assigneeId.map { [$0] } ?? []
         RecurringChore(
             id: id,
             householdId: householdId,
             title: title,
-            recurrenceType: .custom,
-            recurrenceInterval: max(frequencyDays, 1),
+            recurrenceType: RecurringChore.RecurrenceType(rawValue: recurrenceTypeRaw) ?? .custom,
+            recurrenceDay: recurrenceDay,
+            recurrenceDayOfMonth: recurrenceDayOfMonth,
+            recurrenceInterval: max(recurrenceInterval, 1),
+            assigneeId: assigneeId,
+            defaultAssigneeIds: resolvedAssigneeIds,
             categoryId: categoryId,
+            isActive: isActive,
+            lastGeneratedDate: lastGeneratedDate,
+            nextScheduledDate: nextScheduledDate,
+            notes: notes,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            frequencyDays: max(frequencyDays, 1),
+            assigneeIds: resolvedAssigneeIds
         )
     }
 }

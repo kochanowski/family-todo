@@ -517,6 +517,7 @@ enum HouseholdCloudDeltaDomain: String, Equatable, Hashable {
     case workItems
     case backlogCategories
     case backlogItems
+    case recurringChores
 }
 
 struct HouseholdCloudDelta: Equatable {
@@ -3021,6 +3022,7 @@ class HouseholdStore: ObservableObject {
         let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
+        let recurringStore = RecurringChoreStore(householdId: household.id, modelContext: modelContext)
 
         guard let syncContext = HouseholdSyncContextFactory.make(
             household: household,
@@ -3056,8 +3058,12 @@ class HouseholdStore: ObservableObject {
             cloudCategoryIDs: Set(snapshot.backlogCategories.map(\.id)),
             cloudItemIDs: Set(snapshot.backlogItems.map(\.id))
         )
+        recurringStore.syncToCache(
+            snapshot.recurringChores,
+            cloudChoreIDs: Set(snapshot.recurringChores.map(\.id))
+        )
         CloudKitDiagnosticsState.shared.recordProgress(
-            operation: "snapshot.cacheApplied householdId=\(household.id.uuidString) members=\(mergedMembers.count) shopping=\(snapshot.shoppingItems.count) bundles=\(snapshot.shoppingBundles.count) workItems=\(snapshot.unifiedWorkItems.count) categories=\(snapshot.backlogCategories.count) backlogItems=\(snapshot.backlogItems.count)"
+            operation: "snapshot.cacheApplied householdId=\(household.id.uuidString) members=\(mergedMembers.count) shopping=\(snapshot.shoppingItems.count) bundles=\(snapshot.shoppingBundles.count) workItems=\(snapshot.unifiedWorkItems.count) categories=\(snapshot.backlogCategories.count) backlogItems=\(snapshot.backlogItems.count) recurringChores=\(snapshot.recurringChores.count)"
         )
 
         let remoteMembershipConfirmed = snapshot.hasActiveMembership(userId: userId)
@@ -3876,6 +3882,7 @@ class HouseholdStore: ObservableObject {
         let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
+        let recurringStore = RecurringChoreStore(householdId: household.id, modelContext: modelContext)
 
         try await applyDeltaMetadataAndMembers(
             household: household,
@@ -3895,7 +3902,8 @@ class HouseholdStore: ObservableObject {
             syncContext: syncContext,
             delta: delta,
             taskStore: taskStore,
-            backlogStore: backlogStore
+            backlogStore: backlogStore,
+            recurringStore: recurringStore
         )
 
         let cachedSnapshot = cachedJoinHydrationSnapshot(
@@ -3981,7 +3989,8 @@ class HouseholdStore: ObservableObject {
         syncContext: HouseholdSyncContext,
         delta: HouseholdCloudDelta,
         taskStore: TaskStore,
-        backlogStore: BacklogStore
+        backlogStore: BacklogStore,
+        recurringStore: RecurringChoreStore
     ) async throws {
         let needsUnifiedWorkRefresh =
             delta.changedDomains.contains(.tasks) ||
@@ -4014,6 +4023,19 @@ class HouseholdStore: ObservableObject {
                 cloudCategoryIDs: Set(categories.map(\.id)),
                 cloudItemIDs: Set(items.map(\.id))
             )
+        }
+
+        if delta.changedDomains.contains(.recurringChores) {
+            let recurringChores = try await cloudKit.fetchRecurringChores(
+                householdId: householdId,
+                scope: syncContext.scope
+            )
+            recurringStore.syncToCache(
+                recurringChores,
+                cloudChoreIDs: Set(recurringChores.map(\.id))
+            )
+            NotificationCenter.default.post(name: .backlogDataDidChange, object: "remote")
+            NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "remote")
         }
     }
 

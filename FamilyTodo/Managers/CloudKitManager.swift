@@ -88,7 +88,6 @@ actor CloudKitManager {
     private static let ownerHouseholdZonePrefix = "HouseholdZone-"
     private static let ignorableHouseholdDeltaRecordTypes: Set<String> = [
         "Area",
-        "RecurringChore",
     ]
     private static let defaultQueryPageSize = 200
     private static let queryPageTimeoutNanoseconds: UInt64 = 12_000_000_000
@@ -1946,6 +1945,8 @@ actor CloudKitManager {
                 domains.insert(.backlogCategories)
             case "BacklogItem":
                 domains.insert(.backlogItems)
+            case "RecurringChore":
+                domains.insert(.recurringChores)
             case _ where ignorableHouseholdDeltaRecordTypes.contains(recordType):
                 ignoredRecordTypes.insert(recordType)
             default:

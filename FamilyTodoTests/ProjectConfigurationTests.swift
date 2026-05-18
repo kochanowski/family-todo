@@ -36,11 +36,11 @@ final class ProjectConfigurationTests: XCTestCase {
         )
     }
 
-    func testMarketingVersionIsReadyForTestFlight13() throws {
+    func testMarketingVersionIsReadyForTestFlight14() throws {
         let projectContents = try loadProjectFile()
 
-        XCTAssertTrue(projectContents.contains("MARKETING_VERSION = 1.3;"))
-        XCTAssertFalse(projectContents.contains("MARKETING_VERSION = 1.2;"))
+        XCTAssertTrue(projectContents.contains("MARKETING_VERSION = 1.4;"))
+        XCTAssertFalse(projectContents.contains("MARKETING_VERSION = 1.3;"))
     }
 
     func testVisiblePremiumCopyUsesDwelloProBranding() throws {

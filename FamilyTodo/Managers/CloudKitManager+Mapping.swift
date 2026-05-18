@@ -47,6 +47,16 @@ extension CloudKitManager {
         return references.compactMap { UUID(uuidString: $0.recordID.recordName) }
     }
 
+    func intValue(_ value: Any?) -> Int? {
+        if let value = value as? Int {
+            return value
+        }
+        if let value = value as? Int64 {
+            return Int(value)
+        }
+        return nil
+    }
+
     // MARK: - Household Mapping
 
     func householdRecord(from household: Household) -> CKRecord {
@@ -354,6 +364,9 @@ extension CloudKitManager {
         if let recurrenceInterval = chore.recurrenceInterval {
             record["recurrenceInterval"] = recurrenceInterval as CKRecordValue
         }
+        if let assigneeId = chore.assigneeId {
+            record["assigneeId"] = reference(for: assigneeId)
+        }
         if !chore.defaultAssigneeIds.isEmpty {
             record["defaultAssigneeIds"] =
                 references(from: chore.defaultAssigneeIds) as CKRecordValue
@@ -391,7 +404,6 @@ extension CloudKitManager {
             let title = record["title"] as? String,
             let recurrenceTypeRaw = record["recurrenceType"] as? String,
             let recurrenceType = RecurringChore.RecurrenceType(rawValue: recurrenceTypeRaw),
-            let isActiveValue = record["isActive"] as? Int64,
             let createdAt = record["createdAt"] as? Date,
             let updatedAt = record["updatedAt"] as? Date
         else {
@@ -405,9 +417,10 @@ extension CloudKitManager {
             from: record["defaultAssigneeIds"] as? [CKRecord.Reference]
         )
         let fallbackAssigneeId = uuid(from: record["defaultAssigneeId"] as? CKRecord.Reference)
+        let assigneeId = uuid(from: record["assigneeId"] as? CKRecord.Reference) ?? fallbackAssigneeId
         let resolvedAssigneeIds =
             defaultAssigneeIds.isEmpty
-                ? (fallbackAssigneeId.map { [$0] } ?? [])
+                ? (assigneeId.map { [$0] } ?? [])
                 : defaultAssigneeIds
 
         return RecurringChore(
@@ -415,13 +428,14 @@ extension CloudKitManager {
             householdId: householdId,
             title: title,
             recurrenceType: recurrenceType,
-            recurrenceDay: record["recurrenceDay"] as? Int,
-            recurrenceDayOfMonth: record["recurrenceDayOfMonth"] as? Int,
+            recurrenceDay: intValue(record["recurrenceDay"]),
+            recurrenceDayOfMonth: intValue(record["recurrenceDayOfMonth"]),
             recurrenceInterval: intervalValue,
+            assigneeId: assigneeId,
             defaultAssigneeIds: resolvedAssigneeIds,
             areaId: uuid(from: record["areaId"] as? CKRecord.Reference),
             categoryId: uuid(from: record["categoryId"] as? CKRecord.Reference),
-            isActive: isActiveValue == 1,
+            isActive: intValue(record["isActive"]) != 0,
             lastGeneratedDate: record["lastGeneratedDate"] as? Date,
             nextScheduledDate: record["nextScheduledDate"] as? Date,
             notes: record["notes"] as? String,

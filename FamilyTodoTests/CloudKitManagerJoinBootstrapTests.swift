@@ -69,15 +69,15 @@ final class CloudKitManagerJoinBootstrapTests: XCTestCase {
         )
     }
 
-    func testHouseholdDeltaClassificationIgnoresLegacyAreaAndRecurringChore() {
+    func testHouseholdDeltaClassificationTracksRecurringChoreAndIgnoresLegacyArea() {
         let classification = CloudKitManager.classifyHouseholdDeltaRecordTypes([
             "ShoppingItem",
             "Area",
             "RecurringChore",
         ])
 
-        XCTAssertEqual(classification.changedDomains, [.shoppingItems])
-        XCTAssertEqual(classification.ignoredRecordTypes, ["Area", "RecurringChore"])
+        XCTAssertEqual(classification.changedDomains, [.shoppingItems, .recurringChores])
+        XCTAssertEqual(classification.ignoredRecordTypes, ["Area"])
         XCTAssertTrue(classification.unknownRecordTypes.isEmpty)
         XCTAssertEqual(classification.fallbackReason, nil)
     }

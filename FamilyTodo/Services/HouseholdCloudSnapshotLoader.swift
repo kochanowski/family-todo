@@ -7,6 +7,7 @@ struct HouseholdCloudSnapshot {
     let shoppingBundles: [ShoppingBundle]
     let backlogCategories: [BacklogCategory]
     let backlogItems: [BacklogItem]
+    let recurringChores: [RecurringChore]
 
     func hasActiveMembership(userId: String) -> Bool {
         members.contains { $0.userId == userId && $0.isActive }
@@ -102,6 +103,16 @@ actor HouseholdCloudSnapshotLoader {
                     scope: scope
                 )
             }
+            let recurringChores = try await fetchDomain(
+                "recurringChores",
+                householdId: householdId,
+                scope: scope
+            ) {
+                try await self.cloud.fetchRecurringChores(
+                    householdId: householdId,
+                    scope: scope
+                )
+            }
             let tasks = try await fetchDomain(
                 "tasks",
                 householdId: householdId,
@@ -133,7 +144,8 @@ actor HouseholdCloudSnapshotLoader {
                 shoppingItems: shoppingItems,
                 shoppingBundles: shoppingBundles,
                 backlogCategories: backlogCategories,
-                backlogItems: backlogItems
+                backlogItems: backlogItems,
+                recurringChores: recurringChores
             )
         }
     }
@@ -258,6 +270,9 @@ actor HouseholdCloudSnapshotLoader {
         }
         if let backlogItems = value as? [BacklogItem] {
             return "count=\(backlogItems.count)"
+        }
+        if let recurringChores = value as? [RecurringChore] {
+            return "count=\(recurringChores.count)"
         }
         if let tasks = value as? [Task] {
             return "count=\(tasks.count)"

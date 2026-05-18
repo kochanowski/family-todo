@@ -632,6 +632,140 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertNil(localStore.currentHousehold)
     }
 
+    func testCachedRecurringChoreRoundTripPreservesScheduleFields() {
+        let assigneeId = UUID()
+        let categoryId = UUID()
+        let lastGenerated = Date().addingTimeInterval(-86400)
+        let nextScheduled = Date().addingTimeInterval(86400)
+        let chore = RecurringChore(
+            householdId: UUID(),
+            title: "Clean kitchen",
+            recurrenceType: .weekly,
+            recurrenceDay: 2,
+            recurrenceInterval: 1,
+            assigneeId: assigneeId,
+            defaultAssigneeIds: [assigneeId],
+            categoryId: categoryId,
+            isActive: true,
+            lastGeneratedDate: lastGenerated,
+            nextScheduledDate: nextScheduled,
+            notes: "Counters and floor"
+        )
+
+        let roundTripped = CachedRecurringChore(from: chore).toRecurringChore()
+
+        XCTAssertEqual(roundTripped.id, chore.id)
+        XCTAssertEqual(roundTripped.recurrenceType, .weekly)
+        XCTAssertEqual(roundTripped.recurrenceDay, 2)
+        XCTAssertEqual(roundTripped.recurrenceInterval, 1)
+        XCTAssertEqual(roundTripped.assigneeId, assigneeId)
+        XCTAssertEqual(roundTripped.defaultAssigneeIds, [assigneeId])
+        XCTAssertEqual(roundTripped.categoryId, categoryId)
+        XCTAssertEqual(roundTripped.lastGeneratedDate, lastGenerated)
+        XCTAssertEqual(roundTripped.nextScheduledDate, nextScheduled)
+        XCTAssertEqual(roundTripped.notes, "Counters and floor")
+    }
+
+    func testChoreSchedulerGeneratesDueRecurringTask() async throws {
+        let container = try requireContainer()
+        let householdId = UUID()
+        let assigneeId = UUID()
+        let dueDate = Date().addingTimeInterval(-86400)
+        let chore = RecurringChore(
+            householdId: householdId,
+            title: "Vacuum",
+            recurrenceType: .daily,
+            assigneeId: assigneeId,
+            defaultAssigneeIds: [assigneeId],
+            nextScheduledDate: dueDate
+        )
+        container.mainContext.insert(CachedRecurringChore(from: chore))
+        try container.mainContext.save()
+
+        let taskStore = TaskStore(modelContext: container.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: container.mainContext,
+            taskStore: taskStore,
+            syncMode: .localOnly
+        )
+
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedWorkItem>())
+            .map { $0.toTask() }
+        XCTAssertEqual(tasks.count, 1)
+        XCTAssertEqual(tasks.first?.title, "Vacuum")
+        XCTAssertEqual(tasks.first?.status, .backlog)
+        XCTAssertEqual(tasks.first?.taskType, .recurring)
+        XCTAssertEqual(tasks.first?.recurringChoreId, chore.id)
+        XCTAssertEqual(tasks.first?.assigneeId, assigneeId)
+    }
+
+    func testChoreSchedulerDeduplicatesExistingOpenOccurrence() async throws {
+        let container = try requireContainer()
+        let householdId = UUID()
+        let dueDate = Date().addingTimeInterval(-86400)
+        let chore = RecurringChore(
+            householdId: householdId,
+            title: "Mop",
+            recurrenceType: .daily,
+            nextScheduledDate: dueDate
+        )
+        container.mainContext.insert(CachedRecurringChore(from: chore))
+        try container.mainContext.save()
+
+        let taskStore = TaskStore(modelContext: container.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: container.mainContext,
+            taskStore: taskStore,
+            syncMode: .localOnly
+        )
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: container.mainContext,
+            taskStore: taskStore,
+            syncMode: .localOnly
+        )
+
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedWorkItem>())
+            .map { $0.toTask() }
+        XCTAssertEqual(tasks.count, 1)
+    }
+
+    func testChoreSchedulerSkipsInactiveChore() async throws {
+        let container = try requireContainer()
+        let householdId = UUID()
+        let chore = RecurringChore(
+            householdId: householdId,
+            title: "Dust",
+            recurrenceType: .daily,
+            isActive: false,
+            nextScheduledDate: Date().addingTimeInterval(-86400)
+        )
+        container.mainContext.insert(CachedRecurringChore(from: chore))
+        try container.mainContext.save()
+
+        let taskStore = TaskStore(modelContext: container.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: container.mainContext,
+            taskStore: taskStore,
+            syncMode: .localOnly
+        )
+
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedWorkItem>())
+        XCTAssertTrue(tasks.isEmpty)
+    }
+
     func testRestoreCachedHouseholdSkipsPendingExitOperations() async throws {
         let suiteName = "HouseholdStoreTests.\(#function)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

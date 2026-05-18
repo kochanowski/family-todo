@@ -12,6 +12,7 @@ enum ShoppingOnboardingTip: Equatable {
 
 enum IdeasOnboardingTip: Equatable {
     case createCategory
+    case recurringChoresDiscover
     case addIdea
     case assignOwner
     case promote
@@ -26,6 +27,7 @@ enum AppTipProgressKey {
     static let shoppingBundlesLocationCompleted = "appTips.shopping.bundlesLocationCompleted"
     static let shoppingBundleQuickAddCompleted = "appTips.shopping.bundleQuickAddCompleted"
     static let ideasCreateCategoryCompleted = "appTips.ideas.createCategoryCompleted"
+    static let ideasRecurringChoresCompleted = "appTips.ideas.recurringChoresCompleted"
     static let ideasAddIdeaCompleted = "appTips.ideas.addIdeaCompleted"
     static let ideasAssignOwnerCompleted = "appTips.ideas.assignOwnerCompleted"
     static let ideasPromoteCompleted = "appTips.ideas.promoteCompleted"
@@ -40,6 +42,7 @@ enum AppTipProgressKey {
         shoppingBundlesLocationCompleted,
         shoppingBundleQuickAddCompleted,
         ideasCreateCategoryCompleted,
+        ideasRecurringChoresCompleted,
         ideasAddIdeaCompleted,
         ideasAssignOwnerCompleted,
         ideasPromoteCompleted,
@@ -202,6 +205,12 @@ enum AppTipStorageKey {
             AppTipEvents.ideasCategoryCreated.sendDonation()
         }
 
+        static func donateIdeasRecurringChoresOpened() {
+            markProgress(AppTipProgressKey.ideasRecurringChoresCompleted)
+            guard #available(iOS 17, *) else { return }
+            AppTipEvents.ideasRecurringChoresOpened.sendDonation()
+        }
+
         static func donateIdeasFirstIdeaAdded() {
             markProgress(AppTipProgressKey.ideasAddIdeaCompleted)
             guard #available(iOS 17, *) else { return }
@@ -271,6 +280,7 @@ enum AppTipStorageKey {
                     ShoppingBundlesLocationTip.self,
                     ShoppingBundleQuickAddTip.self,
                     IdeasCreateCategoryTip.self,
+                    IdeasRecurringChoresTip.self,
                     IdeasAddIdeaTip.self,
                     IdeasAssignOwnerTip.self,
                     IdeaPromotionTip.self,
@@ -297,6 +307,8 @@ enum AppTipStorageKey {
                 return [IdeaPromotionTip.self]
             case "ideas_category":
                 return [IdeasCreateCategoryTip.self]
+            case "ideas_recurring":
+                return [IdeasRecurringChoresTip.self]
             case "ideas_add":
                 return [IdeasAddIdeaTip.self]
             case "ideas_assign":
@@ -316,6 +328,7 @@ enum AppTipStorageKey {
         static let shoppingBundlesVisited = Tips.Event(id: "shopping.bundlesVisited")
         static let bundleQuickAddUsed = Tips.Event(id: "shopping.bundleQuickAddUsed")
         static let ideasCategoryCreated = Tips.Event(id: "backlog.categoryCreated")
+        static let ideasRecurringChoresOpened = Tips.Event(id: "backlog.recurringChoresOpened")
         static let ideasFirstIdeaAdded = Tips.Event(id: "backlog.firstIdeaAdded")
         static let ideasOwnerAssigned = Tips.Event(id: "backlog.ownerAssigned")
         static let ideaPromoted = Tips.Event(id: "backlog.ideaPromoted")
@@ -374,7 +387,9 @@ enum AppTipStorageKey {
             hasPendingDeletionToast: Bool,
             hasCompletedAddIdea: Bool,
             hasCompletedAssignOwner: Bool,
-            hasCompletedPromote: Bool
+            hasCompletedPromote: Bool,
+            hasRecurringChores: Bool,
+            hasCompletedRecurringChoresTip: Bool
         ) -> IdeasOnboardingTip? {
             guard !hasActiveBanner,
                   !hasPresentedSheet,
@@ -385,6 +400,10 @@ enum AppTipStorageKey {
 
             if !hasCategories {
                 return .createCategory
+            }
+
+            if hasCategories, !hasRecurringChores, !hasCompletedRecurringChoresTip {
+                return .recurringChoresDiscover
             }
 
             if hasCategories, !hasVisibleIdeas, !hasCompletedAddIdea {
@@ -529,6 +548,29 @@ enum AppTipStorageKey {
 
         var image: Image? {
             Image(systemName: "folder.badge.plus")
+        }
+    }
+
+    @available(iOS 17, *)
+    struct IdeasRecurringChoresTip: Tip {
+        var title: Text {
+            Text("Automate chores")
+        }
+
+        var message: Text? {
+            Text("Set up recurring chores here so tasks come back automatically.")
+        }
+
+        var image: Image? {
+            Image(systemName: "arrow.triangle.2.circlepath")
+        }
+
+        var rules: [Rule] {
+            [
+                #Rule(AppTipEvents.ideasRecurringChoresOpened) {
+                    $0.donations.count < 1
+                },
+            ]
         }
     }
 
@@ -730,6 +772,10 @@ enum AppTipStorageKey {
             defaults.set(true, forKey: AppTipProgressKey.ideasCreateCategoryCompleted)
         }
 
+        static func donateIdeasRecurringChoresOpened() {
+            defaults.set(true, forKey: AppTipProgressKey.ideasRecurringChoresCompleted)
+        }
+
         static func donateIdeasFirstIdeaAdded() {
             defaults.set(true, forKey: AppTipProgressKey.ideasAddIdeaCompleted)
         }
@@ -812,7 +858,9 @@ enum AppTipStorageKey {
             hasPendingDeletionToast: Bool,
             hasCompletedAddIdea: Bool,
             hasCompletedAssignOwner: Bool,
-            hasCompletedPromote: Bool
+            hasCompletedPromote: Bool,
+            hasRecurringChores: Bool,
+            hasCompletedRecurringChoresTip: Bool
         ) -> IdeasOnboardingTip? {
             guard !hasActiveBanner,
                   !hasPresentedSheet,
@@ -823,6 +871,10 @@ enum AppTipStorageKey {
 
             if !hasCategories {
                 return .createCategory
+            }
+
+            if hasCategories, !hasRecurringChores, !hasCompletedRecurringChoresTip {
+                return .recurringChoresDiscover
             }
 
             if hasCategories, !hasVisibleIdeas, !hasCompletedAddIdea {

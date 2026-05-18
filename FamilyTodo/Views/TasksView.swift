@@ -77,6 +77,8 @@ private struct TasksContent: View {
     @StateObject private var store: TaskStore
     @StateObject private var memberStore: MemberStore
     @StateObject private var backlogStore: BacklogStore
+    private let householdId: UUID
+    private let modelContext: ModelContext
 
     @State private var taskBeingCompleted: UUID?
     @State private var selectedTask: Task?
@@ -116,6 +118,8 @@ private struct TasksContent: View {
     @Environment(\.colorScheme) private var colorScheme
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
+        self.householdId = householdId
+        self.modelContext = modelContext
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(householdId)
         _store = StateObject(wrappedValue: taskStore)
@@ -364,10 +368,11 @@ private struct TasksContent: View {
         let displayedTasks = filteredActiveTasks
         ForEach(displayedTasks) { task in
             if taskBeingCompleted != task.id {
-                let index = displayedTasks.firstIndex(where: { $0.id == task.id }) ?? 0
+                let nextIndex = filteredNextTasks.firstIndex(where: { $0.id == task.id }) ?? -1
                 if isSingleAssigneeFilter,
-                   index == normalizedWipLimit,
-                   displayedTasks.count > normalizedWipLimit
+                   task.status == .next,
+                   nextIndex == normalizedWipLimit,
+                   filteredNextTasks.count > normalizedWipLimit
                 {
                     overLimitSeparator
                         .tasksListRowStyle(taskListRowInsets)
@@ -442,6 +447,7 @@ private struct TasksContent: View {
         .onMove(perform: moveActiveTasks)
         .moveDisabled(
             taskBeingCompleted != nil ||
+                !visibleBacklogTasks.isEmpty ||
                 !hiddenPendingDeleteIds.isEmpty ||
                 !hiddenMovedToIdeasIds.isEmpty
         )
@@ -579,6 +585,10 @@ private struct TasksContent: View {
     }
 
     private var filteredActiveTasks: [Task] {
+        (visibleBacklogTasks + visibleNextTasks).filter(matchesAssigneeFilter)
+    }
+
+    private var filteredNextTasks: [Task] {
         visibleNextTasks.filter(matchesAssigneeFilter)
     }
 
@@ -957,6 +967,12 @@ private struct TasksContent: View {
         }
     }
 
+    private var visibleBacklogTasks: [Task] {
+        store.backlogTasks.filter {
+            !hiddenPendingDeleteIds.contains($0.id) && !hiddenMovedToIdeasIds.contains($0.id)
+        }
+    }
+
     private var shouldShowTaskSwipeActionsTip: Bool {
         AppTipVisibility.shouldShowTaskSwipeActionsTip(
             isTasksTabSelected: selectedTab == .tasks,
@@ -1094,6 +1110,12 @@ private struct TasksContent: View {
         async let loadBacklog = backlogStore.loadDataForDisplay()
 
         _ = await (loadTasks, loadMembers, loadBacklog)
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: modelContext,
+            taskStore: store,
+            syncMode: userSession.syncMode
+        )
         normalizeAssigneeFilterSelection()
     }
 

@@ -105,10 +105,11 @@ final class AppTipVisibilityTests: XCTestCase {
                 hasActiveBanner: false,
                 hasPresentedSheet: false,
                 hasPendingDeletionToast: false,
-                hasCompletedCreateCategory: false,
                 hasCompletedAddIdea: false,
                 hasCompletedAssignOwner: false,
-                hasCompletedPromote: false
+                hasCompletedPromote: false,
+                hasRecurringChores: true,
+                hasCompletedRecurringChoresTip: true
             ),
             .createCategory
         )
@@ -122,10 +123,11 @@ final class AppTipVisibilityTests: XCTestCase {
                 hasActiveBanner: false,
                 hasPresentedSheet: false,
                 hasPendingDeletionToast: false,
-                hasCompletedCreateCategory: true,
                 hasCompletedAddIdea: false,
                 hasCompletedAssignOwner: false,
-                hasCompletedPromote: false
+                hasCompletedPromote: false,
+                hasRecurringChores: true,
+                hasCompletedRecurringChoresTip: true
             ),
             .addIdea
         )
@@ -139,10 +141,11 @@ final class AppTipVisibilityTests: XCTestCase {
                 hasActiveBanner: false,
                 hasPresentedSheet: false,
                 hasPendingDeletionToast: false,
-                hasCompletedCreateCategory: true,
                 hasCompletedAddIdea: true,
                 hasCompletedAssignOwner: false,
-                hasCompletedPromote: false
+                hasCompletedPromote: false,
+                hasRecurringChores: true,
+                hasCompletedRecurringChoresTip: true
             ),
             .assignOwner
         )
@@ -156,13 +159,33 @@ final class AppTipVisibilityTests: XCTestCase {
                 hasActiveBanner: false,
                 hasPresentedSheet: false,
                 hasPendingDeletionToast: false,
-                hasCompletedCreateCategory: true,
                 hasCompletedAddIdea: true,
                 hasCompletedAssignOwner: true,
-                hasCompletedPromote: false
+                hasCompletedPromote: false,
+                hasRecurringChores: true,
+                hasCompletedRecurringChoresTip: true
             ),
             .promote
         )
+    }
+
+    func testIdeasTipShowsRecurringDiscoveryAfterCategoryBeforeIdeas() {
+        let tip = AppTipVisibility.ideasTip(
+            hasCategories: true,
+            hasVisibleIdeas: false,
+            hasVisibleUnassignedIdea: false,
+            hasVisibleAssignedIdea: false,
+            hasActiveBanner: false,
+            hasPresentedSheet: false,
+            hasPendingDeletionToast: false,
+            hasCompletedAddIdea: false,
+            hasCompletedAssignOwner: false,
+            hasCompletedPromote: false,
+            hasRecurringChores: false,
+            hasCompletedRecurringChoresTip: false
+        )
+
+        XCTAssertEqual(tip, .recurringChoresDiscover)
     }
 
     func testTaskSwipeActionsTipRequiresVisibleActiveBoardWithoutTransientState() {
@@ -254,10 +277,11 @@ final class AppTipVisibilityTests: XCTestCase {
             hasActiveBanner: false,
             hasPresentedSheet: false,
             hasPendingDeletionToast: false,
-            hasCompletedCreateCategory: true,
             hasCompletedAddIdea: true,
             hasCompletedAssignOwner: true, // assignment step done
-            hasCompletedPromote: false // not yet promoted
+            hasCompletedPromote: false,
+            hasRecurringChores: true,
+            hasCompletedRecurringChoresTip: true // not yet promoted
         )
         XCTAssertEqual(tip, .promote)
     }

@@ -53,6 +53,9 @@ private struct BacklogContent: View {
 
     @StateObject private var store: BacklogStore
     @StateObject private var memberStore: MemberStore
+    @StateObject private var recurringStore: RecurringChoreStore
+    private let householdId: UUID
+    private let modelContext: ModelContext
     @Binding private var selectedTab: AppTab
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
@@ -62,6 +65,7 @@ private struct BacklogContent: View {
     @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
 
     @State private var isAddingCategory = false
+    @State private var isShowingRecurringChores = false
     @State private var newCategoryName = ""
     @State private var newCategoryColorHex = MemberColorToken.randomHex()
     @State private var activeBanner: PromotionBanner?
@@ -95,15 +99,22 @@ private struct BacklogContent: View {
     private var hasCompletedIdeasAssignOwnerTip = false
     @AppStorage(AppTipProgressKey.ideasPromoteCompleted)
     private var hasCompletedIdeasPromoteTip = false
+    @AppStorage(AppTipProgressKey.ideasRecurringChoresCompleted)
+    private var hasCompletedIdeasRecurringChoresTip = false
     @AppStorage(AppTips.runtimeGenerationDefaultsKey)
     private var appTipRuntimeGeneration = 0
 
     init(householdId: UUID, modelContext: ModelContext, selectedTab: Binding<AppTab>) {
+        self.householdId = householdId
+        self.modelContext = modelContext
         _store = StateObject(
             wrappedValue: BacklogStore(householdId: householdId, modelContext: modelContext)
         )
         _memberStore = StateObject(
             wrappedValue: MemberStore(householdId: householdId, modelContext: modelContext)
+        )
+        _recurringStore = StateObject(
+            wrappedValue: RecurringChoreStore(householdId: householdId, modelContext: modelContext)
         )
         _selectedTab = selectedTab
     }
@@ -202,6 +213,13 @@ private struct BacklogContent: View {
                             }
                         }
                     }
+                )
+            }
+            .sheet(isPresented: $isShowingRecurringChores) {
+                RecurringChoresView(
+                    store: recurringStore,
+                    categories: store.categories,
+                    members: activeMembers
                 )
             }
             .sheet(item: $editingCategory) { category in
@@ -513,8 +531,15 @@ private struct BacklogContent: View {
         updateStoreCloudContext()
         store.setSyncMode(userSession.syncMode)
         memberStore.setSyncMode(userSession.syncMode)
+        recurringStore.setSyncMode(userSession.syncMode)
         await store.loadDataForDisplay()
         await memberStore.loadMembersForDisplay()
+        await recurringStore.loadChores()
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: modelContext,
+            syncMode: userSession.syncMode
+        )
         syncPromotionTipAnchorWithVisibleItems()
     }
 
@@ -583,6 +608,25 @@ private struct BacklogContent: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                presentRecurringChoresSheet()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 20))
+                    .foregroundStyle(themeStore.accentTabColor)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("backlogRecurringChoresButton")
+            .accessibilityLabel("Recurring Chores")
+            .contextualPopoverTip(
+                activeIdeasTip == .recurringChoresDiscover,
+                tipID: "ideas.recurringChores",
+                IdeasRecurringChoresTip(),
+                arrowEdge: .top,
+                generation: appTipRuntimeGeneration
+            )
 
             Button {
                 presentNewCategorySheet()
@@ -1005,7 +1049,9 @@ private struct BacklogContent: View {
             hasPendingDeletionToast: pendingDeletionItem != nil,
             hasCompletedAddIdea: hasCompletedIdeasAddIdeaTip,
             hasCompletedAssignOwner: hasCompletedIdeasAssignOwnerTip,
-            hasCompletedPromote: hasCompletedIdeasPromoteTip
+            hasCompletedPromote: hasCompletedIdeasPromoteTip,
+            hasRecurringChores: !recurringStore.chores.isEmpty,
+            hasCompletedRecurringChoresTip: hasCompletedIdeasRecurringChoresTip
         )
     }
 
@@ -1017,6 +1063,12 @@ private struct BacklogContent: View {
         }
         newCategoryColorHex = MemberColorToken.randomHex()
         isAddingCategory = true
+    }
+
+    private func presentRecurringChoresSheet() {
+        HapticManager.lightTap()
+        isShowingRecurringChores = true
+        AppTips.donateIdeasRecurringChoresOpened()
     }
 
     private var canCreateCategory: Bool {
@@ -1075,6 +1127,7 @@ private struct BacklogContent: View {
 
     private var hasPresentedIdeasSheet: Bool {
         isAddingCategory ||
+            isShowingRecurringChores ||
             editingCategory != nil ||
             editingItemID != nil ||
             pendingPromotionItemID != nil ||
@@ -1835,6 +1888,470 @@ private struct BacklogAssignButtonChrome: ViewModifier {
                     }
             }
         }
+    }
+}
+
+private enum RecurringChoreEditorDestination: Identifiable {
+    case create
+    case edit(RecurringChore)
+
+    var id: String {
+        switch self {
+        case .create:
+            "create"
+        case let .edit(chore):
+            chore.id.uuidString
+        }
+    }
+
+    var chore: RecurringChore? {
+        if case let .edit(chore) = self {
+            return chore
+        }
+        return nil
+    }
+}
+
+private struct RecurringChoresView: View {
+    @ObservedObject var store: RecurringChoreStore
+    let categories: [BacklogCategory]
+    let members: [Member]
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var userSession: UserSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var editorDestination: RecurringChoreEditorDestination?
+    @State private var hasStartedInitialLoad = false
+
+    private var activeChores: [RecurringChore] {
+        store.chores.filter(\.isActive).sorted(by: sortChores)
+    }
+
+    private var pausedChores: [RecurringChore] {
+        store.chores.filter { !$0.isActive }.sorted(by: sortChores)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if store.isLoading, store.chores.isEmpty {
+                    ProgressView("Loading recurring chores...")
+                } else if store.chores.isEmpty {
+                    recurringEmptyState
+                } else {
+                    choresList
+                }
+            }
+            .background(themeStore.canvasColor.ignoresSafeArea())
+            .navigationTitle("Recurring Chores")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        HapticManager.lightTap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("Recurring Chores")
+                        .font(themeStore.font(for: .inlineTitle))
+                        .foregroundStyle(themeStore.contentPrimaryColor)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        HapticManager.lightTap()
+                        editorDestination = .create
+                    } label: {
+                        Image(systemName: "plus")
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityIdentifier("recurringChoresAddButton")
+                }
+            }
+            .task {
+                guard !hasStartedInitialLoad else { return }
+                hasStartedInitialLoad = true
+                store.setSyncMode(userSession.syncMode)
+                await store.loadChores()
+            }
+            .onChange(of: userSession.syncMode) { _, mode in
+                store.setSyncMode(mode)
+                _ = _Concurrency.Task {
+                    await store.loadChores()
+                }
+            }
+            .sheet(item: $editorDestination) { destination in
+                RecurringChoreEditorSheet(
+                    store: store,
+                    categories: categories,
+                    members: members,
+                    chore: destination.chore
+                )
+            }
+        }
+    }
+
+    private var choresList: some View {
+        List {
+            if !activeChores.isEmpty {
+                Section {
+                    ForEach(activeChores) { chore in
+                        Button {
+                            HapticManager.lightTap()
+                            editorDestination = .edit(chore)
+                        } label: {
+                            RecurringChoreRow(
+                                chore: chore,
+                                category: category(for: chore.categoryId),
+                                assignee: assignee(for: chore.assigneeId)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                delete(chore)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Active")
+                        .font(themeStore.font(for: .sectionHeader))
+                }
+            }
+
+            if !pausedChores.isEmpty {
+                Section {
+                    ForEach(pausedChores) { chore in
+                        Button {
+                            HapticManager.lightTap()
+                            editorDestination = .edit(chore)
+                        } label: {
+                            RecurringChoreRow(
+                                chore: chore,
+                                category: category(for: chore.categoryId),
+                                assignee: assignee(for: chore.assigneeId)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                delete(chore)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Paused")
+                        .font(themeStore.font(for: .sectionHeader))
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var recurringEmptyState: some View {
+        ContentUnavailableView {
+            Label("No Recurring Chores", systemImage: "arrow.triangle.2.circlepath")
+        } description: {
+            Text("Create chores that automatically return to your task board.")
+                .font(themeStore.font(for: .body))
+        } actions: {
+            Button {
+                HapticManager.lightTap()
+                editorDestination = .create
+            } label: {
+                Text("Create Chore")
+                    .font(themeStore.font(for: .buttonLabel))
+            }
+        }
+    }
+
+    private func category(for id: UUID?) -> BacklogCategory? {
+        guard let id else { return nil }
+        return categories.first { $0.id == id }
+    }
+
+    private func assignee(for id: UUID?) -> Member? {
+        guard let id else { return nil }
+        return members.first { $0.id == id }
+    }
+
+    private func delete(_ chore: RecurringChore) {
+        HapticManager.warning()
+        _ = _Concurrency.Task {
+            await store.deleteChore(chore)
+        }
+    }
+
+    private func sortChores(_ lhs: RecurringChore, _ rhs: RecurringChore) -> Bool {
+        lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+    }
+}
+
+private struct RecurringChoreRow: View {
+    let chore: RecurringChore
+    let category: BacklogCategory?
+    let assignee: Member?
+
+    @EnvironmentObject private var themeStore: ThemeStore
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(themeStore.accentTabColor)
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(chore.title)
+                    .font(themeStore.font(for: .listRowTitle))
+                    .foregroundStyle(themeStore.contentPrimaryColor)
+
+                HStack(spacing: 6) {
+                    Text(recurrenceSummary)
+                        .font(themeStore.font(for: .bodySmall))
+                        .foregroundStyle(themeStore.contentSecondaryColor)
+
+                    if let assignee {
+                        MemberNameChipView(name: assignee.displayName, colorHex: assignee.colorHex)
+                    }
+
+                    if let category {
+                        Text(category.title)
+                            .font(themeStore.font(for: .caption))
+                            .foregroundStyle(Color(hex: category.colorHex))
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var recurrenceSummary: String {
+        switch chore.recurrenceType {
+        case .daily:
+            let interval = max(chore.recurrenceInterval ?? 1, 1)
+            return interval == 1 ? "Daily" : "Every \(interval) days"
+        case .weekly:
+            return "Weekly · \(Self.weekdayName(for: chore.recurrenceDay ?? 2))"
+        case .monthly:
+            return "Monthly · Day \(chore.recurrenceDayOfMonth ?? 1)"
+        case .custom:
+            let interval = max(chore.recurrenceInterval ?? chore.frequencyDays, 1)
+            return "Every \(interval) days"
+        }
+    }
+
+    private static func weekdayName(for weekday: Int) -> String {
+        let symbols = Calendar.current.weekdaySymbols
+        let index = min(max(weekday, 1), symbols.count) - 1
+        return symbols[index]
+    }
+}
+
+private struct RecurringChoreEditorSheet: View {
+    @ObservedObject var store: RecurringChoreStore
+    let categories: [BacklogCategory]
+    let members: [Member]
+    let chore: RecurringChore?
+
+    @EnvironmentObject private var themeStore: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var categoryId: UUID?
+    @State private var assigneeId: UUID?
+    @State private var recurrenceType: RecurringChore.RecurrenceType
+    @State private var recurrenceInterval: Int
+    @State private var recurrenceDay: Int
+    @State private var recurrenceDayOfMonth: Int
+    @State private var notes: String
+    @State private var isActive: Bool
+
+    init(
+        store: RecurringChoreStore,
+        categories: [BacklogCategory],
+        members: [Member],
+        chore: RecurringChore?
+    ) {
+        self.store = store
+        self.categories = categories
+        self.members = members
+        self.chore = chore
+        _title = State(initialValue: chore?.title ?? "")
+        _categoryId = State(initialValue: chore?.categoryId ?? categories.first?.id)
+        _assigneeId = State(initialValue: chore?.assigneeId ?? members.first?.id)
+        _recurrenceType = State(initialValue: chore?.recurrenceType ?? .weekly)
+        _recurrenceInterval = State(initialValue: max(chore?.recurrenceInterval ?? 1, 1))
+        _recurrenceDay = State(initialValue: chore?.recurrenceDay ?? Calendar.current.component(.weekday, from: Date()))
+        _recurrenceDayOfMonth = State(initialValue: chore?.recurrenceDayOfMonth ?? 1)
+        _notes = State(initialValue: chore?.notes ?? "")
+        _isActive = State(initialValue: chore?.isActive ?? true)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Title", text: $title)
+                        .font(themeStore.font(for: .body))
+                        .textInputAutocapitalization(.sentences)
+                } header: {
+                    Text("Chore")
+                        .font(themeStore.font(for: .sectionHeader))
+                }
+
+                Section {
+                    Picker("Category", selection: $categoryId) {
+                        Text("No category").tag(UUID?.none)
+                        ForEach(categories) { category in
+                            Text(category.title).tag(Optional(category.id))
+                        }
+                    }
+                    .font(themeStore.font(for: .body))
+
+                    Picker("Assignee", selection: $assigneeId) {
+                        ForEach(members) { member in
+                            Text(member.displayName).tag(Optional(member.id))
+                        }
+                    }
+                    .font(themeStore.font(for: .body))
+                } header: {
+                    Text("Ownership")
+                        .font(themeStore.font(for: .sectionHeader))
+                }
+
+                Section {
+                    Picker("Frequency", selection: $recurrenceType) {
+                        Text("Daily").tag(RecurringChore.RecurrenceType.daily)
+                        Text("Weekly").tag(RecurringChore.RecurrenceType.weekly)
+                        Text("Monthly").tag(RecurringChore.RecurrenceType.monthly)
+                    }
+                    .pickerStyle(.segmented)
+
+                    recurrenceControls
+                } header: {
+                    Text("Schedule")
+                        .font(themeStore.font(for: .sectionHeader))
+                }
+
+                Section {
+                    TextField("Notes", text: $notes, axis: .vertical)
+                        .font(themeStore.font(for: .body))
+                        .lineLimit(2 ... 4)
+
+                    Toggle(isOn: $isActive) {
+                        Text("Active")
+                            .font(themeStore.font(for: .body))
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(themeStore.canvasColor.ignoresSafeArea())
+            .navigationTitle(chore == nil ? "New Chore" : "Edit Chore")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        HapticManager.lightTap()
+                        dismiss()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(chore == nil ? "Create" : "Save") {
+                        save()
+                    }
+                    .font(themeStore.font(for: .buttonLabel))
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recurrenceControls: some View {
+        switch recurrenceType {
+        case .daily:
+            Stepper(value: $recurrenceInterval, in: 1 ... 30) {
+                Text(recurrenceInterval == 1 ? "Every day" : "Every \(recurrenceInterval) days")
+                    .font(themeStore.font(for: .body))
+            }
+        case .weekly:
+            Picker("Day", selection: $recurrenceDay) {
+                ForEach(1 ... 7, id: \.self) { weekday in
+                    Text(Self.weekdayName(for: weekday)).tag(weekday)
+                }
+            }
+            .font(themeStore.font(for: .body))
+        case .monthly:
+            Stepper(value: $recurrenceDayOfMonth, in: 1 ... 28) {
+                Text("Day \(recurrenceDayOfMonth)")
+                    .font(themeStore.font(for: .body))
+            }
+        case .custom:
+            Stepper(value: $recurrenceInterval, in: 1 ... 30) {
+                Text("Every \(recurrenceInterval) days")
+                    .font(themeStore.font(for: .body))
+            }
+        }
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && assigneeId != nil
+    }
+
+    private func save() {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        HapticManager.lightTap()
+
+        _ = _Concurrency.Task {
+            if var existing = chore {
+                existing.title = trimmedTitle
+                existing.categoryId = categoryId
+                existing.assigneeId = assigneeId
+                existing.defaultAssigneeIds = assigneeId.map { [$0] } ?? []
+                existing.recurrenceType = recurrenceType
+                existing.recurrenceInterval = recurrenceInterval
+                existing.recurrenceDay = recurrenceType == .weekly ? recurrenceDay : nil
+                existing.recurrenceDayOfMonth = recurrenceType == .monthly ? recurrenceDayOfMonth : nil
+                existing.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+                existing.isActive = isActive
+                existing.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: existing, from: Date())
+                existing.updatedAt = Date()
+                await store.updateChore(existing)
+            } else {
+                await store.addChore(
+                    title: trimmedTitle,
+                    recurrenceType: recurrenceType,
+                    recurrenceInterval: recurrenceInterval,
+                    recurrenceDay: recurrenceType == .weekly ? recurrenceDay : nil,
+                    recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
+                    assigneeId: assigneeId,
+                    categoryId: categoryId,
+                    notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
+                    isActive: isActive
+                )
+            }
+            await MainActor.run {
+                dismiss()
+            }
+        }
+    }
+
+    private static func weekdayName(for weekday: Int) -> String {
+        let symbols = Calendar.current.weekdaySymbols
+        let index = min(max(weekday, 1), symbols.count) - 1
+        return symbols[index]
     }
 }
 
