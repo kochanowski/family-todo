@@ -112,13 +112,20 @@ struct SettingsView: View {
         Section {
             ThemeMiniatureCarousel(selectedTheme: Binding(
                 get: { themeStore.unifiedTheme },
-                set: {
+                set: { newTheme in
                     HapticManager.selection()
-                    themeStore.unifiedTheme = $0
+                    guard PremiumAccessPolicy.canUseTheme(
+                        newTheme,
+                        isPremium: premiumSubscriptionManager.isPremium
+                    ) else {
+                        premiumSubscriptionManager.presentUpsell(.premiumTheme)
+                        return
+                    }
+                    themeStore.unifiedTheme = newTheme
                 }
-            ))
-            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-            .listRowBackground(Color.clear)
+            ), isPremium: premiumSubscriptionManager.isPremium)
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowBackground(Color.clear)
         } header: {
             Text("Appearance")
         }
@@ -306,6 +313,13 @@ struct SettingsView: View {
     private func tabTintButton(for tint: TabTintColor) -> some View {
         Button {
             HapticManager.selection()
+            guard PremiumAccessPolicy.canUseAccentColor(
+                tint,
+                isPremium: premiumSubscriptionManager.isPremium
+            ) else {
+                premiumSubscriptionManager.presentUpsell(.accentColor)
+                return
+            }
             themeStore.tabTintColor = tint
         } label: {
             VStack(spacing: 6) {
@@ -325,6 +339,12 @@ struct SettingsView: View {
                         x: 0,
                         y: 2
                     )
+                    .overlay(alignment: .topTrailing) {
+                        if shouldShowProBadge(for: tint) {
+                            ProBadgeView()
+                                .offset(x: 7, y: -7)
+                        }
+                    }
                 Text(tint.displayName)
                     .font(themeStore.font(for: .tabLabel))
                     .foregroundStyle(themeStore.tabTintColor == tint ? .primary : .secondary)
@@ -332,6 +352,11 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+    }
+
+    private func shouldShowProBadge(for tint: TabTintColor) -> Bool {
+        !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canUseAccentColor(tint, isPremium: false)
     }
 
     private func destructiveActionLabel(
@@ -471,6 +496,7 @@ struct SettingsView: View {
 private struct ThemeMiniatureCarousel: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @Binding var selectedTheme: UnifiedTheme
+    let isPremium: Bool
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -478,17 +504,23 @@ private struct ThemeMiniatureCarousel: View {
                 ForEach(UnifiedTheme.allCases) { theme in
                     ThemeMiniatureCard(
                         theme: theme,
-                        isSelected: selectedTheme == theme
+                        isSelected: selectedTheme == theme,
+                        showsProBadge: shouldShowProBadge(for: theme)
                     ) {
                         selectedTheme = theme
                     }
                     .environmentObject(themeStore)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 10)
+            .padding(.trailing, 10)
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.viewAligned)
+    }
+
+    private func shouldShowProBadge(for theme: UnifiedTheme) -> Bool {
+        !isPremium && !PremiumAccessPolicy.canUseTheme(theme, isPremium: false)
     }
 }
 
@@ -496,21 +528,32 @@ private struct ThemeMiniatureCard: View {
     @EnvironmentObject private var themeStore: ThemeStore
     let theme: UnifiedTheme
     let isSelected: Bool
+    let showsProBadge: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                ThemeMiniatureContent(theme: theme)
-                    .frame(width: 85, height: 150)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                isSelected ? themeStore.accentTabColor : Color.primary.opacity(0.12),
-                                lineWidth: isSelected ? 2 : 1
-                            )
+                ZStack(alignment: .topTrailing) {
+                    ThemeMiniatureContent(theme: theme)
+                        .frame(width: 85, height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(
+                                    isSelected ? themeStore.accentTabColor : Color.primary.opacity(0.12),
+                                    lineWidth: isSelected ? 2 : 1
+                                )
+                        }
+
+                    if showsProBadge {
+                        ProBadgeView()
+                            .offset(x: 7, y: -7)
+                            .allowsHitTesting(false)
                     }
+                }
+                .padding(.top, showsProBadge ? 8 : 0)
+                .padding(.trailing, showsProBadge ? 8 : 0)
 
                 Group {
                     if isSelected {

@@ -59,6 +59,7 @@ private struct BacklogContent: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @EnvironmentObject private var subscriptionManager: CloudKitSubscriptionManager
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
 
     @State private var isAddingCategory = false
     @State private var newCategoryName = ""
@@ -184,10 +185,19 @@ private struct BacklogContent: View {
                         HapticManager.lightTap()
                         _ = _Concurrency.Task {
                             let previousCategoryCount = store.categories.count
-                            await store.addCategory(name, colorHex: colorHex)
+                            let result = await store.addCategory(
+                                name,
+                                colorHex: colorHex,
+                                isPremium: premiumSubscriptionManager.isPremium
+                            )
                             await MainActor.run {
-                                if store.categories.count > previousCategoryCount {
+                                switch result {
+                                case .created where store.categories.count > previousCategoryCount:
                                     AppTips.donateIdeasCategoryCreated()
+                                case let .blocked(feature):
+                                    premiumSubscriptionManager.presentUpsell(UpsellContext(feature: feature))
+                                case .created, .ignored:
+                                    break
                                 }
                             }
                         }
@@ -577,10 +587,17 @@ private struct BacklogContent: View {
             Button {
                 presentNewCategorySheet()
             } label: {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 20))
-                    .foregroundStyle(themeStore.accentTabColor)
-                    .frame(width: 44, height: 44)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 20))
+                        .foregroundStyle(themeStore.accentTabColor)
+                        .frame(width: 44, height: 44)
+
+                    if isAtFreeCategoryLimit {
+                        ProBadgeView()
+                            .offset(x: 2, y: -2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("backlogAddCategoryButton")
@@ -994,8 +1011,27 @@ private struct BacklogContent: View {
 
     private func presentNewCategorySheet() {
         HapticManager.lightTap()
+        guard canCreateCategory else {
+            premiumSubscriptionManager.presentUpsell(.backlogCategoryLimit)
+            return
+        }
         newCategoryColorHex = MemberColorToken.randomHex()
         isAddingCategory = true
+    }
+
+    private var canCreateCategory: Bool {
+        PremiumAccessPolicy.canCreateBacklogCategory(
+            currentCount: store.categories.count,
+            isPremium: premiumSubscriptionManager.isPremium
+        )
+    }
+
+    private var isAtFreeCategoryLimit: Bool {
+        !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canCreateBacklogCategory(
+                currentCount: store.categories.count,
+                isPremium: false
+            )
     }
 
     private var hasVisibleIdeas: Bool {

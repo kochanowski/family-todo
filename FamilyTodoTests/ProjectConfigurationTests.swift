@@ -36,13 +36,70 @@ final class ProjectConfigurationTests: XCTestCase {
         )
     }
 
+    func testMarketingVersionIsReadyForTestFlight13() throws {
+        let projectContents = try loadProjectFile()
+
+        XCTAssertTrue(projectContents.contains("MARKETING_VERSION = 1.3;"))
+        XCTAssertFalse(projectContents.contains("MARKETING_VERSION = 1.2;"))
+    }
+
+    func testVisiblePremiumCopyUsesDwelloProBranding() throws {
+        let repoRootURL = repoRootURL()
+        let visibleSourceFiles = [
+            "FamilyTodo/Views/MoreView.swift",
+            "FamilyTodo/Views/SettingsView.swift",
+            "FamilyTodo/Views/BacklogView.swift",
+            "FamilyTodo/Views/BundlesManagementView.swift",
+            "FamilyTodo/Views/ShoppingListView.swift",
+            "FamilyTodo/Views/HouseholdSettingsView.swift",
+            "FamilyTodo/Views/Components/PremiumUpsellSheet.swift",
+            "FamilyTodo/Views/Components/ProBadgeView.swift",
+        ]
+
+        let combinedCopy = try visibleSourceFiles
+            .map { path in
+                try String(contentsOf: repoRootURL.appendingPathComponent(path), encoding: .utf8)
+            }
+            .joined(separator: "\n")
+
+        XCTAssertTrue(combinedCopy.contains("Dwello Pro"))
+        XCTAssertFalse(combinedCopy.contains("Dwello Plus"))
+        XCTAssertFalse(combinedCopy.contains("HousePulse"))
+    }
+
+    func testPremiumLimitUIUsesContextualUpsellInsteadOfNativeAlertHelper() throws {
+        let repoRootURL = repoRootURL()
+        let sourceFiles = [
+            "FamilyTodo/Services/SubscriptionManager.swift",
+            "FamilyTodo/Views/MoreView.swift",
+            "FamilyTodo/Views/SettingsView.swift",
+            "FamilyTodo/Views/BacklogView.swift",
+            "FamilyTodo/Views/BundlesManagementView.swift",
+            "FamilyTodo/Views/ShoppingListView.swift",
+            "FamilyTodo/Views/HouseholdSettingsView.swift",
+        ]
+
+        let combinedSource = try sourceFiles
+            .map { path in
+                try String(contentsOf: repoRootURL.appendingPathComponent(path), encoding: .utf8)
+            }
+            .joined(separator: "\n")
+
+        XCTAssertTrue(combinedSource.contains("presentUpsell"))
+        XCTAssertFalse(combinedSource.contains("premiumFeaturePrompt"))
+        XCTAssertFalse(combinedSource.contains("premiumFeaturePromptAlert"))
+    }
+
     private func loadProjectFile() throws -> String {
-        let testsDirectoryURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-        let repoRootURL = testsDirectoryURL.deletingLastPathComponent()
-        let projectURL = repoRootURL
+        let projectURL = repoRootURL()
             .appendingPathComponent("FamilyTodo.xcodeproj")
             .appendingPathComponent("project.pbxproj")
         return try String(contentsOf: projectURL, encoding: .utf8)
+    }
+
+    private func repoRootURL() -> URL {
+        let testsDirectoryURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+        return testsDirectoryURL.deletingLastPathComponent()
     }
 }

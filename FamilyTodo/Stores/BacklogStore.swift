@@ -43,6 +43,12 @@ final class BacklogStore: ObservableObject {
         case blocked(CategoryDeletionBlockReason)
     }
 
+    enum CategoryCreationResult: Equatable {
+        case created(BacklogCategory)
+        case blocked(PremiumFeature)
+        case ignored
+    }
+
     private struct PendingSyncSnapshot {
         var pendingUploadItemsByID: [UUID: BacklogItem]
         var pendingDeleteItemIDs: Set<UUID>
@@ -612,10 +618,21 @@ final class BacklogStore: ObservableObject {
 
     // MARK: - Category Operations
 
-    func addCategory(_ title: String, colorHex: String? = nil) async {
-        guard let householdId else { return }
+    @discardableResult
+    func addCategory(
+        _ title: String,
+        colorHex: String? = nil,
+        isPremium: Bool
+    ) async -> CategoryCreationResult {
+        guard let householdId else { return .ignored }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        guard !trimmedTitle.isEmpty else { return .ignored }
+        guard PremiumAccessPolicy.canCreateBacklogCategory(
+            currentCount: categories.count,
+            isPremium: isPremium
+        ) else {
+            return .blocked(.backlogCategoryLimit)
+        }
         let categoryId = UUID()
         let resolvedColorHex = resolveCategoryColorHex(
             requested: colorHex,
@@ -647,11 +664,12 @@ final class BacklogStore: ObservableObject {
             didPersistLocally = true
         }
 
-        guard didPersistLocally else { return }
+        guard didPersistLocally else { return .ignored }
         postLocalBacklogRefresh(includeTaskBoard: true)
 
-        guard isCloudSyncEnabled else { return }
+        guard isCloudSyncEnabled else { return .created(category) }
         replayPendingMutationsInBackground()
+        return .created(category)
     }
 
     @discardableResult

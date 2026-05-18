@@ -41,6 +41,7 @@ private struct ShoppingListContent: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var celebrationManager: CelebrationManager
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -94,6 +95,56 @@ private struct ShoppingListContent: View {
     }
 
     var body: some View {
+        shoppingRootWithFeedback
+    }
+
+    private var shoppingRootWithFeedback: some View {
+        shoppingRootWithSheets
+            .overlay(alignment: .bottom) {
+                if let activeToast {
+                    ToastView(message: activeToast.message)
+                        .padding(.horizontal, ToastView.Metrics.horizontalInset)
+                        .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
+                        .transition(ToastView.AnimationTokens.transition)
+                        .id(activeToast.id)
+                }
+            }
+            .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
+    }
+
+    private var shoppingRootWithSheets: some View {
+        shoppingRootWithLifecycle
+            .sheet(isPresented: $showClearToBuyConfirmation) {
+                AppConfirmationSheet(
+                    title: "Clear shopping list?",
+                    message: "This removes current To Buy items. Recently Purchased stays unchanged.",
+                    primaryTitle: "Clear",
+                    titleFontToken: .profileName,
+                    messageFontToken: .bodyStrong,
+                    primaryStyle: .destructive,
+                    onPrimary: clearToBuy
+                )
+            }
+            .sheet(isPresented: $showRestock) {
+                RestockSheet(
+                    store: store,
+                    onRestore: restoreRecentItem,
+                    onDeleteItem: deleteRecentItem,
+                    onClearAll: clearRecentItems
+                )
+            }
+            .sheet(isPresented: $showQuickAddBundleChooser) {
+                ShoppingQuickAddBundleSheet(
+                    bundles: quickAddBundles,
+                    onSelectBundle: { bundle in
+                        showQuickAddBundleChooser = false
+                        handleBundleQuickAdd(bundle)
+                    }
+                )
+            }
+    }
+
+    private var shoppingRootWithLifecycle: some View {
         GeometryReader(content: shoppingGeometryContent)
             .task {
                 guard !didPerformInitialLoad else { return }
@@ -176,44 +227,6 @@ private struct ShoppingListContent: View {
             ) { _ in
                 isKeyboardVisible = false
             }
-            .sheet(isPresented: $showClearToBuyConfirmation) {
-                AppConfirmationSheet(
-                    title: "Clear shopping list?",
-                    message: "This removes current To Buy items. Recently Purchased stays unchanged.",
-                    primaryTitle: "Clear",
-                    titleFontToken: .profileName,
-                    messageFontToken: .bodyStrong,
-                    primaryStyle: .destructive,
-                    onPrimary: clearToBuy
-                )
-            }
-            .sheet(isPresented: $showRestock) {
-                RestockSheet(
-                    store: store,
-                    onRestore: restoreRecentItem,
-                    onDeleteItem: deleteRecentItem,
-                    onClearAll: clearRecentItems
-                )
-            }
-            .sheet(isPresented: $showQuickAddBundleChooser) {
-                ShoppingQuickAddBundleSheet(
-                    bundles: quickAddBundles,
-                    onSelectBundle: { bundle in
-                        showQuickAddBundleChooser = false
-                        handleBundleQuickAdd(bundle)
-                    }
-                )
-            }
-            .overlay(alignment: .bottom) {
-                if let activeToast {
-                    ToastView(message: activeToast.message)
-                        .padding(.horizontal, ToastView.Metrics.horizontalInset)
-                        .padding(.bottom, AppChromeMetrics.compactCTAHeight + 22)
-                        .transition(ToastView.AnimationTokens.transition)
-                        .id(activeToast.id)
-                }
-            }
-            .animation(ToastView.AnimationTokens.curve, value: activeToast?.id)
             .onAppear {
                 isScreenVisible = true
                 if didPerformInitialLoad {
@@ -548,6 +561,10 @@ private struct ShoppingListContent: View {
             HStack(spacing: 0) {
                 Text("Add item")
                     .font(themeStore.font(for: .buttonLabel))
+                if shouldShowLockedQuickAddBadge {
+                    ProBadgeView()
+                        .padding(.leading, 7)
+                }
             }
             .foregroundStyle(foreground)
             .padding(.horizontal, AppChromeMetrics.compactCTAHorizontalPadding)
@@ -1003,6 +1020,10 @@ private struct ShoppingListContent: View {
         bundleStore.quickAddBundles
     }
 
+    private var shouldShowLockedQuickAddBadge: Bool {
+        !premiumSubscriptionManager.isPremium && !quickAddBundles.isEmpty
+    }
+
     private var quickAddFeedbackEnabled: Bool {
         !quickAddBundles.isEmpty
     }
@@ -1047,6 +1068,12 @@ private struct ShoppingListContent: View {
 
     private func handleQuickAddLongPress() {
         guard quickAddFeedbackEnabled else { return }
+        guard PremiumAccessPolicy.canUseShoppingBundles(
+            isPremium: premiumSubscriptionManager.isPremium
+        ) else {
+            premiumSubscriptionManager.presentUpsell(.shoppingBundles)
+            return
+        }
 
         withAnimation(WowAnimation.easeOut) {
             isQuickAddPressVisualActive = false
@@ -1060,6 +1087,13 @@ private struct ShoppingListContent: View {
     }
 
     private func handleBundleQuickAdd(_ bundle: ShoppingBundle) {
+        guard PremiumAccessPolicy.canUseShoppingBundles(
+            isPremium: premiumSubscriptionManager.isPremium
+        ) else {
+            showQuickAddBundleChooser = false
+            premiumSubscriptionManager.presentUpsell(.shoppingBundles)
+            return
+        }
         cancelEditingItem()
         dismissRapidEntry()
         dismissInlineInsert()

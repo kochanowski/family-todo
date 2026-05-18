@@ -1,5 +1,4 @@
 import Foundation
-import RevenueCatUI
 import SwiftData
 import SwiftUI
 import UIKit
@@ -85,22 +84,6 @@ struct MoreView: View {
         .task {
             await premiumSubscriptionManager.refreshCustomerInfo()
         }
-        .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
-            PaywallView()
-                .onDisappear {
-                    _ = _Concurrency.Task {
-                        await premiumSubscriptionManager.refreshCustomerInfo()
-                    }
-                }
-        }
-        .sheet(isPresented: $premiumSubscriptionManager.displayCustomerCenter) {
-            CustomerCenterView()
-                .onDisappear {
-                    _ = _Concurrency.Task {
-                        await premiumSubscriptionManager.refreshCustomerInfo()
-                    }
-                }
-        }
     }
 
     // MARK: - Header
@@ -127,7 +110,7 @@ struct MoreView: View {
                     .foregroundStyle(.white.opacity(0.95))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(premiumSubscriptionManager.isPremium ? "Dwello Plus Active" : "Dwello Plus")
+                    Text(premiumSubscriptionManager.isPremium ? "Dwello Pro Active" : "Dwello Pro")
                         .font(themeStore.font(for: .inlineTitle))
                         .foregroundStyle(.white)
 
@@ -161,7 +144,7 @@ struct MoreView: View {
                                 .controlSize(.small)
                                 .tint(themeStore.accentTabColor)
                         }
-                        Text("Upgrade to Dwello Plus")
+                        Text("Upgrade to Dwello Pro")
                         Spacer()
                     }
                 }
@@ -369,6 +352,7 @@ struct CategoriesManagementView: View {
     @EnvironmentObject private var userSession: UserSession
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @State private var selectedCategory: BacklogCategory?
     @State private var isAddingCategory = false
     @State private var newCategoryColorHex = MemberColorToken.randomHex()
@@ -421,10 +405,19 @@ struct CategoriesManagementView: View {
 
             Section {
                 Button {
+                    guard canCreateCategory else {
+                        premiumSubscriptionManager.presentUpsell(.backlogCategoryLimit)
+                        return
+                    }
                     newCategoryColorHex = MemberColorToken.randomHex()
                     isAddingCategory = true
                 } label: {
-                    Label("New category", systemImage: "plus.circle")
+                    HStack(spacing: 8) {
+                        Label("New category", systemImage: "plus.circle")
+                        if isAtFreeCategoryLimit {
+                            ProBadgeView(size: .inline)
+                        }
+                    }
                 }
             }
         }
@@ -496,11 +489,33 @@ struct CategoriesManagementView: View {
                 onSubmit: { name, colorHex in
                     newCategoryColorHex = MemberColorToken.randomHex()
                     _ = _Concurrency.Task {
-                        await store.addCategory(name, colorHex: colorHex)
+                        let result = await store.addCategory(
+                            name,
+                            colorHex: colorHex,
+                            isPremium: premiumSubscriptionManager.isPremium
+                        )
+                        if case let .blocked(feature) = result {
+                            premiumSubscriptionManager.presentUpsell(UpsellContext(feature: feature))
+                        }
                     }
                 }
             )
         }
+    }
+
+    private var canCreateCategory: Bool {
+        PremiumAccessPolicy.canCreateBacklogCategory(
+            currentCount: store.categories.count,
+            isPremium: premiumSubscriptionManager.isPremium
+        )
+    }
+
+    private var isAtFreeCategoryLimit: Bool {
+        !premiumSubscriptionManager.isPremium &&
+            !PremiumAccessPolicy.canCreateBacklogCategory(
+                currentCount: store.categories.count,
+                isPremium: false
+            )
     }
 }
 

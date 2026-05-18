@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct BacklogCategory: Identifiable, Codable {
+struct BacklogCategory: Identifiable, Codable, Equatable {
     let id: UUID
     let householdId: UUID
     var title: String

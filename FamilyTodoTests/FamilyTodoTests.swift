@@ -116,6 +116,28 @@ final class ThemeStoreTests: XCTestCase {
         assertColor(foreground, matches: .black)
     }
 
+    func testPremiumAccessFallbackResetsPremiumThemeAndAccentForFreeUsers() {
+        let store = ThemeStore()
+        store.unifiedTheme = .paper
+        store.tabTintColor = .purple
+
+        store.applyPremiumAccess(isPremium: false)
+
+        XCTAssertEqual(store.unifiedTheme, .auto)
+        XCTAssertEqual(store.tabTintColor, .defaultGreen)
+    }
+
+    func testPremiumAccessKeepsPremiumThemeAndAccentForPremiumUsers() {
+        let store = ThemeStore()
+        store.unifiedTheme = .retroDark
+        store.tabTintColor = .pink
+
+        store.applyPremiumAccess(isPremium: true)
+
+        XCTAssertEqual(store.unifiedTheme, .retroDark)
+        XCTAssertEqual(store.tabTintColor, .pink)
+    }
+
     func testInactiveTabBarColorUsesBlackForLightTheme() {
         let store = ThemeStore()
         store.unifiedTheme = .light
@@ -297,6 +319,55 @@ final class ThemeStoreTests: XCTestCase {
         var alpha = CGFloat.zero
         color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         return RGBAComponents(red: red, green: green, blue: blue, alpha: alpha)
+    }
+}
+
+@MainActor
+final class PremiumUpsellTests: XCTestCase {
+    func testUpsellContextProvidesDwelloProCopyForEveryPremiumGate() {
+        let contexts: [UpsellContext] = [
+            .premiumTheme,
+            .accentColor,
+            .backlogCategoryLimit,
+            .householdMemberLimit,
+            .shoppingBundles,
+        ]
+
+        for context in contexts {
+            XCTAssertFalse(context.id.isEmpty)
+            XCTAssertEqual(context.eyebrow, "Dwello Pro")
+            XCTAssertFalse(context.title.isEmpty)
+            XCTAssertTrue(context.message.contains("Dwello Pro"))
+            XCTAssertEqual(context.primaryCTATitle, "See Dwello Pro")
+            XCTAssertFalse(context.iconName.isEmpty)
+        }
+    }
+
+    func testUpsellContextMapsFromPremiumFeature() {
+        XCTAssertEqual(UpsellContext(feature: .premiumTheme), .premiumTheme)
+        XCTAssertEqual(UpsellContext(feature: .accentColor), .accentColor)
+        XCTAssertEqual(UpsellContext(feature: .backlogCategoryLimit), .backlogCategoryLimit)
+        XCTAssertEqual(UpsellContext(feature: .householdMemberLimit), .householdMemberLimit)
+        XCTAssertEqual(UpsellContext(feature: .shoppingBundles), .shoppingBundles)
+    }
+
+    func testPresentUpsellStoresActiveContext() {
+        let manager = SubscriptionManager()
+
+        manager.presentUpsell(.shoppingBundles)
+
+        XCTAssertEqual(manager.activeUpsellContext, .shoppingBundles)
+        XCTAssertFalse(manager.displayPaywall)
+    }
+
+    func testPresentPaywallFromUpsellClearsContextAndShowsPaywall() {
+        let manager = SubscriptionManager()
+        manager.activeUpsellContext = .accentColor
+
+        manager.presentPaywallFromUpsell()
+
+        XCTAssertNil(manager.activeUpsellContext)
+        XCTAssertTrue(manager.displayPaywall)
     }
 }
 

@@ -94,7 +94,8 @@ final class ShoppingBundleStoreTests: XCTestCase {
         await store.createBundle(
             name: "Weekend breakfast",
             icon: "shippingbox.fill",
-            items: ["Eggs", "Bread", " "]
+            items: ["Eggs", "Bread", " "],
+            isPremium: true
         )
 
         XCTAssertEqual(store.bundles.count, 1)
@@ -111,7 +112,7 @@ final class ShoppingBundleStoreTests: XCTestCase {
         created.name = "Sunday breakfast"
         created.icon = "archivebox.fill"
         created.items = ["Bagels", "Jam"]
-        await store.updateBundle(created)
+        await store.updateBundle(created, isPremium: true)
 
         cachedBundles = try modelContainer.mainContext.fetch(createDescriptor)
         XCTAssertEqual(store.bundles.first?.name, "Sunday breakfast")
@@ -123,6 +124,37 @@ final class ShoppingBundleStoreTests: XCTestCase {
 
         XCTAssertTrue(store.bundles.isEmpty)
         XCTAssertTrue(try modelContainer.mainContext.fetch(createDescriptor).isEmpty)
+    }
+
+    func testFreeBundleCreateAndUpdateAreBlockedButDeleteStaysAvailable() async throws {
+        let blockedCreate = await store.createBundle(
+            name: "Blocked",
+            items: ["Milk"],
+            isPremium: false
+        )
+
+        XCTAssertEqual(blockedCreate, .blocked(.shoppingBundles))
+        XCTAssertTrue(store.bundles.isEmpty)
+
+        let existing = ShoppingBundle(
+            householdId: householdId,
+            name: "Existing",
+            items: ["Eggs"]
+        )
+        modelContainer.mainContext.insert(CachedShoppingBundle(from: existing))
+        try modelContainer.mainContext.save()
+        await store.loadBundlesForDisplay()
+
+        var edited = try XCTUnwrap(store.bundles.first)
+        edited.name = "Edited"
+        let blockedUpdate = await store.updateBundle(edited, isPremium: false)
+
+        XCTAssertEqual(blockedUpdate, .blocked(.shoppingBundles))
+        XCTAssertEqual(store.bundles.first?.name, "Existing")
+
+        await store.deleteBundle(existing)
+
+        XCTAssertTrue(store.bundles.isEmpty)
     }
 
     func testMergeCloudSnapshotPendingUploadWinsAndPendingDeleteRemoved() {

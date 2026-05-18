@@ -162,6 +162,101 @@ final class HouseholdJoinFlowTests: XCTestCase {
         XCTAssertTrue(cachedTargetMembers.first?.isActive ?? false)
     }
 
+    func testFreeHouseholdAtMemberLimitRejectsNewJoin() async throws {
+        let userId = "third-user"
+        let targetHousehold = TestCacheFixtures.household(name: "Free Home", ownerId: "owner-2")
+        let inviteToken = InviteToken(
+            id: "FREE2MAX",
+            code: "FREE2MAX",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/free",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let existingMembers = [
+            TestCacheFixtures.member(
+                householdId: targetHousehold.id,
+                userId: "owner-2",
+                displayName: "Owner",
+                role: .owner
+            ),
+            TestCacheFixtures.member(
+                householdId: targetHousehold.id,
+                userId: "member-2",
+                displayName: "Member"
+            ),
+        ]
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            inviteRedeemResults: [inviteToken.code: targetHousehold],
+            participantMembers: existingMembers
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        do {
+            try await store.joinHousehold(
+                inviteCode: inviteToken.code,
+                userId: userId,
+                displayName: "Taylor"
+            )
+            XCTFail("Expected free member limit to reject the join.")
+        } catch let error as HouseholdError {
+            XCTAssertEqual(error, .householdMemberLimitReached)
+        }
+    }
+
+    func testPremiumHouseholdAtFreeMemberLimitAllowsNewJoin() async throws {
+        let userId = "third-user"
+        var targetHousehold = TestCacheFixtures.household(name: "Premium Home", ownerId: "owner-2")
+        targetHousehold.isPremium = true
+        let inviteToken = InviteToken(
+            id: "PRO2MAX",
+            code: "PRO2MAX",
+            householdId: targetHousehold.id,
+            shareURL: "https://www.icloud.com/share/pro",
+            createdAt: TestCacheFixtures.referenceDate,
+            expiresAt: TestCacheFixtures.referenceDate.addingTimeInterval(InviteToken.ttl),
+            isRevoked: false,
+            usesCount: 0
+        )
+        let existingMembers = [
+            TestCacheFixtures.member(
+                householdId: targetHousehold.id,
+                userId: "owner-2",
+                displayName: "Owner",
+                role: .owner
+            ),
+            TestCacheFixtures.member(
+                householdId: targetHousehold.id,
+                userId: "member-2",
+                displayName: "Member"
+            ),
+        ]
+        let cloud = FakeHouseholdCloud(
+            households: [targetHousehold],
+            inviteTokens: [inviteToken],
+            inviteRedeemResults: [inviteToken.code: targetHousehold],
+            participantMembers: existingMembers
+        )
+
+        let store = makeStore(cloud: cloud)
+        store.setSyncMode(.cloud)
+
+        try await store.joinHousehold(
+            inviteCode: inviteToken.code,
+            userId: userId,
+            displayName: "Taylor"
+        )
+
+        XCTAssertEqual(store.currentHousehold?.id, targetHousehold.id)
+        XCTAssertEqual(try cachedMembers(for: targetHousehold.id).count, 1)
+    }
+
     func testJoinInviteCodeClearsStaleLocalHouseholdSelection() async throws {
         let userId = "joined-user"
         let staleHousehold = TestCacheFixtures.household(name: "Stale Local", ownerId: "owner-old")

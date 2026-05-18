@@ -43,6 +43,27 @@ final class BacklogStoreTests: XCTestCase {
         XCTAssertEqual(restored.title, "Laundry")
     }
 
+    func testFreeCategoryLimitBlocksFifthCategoryButPremiumAllowsIt() async {
+        for index in 1 ... PremiumAccessPolicy.freeBacklogCategoryLimit {
+            let result = await store.addCategory("Category \(index)", isPremium: false)
+            if case .created = result {
+                continue
+            }
+            XCTFail("Expected free category \(index) to be created, got \(result)")
+        }
+
+        let blockedResult = await store.addCategory("Overflow", isPremium: false)
+        XCTAssertEqual(blockedResult, .blocked(.backlogCategoryLimit))
+        XCTAssertEqual(store.categories.count, PremiumAccessPolicy.freeBacklogCategoryLimit)
+
+        let premiumResult = await store.addCategory("Premium Overflow", isPremium: true)
+        if case .created = premiumResult {
+            XCTAssertEqual(store.categories.count, PremiumAccessPolicy.freeBacklogCategoryLimit + 1)
+        } else {
+            XCTFail("Expected premium category creation, got \(premiumResult)")
+        }
+    }
+
     func testPromoteUsesBacklogAssigneeWhenNoOverrideProvided() async throws {
         let categoryId = UUID()
         let assigneeId = UUID()
@@ -303,7 +324,7 @@ final class BacklogStoreTests: XCTestCase {
     }
 
     func testDeleteCategoryIsBlockedWhenIdeasStillExist() async {
-        await store.addCategory("Projects")
+        await store.addCategory("Projects", isPremium: true)
 
         guard let category = store.categories.first else {
             XCTFail("Expected category")
@@ -319,7 +340,7 @@ final class BacklogStoreTests: XCTestCase {
     }
 
     func testDeleteCategoryIsBlockedWhenTaskStillLinksToCategory() async throws {
-        await store.addCategory("Errands")
+        await store.addCategory("Errands", isPremium: true)
 
         guard let category = store.categories.first else {
             XCTFail("Expected category")
