@@ -433,6 +433,7 @@ final class RecurringChoreStore: ObservableObject {
         }
     }
 
+    @discardableResult
     func addChore(
         title: String,
         recurrenceType: RecurringChore.RecurrenceType,
@@ -444,10 +445,10 @@ final class RecurringChoreStore: ObservableObject {
         categoryId: UUID? = nil,
         notes: String? = nil,
         isActive: Bool = true
-    ) async {
-        guard let householdId else { return }
+    ) async -> RecurringChore? {
+        guard let householdId else { return nil }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
 
         var chore = RecurringChore(
             householdId: householdId,
@@ -466,13 +467,14 @@ final class RecurringChoreStore: ObservableObject {
         chores.append(chore)
         upsertCachedChore(chore)
 
-        guard isCloudSyncEnabled else { return }
+        guard isCloudSyncEnabled else { return chore }
         do {
             let scope = await cloudKit.getHouseholdScope()
             _ = try await cloudKit.saveRecurringChore(chore, scope: scope)
         } catch {
             self.error = error
         }
+        return chore
     }
 
     func updateChore(_ chore: RecurringChore) async {
@@ -507,7 +509,20 @@ final class RecurringChoreStore: ObservableObject {
         updated.lastGeneratedDate = date
         updated.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: updated, from: date)
         updated.updatedAt = Date()
-        await updateChore(updated)
+        if let index = chores.firstIndex(where: { $0.id == updated.id }) {
+            chores[index] = updated
+        } else {
+            chores.append(updated)
+        }
+        upsertCachedChore(updated)
+
+        guard isCloudSyncEnabled else { return }
+        do {
+            let scope = await cloudKit.getHouseholdScope()
+            _ = try await cloudKit.saveRecurringChore(updated, scope: scope)
+        } catch {
+            self.error = error
+        }
     }
 
     private func loadFromCache(householdId: UUID) {
@@ -571,6 +586,12 @@ final class RecurringChoreStore: ObservableObject {
 final class ChoreScheduler {
     static let shared = ChoreScheduler()
 
+    private enum OccurrenceMaterializationResult: Equatable {
+        case created
+        case alreadyExists
+        case skipped
+    }
+
     func runIfNeeded(
         householdId: UUID?,
         modelContext: ModelContext,
@@ -600,26 +621,79 @@ final class ChoreScheduler {
                 continue
             }
             if nextDate <= now {
-                if Self.hasGeneratedTask(for: chore, dueDate: nextDate, tasks: resolvedTaskStore.tasks) {
-                    await recurringStore.markGenerated(chore, at: now)
-                    continue
-                }
-
-                await resolvedTaskStore.createTask(
-                    title: chore.title,
-                    status: .backlog,
-                    assigneeId: chore.assigneeId,
-                    assigneeIds: chore.assigneeId.map { [$0] } ?? chore.defaultAssigneeIds,
-                    backlogCategoryId: chore.categoryId,
-                    areaId: chore.areaId,
+                let result = await materializeOccurrence(
+                    for: chore,
                     dueDate: nextDate,
-                    notes: chore.notes,
-                    taskType: .recurring,
-                    recurringChoreId: chore.id
+                    taskStore: resolvedTaskStore
                 )
-                await recurringStore.markGenerated(chore, at: now)
+                if result == .created || result == .alreadyExists {
+                    await recurringStore.markGenerated(chore, at: now)
+                }
             }
         }
+    }
+
+    @discardableResult
+    func generateInitialOccurrence(
+        for chore: RecurringChore,
+        recurringStore: RecurringChoreStore,
+        householdId: UUID?,
+        modelContext: ModelContext,
+        taskStore: TaskStore? = nil,
+        syncMode: SyncMode,
+        dueDate: Date
+    ) async -> Bool {
+        guard chore.isActive else { return false }
+        guard let householdId else { return false }
+
+        let resolvedTaskStore: TaskStore
+        if let taskStore {
+            resolvedTaskStore = taskStore
+        } else {
+            let createdTaskStore = TaskStore(modelContext: modelContext)
+            createdTaskStore.setHousehold(householdId)
+            createdTaskStore.setSyncMode(syncMode)
+            resolvedTaskStore = createdTaskStore
+        }
+        await resolvedTaskStore.loadTasks()
+
+        let occurrenceDate = Calendar.current.startOfDay(for: dueDate)
+        let result = await materializeOccurrence(
+            for: chore,
+            dueDate: occurrenceDate,
+            taskStore: resolvedTaskStore
+        )
+        guard result == .created || result == .alreadyExists else { return false }
+
+        await recurringStore.markGenerated(chore, at: dueDate)
+        return result == .created
+    }
+
+    private func materializeOccurrence(
+        for chore: RecurringChore,
+        dueDate: Date,
+        taskStore: TaskStore
+    ) async -> OccurrenceMaterializationResult {
+        if Self.hasGeneratedTask(for: chore, dueDate: dueDate, tasks: taskStore.tasks) {
+            return .alreadyExists
+        }
+
+        let result = await taskStore.createTask(
+            title: chore.title,
+            status: .backlog,
+            assigneeId: chore.assigneeId,
+            assigneeIds: chore.assigneeId.map { [$0] } ?? chore.defaultAssigneeIds,
+            backlogCategoryId: chore.categoryId,
+            areaId: chore.areaId,
+            dueDate: dueDate,
+            notes: chore.notes,
+            taskType: .recurring,
+            recurringChoreId: chore.id
+        )
+        guard result == .ok else { return .skipped }
+
+        NotificationCenter.default.post(name: .taskBoardDataDidChange, object: "local")
+        return .created
     }
 
     private static func hasGeneratedTask(for chore: RecurringChore, dueDate: Date, tasks: [Task]) -> Bool {
