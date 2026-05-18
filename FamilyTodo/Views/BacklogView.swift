@@ -2061,7 +2061,7 @@ private struct RecurringChoresView: View {
             Label("No Recurring Chores", systemImage: "arrow.triangle.2.circlepath")
         } description: {
             Text("Create chores that automatically return to your task board.")
-                .font(themeStore.font(for: .body))
+                .font(themeStore.font(for: .listRowTitle))
         } actions: {
             Button {
                 HapticManager.lightTap()
@@ -2125,7 +2125,7 @@ private struct RecurringChoreRow: View {
 
                     if let category {
                         Text(category.title)
-                            .font(themeStore.font(for: .caption))
+                            .font(themeStore.font(for: .chip))
                             .foregroundStyle(Color(hex: category.colorHex))
                     }
                 }
@@ -2202,7 +2202,7 @@ private struct RecurringChoreEditorSheet: View {
             Form {
                 Section {
                     TextField("Title", text: $title)
-                        .font(themeStore.font(for: .body))
+                        .font(themeStore.font(for: .listRowTitle))
                         .textInputAutocapitalization(.sentences)
                 } header: {
                     Text("Chore")
@@ -2216,14 +2216,14 @@ private struct RecurringChoreEditorSheet: View {
                             Text(category.title).tag(Optional(category.id))
                         }
                     }
-                    .font(themeStore.font(for: .body))
+                    .font(themeStore.font(for: .listRowTitle))
 
                     Picker("Assignee", selection: $assigneeId) {
                         ForEach(members) { member in
                             Text(member.displayName).tag(Optional(member.id))
                         }
                     }
-                    .font(themeStore.font(for: .body))
+                    .font(themeStore.font(for: .listRowTitle))
                 } header: {
                     Text("Ownership")
                         .font(themeStore.font(for: .sectionHeader))
@@ -2245,12 +2245,12 @@ private struct RecurringChoreEditorSheet: View {
 
                 Section {
                     TextField("Notes", text: $notes, axis: .vertical)
-                        .font(themeStore.font(for: .body))
+                        .font(themeStore.font(for: .listRowTitle))
                         .lineLimit(2 ... 4)
 
                     Toggle(isOn: $isActive) {
                         Text("Active")
-                            .font(themeStore.font(for: .body))
+                            .font(themeStore.font(for: .listRowTitle))
                     }
                 }
             }
@@ -2283,7 +2283,7 @@ private struct RecurringChoreEditorSheet: View {
         case .daily:
             Stepper(value: $recurrenceInterval, in: 1 ... 30) {
                 Text(recurrenceInterval == 1 ? "Every day" : "Every \(recurrenceInterval) days")
-                    .font(themeStore.font(for: .body))
+                    .font(themeStore.font(for: .listRowTitle))
             }
         case .weekly:
             Picker("Day", selection: $recurrenceDay) {
@@ -2291,16 +2291,16 @@ private struct RecurringChoreEditorSheet: View {
                     Text(Self.weekdayName(for: weekday)).tag(weekday)
                 }
             }
-            .font(themeStore.font(for: .body))
+            .font(themeStore.font(for: .listRowTitle))
         case .monthly:
             Stepper(value: $recurrenceDayOfMonth, in: 1 ... 28) {
                 Text("Day \(recurrenceDayOfMonth)")
-                    .font(themeStore.font(for: .body))
+                    .font(themeStore.font(for: .listRowTitle))
             }
         case .custom:
             Stepper(value: $recurrenceInterval, in: 1 ... 30) {
                 Text("Every \(recurrenceInterval) days")
-                    .font(themeStore.font(for: .body))
+                    .font(themeStore.font(for: .listRowTitle))
             }
         }
     }
