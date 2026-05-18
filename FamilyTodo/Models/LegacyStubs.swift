@@ -825,7 +825,7 @@ final class CachedRecurringChore {
 
     func toRecurringChore() -> RecurringChore {
         let resolvedAssigneeIds = assigneeId.map { [$0] } ?? []
-        RecurringChore(
+        return RecurringChore(
             id: id,
             householdId: householdId,
             title: title,
