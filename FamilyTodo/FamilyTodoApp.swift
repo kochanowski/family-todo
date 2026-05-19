@@ -131,7 +131,8 @@ struct FamilyTodoApp: App {
             await ChoreScheduler.shared.runIfNeeded(
                 householdId: userSession.currentHouseholdID,
                 modelContext: modelContext,
-                syncMode: userSession.syncMode
+                syncMode: userSession.syncMode,
+                currentUserId: userSession.userId
             )
         }
     }

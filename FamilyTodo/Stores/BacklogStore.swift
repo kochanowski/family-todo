@@ -1189,6 +1189,14 @@ final class BacklogStore: ObservableObject {
         }
 
         postLocalBacklogRefresh(includeTaskBoard: true)
+        if let promotedTask = promotedItem.asTask() {
+            _ = _Concurrency.Task {
+                await NotificationService.shared.refreshScheduledNotifications(
+                    householdId: promotedTask.householdId,
+                    modelContext: modelContext
+                )
+            }
+        }
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()

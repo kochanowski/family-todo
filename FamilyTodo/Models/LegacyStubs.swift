@@ -611,7 +611,8 @@ final class ChoreScheduler {
         householdId: UUID?,
         modelContext: ModelContext,
         taskStore: TaskStore? = nil,
-        syncMode: SyncMode
+        syncMode: SyncMode,
+        currentUserId: String? = nil
     ) async {
         guard let householdId else { return }
 
@@ -626,26 +627,65 @@ final class ChoreScheduler {
             let createdTaskStore = TaskStore(modelContext: modelContext)
             createdTaskStore.setHousehold(householdId)
             createdTaskStore.setSyncMode(syncMode)
+            createdTaskStore.setCloudContext(currentUserId: currentUserId, householdOwnerId: nil)
             resolvedTaskStore = createdTaskStore
         }
         await resolvedTaskStore.loadTasks()
 
         let now = Date()
         for chore in recurringStore.chores where chore.isActive {
-            guard let nextDate = chore.nextScheduledDate ?? Self.nextScheduledDate(for: chore, from: now) else {
-                continue
-            }
-            if nextDate <= now {
-                let result = await materializeOccurrence(
-                    for: chore,
-                    dueDate: nextDate,
-                    taskStore: resolvedTaskStore
-                )
-                if result == .created || result == .alreadyExists {
-                    await recurringStore.markGenerated(chore, at: nextDate)
-                }
-            }
+            await materializeNextOpenOccurrence(
+                for: chore,
+                recurringStore: recurringStore,
+                taskStore: resolvedTaskStore,
+                from: now
+            )
         }
+    }
+
+    @discardableResult
+    func materializeNextOpenOccurrence(
+        choreId: UUID,
+        householdId: UUID?,
+        modelContext: ModelContext,
+        taskStore: TaskStore? = nil,
+        syncMode: SyncMode,
+        currentUserId: String? = nil
+    ) async -> Bool {
+        guard let householdId else { return false }
+
+        let targetChoreId = choreId
+        let descriptor = FetchDescriptor<CachedRecurringChore>(
+            predicate: #Predicate { $0.id == targetChoreId }
+        )
+        guard let chore = try? modelContext.fetch(descriptor).first?.toRecurringChore(),
+              chore.isActive
+        else {
+            return false
+        }
+
+        let recurringStore = RecurringChoreStore(householdId: householdId, modelContext: modelContext)
+        recurringStore.setSyncMode(syncMode)
+        recurringStore.syncToCache([chore])
+
+        let resolvedTaskStore: TaskStore
+        if let taskStore {
+            resolvedTaskStore = taskStore
+        } else {
+            let createdTaskStore = TaskStore(modelContext: modelContext)
+            createdTaskStore.setHousehold(householdId)
+            createdTaskStore.setSyncMode(syncMode)
+            createdTaskStore.setCloudContext(currentUserId: currentUserId, householdOwnerId: nil)
+            resolvedTaskStore = createdTaskStore
+        }
+        resolvedTaskStore.rehydrateVisibleSnapshotFromCache()
+
+        return await materializeNextOpenOccurrence(
+            for: chore,
+            recurringStore: recurringStore,
+            taskStore: resolvedTaskStore,
+            from: Date()
+        )
     }
 
     @discardableResult
@@ -672,16 +712,39 @@ final class ChoreScheduler {
         }
         await resolvedTaskStore.loadTasks()
 
-        let occurrenceDate = Calendar.current.startOfDay(for: dueDate)
         let result = await materializeOccurrence(
             for: chore,
-            dueDate: occurrenceDate,
+            dueDate: dueDate,
             taskStore: resolvedTaskStore
         )
-        guard result == .created || result == .alreadyExists else { return false }
+        guard result == .created else { return false }
 
-        await recurringStore.markGenerated(chore, at: occurrenceDate)
+        await recurringStore.markGenerated(chore, at: dueDate)
         return result == .created
+    }
+
+    @discardableResult
+    private func materializeNextOpenOccurrence(
+        for chore: RecurringChore,
+        recurringStore: RecurringChoreStore,
+        taskStore: TaskStore,
+        from baseDate: Date
+    ) async -> Bool {
+        guard chore.isActive else { return false }
+        guard !Self.hasOpenGeneratedTask(for: chore, tasks: taskStore.tasks) else { return false }
+        guard let nextDate = chore.nextScheduledDate ?? Self.nextScheduledDate(for: chore, from: baseDate) else {
+            return false
+        }
+
+        let result = await materializeOccurrence(
+            for: chore,
+            dueDate: nextDate,
+            taskStore: taskStore
+        )
+        guard result == .created else { return false }
+
+        await recurringStore.markGenerated(chore, at: nextDate)
+        return true
     }
 
     private func materializeOccurrence(
@@ -689,7 +752,7 @@ final class ChoreScheduler {
         dueDate: Date,
         taskStore: TaskStore
     ) async -> OccurrenceMaterializationResult {
-        if Self.hasGeneratedTask(for: chore, dueDate: dueDate, tasks: taskStore.tasks) {
+        if Self.hasOpenGeneratedTask(for: chore, tasks: taskStore.tasks) {
             return .alreadyExists
         }
 
@@ -703,7 +766,8 @@ final class ChoreScheduler {
             dueDate: dueDate,
             notes: chore.notes,
             taskType: .recurring,
-            recurringChoreId: chore.id
+            recurringChoreId: chore.id,
+            deliverAssignedAlert: true
         )
         guard result == .ok else { return .skipped }
 
@@ -711,12 +775,10 @@ final class ChoreScheduler {
         return .created
     }
 
-    private static func hasGeneratedTask(for chore: RecurringChore, dueDate: Date, tasks: [Task]) -> Bool {
-        let calendar = Calendar.current
-        return tasks.contains { task in
+    private static func hasOpenGeneratedTask(for chore: RecurringChore, tasks: [Task]) -> Bool {
+        tasks.contains { task in
             task.recurringChoreId == chore.id &&
-                task.status != .done &&
-                task.dueDate.map { calendar.isDate($0, inSameDayAs: dueDate) } == true
+                task.status != .done
         }
     }
 

@@ -541,7 +541,8 @@ private struct BacklogContent: View {
         await ChoreScheduler.shared.runIfNeeded(
             householdId: householdId,
             modelContext: modelContext,
-            syncMode: userSession.syncMode
+            syncMode: userSession.syncMode,
+            currentUserId: userSession.userId
         )
         syncPromotionTipAnchorWithVisibleItems()
     }
@@ -1928,6 +1929,7 @@ private struct RecurringChoresView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editorDestination: RecurringChoreEditorDestination?
     @State private var hasStartedInitialLoad = false
+    @State private var openRecurringTasks: [UUID: Task] = [:]
 
     private var activeChores: [RecurringChore] {
         store.chores.filter(\.isActive).sorted(by: sortChores)
@@ -1982,12 +1984,17 @@ private struct RecurringChoresView: View {
                 hasStartedInitialLoad = true
                 store.setSyncMode(userSession.syncMode)
                 await store.loadChores()
+                refreshOpenRecurringTasks()
             }
             .onChange(of: userSession.syncMode) { _, mode in
                 store.setSyncMode(mode)
                 _ = _Concurrency.Task {
                     await store.loadChores()
+                    refreshOpenRecurringTasks()
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .taskBoardDataDidChange)) { _ in
+                refreshOpenRecurringTasks()
             }
             .sheet(item: $editorDestination) { destination in
                 RecurringChoreEditorSheet(
@@ -2005,6 +2012,12 @@ private struct RecurringChoresView: View {
 
     private var choresList: some View {
         List {
+            Section {
+                Text("Recurring chores create tasks directly. They do not appear in Ideas.")
+                    .font(themeStore.font(for: .bodySmall))
+                    .foregroundStyle(themeStore.contentSecondaryColor)
+            }
+
             if !activeChores.isEmpty {
                 Section {
                     ForEach(activeChores) { chore in
@@ -2014,6 +2027,7 @@ private struct RecurringChoresView: View {
                         } label: {
                             RecurringChoreRow(
                                 chore: chore,
+                                openTask: openTask(for: chore),
                                 category: category(for: chore.categoryId),
                                 assignee: assignee(for: chore.assigneeId)
                             )
@@ -2042,6 +2056,7 @@ private struct RecurringChoresView: View {
                         } label: {
                             RecurringChoreRow(
                                 chore: chore,
+                                openTask: openTask(for: chore),
                                 category: category(for: chore.categoryId),
                                 assignee: assignee(for: chore.assigneeId)
                             )
@@ -2092,6 +2107,29 @@ private struct RecurringChoresView: View {
         return members.first { $0.id == id }
     }
 
+    private func openTask(for chore: RecurringChore) -> Task? {
+        openRecurringTasks[chore.id]
+    }
+
+    private func refreshOpenRecurringTasks() {
+        let cached = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: modelContext
+        )
+        let tasks = WorkItemCacheStoreSupport.visibleTasks(from: cached)
+        var nextOpenByChore: [UUID: Task] = [:]
+        for task in tasks where task.status != .done {
+            guard let recurringChoreId = task.recurringChoreId else { continue }
+            if let existing = nextOpenByChore[recurringChoreId],
+               Self.prefersOpenRecurringTask(existing, over: task)
+            {
+                continue
+            }
+            nextOpenByChore[recurringChoreId] = task
+        }
+        openRecurringTasks = nextOpenByChore
+    }
+
     private func delete(_ chore: RecurringChore) {
         HapticManager.warning()
         _ = _Concurrency.Task {
@@ -2102,10 +2140,20 @@ private struct RecurringChoresView: View {
     private func sortChores(_ lhs: RecurringChore, _ rhs: RecurringChore) -> Bool {
         lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
     }
+
+    private static func prefersOpenRecurringTask(_ lhs: Task, over rhs: Task) -> Bool {
+        let lhsDue = lhs.dueDate ?? .distantFuture
+        let rhsDue = rhs.dueDate ?? .distantFuture
+        if lhsDue != rhsDue {
+            return lhsDue < rhsDue
+        }
+        return lhs.createdAt < rhs.createdAt
+    }
 }
 
 private struct RecurringChoreRow: View {
     let chore: RecurringChore
+    let openTask: Task?
     let category: BacklogCategory?
     let assignee: Member?
 
@@ -2147,7 +2195,11 @@ private struct RecurringChoreRow: View {
 
     private var recurrenceSummary: String {
         let timeText = Self.timeText(hour: chore.scheduledHour, minute: chore.scheduledMinute)
-        let nextText = chore.nextScheduledDate.map { "Next: \(Self.dateText($0))" }
+        let openTaskText = openTask?.dueDate.map { "Open task due: \(Self.dateTimeText($0))" }
+        let nextText = chore.nextScheduledDate.map { "Next task: \(Self.dateTimeText($0))" }
+        if let openTaskText {
+            return openTaskText
+        }
         switch chore.recurrenceType {
         case .daily:
             let interval = max(chore.recurrenceInterval ?? 1, 1)
@@ -2193,6 +2245,13 @@ private struct RecurringChoreRow: View {
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
+
+    private static func dateTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
 }
 
 enum RecurringChoreEditorValidation {
@@ -2221,6 +2280,7 @@ private struct RecurringChoreEditorSheet: View {
     let chore: RecurringChore?
 
     @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var userSession: UserSession
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var categoryId: UUID?
@@ -2444,11 +2504,20 @@ private struct RecurringChoreEditorSheet: View {
                 existing.scheduledMinute = minute
                 existing.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
                 existing.isActive = isActive
-                existing.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: existing, from: Date())
+                if !hasOpenTask(for: existing.id) {
+                    existing.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: existing, from: Date())
+                }
                 existing.updatedAt = Date()
                 await store.updateChore(existing)
+                await ChoreScheduler.shared.materializeNextOpenOccurrence(
+                    choreId: existing.id,
+                    householdId: householdId,
+                    modelContext: modelContext,
+                    syncMode: syncMode,
+                    currentUserId: userSession.userId
+                )
             } else {
-                await store.addChore(
+                let chore = await store.addChore(
                     title: trimmedTitle,
                     recurrenceType: recurrenceType,
                     recurrenceInterval: recurrenceInterval,
@@ -2462,10 +2531,29 @@ private struct RecurringChoreEditorSheet: View {
                     notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
                     isActive: isActive
                 )
+                if let chore {
+                    await ChoreScheduler.shared.materializeNextOpenOccurrence(
+                        choreId: chore.id,
+                        householdId: householdId,
+                        modelContext: modelContext,
+                        syncMode: syncMode,
+                        currentUserId: userSession.userId
+                    )
+                }
             }
             await MainActor.run {
                 dismiss()
             }
+        }
+    }
+
+    private func hasOpenTask(for choreId: UUID) -> Bool {
+        let cached = WorkItemCacheStoreSupport.fetchCachedWorkItems(
+            householdId: householdId,
+            context: modelContext
+        )
+        return WorkItemCacheStoreSupport.visibleTasks(from: cached).contains { task in
+            task.recurringChoreId == choreId && task.status != .done
         }
     }
 

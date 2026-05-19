@@ -1114,7 +1114,8 @@ private struct TasksContent: View {
             householdId: householdId,
             modelContext: modelContext,
             taskStore: store,
-            syncMode: userSession.syncMode
+            syncMode: userSession.syncMode,
+            currentUserId: userSession.userId
         )
         normalizeAssigneeFilterSelection()
     }

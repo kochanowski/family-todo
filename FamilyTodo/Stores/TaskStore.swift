@@ -246,6 +246,11 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    private func syncAssignedTaskAlert(for task: Task) async {
+        guard isTaskAssignedToCurrentMember(task) else { return }
+        await notificationService.deliverAssignedTaskAlert(for: task)
+    }
+
     private func syncDailyDigestSchedule() async {
         await notificationService.refreshDailyDigest(
             householdId: householdId,
@@ -473,7 +478,10 @@ final class TaskStore: ObservableObject {
         replayPendingMutationsInBackground()
     }
 
-    private func syncCloudWorkItemsToCache(_ cloudItems: [WorkItem]) {
+    private func syncCloudWorkItemsToCache(
+        _ cloudItems: [WorkItem],
+        deliverAssignedTaskAlerts: Bool = false
+    ) {
         guard let householdId else { return }
 
         let descriptor = FetchDescriptor<CachedWorkItem>(
@@ -483,6 +491,7 @@ final class TaskStore: ObservableObject {
         let cachedByID = Dictionary(uniqueKeysWithValues: cachedWorkItems.map { ($0.id, $0) })
         let pendingSnapshot = WorkItemCacheStoreSupport.pendingSnapshot(from: cachedWorkItems)
         let deduplicatedByLogicalID = WorkItemCacheStoreSupport.canonicalCachedWorkItemsByLogicalItemID(cachedWorkItems)
+        var assignedTasksToAlert: [Task] = []
 
         for item in cloudItems {
             if pendingSnapshot.pendingDeleteLogicalItemIDs.contains(item.logicalItemID) {
@@ -498,6 +507,12 @@ final class TaskStore: ObservableObject {
                 ) {
                     continue
                 }
+                collectAssignedTaskAlertIfNeeded(
+                    item: item,
+                    previous: cached.toWorkItem(),
+                    deliverAssignedTaskAlerts: deliverAssignedTaskAlerts,
+                    into: &assignedTasksToAlert
+                )
                 cached.update(from: item)
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
@@ -513,6 +528,12 @@ final class TaskStore: ObservableObject {
                 ) {
                     continue
                 }
+                collectAssignedTaskAlertIfNeeded(
+                    item: item,
+                    previous: cached.toWorkItem(),
+                    deliverAssignedTaskAlerts: deliverAssignedTaskAlerts,
+                    into: &assignedTasksToAlert
+                )
                 cached.update(from: item)
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
@@ -528,10 +549,17 @@ final class TaskStore: ObservableObject {
                 cached.syncStatusRaw = TaskSyncStatus.synced
                 cached.lastSyncedAt = Date()
                 modelContext.insert(cached)
+                collectAssignedTaskAlertIfNeeded(
+                    item: item,
+                    previous: nil,
+                    deliverAssignedTaskAlerts: deliverAssignedTaskAlerts,
+                    into: &assignedTasksToAlert
+                )
             }
         }
 
         saveContextOrSetError(operation: "sync task work items to cache")
+        deliverAssignedTaskAlertsIfNeeded(for: assignedTasksToAlert)
     }
 
     private func visibleTasks(from cachedWorkItems: [CachedWorkItem]) -> [Task] {
@@ -547,6 +575,57 @@ final class TaskStore: ObservableObject {
             cloudItem.updatedAt >= localItem.updatedAt
     }
 
+    private func collectAssignedTaskAlertIfNeeded(
+        item: WorkItem,
+        previous: WorkItem?,
+        deliverAssignedTaskAlerts: Bool,
+        into tasksToAlert: inout [Task]
+    ) {
+        guard deliverAssignedTaskAlerts,
+              let task = item.asTask(),
+              task.status != .done,
+              isTaskAssignedToCurrentMember(task)
+        else {
+            return
+        }
+
+        if let previousTask = previous?.asTask(),
+           isTaskAssignedToCurrentMember(previousTask)
+        {
+            return
+        }
+
+        tasksToAlert.append(task)
+    }
+
+    private func deliverAssignedTaskAlertsIfNeeded(for tasksToAlert: [Task]) {
+        guard !tasksToAlert.isEmpty else { return }
+        _ = _Concurrency.Task { [self] in
+            for task in tasksToAlert {
+                await notificationService.deliverAssignedTaskAlert(for: task)
+                await syncReminder(for: task)
+            }
+            await syncDailyDigestSchedule()
+        }
+    }
+
+    private func isTaskAssignedToCurrentMember(_ task: Task) -> Bool {
+        guard let currentMemberId else { return false }
+        return task.assigneeId == currentMemberId || task.assigneeIds.contains(currentMemberId)
+    }
+
+    private var currentMemberId: UUID? {
+        guard let householdId, let currentUserId else { return nil }
+        let descriptor = FetchDescriptor<CachedMember>(
+            predicate: #Predicate {
+                $0.householdId == householdId &&
+                    $0.userId == currentUserId &&
+                    $0.isActive
+            }
+        )
+        return try? modelContext.fetch(descriptor).first?.id
+    }
+
     private static func workItemTaskSort(_ lhs: WorkItem, _ rhs: WorkItem) -> Bool {
         let lhsTask = lhs.toTask()
         let rhsTask = rhs.toTask()
@@ -557,8 +636,14 @@ final class TaskStore: ObservableObject {
         syncCloudWorkItemsToCache(cloudTasks.map(WorkItem.init(task:)))
     }
 
-    func syncUnifiedWorkItemsToCache(_ cloudItems: [WorkItem]) {
-        syncCloudWorkItemsToCache(cloudItems)
+    func syncUnifiedWorkItemsToCache(
+        _ cloudItems: [WorkItem],
+        deliverAssignedTaskAlerts: Bool = false
+    ) {
+        syncCloudWorkItemsToCache(
+            cloudItems,
+            deliverAssignedTaskAlerts: deliverAssignedTaskAlerts
+        )
     }
 
     private func replayPendingMutationsInBackground() {
@@ -709,7 +794,8 @@ final class TaskStore: ObservableObject {
         notes: String? = nil,
         taskType: Task.TaskType = .oneOff,
         recurringChoreId: UUID? = nil,
-        order: Int? = nil
+        order: Int? = nil,
+        deliverAssignedAlert: Bool = false
     ) async -> NextTransitionValidation {
         guard let householdId else { return .ok }
 
@@ -773,6 +859,9 @@ final class TaskStore: ObservableObject {
         // idea from the UI. Blocking here causes a visible ~13-second delay.
         _ = _Concurrency.Task { [self] in
             await syncReminder(for: task)
+            if deliverAssignedAlert {
+                await syncAssignedTaskAlert(for: task)
+            }
             await syncDailyDigestSchedule()
         }
 
@@ -843,7 +932,18 @@ final class TaskStore: ObservableObject {
             updatedTask.order = nextTaskOrderBaseline() + 1
         }
 
-        return await updateTask(updatedTask)
+        let result = await updateTask(updatedTask)
+        if result == .ok, status == .done, let recurringChoreId = task.recurringChoreId {
+            await ChoreScheduler.shared.materializeNextOpenOccurrence(
+                choreId: recurringChoreId,
+                householdId: householdId,
+                modelContext: modelContext,
+                taskStore: self,
+                syncMode: syncMode,
+                currentUserId: currentUserId
+            )
+        }
+        return result
     }
 
     @discardableResult

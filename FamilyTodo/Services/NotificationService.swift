@@ -429,6 +429,36 @@ enum NotificationSchedulePlanner {
             }
         }
 
+        func deliverAssignedTaskAlert(for task: Task) async {
+            await checkAuthorizationStatus()
+            guard isAuthorized,
+                  notificationsEnabled(),
+                  task.status != .done
+            else {
+                return
+            }
+
+            let dueText = task.dueDate.map { dueDate in
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                formatter.timeStyle = .short
+                return " Due \(formatter.string(from: dueDate))."
+            } ?? ""
+
+            let delivered = await deliverImmediateAlert(
+                title: "New task assigned to you",
+                body: "\(task.title).\(dueText)",
+                identifier: "assigned-task-\(task.id.uuidString)-\(UUID().uuidString)",
+                threadIdentifier: "assigned-tasks-\(task.householdId.uuidString)",
+                categoryIdentifier: AppNotificationCategory.taskReminder
+            )
+            recordNotificationProgress(
+                delivered
+                    ? "notification.assignedTask.delivered householdId=\(task.householdId.uuidString) taskId=\(task.id.uuidString)"
+                    : "notification.assignedTask.deliveryFailed householdId=\(task.householdId.uuidString) taskId=\(task.id.uuidString)"
+            )
+        }
+
         /// Remove scheduled reminder for a task
         func removeTaskReminder(for task: Task) async {
             center.removePendingNotificationRequests(withIdentifiers: [taskNotificationId(task)])
@@ -926,6 +956,8 @@ enum NotificationSchedulePlanner {
         }
 
         func scheduleTaskReminder(for _: Task) async {}
+
+        func deliverAssignedTaskAlert(for _: Task) async {}
 
         func removeTaskReminder(for _: Task) async {}
 

@@ -3878,7 +3878,11 @@ class HouseholdStore: ObservableObject {
             )
         }
 
-        let taskStore = makeTaskStore(modelContext: modelContext, householdId: household.id)
+        let taskStore = makeTaskStore(
+            modelContext: modelContext,
+            householdId: household.id,
+            syncContext: syncContext
+        )
         let shoppingStore = ShoppingListStore(householdId: household.id, modelContext: modelContext)
         let bundleStore = ShoppingBundleStore(householdId: household.id, modelContext: modelContext)
         let backlogStore = BacklogStore(householdId: household.id, modelContext: modelContext)
@@ -3897,13 +3901,19 @@ class HouseholdStore: ObservableObject {
             shoppingStore: shoppingStore,
             bundleStore: bundleStore
         )
+        let deliverAssignedTaskAlerts = if case .remotePush = reason {
+            true
+        } else {
+            false
+        }
         try await applyDeltaWorkAndBacklog(
             householdId: household.id,
             syncContext: syncContext,
             delta: delta,
             taskStore: taskStore,
             backlogStore: backlogStore,
-            recurringStore: recurringStore
+            recurringStore: recurringStore,
+            deliverAssignedTaskAlerts: deliverAssignedTaskAlerts
         )
 
         let cachedSnapshot = cachedJoinHydrationSnapshot(
@@ -3921,10 +3931,12 @@ class HouseholdStore: ObservableObject {
 
     private func makeTaskStore(
         modelContext: ModelContext,
-        householdId: UUID
+        householdId: UUID,
+        syncContext: HouseholdSyncContext
     ) -> TaskStore {
         let taskStore = TaskStore(modelContext: modelContext)
         taskStore.setHousehold(householdId)
+        taskStore.setCloudContext(syncContext)
         return taskStore
     }
 
@@ -3990,7 +4002,8 @@ class HouseholdStore: ObservableObject {
         delta: HouseholdCloudDelta,
         taskStore: TaskStore,
         backlogStore: BacklogStore,
-        recurringStore: RecurringChoreStore
+        recurringStore: RecurringChoreStore,
+        deliverAssignedTaskAlerts: Bool
     ) async throws {
         let needsUnifiedWorkRefresh =
             delta.changedDomains.contains(.tasks) ||
@@ -4005,7 +4018,10 @@ class HouseholdStore: ObservableObject {
                 householdId: householdId,
                 scope: syncContext.scope
             )
-            taskStore.syncUnifiedWorkItemsToCache(unifiedWorkItems)
+            taskStore.syncUnifiedWorkItemsToCache(
+                unifiedWorkItems,
+                deliverAssignedTaskAlerts: deliverAssignedTaskAlerts
+            )
         }
 
         if needsBacklogRefresh {
