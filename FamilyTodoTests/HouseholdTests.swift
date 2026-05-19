@@ -319,6 +319,30 @@ final class HouseholdStoreTests: XCTestCase {
         try XCTUnwrap(modelContainer, "Expected in-memory model container", file: file, line: line)
     }
 
+    private func requireDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int,
+        minute: Int = 0,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        components.second = 0
+        return try XCTUnwrap(
+            Calendar.current.date(from: components),
+            "Expected valid date",
+            file: file,
+            line: line
+        )
+    }
+
     // MARK: - Computed Properties
 
     func testCurrentHousehold_WhenNil_IsNil() {
@@ -637,6 +661,7 @@ final class HouseholdStoreTests: XCTestCase {
         let categoryId = UUID()
         let lastGenerated = Date().addingTimeInterval(-86400)
         let nextScheduled = Date().addingTimeInterval(86400)
+        let scheduleStart = Date().addingTimeInterval(-172_800)
         let chore = RecurringChore(
             householdId: UUID(),
             title: "Clean kitchen",
@@ -649,6 +674,9 @@ final class HouseholdStoreTests: XCTestCase {
             isActive: true,
             lastGeneratedDate: lastGenerated,
             nextScheduledDate: nextScheduled,
+            scheduleStartDate: scheduleStart,
+            scheduledHour: 12,
+            scheduledMinute: 30,
             notes: "Counters and floor"
         )
 
@@ -663,7 +691,104 @@ final class HouseholdStoreTests: XCTestCase {
         XCTAssertEqual(roundTripped.categoryId, categoryId)
         XCTAssertEqual(roundTripped.lastGeneratedDate, lastGenerated)
         XCTAssertEqual(roundTripped.nextScheduledDate, nextScheduled)
+        XCTAssertEqual(roundTripped.scheduleStartDate, scheduleStart)
+        XCTAssertEqual(roundTripped.scheduledHour, 12)
+        XCTAssertEqual(roundTripped.scheduledMinute, 30)
         XCTAssertEqual(roundTripped.notes, "Counters and floor")
+    }
+
+    func testChoreSchedulerCalculatesDailyScheduleAtSelectedTime() throws {
+        let calendar = Calendar.current
+        let start = try requireDate(year: 2026, month: 5, day: 19, hour: 12)
+        let beforeNoon = try requireDate(year: 2026, month: 5, day: 19, hour: 11, minute: 30)
+        let afterNoon = try requireDate(year: 2026, month: 5, day: 19, hour: 12, minute: 1)
+        let chore = RecurringChore(
+            title: "Reset kitchen",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            scheduleStartDate: start,
+            scheduledHour: 12,
+            scheduledMinute: 0
+        )
+
+        let first = try XCTUnwrap(ChoreScheduler.nextScheduledDate(for: chore, from: beforeNoon))
+        XCTAssertTrue(calendar.isDate(first, inSameDayAs: start))
+        XCTAssertEqual(calendar.component(.hour, from: first), 12)
+        XCTAssertEqual(calendar.component(.minute, from: first), 0)
+
+        let second = try XCTUnwrap(ChoreScheduler.nextScheduledDate(for: chore, from: afterNoon))
+        XCTAssertEqual(calendar.dateComponents([.day], from: start, to: second).day, 1)
+        XCTAssertEqual(calendar.component(.hour, from: second), 12)
+        XCTAssertEqual(calendar.component(.minute, from: second), 0)
+    }
+
+    func testChoreSchedulerCalculatesEveryTwoDaysAtSelectedTime() throws {
+        let calendar = Calendar.current
+        let start = try requireDate(year: 2026, month: 5, day: 19, hour: 12)
+        let afterFirstOccurrence = try requireDate(year: 2026, month: 5, day: 19, hour: 13)
+        let chore = RecurringChore(
+            title: "Water plants",
+            recurrenceType: .daily,
+            recurrenceInterval: 2,
+            scheduleStartDate: start,
+            scheduledHour: 12,
+            scheduledMinute: 0
+        )
+
+        let next = try XCTUnwrap(ChoreScheduler.nextScheduledDate(for: chore, from: afterFirstOccurrence))
+
+        XCTAssertEqual(calendar.dateComponents([.day], from: start, to: next).day, 2)
+        XCTAssertEqual(calendar.component(.hour, from: next), 12)
+        XCTAssertEqual(calendar.component(.minute, from: next), 0)
+    }
+
+    func testChoreSchedulerCalculatesWeeklyScheduleAtSelectedTime() throws {
+        let calendar = Calendar.current
+        let start = try requireDate(year: 2026, month: 5, day: 19, hour: 12)
+        let chore = RecurringChore(
+            title: "Sheets",
+            recurrenceType: .weekly,
+            recurrenceDay: calendar.component(.weekday, from: start),
+            recurrenceInterval: 1,
+            scheduleStartDate: start,
+            scheduledHour: 12,
+            scheduledMinute: 0
+        )
+
+        let next = try XCTUnwrap(
+            try ChoreScheduler.nextScheduledDate(
+                for: chore,
+                from: requireDate(year: 2026, month: 5, day: 19, hour: 12, minute: 1)
+            )
+        )
+
+        XCTAssertEqual(calendar.dateComponents([.day], from: start, to: next).day, 7)
+        XCTAssertEqual(calendar.component(.hour, from: next), 12)
+    }
+
+    func testChoreSchedulerCalculatesMonthlyScheduleAtSelectedTime() throws {
+        let calendar = Calendar.current
+        let start = try requireDate(year: 2026, month: 5, day: 10, hour: 12)
+        let chore = RecurringChore(
+            title: "Clean filter",
+            recurrenceType: .monthly,
+            recurrenceDayOfMonth: 10,
+            recurrenceInterval: 1,
+            scheduleStartDate: start,
+            scheduledHour: 12,
+            scheduledMinute: 0
+        )
+
+        let next = try XCTUnwrap(
+            try ChoreScheduler.nextScheduledDate(
+                for: chore,
+                from: requireDate(year: 2026, month: 5, day: 10, hour: 12, minute: 1)
+            )
+        )
+
+        XCTAssertEqual(calendar.component(.month, from: next), 6)
+        XCTAssertEqual(calendar.component(.day, from: next), 10)
+        XCTAssertEqual(calendar.component(.hour, from: next), 12)
     }
 
     func testChoreSchedulerGeneratesDueRecurringTask() async throws {
@@ -736,6 +861,83 @@ final class HouseholdStoreTests: XCTestCase {
         let tasks = try container.mainContext.fetch(FetchDescriptor<CachedWorkItem>())
             .map { $0.toTask() }
         XCTAssertEqual(tasks.count, 1)
+    }
+
+    func testChoreSchedulerDoesNotGenerateBeforeScheduledTime() async throws {
+        let container = try requireContainer()
+        let householdId = UUID()
+        let futureDate = Date().addingTimeInterval(3600)
+        let components = Calendar.current.dateComponents([.hour, .minute], from: futureDate)
+        let chore = RecurringChore(
+            householdId: householdId,
+            title: "Future chore",
+            recurrenceType: .daily,
+            nextScheduledDate: futureDate,
+            scheduleStartDate: futureDate,
+            scheduledHour: components.hour ?? 12,
+            scheduledMinute: components.minute ?? 0
+        )
+        container.mainContext.insert(CachedRecurringChore(from: chore))
+        try container.mainContext.save()
+
+        let taskStore = TaskStore(modelContext: container.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: container.mainContext,
+            taskStore: taskStore,
+            syncMode: .localOnly
+        )
+
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedWorkItem>())
+        XCTAssertTrue(tasks.isEmpty)
+    }
+
+    func testChoreSchedulerAdvancesFromScheduledOccurrenceTime() async throws {
+        let container = try requireContainer()
+        let householdId = UUID()
+        let scheduledDate = Date().addingTimeInterval(-86400)
+        let components = Calendar.current.dateComponents([.hour, .minute], from: scheduledDate)
+        let chore = RecurringChore(
+            householdId: householdId,
+            title: "Timed chore",
+            recurrenceType: .daily,
+            recurrenceInterval: 1,
+            nextScheduledDate: scheduledDate,
+            scheduleStartDate: scheduledDate,
+            scheduledHour: components.hour ?? 12,
+            scheduledMinute: components.minute ?? 0
+        )
+        container.mainContext.insert(CachedRecurringChore(from: chore))
+        try container.mainContext.save()
+
+        let taskStore = TaskStore(modelContext: container.mainContext)
+        taskStore.setHousehold(householdId)
+        taskStore.setSyncMode(.localOnly)
+
+        await ChoreScheduler.shared.runIfNeeded(
+            householdId: householdId,
+            modelContext: container.mainContext,
+            taskStore: taskStore,
+            syncMode: .localOnly
+        )
+
+        let tasks = try container.mainContext.fetch(FetchDescriptor<CachedWorkItem>())
+            .map { $0.toTask() }
+        let taskDueDate = try XCTUnwrap(tasks.first?.dueDate)
+        XCTAssertEqual(Calendar.current.component(.hour, from: taskDueDate), components.hour)
+        XCTAssertEqual(Calendar.current.component(.minute, from: taskDueDate), components.minute)
+
+        let cachedChore = try XCTUnwrap(
+            try container.mainContext.fetch(FetchDescriptor<CachedRecurringChore>()).first?
+                .toRecurringChore()
+        )
+        let nextScheduledDate = try XCTUnwrap(cachedChore.nextScheduledDate)
+        XCTAssertEqual(Calendar.current.component(.hour, from: nextScheduledDate), components.hour)
+        XCTAssertEqual(Calendar.current.component(.minute, from: nextScheduledDate), components.minute)
+        XCTAssertGreaterThan(nextScheduledDate, scheduledDate)
     }
 
     func testChoreSchedulerGeneratesInitialOccurrenceToday() async throws {
@@ -876,14 +1078,39 @@ final class HouseholdStoreTests: XCTestCase {
             RecurringChoreEditorValidation.canSave(
                 title: "Clean kitchen",
                 assigneeId: UUID(),
-                categoryId: nil
+                categoryId: nil,
+                scheduledHour: 12,
+                scheduledMinute: 0
             )
         )
         XCTAssertTrue(
             RecurringChoreEditorValidation.canSave(
                 title: "Clean kitchen",
                 assigneeId: UUID(),
-                categoryId: UUID()
+                categoryId: UUID(),
+                scheduledHour: 12,
+                scheduledMinute: 0
+            )
+        )
+    }
+
+    func testRecurringChoreEditorValidationRequiresExplicitAssigneeAndValidTime() {
+        XCTAssertFalse(
+            RecurringChoreEditorValidation.canSave(
+                title: "Clean kitchen",
+                assigneeId: nil,
+                categoryId: UUID(),
+                scheduledHour: 12,
+                scheduledMinute: 0
+            )
+        )
+        XCTAssertFalse(
+            RecurringChoreEditorValidation.canSave(
+                title: "Clean kitchen",
+                assigneeId: UUID(),
+                categoryId: UUID(),
+                scheduledHour: 24,
+                scheduledMinute: 0
             )
         )
     }

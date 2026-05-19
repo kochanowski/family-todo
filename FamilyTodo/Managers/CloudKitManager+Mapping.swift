@@ -387,6 +387,11 @@ extension CloudKitManager {
         if let nextScheduledDate = chore.nextScheduledDate {
             record["nextScheduledDate"] = nextScheduledDate as CKRecordValue
         }
+        if let scheduleStartDate = chore.scheduleStartDate {
+            record["scheduleStartDate"] = scheduleStartDate as CKRecordValue
+        }
+        record["scheduledHour"] = chore.scheduledHour as CKRecordValue
+        record["scheduledMinute"] = chore.scheduledMinute as CKRecordValue
         if let notes = chore.notes {
             record["notes"] = notes as CKRecordValue
         }
@@ -422,6 +427,13 @@ extension CloudKitManager {
             defaultAssigneeIds.isEmpty
                 ? (assigneeId.map { [$0] } ?? [])
                 : defaultAssigneeIds
+        let scheduleStartDate = record["scheduleStartDate"] as? Date
+            ?? record["nextScheduledDate"] as? Date
+            ?? createdAt
+        let fallbackTimeDate = record["nextScheduledDate"] as? Date ?? scheduleStartDate
+        let fallbackTimeComponents = Calendar.current.dateComponents([.hour, .minute], from: fallbackTimeDate)
+        let scheduledHour = min(max(intValue(record["scheduledHour"]) ?? fallbackTimeComponents.hour ?? 12, 0), 23)
+        let scheduledMinute = min(max(intValue(record["scheduledMinute"]) ?? fallbackTimeComponents.minute ?? 0, 0), 59)
 
         return RecurringChore(
             id: id,
@@ -438,6 +450,9 @@ extension CloudKitManager {
             isActive: intValue(record["isActive"]) != 0,
             lastGeneratedDate: record["lastGeneratedDate"] as? Date,
             nextScheduledDate: record["nextScheduledDate"] as? Date,
+            scheduleStartDate: scheduleStartDate,
+            scheduledHour: scheduledHour,
+            scheduledMinute: scheduledMinute,
             notes: record["notes"] as? String,
             createdAt: createdAt,
             updatedAt: updatedAt

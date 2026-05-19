@@ -81,6 +81,9 @@ struct RecurringChore: Identifiable, Codable {
     var isActive: Bool
     var lastGeneratedDate: Date?
     var nextScheduledDate: Date?
+    var scheduleStartDate: Date?
+    var scheduledHour: Int
+    var scheduledMinute: Int
     var notes: String?
     let createdAt: Date
     var updatedAt: Date
@@ -104,6 +107,9 @@ struct RecurringChore: Identifiable, Codable {
         isActive: Bool = true,
         lastGeneratedDate: Date? = nil,
         nextScheduledDate: Date? = nil,
+        scheduleStartDate: Date? = nil,
+        scheduledHour: Int = 12,
+        scheduledMinute: Int = 0,
         notes: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -126,6 +132,9 @@ struct RecurringChore: Identifiable, Codable {
         self.isActive = isActive
         self.lastGeneratedDate = lastGeneratedDate
         self.nextScheduledDate = nextScheduledDate
+        self.scheduleStartDate = scheduleStartDate
+        self.scheduledHour = min(max(scheduledHour, 0), 23)
+        self.scheduledMinute = min(max(scheduledMinute, 0), 59)
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -443,6 +452,9 @@ final class RecurringChoreStore: ObservableObject {
         assigneeId: UUID? = nil,
         defaultAssigneeIds: [UUID] = [],
         categoryId: UUID? = nil,
+        scheduleStartDate: Date? = nil,
+        scheduledHour: Int = 12,
+        scheduledMinute: Int = 0,
         notes: String? = nil,
         isActive: Bool = true
     ) async -> RecurringChore? {
@@ -461,6 +473,9 @@ final class RecurringChoreStore: ObservableObject {
             defaultAssigneeIds: defaultAssigneeIds.isEmpty ? assigneeId.map { [$0] } ?? [] : defaultAssigneeIds,
             categoryId: categoryId,
             isActive: isActive,
+            scheduleStartDate: scheduleStartDate ?? Date(),
+            scheduledHour: scheduledHour,
+            scheduledMinute: scheduledMinute,
             notes: notes
         )
         chore.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: chore, from: Date())
@@ -627,7 +642,7 @@ final class ChoreScheduler {
                     taskStore: resolvedTaskStore
                 )
                 if result == .created || result == .alreadyExists {
-                    await recurringStore.markGenerated(chore, at: now)
+                    await recurringStore.markGenerated(chore, at: nextDate)
                 }
             }
         }
@@ -665,7 +680,7 @@ final class ChoreScheduler {
         )
         guard result == .created || result == .alreadyExists else { return false }
 
-        await recurringStore.markGenerated(chore, at: dueDate)
+        await recurringStore.markGenerated(chore, at: occurrenceDate)
         return result == .created
     }
 
@@ -708,33 +723,89 @@ final class ChoreScheduler {
     static func nextScheduledDate(for chore: RecurringChore, from baseDate: Date) -> Date? {
         let calendar = Calendar.current
         let interval = max(chore.recurrenceInterval ?? 1, 1)
+        let scheduledHour = min(max(chore.scheduledHour, 0), 23)
+        let scheduledMinute = min(max(chore.scheduledMinute, 0), 59)
+        let startDate = chore.scheduleStartDate ?? chore.nextScheduledDate ?? chore.createdAt
+        let startOfSchedule = scheduledDate(
+            on: startDate,
+            hour: scheduledHour,
+            minute: scheduledMinute,
+            calendar: calendar
+        ) ?? startDate
 
         switch chore.recurrenceType {
-        case .daily:
-            return calendar.date(byAdding: .day, value: interval, to: baseDate)
+        case .daily, .custom:
+            var candidate = startOfSchedule
+            while candidate <= baseDate {
+                guard let next = calendar.date(byAdding: .day, value: interval, to: candidate) else {
+                    return nil
+                }
+                candidate = next
+            }
+            return candidate
         case .weekly:
             let targetWeekday = chore.recurrenceDay ?? 2
-            let start = calendar.startOfDay(for: baseDate)
-            for offset in 0 ... (7 * interval) {
-                guard let candidate = calendar.date(byAdding: .day, value: offset, to: start) else { continue }
-                if calendar.component(.weekday, from: candidate) == targetWeekday {
-                    if candidate > start {
-                        return candidate
-                    }
+            let scheduleWeek = calendar.dateInterval(of: .weekOfYear, for: startOfSchedule)?.start ??
+                calendar.startOfDay(for: startOfSchedule)
+            var candidateDay = calendar.startOfDay(for: startOfSchedule)
+            for _ in 0 ..< 730 {
+                defer {
+                    candidateDay = calendar.date(byAdding: .day, value: 1, to: candidateDay) ?? candidateDay
+                }
+                guard calendar.component(.weekday, from: candidateDay) == targetWeekday else { continue }
+                guard let candidate = scheduledDate(
+                    on: candidateDay,
+                    hour: scheduledHour,
+                    minute: scheduledMinute,
+                    calendar: calendar
+                ) else {
+                    continue
+                }
+                guard candidate >= startOfSchedule, candidate > baseDate else { continue }
+                let candidateWeek = calendar.dateInterval(of: .weekOfYear, for: candidate)?.start ??
+                    calendar.startOfDay(for: candidate)
+                let weekDelta = calendar.dateComponents([.weekOfYear], from: scheduleWeek, to: candidateWeek)
+                    .weekOfYear ?? 0
+                if weekDelta % interval == 0 {
+                    return candidate
                 }
             }
-            return calendar.date(byAdding: .day, value: 7 * interval, to: start)
+            return nil
         case .monthly:
             let day = min(max(chore.recurrenceDayOfMonth ?? 1, 1), 28)
-            guard let nextMonth = calendar.date(byAdding: .month, value: interval, to: baseDate) else {
-                return nil
+            var monthCursor = startOfSchedule
+            for _ in 0 ..< 240 {
+                var components = calendar.dateComponents([.year, .month], from: monthCursor)
+                components.day = day
+                components.hour = scheduledHour
+                components.minute = scheduledMinute
+                components.second = 0
+                if let candidate = calendar.date(from: components),
+                   candidate >= startOfSchedule,
+                   candidate > baseDate
+                {
+                    return candidate
+                }
+                guard let nextMonth = calendar.date(byAdding: .month, value: interval, to: monthCursor) else {
+                    return nil
+                }
+                monthCursor = nextMonth
             }
-            var components = calendar.dateComponents([.year, .month], from: nextMonth)
-            components.day = day
-            return calendar.date(from: components)
-        case .custom:
-            return calendar.date(byAdding: .day, value: interval, to: baseDate)
+            return nil
         }
+    }
+
+    private static func scheduledDate(
+        on date: Date,
+        hour: Int,
+        minute: Int,
+        calendar: Calendar
+    ) -> Date? {
+        var components = calendar.dateComponents([.year, .month, .day], from: date)
+        components.hour = hour
+        components.minute = minute
+        components.second = 0
+        return calendar.date(from: components)
     }
 }
 
@@ -818,6 +889,9 @@ final class CachedRecurringChore {
     var isActive: Bool = true
     var lastGeneratedDate: Date?
     var nextScheduledDate: Date?
+    var scheduleStartDate: Date?
+    var scheduledHour: Int?
+    var scheduledMinute: Int?
     var notes: String?
     var createdAt: Date
     var updatedAt: Date
@@ -836,6 +910,9 @@ final class CachedRecurringChore {
         isActive: Bool = true,
         lastGeneratedDate: Date? = nil,
         nextScheduledDate: Date? = nil,
+        scheduleStartDate: Date? = nil,
+        scheduledHour: Int? = nil,
+        scheduledMinute: Int? = nil,
         notes: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -853,6 +930,9 @@ final class CachedRecurringChore {
         self.isActive = isActive
         self.lastGeneratedDate = lastGeneratedDate
         self.nextScheduledDate = nextScheduledDate
+        self.scheduleStartDate = scheduleStartDate
+        self.scheduledHour = scheduledHour
+        self.scheduledMinute = scheduledMinute
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -873,6 +953,9 @@ final class CachedRecurringChore {
             isActive: chore.isActive,
             lastGeneratedDate: chore.lastGeneratedDate,
             nextScheduledDate: chore.nextScheduledDate,
+            scheduleStartDate: chore.scheduleStartDate,
+            scheduledHour: chore.scheduledHour,
+            scheduledMinute: chore.scheduledMinute,
             notes: chore.notes,
             createdAt: chore.createdAt,
             updatedAt: chore.updatedAt
@@ -892,6 +975,9 @@ final class CachedRecurringChore {
         isActive = chore.isActive
         lastGeneratedDate = chore.lastGeneratedDate
         nextScheduledDate = chore.nextScheduledDate
+        scheduleStartDate = chore.scheduleStartDate
+        scheduledHour = chore.scheduledHour
+        scheduledMinute = chore.scheduledMinute
         notes = chore.notes
         createdAt = chore.createdAt
         updatedAt = chore.updatedAt
@@ -899,6 +985,11 @@ final class CachedRecurringChore {
 
     func toRecurringChore() -> RecurringChore {
         let resolvedAssigneeIds = assigneeId.map { [$0] } ?? []
+        let resolvedScheduleStartDate = scheduleStartDate ?? nextScheduledDate ?? createdAt
+        let fallbackTimeDate = nextScheduledDate ?? resolvedScheduleStartDate
+        let fallbackTimeComponents = Calendar.current.dateComponents([.hour, .minute], from: fallbackTimeDate)
+        let resolvedHour = min(max(scheduledHour ?? fallbackTimeComponents.hour ?? 12, 0), 23)
+        let resolvedMinute = min(max(scheduledMinute ?? fallbackTimeComponents.minute ?? 0, 0), 59)
         return RecurringChore(
             id: id,
             householdId: householdId,
@@ -913,6 +1004,9 @@ final class CachedRecurringChore {
             isActive: isActive,
             lastGeneratedDate: lastGeneratedDate,
             nextScheduledDate: nextScheduledDate,
+            scheduleStartDate: resolvedScheduleStartDate,
+            scheduledHour: resolvedHour,
+            scheduledMinute: resolvedMinute,
             notes: notes,
             createdAt: createdAt,
             updatedAt: updatedAt,

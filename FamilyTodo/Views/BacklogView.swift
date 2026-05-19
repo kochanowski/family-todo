@@ -2146,17 +2146,26 @@ private struct RecurringChoreRow: View {
     }
 
     private var recurrenceSummary: String {
+        let timeText = Self.timeText(hour: chore.scheduledHour, minute: chore.scheduledMinute)
+        let nextText = chore.nextScheduledDate.map { "Next: \(Self.dateText($0))" }
         switch chore.recurrenceType {
         case .daily:
             let interval = max(chore.recurrenceInterval ?? 1, 1)
-            return interval == 1 ? "Daily" : "Every \(interval) days"
+            let cadence = interval == 1 ? "Daily" : "Every \(interval) days"
+            return ([cadence, timeText, nextText] as [String?]).compactMap(\.self).joined(separator: " · ")
         case .weekly:
-            return "Weekly · \(Self.weekdayName(for: chore.recurrenceDay ?? 2))"
+            return (["Weekly", Self.weekdayName(for: chore.recurrenceDay ?? 2), timeText, nextText] as [String?])
+                .compactMap(\.self)
+                .joined(separator: " · ")
         case .monthly:
-            return "Monthly · Day \(chore.recurrenceDayOfMonth ?? 1)"
+            return (["Monthly", "Day \(chore.recurrenceDayOfMonth ?? 1)", timeText, nextText] as [String?])
+                .compactMap(\.self)
+                .joined(separator: " · ")
         case .custom:
             let interval = max(chore.recurrenceInterval ?? chore.frequencyDays, 1)
-            return "Every \(interval) days"
+            return (["Every \(interval) days", timeText, nextText] as [String?])
+                .compactMap(\.self)
+                .joined(separator: " · ")
         }
     }
 
@@ -2165,29 +2174,44 @@ private struct RecurringChoreRow: View {
         let index = min(max(weekday, 1), symbols.count) - 1
         return symbols[index]
     }
+
+    private static func timeText(hour: Int, minute: Int) -> String {
+        var components = DateComponents()
+        components.hour = min(max(hour, 0), 23)
+        components.minute = min(max(minute, 0), 59)
+        guard let date = Calendar.current.date(from: components) else { return "12:00" }
+
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
+    }
+
+    private static func dateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
 }
 
 enum RecurringChoreEditorValidation {
-    static func canSave(title: String, assigneeId: UUID?, categoryId: UUID?) -> Bool {
+    static func canSave(
+        title: String,
+        assigneeId: UUID?,
+        categoryId: UUID?,
+        scheduledHour: Int,
+        scheduledMinute: Int
+    ) -> Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             assigneeId != nil &&
-            categoryId != nil
+            categoryId != nil &&
+            (0 ... 23).contains(scheduledHour) &&
+            (0 ... 59).contains(scheduledMinute)
     }
 }
 
 private struct RecurringChoreEditorSheet: View {
-    private enum FirstOccurrenceMode: String, CaseIterable {
-        case today
-        case scheduled
-
-        var title: String {
-            switch self {
-            case .today: "Today"
-            case .scheduled: "On schedule"
-            }
-        }
-    }
-
     @ObservedObject var store: RecurringChoreStore
     let householdId: UUID
     let modelContext: ModelContext
@@ -2205,9 +2229,10 @@ private struct RecurringChoreEditorSheet: View {
     @State private var recurrenceInterval: Int
     @State private var recurrenceDay: Int
     @State private var recurrenceDayOfMonth: Int
+    @State private var scheduleStartDate: Date
+    @State private var scheduledTime: Date
     @State private var notes: String
     @State private var isActive: Bool
-    @State private var firstOccurrenceMode: FirstOccurrenceMode
 
     init(
         store: RecurringChoreStore,
@@ -2226,15 +2251,21 @@ private struct RecurringChoreEditorSheet: View {
         self.members = members
         self.chore = chore
         _title = State(initialValue: chore?.title ?? "")
-        _categoryId = State(initialValue: chore?.categoryId ?? categories.first?.id)
-        _assigneeId = State(initialValue: chore?.assigneeId ?? members.first?.id)
+        _categoryId = State(initialValue: chore?.categoryId)
+        _assigneeId = State(initialValue: chore?.assigneeId)
         _recurrenceType = State(initialValue: chore?.recurrenceType ?? .weekly)
         _recurrenceInterval = State(initialValue: max(chore?.recurrenceInterval ?? 1, 1))
         _recurrenceDay = State(initialValue: chore?.recurrenceDay ?? Calendar.current.component(.weekday, from: Date()))
         _recurrenceDayOfMonth = State(initialValue: chore?.recurrenceDayOfMonth ?? 1)
+        _scheduleStartDate = State(initialValue: chore?.scheduleStartDate ?? chore?.nextScheduledDate ?? Date())
+        _scheduledTime = State(
+            initialValue: Self.timeDate(
+                hour: chore?.scheduledHour ?? 12,
+                minute: chore?.scheduledMinute ?? 0
+            )
+        )
         _notes = State(initialValue: chore?.notes ?? "")
         _isActive = State(initialValue: chore?.isActive ?? true)
-        _firstOccurrenceMode = State(initialValue: .today)
     }
 
     var body: some View {
@@ -2256,6 +2287,7 @@ private struct RecurringChoreEditorSheet: View {
                             .foregroundStyle(themeStore.contentSecondaryColor)
                     } else {
                         Picker("Category", selection: $categoryId) {
+                            Text("Pick a category").tag(UUID?.none)
                             ForEach(categories) { category in
                                 Text(category.title).tag(Optional(category.id))
                             }
@@ -2263,12 +2295,19 @@ private struct RecurringChoreEditorSheet: View {
                         .font(themeStore.font(for: .listRowTitle))
                     }
 
-                    Picker("Assignee", selection: $assigneeId) {
-                        ForEach(members) { member in
-                            Text(member.displayName).tag(Optional(member.id))
+                    if members.isEmpty {
+                        Text("Invite a household member before adding recurring chores.")
+                            .font(themeStore.font(for: .listRowTitle))
+                            .foregroundStyle(themeStore.contentSecondaryColor)
+                    } else {
+                        Picker("Assignee", selection: $assigneeId) {
+                            Text("Pick a household member").tag(UUID?.none)
+                            ForEach(members) { member in
+                                Text(member.displayName).tag(Optional(member.id))
+                            }
                         }
+                        .font(themeStore.font(for: .listRowTitle))
                     }
-                    .font(themeStore.font(for: .listRowTitle))
                 } header: {
                     Text("Ownership")
                         .font(themeStore.font(for: .sectionHeader))
@@ -2284,14 +2323,19 @@ private struct RecurringChoreEditorSheet: View {
 
                     recurrenceControls
 
-                    if chore == nil {
-                        Picker("First task", selection: $firstOccurrenceMode) {
-                            ForEach(FirstOccurrenceMode.allCases, id: \.self) { mode in
-                                Text(mode.title).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                    }
+                    DatePicker(
+                        "Starts",
+                        selection: $scheduleStartDate,
+                        displayedComponents: .date
+                    )
+                    .font(themeStore.font(for: .listRowTitle))
+
+                    DatePicker(
+                        "Time",
+                        selection: $scheduledTime,
+                        displayedComponents: .hourAndMinute
+                    )
+                    .font(themeStore.font(for: .listRowTitle))
                 } header: {
                     Text("Schedule")
                         .font(themeStore.font(for: .sectionHeader))
@@ -2363,13 +2407,26 @@ private struct RecurringChoreEditorSheet: View {
         RecurringChoreEditorValidation.canSave(
             title: title,
             assigneeId: assigneeId,
-            categoryId: categoryId
+            categoryId: categoryId,
+            scheduledHour: scheduledHour,
+            scheduledMinute: scheduledMinute
         )
+    }
+
+    private var scheduledHour: Int {
+        Calendar.current.component(.hour, from: scheduledTime)
+    }
+
+    private var scheduledMinute: Int {
+        Calendar.current.component(.minute, from: scheduledTime)
     }
 
     private func save() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let startDate = Calendar.current.startOfDay(for: scheduleStartDate)
+        let hour = scheduledHour
+        let minute = scheduledMinute
         HapticManager.lightTap()
 
         _ = _Concurrency.Task {
@@ -2382,13 +2439,16 @@ private struct RecurringChoreEditorSheet: View {
                 existing.recurrenceInterval = recurrenceInterval
                 existing.recurrenceDay = recurrenceType == .weekly ? recurrenceDay : nil
                 existing.recurrenceDayOfMonth = recurrenceType == .monthly ? recurrenceDayOfMonth : nil
+                existing.scheduleStartDate = startDate
+                existing.scheduledHour = hour
+                existing.scheduledMinute = minute
                 existing.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
                 existing.isActive = isActive
                 existing.nextScheduledDate = ChoreScheduler.nextScheduledDate(for: existing, from: Date())
                 existing.updatedAt = Date()
                 await store.updateChore(existing)
             } else {
-                let createdChore = await store.addChore(
+                await store.addChore(
                     title: trimmedTitle,
                     recurrenceType: recurrenceType,
                     recurrenceInterval: recurrenceInterval,
@@ -2396,19 +2456,12 @@ private struct RecurringChoreEditorSheet: View {
                     recurrenceDayOfMonth: recurrenceType == .monthly ? recurrenceDayOfMonth : nil,
                     assigneeId: assigneeId,
                     categoryId: categoryId,
+                    scheduleStartDate: startDate,
+                    scheduledHour: hour,
+                    scheduledMinute: minute,
                     notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
                     isActive: isActive
                 )
-                if firstOccurrenceMode == .today, let createdChore {
-                    await ChoreScheduler.shared.generateInitialOccurrence(
-                        for: createdChore,
-                        recurringStore: store,
-                        householdId: householdId,
-                        modelContext: modelContext,
-                        syncMode: syncMode,
-                        dueDate: Date()
-                    )
-                }
             }
             await MainActor.run {
                 dismiss()
@@ -2420,6 +2473,13 @@ private struct RecurringChoreEditorSheet: View {
         let symbols = Calendar.current.weekdaySymbols
         let index = min(max(weekday, 1), symbols.count) - 1
         return symbols[index]
+    }
+
+    private static func timeDate(hour: Int, minute: Int) -> Date {
+        var components = DateComponents()
+        components.hour = min(max(hour, 0), 23)
+        components.minute = min(max(minute, 0), 59)
+        return Calendar.current.date(from: components) ?? Date()
     }
 }
 

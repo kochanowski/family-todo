@@ -129,6 +129,9 @@
         { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false },
         { "name": "lastGeneratedDate", "type": "Date", "queryable": false, "sortable": false },
         { "name": "nextScheduledDate", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "scheduleStartDate", "type": "Date", "queryable": false, "sortable": false },
+        { "name": "scheduledHour", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "scheduledMinute", "type": "Int64", "queryable": false, "sortable": false },
         { "name": "notes", "type": "String", "queryable": false, "sortable": false },
         { "name": "createdAt", "type": "Date", "queryable": false, "sortable": false },
         { "name": "updatedAt", "type": "Date", "queryable": false, "sortable": false }
