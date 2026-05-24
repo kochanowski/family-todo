@@ -69,6 +69,8 @@ jobs:
       - name: Generate Secrets.swift
         env:
           REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+          POSTHOG_PROJECT_TOKEN: ${{ secrets.POSTHOG_PROJECT_TOKEN }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
         run: |
           set -euo pipefail
           if [ -z "$REVENUECAT_API_KEY" ]; then
@@ -87,6 +89,8 @@ jobs:
           cat > FamilyTodo/Secrets.swift <<EOF
           struct Secrets {
               static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+              static let postHogProjectToken = "${POSTHOG_PROJECT_TOKEN}"
+              static let postHogHost = "${POSTHOG_HOST}"
           }
           EOF
 
@@ -209,6 +213,8 @@ jobs:
       - name: Generate Secrets.swift
         env:
           REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+          POSTHOG_PROJECT_TOKEN: ${{ secrets.POSTHOG_PROJECT_TOKEN }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
         run: |
           set -euo pipefail
           if [ -z "$REVENUECAT_API_KEY" ]; then
@@ -227,6 +233,8 @@ jobs:
           cat > FamilyTodo/Secrets.swift <<EOF
           struct Secrets {
               static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+              static let postHogProjectToken = "${POSTHOG_PROJECT_TOKEN}"
+              static let postHogHost = "${POSTHOG_HOST}"
           }
           EOF
 
@@ -360,6 +368,8 @@ jobs:
       - name: Generate Secrets.swift
         env:
           REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+          POSTHOG_PROJECT_TOKEN: ${{ secrets.POSTHOG_PROJECT_TOKEN }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
         run: |
           set -euo pipefail
           if [ -z "$REVENUECAT_API_KEY" ]; then
@@ -378,6 +388,8 @@ jobs:
           cat > FamilyTodo/Secrets.swift <<EOF
           struct Secrets {
               static let revenueCatApiKey = "${REVENUECAT_API_KEY}"
+              static let postHogProjectToken = "${POSTHOG_PROJECT_TOKEN}"
+              static let postHogHost = "${POSTHOG_HOST}"
           }
           EOF
 

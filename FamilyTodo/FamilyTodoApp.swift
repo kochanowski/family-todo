@@ -4,16 +4,19 @@ import RevenueCat
 import SwiftData
 import SwiftUI
 
-// PostHog: Read configuration from Xcode scheme environment variables
-enum PostHogEnv: String {
-    case projectToken = "POSTHOG_PROJECT_TOKEN"
-    case host = "POSTHOG_HOST"
+enum PostHogRuntime {
+    static func configureIfNeeded() {
+        let projectToken = Secrets.postHogProjectToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = Secrets.postHogHost.trimmingCharacters(in: .whitespacesAndNewlines)
 
-    var value: String {
-        guard let value = ProcessInfo.processInfo.environment[rawValue] else {
-            fatalError("Set \(rawValue) in the Xcode scheme Run environment variables.")
+        guard !projectToken.isEmpty, URL(string: host)?.host != nil else {
+            print("[PostHog] Configuration is invalid. Analytics remains disabled.")
+            return
         }
-        return value
+
+        let postHogConfig = PostHogConfig(apiKey: projectToken, host: host)
+        postHogConfig.captureApplicationLifecycleEvents = true
+        PostHogSDK.shared.setup(postHogConfig)
     }
 }
 
@@ -67,9 +70,7 @@ struct FamilyTodoApp: App {
         )
         // PostHog: Initialize analytics SDK
         #if !CI
-            let postHogConfig = PostHogConfig(apiKey: PostHogEnv.projectToken.value, host: PostHogEnv.host.value)
-            postHogConfig.captureApplicationLifecycleEvents = true
-            PostHogSDK.shared.setup(postHogConfig)
+            PostHogRuntime.configureIfNeeded()
         #endif
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
