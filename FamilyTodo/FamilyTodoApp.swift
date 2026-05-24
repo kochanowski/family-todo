@@ -53,16 +53,9 @@ struct FamilyTodoApp: App {
     private let sharedModelContainer: ModelContainer?
 
     private static let appSchema = Schema([
-        CachedWorkItem.self,
-        CachedTask.self,
-        CachedMember.self,
-        CachedShoppingItem.self,
-        CachedShoppingBundle.self,
-        CachedBacklogCategory.self,
-        CachedBacklogItem.self,
-        CachedHousehold.self,
-        CachedArea.self,
-        CachedRecurringChore.self,
+        CachedWorkItem.self, CachedTask.self, CachedMember.self, CachedShoppingItem.self,
+        CachedShoppingBundle.self, CachedBacklogCategory.self, CachedBacklogItem.self,
+        CachedHousehold.self, CachedArea.self, CachedRecurringChore.self,
     ])
 
     init() {
@@ -74,10 +67,7 @@ struct FamilyTodoApp: App {
         )
         // PostHog: Initialize analytics SDK
         #if !CI
-            let postHogConfig = PostHogConfig(
-                apiKey: PostHogEnv.projectToken.value,
-                host: PostHogEnv.host.value
-            )
+            let postHogConfig = PostHogConfig(apiKey: PostHogEnv.projectToken.value, host: PostHogEnv.host.value)
             postHogConfig.captureApplicationLifecycleEvents = true
             PostHogSDK.shared.setup(postHogConfig)
         #endif
