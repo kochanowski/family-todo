@@ -1,4 +1,5 @@
 import Foundation
+import PostHog
 import SwiftData
 import SwiftUI
 
@@ -985,6 +986,12 @@ final class BacklogStore: ObservableObject {
 
         postLocalBacklogRefresh()
 
+        // PostHog: Track idea addition
+        PostHogSDK.shared.capture("idea_added", properties: [
+            "is_assigned": assigneeId != nil,
+            "has_notes": notes != nil && !(notes?.isEmpty ?? true),
+        ])
+
         guard isCloudSyncEnabled else { return }
         replayPendingMutationsInBackground()
     }
@@ -1189,6 +1196,12 @@ final class BacklogStore: ObservableObject {
         }
 
         postLocalBacklogRefresh(includeTaskBoard: true)
+
+        // PostHog: Track idea promotion to task
+        PostHogSDK.shared.capture("idea_promoted_to_task", properties: [
+            "preferred_status": preferredStatus.rawValue,
+            "is_assigned": resolvedAssigneeId != nil,
+        ])
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()

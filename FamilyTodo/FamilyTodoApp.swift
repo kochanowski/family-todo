@@ -1,7 +1,21 @@
 import CloudKit
+import PostHog
 import RevenueCat
 import SwiftData
 import SwiftUI
+
+// PostHog: Read configuration from Xcode scheme environment variables
+enum PostHogEnv: String {
+    case projectToken = "POSTHOG_PROJECT_TOKEN"
+    case host = "POSTHOG_HOST"
+
+    var value: String {
+        guard let value = ProcessInfo.processInfo.environment[rawValue] else {
+            fatalError("Set \(rawValue) in the Xcode scheme Run environment variables.")
+        }
+        return value
+    }
+}
 
 /// Session-scoped developer mode toggle. Unlocked with a secret 5-tap gesture on the
 /// household settings navigation title. Resets to locked on every cold start.
@@ -58,6 +72,15 @@ struct FamilyTodoApp: App {
             apiKey: Secrets.revenueCatApiKey,
             diagnostics: CloudKitDiagnosticsState.shared
         )
+        // PostHog: Initialize analytics SDK
+        #if !CI
+            let postHogConfig = PostHogConfig(
+                apiKey: PostHogEnv.projectToken.value,
+                host: PostHogEnv.host.value
+            )
+            postHogConfig.captureApplicationLifecycleEvents = true
+            PostHogSDK.shared.setup(postHogConfig)
+        #endif
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
 

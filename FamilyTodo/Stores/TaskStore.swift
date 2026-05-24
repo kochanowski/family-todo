@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import PostHog
 import SwiftData
 import SwiftUI
 
@@ -776,6 +777,13 @@ final class TaskStore: ObservableObject {
             await syncDailyDigestSchedule()
         }
 
+        // PostHog: Track task creation
+        PostHogSDK.shared.capture("task_created", properties: [
+            "status": task.status.rawValue,
+            "has_due_date": task.dueDate != nil,
+            "is_assigned": task.assigneeId != nil || !task.assigneeIds.isEmpty,
+        ])
+
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()
         }
@@ -834,6 +842,11 @@ final class TaskStore: ObservableObject {
         if status == .done {
             updatedTask.completedAt = Date()
             updatedTask.completedById = currentUserId
+            // PostHog: Track task completion
+            PostHogSDK.shared.capture("task_completed", properties: [
+                "had_due_date": task.dueDate != nil,
+                "was_overdue": task.dueDate.map { $0 < Date() } ?? false,
+            ])
         } else if task.status == .done {
             updatedTask.completedAt = nil
             updatedTask.completedById = nil

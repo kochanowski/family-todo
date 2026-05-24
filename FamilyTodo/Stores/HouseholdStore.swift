@@ -1,5 +1,6 @@
 import CloudKit
 import Combine
+import PostHog
 import SwiftData
 import SwiftUI
 import UIKit
@@ -1305,6 +1306,8 @@ class HouseholdStore: ObservableObject {
             updateCache(with: newHousehold)
             currentHousehold = newHousehold
             runCreateHouseholdPostflight(household: newHousehold, userId: userId)
+            // PostHog: Track household creation (cloud)
+            PostHogSDK.shared.capture("household_created", properties: ["sync_mode": "cloud", "household_id": newHousehold.id.uuidString])
             return newHousehold
         }
 
@@ -1317,6 +1320,8 @@ class HouseholdStore: ObservableObject {
         updateCache(with: newHousehold)
         currentHousehold = newHousehold
 
+        // PostHog: Track household creation (local)
+        PostHogSDK.shared.capture("household_created", properties: ["sync_mode": "local", "household_id": newHousehold.id.uuidString])
         return newHousehold
     }
 
@@ -1490,6 +1495,8 @@ class HouseholdStore: ObservableObject {
             householdId: target.household.id,
             userId: userId
         )
+        // PostHog: Track household join via invite code
+        PostHogSDK.shared.capture("household_joined", properties: ["join_method": "invite_code", "household_id": target.household.id.uuidString])
         await prewarmJoinedHouseholdGraphIfNeeded(household: target.household, userId: userId)
     }
 
@@ -1797,6 +1804,8 @@ class HouseholdStore: ObservableObject {
             enqueuePendingExitOperation(pendingOperation)
         }
 
+        // PostHog: Track household leave
+        PostHogSDK.shared.capture("household_left", properties: ["household_id": household.id.uuidString, "sync_mode": syncMode == .cloud ? "cloud" : "local"])
         performLocalHouseholdExit(householdId: household.id)
 
         if pendingOperation != nil {
