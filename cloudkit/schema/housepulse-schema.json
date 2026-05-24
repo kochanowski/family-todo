@@ -127,6 +127,7 @@
         { "name": "areaId", "type": "Reference", "queryable": false, "sortable": false },
         { "name": "categoryId", "type": "Reference", "queryable": false, "sortable": false },
         { "name": "isActive", "type": "Int64", "queryable": false, "sortable": false },
+        { "name": "scheduleStartDate", "type": "Date", "queryable": false, "sortable": false },
         { "name": "lastGeneratedDate", "type": "Date", "queryable": false, "sortable": false },
         { "name": "nextScheduledDate", "type": "Date", "queryable": false, "sortable": false },
         { "name": "notes", "type": "String", "queryable": false, "sortable": false },

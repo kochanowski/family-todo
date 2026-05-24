@@ -79,7 +79,7 @@ required_map='{
   "Area": ["___recordID", "id", "householdId", "name", "icon", "sortOrder", "createdAt"],
   "Task": ["___recordID", "id", "householdId", "title", "status", "assigneeId", "assigneeIds", "backlogCategoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
   "WorkItem": ["___recordID", "id", "logicalItemId", "householdId", "title", "status", "assigneeId", "assigneeIds", "categoryId", "areaId", "dueDate", "lastPokedAt", "completedAt", "completedById", "taskType", "recurringChoreId", "notes", "order", "createdAt", "updatedAt"],
-  "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
+  "RecurringChore": ["id", "householdId", "title", "recurrenceType", "recurrenceDay", "recurrenceDayOfMonth", "recurrenceInterval", "defaultAssigneeIds", "defaultAssigneeId", "areaId", "categoryId", "isActive", "scheduleStartDate", "lastGeneratedDate", "nextScheduledDate", "notes", "createdAt", "updatedAt"],
   "ShoppingItem": ["___recordID", "id", "householdId", "title", "quantityValue", "quantityUnit", "isBought", "boughtAt", "restockCount", "sortOrder", "createdAt", "updatedAt"],
   "ShoppingBundle": ["___recordID", "id", "householdId", "name", "icon", "itemsJSON", "sortOrder", "createdAt", "updatedAt"],
   "BacklogCategory": ["___recordID", "id", "householdId", "title", "colorHex", "sortOrder", "createdAt", "updatedAt"],
