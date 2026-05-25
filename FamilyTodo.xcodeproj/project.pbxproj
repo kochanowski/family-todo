@@ -11,6 +11,7 @@
 		D8A148526B034E92ADDBC14C /* SyncStatusPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848E1F71D41541C8AFF58250 /* SyncStatusPill.swift */; };
 		RCBUILD0000000000000001 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = RCPRODUCT00000000000001 /* RevenueCat */; };
 		RCBUILD0000000000000002 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = RCPRODUCT00000000000002 /* RevenueCatUI */; };
+		POSTHOGBUILD000000000001 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = POSTHOGPRODUCT00000001 /* PostHog */; };
 		RCSRCBUILD0000000000001 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCSRCFILE0000000000001 /* SubscriptionManager.swift */; };
 		SECRETSBUILD00000000001 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = SECRETSFILE0000000001 /* Secrets.swift */; };
 		1640C04D97C34B6D908BC1E1 /* CloudKitSubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A64C673C65F9499681214CF6 /* CloudKitSubscriptionManager.swift */; };
@@ -302,6 +303,7 @@
 			files = (
 				RCBUILD0000000000000001 /* RevenueCat in Frameworks */,
 				RCBUILD0000000000000002 /* RevenueCatUI in Frameworks */,
+				POSTHOGBUILD000000000001 /* PostHog in Frameworks */,
 				A1B2C3D4E5F60718293A4B7D /* SwiftUI.framework in Frameworks */,
 				A1B2C3D4E5F60718293A4B7E /* Foundation.framework in Frameworks */,
 			);
@@ -481,6 +483,7 @@
 			mainGroup = A1B2C3D4E5F60718293A4B84;
 			packageReferences = (
 				RCPACKAGE0000000000001 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+				POSTHOGPACKAGE000000001 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			productRefGroup = A1B2C3D4E5F60718293A4B5E;
 			projectDirPath = "";
@@ -642,6 +645,7 @@
 			packageProductDependencies = (
 				RCPRODUCT00000000000001 /* RevenueCat */,
 				RCPRODUCT00000000000002 /* RevenueCatUI */,
+				POSTHOGPRODUCT00000001 /* PostHog */,
 			);
 			productName = HousePulse;
 			productReference = A1B2C3D4E5F60718293A4B75 /* HousePulse.app */;
@@ -883,6 +887,14 @@
 				minimumVersion = 5.52.0;
 			};
 		};
+		POSTHOGPACKAGE000000001 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.58.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -896,6 +908,11 @@
 			package = RCPACKAGE0000000000001 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
 			productName = RevenueCatUI;
 		};
+		POSTHOGPRODUCT00000001 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = POSTHOGPACKAGE000000001 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
+		};
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -908,7 +925,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_TESTABILITY = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -923,7 +940,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.9;

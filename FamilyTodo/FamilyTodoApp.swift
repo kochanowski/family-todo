@@ -1,7 +1,24 @@
 import CloudKit
+import PostHog
 import RevenueCat
 import SwiftData
 import SwiftUI
+
+enum PostHogRuntime {
+    static func configureIfNeeded() {
+        let projectToken = Secrets.postHogProjectToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = Secrets.postHogHost.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !projectToken.isEmpty, URL(string: host)?.host != nil else {
+            print("[PostHog] Configuration is invalid. Analytics remains disabled.")
+            return
+        }
+
+        let postHogConfig = PostHogConfig(apiKey: projectToken, host: host)
+        postHogConfig.captureApplicationLifecycleEvents = true
+        PostHogSDK.shared.setup(postHogConfig)
+    }
+}
 
 /// Session-scoped developer mode toggle. Unlocked with a secret 5-tap gesture on the
 /// household settings navigation title. Resets to locked on every cold start.
@@ -39,16 +56,9 @@ struct FamilyTodoApp: App {
     private let sharedModelContainer: ModelContainer?
 
     private static let appSchema = Schema([
-        CachedWorkItem.self,
-        CachedTask.self,
-        CachedMember.self,
-        CachedShoppingItem.self,
-        CachedShoppingBundle.self,
-        CachedBacklogCategory.self,
-        CachedBacklogItem.self,
-        CachedHousehold.self,
-        CachedArea.self,
-        CachedRecurringChore.self,
+        CachedWorkItem.self, CachedTask.self, CachedMember.self, CachedShoppingItem.self,
+        CachedShoppingBundle.self, CachedBacklogCategory.self, CachedBacklogItem.self,
+        CachedHousehold.self, CachedArea.self, CachedRecurringChore.self,
     ])
 
     init() {
@@ -58,6 +68,10 @@ struct FamilyTodoApp: App {
             apiKey: Secrets.revenueCatApiKey,
             diagnostics: CloudKitDiagnosticsState.shared
         )
+        // PostHog: Initialize analytics SDK
+        #if !CI
+            PostHogRuntime.configureIfNeeded()
+        #endif
         let userSession = UserSession.shared
         _userSession = StateObject(wrappedValue: userSession)
 

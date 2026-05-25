@@ -18,6 +18,10 @@
     <BuildableProductRunnable runnableDebuggingMode="0">
       <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A1B2C3D4E5F60718293A4B60" BuildableName="HousePulse.app" BlueprintName="HousePulse" ReferencedContainer="container:FamilyTodo.xcodeproj"/>
     </BuildableProductRunnable>
+    <EnvironmentVariables>
+      <EnvironmentVariable key="POSTHOG_PROJECT_TOKEN" value="phc_pCtuHrYRHjFNAJoqShwFUhrFx9TjrZTnKKZjeZyXugoM" isEnabled="YES"/>
+      <EnvironmentVariable key="POSTHOG_HOST" value="https://eu.i.posthog.com" isEnabled="YES"/>
+    </EnvironmentVariables>
   </LaunchAction>
   <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES">
     <BuildableProductRunnable runnableDebuggingMode="0">

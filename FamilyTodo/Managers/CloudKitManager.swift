@@ -934,116 +934,29 @@ actor CloudKitManager {
             mode: mode
         )
 
-        let querySpecs: [(String, ZoneScopedQueryFactory)] = [
-            (
-                "Member",
-                { zoneID in
-                    CKQuery(
-                        recordType: "Member",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "Area",
-                { zoneID in
-                    CKQuery(
-                        recordType: "Area",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "Task",
-                { zoneID in
-                    CKQuery(
-                        recordType: "Task",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "WorkItem",
-                { zoneID in
-                    CKQuery(
-                        recordType: "WorkItem",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "RecurringChore",
-                { zoneID in
-                    CKQuery(
-                        recordType: "RecurringChore",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "ShoppingItem",
-                { zoneID in
-                    CKQuery(
-                        recordType: "ShoppingItem",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "ShoppingBundle",
-                { zoneID in
-                    CKQuery(
-                        recordType: "ShoppingBundle",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "BacklogCategory",
-                { zoneID in
-                    CKQuery(
-                        recordType: "BacklogCategory",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
-            (
-                "BacklogItem",
-                { zoneID in
-                    CKQuery(
-                        recordType: "BacklogItem",
-                        predicate: self.householdReferenceMatchPredicate(
-                            householdId: householdId,
-                            zoneID: zoneID
-                        )
-                    )
-                }
-            ),
+        let recordTypes = [
+            "Member",
+            "Area",
+            "Task",
+            "WorkItem",
+            "RecurringChore",
+            "ShoppingItem",
+            "ShoppingBundle",
+            "BacklogCategory",
+            "BacklogItem",
         ]
+        let querySpecs: [(String, ZoneScopedQueryFactory)] = recordTypes.map { recordType in
+            let queryFactory: ZoneScopedQueryFactory = { zoneID in
+                CKQuery(
+                    recordType: recordType,
+                    predicate: self.householdReferenceMatchPredicate(
+                        householdId: householdId,
+                        zoneID: zoneID
+                    )
+                )
+            }
+            return (recordType, queryFactory)
+        }
 
         do {
             for (recordType, query) in querySpecs {
