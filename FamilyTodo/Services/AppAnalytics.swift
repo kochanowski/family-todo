@@ -2,12 +2,7 @@ import Foundation
 import PostHog
 
 enum AppAnalytics {
-    static func identifyUser(
-        _ userId: String,
-        sessionMode: SessionMode,
-        displayName: String? = nil,
-        hasConfirmedDisplayName: Bool? = nil
-    ) {
+    static func identifyUser(_ userId: String, sessionMode: SessionMode, displayName: String? = nil, hasConfirmedDisplayName: Bool? = nil) {
         var properties: [String: Any] = [
             "session_mode": sessionMode.analyticsValue,
         ]
@@ -39,12 +34,7 @@ enum AppAnalytics {
         )
     }
 
-    static func screenViewed(
-        _ screen: AppScreen,
-        sessionMode: SessionMode,
-        syncMode: SyncMode,
-        householdId: UUID?
-    ) {
+    static func screenViewed(_ screen: AppScreen, sessionMode: SessionMode, syncMode: SyncMode, householdId: UUID?) {
         let properties = enrichedProperties(
             [
                 "$screen_name": screen.rawValue,
