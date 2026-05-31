@@ -9,7 +9,7 @@ enum AppAnalytics {
         hasConfirmedDisplayName: Bool? = nil
     ) {
         var properties: [String: Any] = [
-            "session_mode": sessionMode.analyticsValue
+            "session_mode": sessionMode.analyticsValue,
         ]
         if let displayName {
             properties["display_name"] = displayName
@@ -49,7 +49,7 @@ enum AppAnalytics {
             [
                 "$screen_name": screen.rawValue,
                 "screen_name": screen.rawValue,
-                "screen_area": screen.area
+                "screen_area": screen.area,
             ],
             sessionMode: sessionMode,
             syncMode: syncMode,
