@@ -16,13 +16,7 @@ enum AppAnalytics {
         PostHogSDK.shared.identify(userId, userProperties: properties)
     }
 
-    static func capture(
-        _ event: String,
-        properties: [String: Any] = [:],
-        sessionMode: SessionMode? = nil,
-        syncMode: SyncMode? = nil,
-        householdId: UUID? = nil
-    ) {
+    static func capture(_ event: String, properties: [String: Any] = [:], sessionMode: SessionMode? = nil, syncMode: SyncMode? = nil, householdId: UUID? = nil) {
         PostHogSDK.shared.capture(
             event,
             properties: enrichedProperties(
@@ -55,13 +49,7 @@ enum AppAnalytics {
         captureActivationMilestone("onboarding_started", sessionMode: sessionMode)
     }
 
-    static func activationMilestone(
-        _ milestone: ActivationMilestone,
-        sessionMode: SessionMode? = nil,
-        syncMode: SyncMode? = nil,
-        householdId: UUID? = nil,
-        properties: [String: Any] = [:]
-    ) {
+    static func activationMilestone(_ milestone: ActivationMilestone, sessionMode: SessionMode? = nil, syncMode: SyncMode? = nil, householdId: UUID? = nil, properties: [String: Any] = [:]) {
         captureActivationMilestone(
             milestone.rawValue,
             sessionMode: sessionMode,
@@ -71,11 +59,7 @@ enum AppAnalytics {
         )
     }
 
-    static func firstValueCompleted(
-        source: FirstValueSource,
-        syncMode: SyncMode,
-        householdId: UUID?
-    ) {
+    static func firstValueCompleted(source: FirstValueSource, syncMode: SyncMode, householdId: UUID?) {
         guard markOnce(key: "first_value_completed") else { return }
         let properties: [String: Any] = ["source": source.rawValue]
         capture(
@@ -92,13 +76,7 @@ enum AppAnalytics {
         )
     }
 
-    private static func captureActivationMilestone(
-        _ milestone: String,
-        sessionMode: SessionMode? = nil,
-        syncMode: SyncMode? = nil,
-        householdId: UUID? = nil,
-        properties: [String: Any] = [:]
-    ) {
+    private static func captureActivationMilestone(_ milestone: String, sessionMode: SessionMode? = nil, syncMode: SyncMode? = nil, householdId: UUID? = nil, properties: [String: Any] = [:]) {
         var milestoneProperties = properties
         milestoneProperties["milestone"] = milestone
         capture(
@@ -110,12 +88,7 @@ enum AppAnalytics {
         )
     }
 
-    private static func enrichedProperties(
-        _ properties: [String: Any],
-        sessionMode: SessionMode?,
-        syncMode: SyncMode?,
-        householdId: UUID?
-    ) -> [String: Any] {
+    private static func enrichedProperties(_ properties: [String: Any], sessionMode: SessionMode?, syncMode: SyncMode?, householdId: UUID?) -> [String: Any] {
         var enriched = properties
         if let sessionMode {
             enriched["session_mode"] = sessionMode.analyticsValue
