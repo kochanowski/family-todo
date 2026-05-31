@@ -32,6 +32,9 @@ struct MoreView: View {
                         HouseholdHeroCard()
                     }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        HapticManager.lightTap()
+                    })
 
                     if userSession.isGuest {
                         GuestUpgradeBanner {
@@ -52,6 +55,9 @@ struct MoreView: View {
                             MoreRow(icon: "folder", title: "Idea Categories")
                         }
                         .buttonStyle(.plain)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            HapticManager.lightTap()
+                        })
 
                         Divider()
                             .padding(.leading, 52)
@@ -62,6 +68,9 @@ struct MoreView: View {
                             MoreRow(icon: "gear", title: "Settings")
                         }
                         .buttonStyle(.plain)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            HapticManager.lightTap()
+                        })
                         .accessibilityIdentifier("Settings")
                     }
                     .background {
@@ -123,6 +132,7 @@ struct MoreView: View {
 
             if premiumSubscriptionManager.isPremium {
                 Button {
+                    HapticManager.lightTap()
                     premiumSubscriptionManager.displayCustomerCenter = true
                 } label: {
                     Text("Manage Subscription")
@@ -361,6 +371,7 @@ struct CategoriesManagementView: View {
                 .contentShape(Rectangle())
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         _ = _Concurrency.Task {
                             let result = await store.deleteCategory(category)
                             if case let .blocked(reason) = result {
@@ -386,9 +397,11 @@ struct CategoriesManagementView: View {
             Section {
                 Button {
                     guard canCreateCategory else {
+                        HapticManager.lightTap()
                         premiumSubscriptionManager.presentUpsell(.backlogCategoryLimit)
                         return
                     }
+                    HapticManager.lightTap()
                     newCategoryColorHex = MemberColorToken.randomHex()
                     isAddingCategory = true
                 } label: {

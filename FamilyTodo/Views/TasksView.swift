@@ -463,6 +463,7 @@ private struct TasksContent: View {
             )
             .swipeActions(edge: .trailing) {
                 Button {
+                    HapticManager.lightTap()
                     archiveTask(task)
                 } label: {
                     Label {
@@ -653,6 +654,7 @@ private struct TasksContent: View {
         HStack(spacing: 0) {
             ForEach(TasksFilter.allCases, id: \.self) { filter in
                 Button {
+                    HapticManager.lightTap()
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
                         activeFilter = filter
                     }
@@ -700,6 +702,7 @@ private struct TasksContent: View {
                             ) : themeStore.contentSecondaryColor
 
                     Button {
+                        HapticManager.lightTap()
                         withAnimation(.snappy(duration: 0.2)) {
                             assigneeFilter = option.filter
                         }

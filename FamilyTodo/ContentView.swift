@@ -88,6 +88,7 @@ struct MainAppView: View {
                 reconcileTabBarAppearance(reason: .fontScaleChanged)
             }
             .onChange(of: activeTab) { _, _ in
+                HapticManager.lightTap()
                 TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
                 TabBarDiagnosticsMonitor.shared.recordSnapshot(
                     event: "tabbar.selection.changed",
