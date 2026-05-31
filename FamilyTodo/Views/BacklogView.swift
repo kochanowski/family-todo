@@ -1454,6 +1454,7 @@ struct CategoryCard: View {
 
                 Menu {
                     Button {
+                        HapticManager.lightTap()
                         onEditCategory()
                     } label: {
                         Label {
@@ -1465,6 +1466,7 @@ struct CategoryCard: View {
                     }
 
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         onDeleteCategory()
                     } label: {
                         Label {

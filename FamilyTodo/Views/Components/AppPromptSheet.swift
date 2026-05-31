@@ -264,6 +264,7 @@ struct BacklogAssigneePickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        HapticManager.lightTap()
                         onCancel()
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -276,6 +277,7 @@ struct BacklogAssigneePickerSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     if !autoConfirmOnSelection {
                         Button(actionTitle) {
+                            HapticManager.success()
                             onConfirm()
                         }
                         .font(themeStore.font(for: .buttonLabel))

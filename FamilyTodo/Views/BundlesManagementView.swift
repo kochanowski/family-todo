@@ -149,6 +149,7 @@ struct BundlesManagementView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         _ = _Concurrency.Task {
                             await store.deleteBundle(bundle)
                         }
@@ -199,6 +200,7 @@ struct BundlesManagementView: View {
             premiumSubscriptionManager.presentUpsell(.shoppingBundles)
             return
         }
+        HapticManager.success()
         lastAddedBundleId = bundle.id
         _ = _Concurrency.Task {
             _ = await shoppingStore.createItems(fromTitles: bundle.normalizedItems)
@@ -719,6 +721,7 @@ private struct ShoppingBundleIconPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        HapticManager.lightTap()
                         dismiss()
                     } label: {
                         Text("Close")

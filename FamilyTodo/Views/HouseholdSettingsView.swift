@@ -550,6 +550,7 @@ private struct InviteMemberView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") {
+                        HapticManager.lightTap()
                         dismiss()
                     }
                     .font(themeStore.font(for: .buttonLabel))
@@ -635,6 +636,7 @@ private struct InviteMemberView: View {
 
             // Secondary CTA: copy code
             Button {
+                HapticManager.lightTap()
                 UIPasteboard.general.string = token.code
                 codeCopied = true
                 _Concurrency.Task { @MainActor in
@@ -756,6 +758,7 @@ private struct EditProfileView: View {
                     ForEach(MemberColorToken.allCases, id: \.self) { token in
                         let hex = token.hex
                         Button {
+                            HapticManager.selection()
                             selectedColorHex = hex
                         } label: {
                             Circle()
@@ -783,6 +786,7 @@ private struct EditProfileView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Cancel") {
+                    HapticManager.lightTap()
                     dismiss()
                 }
                 .font(themeStore.font(for: .buttonLabel))
@@ -794,6 +798,7 @@ private struct EditProfileView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    HapticManager.success()
                     saveProfile()
                 } label: {
                     Text("Save")
@@ -946,6 +951,7 @@ private struct EditHouseholdView: View {
                 ) {
                     ForEach(iconOptions, id: \.self) { icon in
                         Button {
+                            HapticManager.selection()
                             draft.iconSymbol = icon
                         } label: {
                             ZStack {
@@ -991,6 +997,7 @@ private struct EditHouseholdView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
+                    HapticManager.lightTap()
                     dismiss()
                 } label: {
                     Text("Cancel")
@@ -999,6 +1006,7 @@ private struct EditHouseholdView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
+                    HapticManager.success()
                     saveHousehold()
                 } label: {
                     Text("Save")

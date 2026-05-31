@@ -1620,6 +1620,7 @@ struct RestockSheet: View {
             HStack {
                 if !store.recentItems.isEmpty {
                     Button(role: .destructive) {
+                        HapticManager.warning()
                         showClearAllConfirmation = true
                     } label: {
                         Text("Clear")
@@ -1632,6 +1633,7 @@ struct RestockSheet: View {
                 Spacer()
 
                 Button("Done") {
+                    HapticManager.lightTap()
                     dismiss()
                 }
                 .font(themeStore.font(for: .buttonLabel))
@@ -1657,6 +1659,7 @@ private struct ShoppingQuickAddBundleSheet: View {
         NavigationStack {
             List(bundles) { bundle in
                 Button {
+                    HapticManager.success()
                     onSelectBundle(bundle)
                     dismiss()
                 } label: {
@@ -1697,6 +1700,7 @@ private struct ShoppingQuickAddBundleSheet: View {
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") {
+                        HapticManager.lightTap()
                         dismiss()
                     }
                     .font(themeStore.font(for: .buttonLabel))

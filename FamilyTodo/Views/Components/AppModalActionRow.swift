@@ -34,7 +34,10 @@ struct AppModalActionRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: onSecondary) {
+            Button(action: {
+                HapticManager.lightTap()
+                onSecondary()
+            }) {
                 Text(secondaryTitle)
                     .font(themeStore.font(for: .buttonLabel))
                     .foregroundStyle(.primary)
@@ -47,7 +50,14 @@ struct AppModalActionRow: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: onPrimary) {
+            Button(action: {
+                if primaryStyle == .destructive {
+                    HapticManager.warning()
+                } else {
+                    HapticManager.success()
+                }
+                onPrimary()
+            }) {
                 Text(primaryTitle)
                     .font(themeStore.font(for: .buttonLabel))
                     .fontWeight(.bold)
