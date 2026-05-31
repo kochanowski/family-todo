@@ -1,5 +1,4 @@
 import Foundation
-import PostHog
 import SwiftData
 import SwiftUI
 
@@ -453,11 +452,25 @@ final class ShoppingListStore: ObservableObject {
             )
         }
 
-        // PostHog: Track shopping item addition
-        PostHogSDK.shared.capture("shopping_item_added", properties: [
-            "has_quantity": quantityValue != nil,
-            "is_inline_insert": afterItemId != nil,
-        ])
+        AppAnalytics.capture(
+            "shopping_item_added",
+            properties: [
+                "has_quantity": quantityValue != nil,
+                "is_inline_insert": afterItemId != nil,
+            ],
+            syncMode: syncMode,
+            householdId: householdId
+        )
+        AppAnalytics.activationMilestone(
+            .shoppingItemAdded,
+            syncMode: syncMode,
+            householdId: householdId
+        )
+        AppAnalytics.firstValueCompleted(
+            source: .shoppingItem,
+            syncMode: syncMode,
+            householdId: householdId
+        )
 
         if !isCloudSyncEnabled {
             return item
@@ -752,8 +765,12 @@ final class ShoppingListStore: ObservableObject {
 
         saveContextOrSetError(operation: "clear recent shopping items cache")
 
-        // PostHog: Track shopping list cleared
-        PostHogSDK.shared.capture("shopping_list_cleared", properties: ["cleared_count": boughtItems.count])
+        AppAnalytics.capture(
+            "shopping_list_cleared",
+            properties: ["cleared_count": boughtItems.count],
+            syncMode: syncMode,
+            householdId: householdId
+        )
     }
 
     // MARK: - Bulk Operations

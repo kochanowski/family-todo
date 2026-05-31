@@ -74,6 +74,7 @@ struct MainAppView: View {
                     extra: ["hasResolvedController": "\(tabBarController != nil)"]
                 )
                 TabBarDiagnosticsMonitor.shared.updateSelectedTab(activeTab)
+                trackActiveTabScreen()
                 primeActiveMemberBaseline()
                 subscriptionManager.updateActiveTab(activeTab)
             }
@@ -92,6 +93,7 @@ struct MainAppView: View {
                     event: "tabbar.selection.changed",
                     extra: ["activeTab": activeTab.rawValue]
                 )
+                trackActiveTabScreen()
                 subscriptionManager.updateActiveTab(activeTab)
             }
             .onChange(of: userSession.currentHouseholdID) { _, _ in
@@ -143,6 +145,15 @@ struct MainAppView: View {
             }
             .tag(AppTab.more)
         }
+    }
+
+    private func trackActiveTabScreen() {
+        AppAnalytics.screenViewed(
+            activeTab.analyticsScreen,
+            sessionMode: userSession.sessionMode,
+            syncMode: userSession.syncMode,
+            householdId: userSession.currentHouseholdID
+        )
     }
 
     private var activeMemberSnapshot: ActiveMemberSnapshot {

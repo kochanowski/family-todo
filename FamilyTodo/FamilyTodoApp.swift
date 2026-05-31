@@ -286,6 +286,7 @@ struct RootView: View {
     @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @Environment(\.scenePhase) private var scenePhase
+    @State private var lastTrackedRootScreen: AppScreen?
 
     var body: some View {
         rootContentWithAlerts
@@ -347,6 +348,9 @@ struct RootView: View {
 
     private var rootContentWithLifecycleHandlers: some View {
         rootContent
+            .onAppear {
+                trackCurrentRootScreen()
+            }
             .onChange(of: userSession.hasActiveSession) { _, hasSession in
                 if !hasSession, onboardingState.currentState != .onboarding {
                     householdStore.resetSetupResolution()
@@ -372,6 +376,7 @@ struct RootView: View {
                 refreshPremiumHouseholdState()
             }
             .onChange(of: onboardingState.currentState) { _, newState in
+                trackCurrentRootScreen(for: newState)
                 if newState == .householdSetup {
                     householdStore.prepareForSetupResolution(key: householdSetupResolutionKey)
                 } else {
@@ -497,6 +502,37 @@ struct RootView: View {
         }
 
         premiumSubscriptionManager.displayPaywall = true
+    }
+
+    private func trackCurrentRootScreen(for state: LaunchState? = nil) {
+        let state = state ?? onboardingState.currentState
+        guard let screen = rootScreen(for: state) else { return }
+        guard lastTrackedRootScreen != screen else { return }
+
+        lastTrackedRootScreen = screen
+        AppAnalytics.screenViewed(
+            screen,
+            sessionMode: userSession.sessionMode,
+            syncMode: userSession.syncMode,
+            householdId: userSession.currentHouseholdID
+        )
+
+        if screen == .onboarding {
+            AppAnalytics.onboardingStarted(sessionMode: userSession.sessionMode)
+        }
+    }
+
+    private func rootScreen(for state: LaunchState) -> AppScreen? {
+        switch state {
+        case .onboarding:
+            .onboarding
+        case .auth:
+            .signIn
+        case .householdSetup:
+            .householdSetup
+        case .mainApp:
+            nil
+        }
     }
 
     private var householdLifecycleSyncKey: String {

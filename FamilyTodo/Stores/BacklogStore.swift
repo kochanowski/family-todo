@@ -1,5 +1,4 @@
 import Foundation
-import PostHog
 import SwiftData
 import SwiftUI
 
@@ -986,11 +985,25 @@ final class BacklogStore: ObservableObject {
 
         postLocalBacklogRefresh()
 
-        // PostHog: Track idea addition
-        PostHogSDK.shared.capture("idea_added", properties: [
-            "is_assigned": assigneeId != nil,
-            "has_notes": notes != nil && !(notes?.isEmpty ?? true),
-        ])
+        AppAnalytics.capture(
+            "idea_added",
+            properties: [
+                "is_assigned": assigneeId != nil,
+                "has_notes": notes != nil && !(notes?.isEmpty ?? true),
+            ],
+            syncMode: syncMode,
+            householdId: householdId
+        )
+        AppAnalytics.activationMilestone(
+            .ideaAdded,
+            syncMode: syncMode,
+            householdId: householdId
+        )
+        AppAnalytics.firstValueCompleted(
+            source: .idea,
+            syncMode: syncMode,
+            householdId: householdId
+        )
 
         guard isCloudSyncEnabled else { return }
         replayPendingMutationsInBackground()
@@ -1197,11 +1210,15 @@ final class BacklogStore: ObservableObject {
 
         postLocalBacklogRefresh(includeTaskBoard: true)
 
-        // PostHog: Track idea promotion to task
-        PostHogSDK.shared.capture("idea_promoted_to_task", properties: [
-            "preferred_status": preferredStatus.rawValue,
-            "is_assigned": resolvedAssigneeId != nil,
-        ])
+        AppAnalytics.capture(
+            "idea_promoted_to_task",
+            properties: [
+                "preferred_status": preferredStatus.rawValue,
+                "is_assigned": resolvedAssigneeId != nil,
+            ],
+            syncMode: syncMode,
+            householdId: householdId
+        )
 
         if isCloudSyncEnabled {
             replayPendingMutationsInBackground()

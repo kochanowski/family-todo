@@ -74,6 +74,7 @@
 		A1B2C3D4E5F60718293A4B9D1 /* CloudKitManager+Mapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B9D2 /* CloudKitManager+Mapping.swift */; };
 		F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */; };
 		FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A73F3BC9DD4B4A97890EEC /* UserSession.swift */; };
+		APPANALYTICSBUILD001 /* AppAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = APPANALYTICSFILE001 /* AppAnalytics.swift */; };
 		D1C0D1A1A1A1A1A1A1A1A1A1 /* CloudKitDiagnosticsState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */; };
 		CKTOKENBUILD0000000001 /* CloudKitChangeTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CKTOKENFILE0000000001 /* CloudKitChangeTokenStore.swift */; };
 		1D4986922D5C4D52B5AFCB1C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D1A7F2E84B45DFA676530A /* SignInView.swift */; };
@@ -225,6 +226,7 @@
 		A1B2C3D4E5F60718293A4B9D2 /* CloudKitManager+Mapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudKitManager+Mapping.swift"; sourceTree = "<group>"; };
 		F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
 		36A73F3BC9DD4B4A97890EEC /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
+		APPANALYTICSFILE001 /* AppAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAnalytics.swift; sourceTree = "<group>"; };
 		RCSRCFILE0000000000001 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
 		SECRETSFILE0000000001 /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 		D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitDiagnosticsState.swift; sourceTree = "<group>"; };
@@ -516,6 +518,7 @@
 				TIPKITA0000000000000001 /* AppTips.swift */,
 				F23E39F22BF543BF82BAF4F9 /* AuthenticationService.swift */,
 				36A73F3BC9DD4B4A97890EEC /* UserSession.swift */,
+				APPANALYTICSFILE001 /* AppAnalytics.swift */,
 				RCSRCFILE0000000000001 /* SubscriptionManager.swift */,
 				D1C0D1A1A1A1A1A1A1A1A1A2 /* CloudKitDiagnosticsState.swift */,
 				CKTOKENFILE0000000001 /* CloudKitChangeTokenStore.swift */,
@@ -781,6 +784,7 @@
 				D1F7A0C7A07C4C67B7B8B4A1 /* ShoppingItem.swift in Sources */,
 				F1D742469FF445D1A5DE82B2 /* AuthenticationService.swift in Sources */,
 				FFC8C5E849E24E6DBE474133 /* UserSession.swift in Sources */,
+				APPANALYTICSBUILD001 /* AppAnalytics.swift in Sources */,
 				RCSRCBUILD0000000000001 /* SubscriptionManager.swift in Sources */,
 				SECRETSBUILD00000000001 /* Secrets.swift in Sources */,
 				D1C0D1A1A1A1A1A1A1A1A1A1 /* CloudKitDiagnosticsState.swift in Sources */,
@@ -921,11 +925,11 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_TESTABILITY = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -937,10 +941,10 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.9;

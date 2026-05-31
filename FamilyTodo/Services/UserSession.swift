@@ -221,14 +221,12 @@ final class UserSession: ObservableObject {
     /// Signs out the current user
     func signOut() {
         if isGuest {
-            // PostHog: Track guest session end
-            PostHogSDK.shared.capture("user_signed_out", properties: ["session_mode": "guest"])
+            AppAnalytics.capture("user_signed_out", sessionMode: .guest)
             PostHogSDK.shared.reset()
             endGuestSession()
             return
         }
-        // PostHog: Track sign out and reset identity
-        PostHogSDK.shared.capture("user_signed_out", properties: ["session_mode": "icloud"])
+        AppAnalytics.capture("user_signed_out", sessionMode: .signedIn)
         PostHogSDK.shared.reset()
         authService.signOut()
         clearSession()
@@ -256,9 +254,17 @@ final class UserSession: ObservableObject {
         preferredDisplayName = nil
         hasConfirmedDisplayName = true
 
-        // PostHog: Identify guest user and track session start
-        PostHogSDK.shared.identify(guestId, userProperties: ["session_mode": "guest", "display_name": displayName])
-        PostHogSDK.shared.capture("guest_session_started", properties: ["display_name": displayName])
+        AppAnalytics.identifyUser(
+            guestId,
+            sessionMode: .guest,
+            displayName: displayName,
+            hasConfirmedDisplayName: true
+        )
+        AppAnalytics.capture(
+            "guest_session_started",
+            properties: ["display_name": displayName],
+            sessionMode: .guest
+        )
 
         restoreHouseholdSelection()
     }
@@ -356,12 +362,15 @@ final class UserSession: ObservableObject {
             persistSignedInSession(userID: userID)
             restorePreferredDisplayName(for: userID)
 
-            // PostHog: Identify authenticated user
             let userDisplayName = authService.currentUser?.displayName ?? authService.currentUser?.givenName
-            var identifyProps: [String: Any] = ["session_mode": "icloud"]
-            if let name = userDisplayName { identifyProps["display_name"] = name }
-            PostHogSDK.shared.identify(userID, userProperties: identifyProps)
-            PostHogSDK.shared.capture("user_signed_in", properties: ["session_mode": "icloud"])
+            AppAnalytics.identifyUser(
+                userID,
+                sessionMode: .signedIn,
+                displayName: userDisplayName,
+                hasConfirmedDisplayName: hasConfirmedDisplayName
+            )
+            AppAnalytics.capture("user_signed_in", sessionMode: .signedIn)
+            AppAnalytics.activationMilestone(.signedIn, sessionMode: .signedIn)
 
             // Restore household selection if exists
             restoreHouseholdSelection()

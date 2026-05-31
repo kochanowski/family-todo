@@ -1,5 +1,4 @@
 import Foundation
-import PostHog
 import RevenueCat
 import RevenueCatUI
 import SwiftUI
@@ -370,15 +369,25 @@ final class SubscriptionManager: NSObject, ObservableObject {
     func presentUpsell(_ context: UpsellContext) {
         HapticManager.lightTap()
         activeUpsellContext = context
-        // PostHog: Track premium upsell viewed
-        PostHogSDK.shared.capture("premium_upsell_viewed", properties: ["feature": context.id])
+        AppAnalytics.capture(
+            "premium_upsell_viewed",
+            properties: ["feature": context.id],
+            sessionMode: userSession?.sessionMode,
+            syncMode: userSession?.syncMode,
+            householdId: userSession?.currentHouseholdID
+        )
     }
 
     func presentPaywallFromUpsell() {
         activeUpsellContext = nil
         displayPaywall = true
-        // PostHog: Track paywall opened from upsell
-        PostHogSDK.shared.capture("premium_paywall_opened", properties: ["source": "upsell"])
+        AppAnalytics.capture(
+            "premium_paywall_opened",
+            properties: ["source": "upsell"],
+            sessionMode: userSession?.sessionMode,
+            syncMode: userSession?.syncMode,
+            householdId: userSession?.currentHouseholdID
+        )
     }
 
     func handlePurchaseCompleted(customerInfo: CustomerInfo) {
