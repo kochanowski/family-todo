@@ -146,19 +146,18 @@ struct FamilyTodoApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppChromeContainer(themeStore: themeStore) {
-                Group {
-                    if startupBootstrapState == .recoveryRequired ||
-                        startupBootstrapState == .emergency ||
-                        sharedModelContainer == nil
-                    {
-                        StartupRecoveryView(
-                            message: startupRecoveryMessage
-                                ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
-                            diagnostics: startupDiagnostics
-                        )
-                    } else if let sharedModelContainer {
-                        RootView()
+            Group {
+                if startupBootstrapState == .recoveryRequired ||
+                    startupBootstrapState == .emergency ||
+                    sharedModelContainer == nil
+                {
+                    StartupRecoveryView(
+                        message: startupRecoveryMessage
+                            ?? "Wykryto krytyczny problem lokalnej bazy. Aplikacja uruchomiona w trybie awaryjnym.",
+                        diagnostics: startupDiagnostics
+                    )
+                } else if let sharedModelContainer {
+                    RootView()
                             .environmentObject(userSession)
                             .environmentObject(themeStore)
                             .environmentObject(householdStore)
@@ -256,21 +255,11 @@ struct FamilyTodoApp: App {
                             } message: {
                                 Text(startupRecoveryMessage ?? "")
                             }
-                    }
                 }
             }
-        }
-    }
-}
-
-private struct AppChromeContainer<Content: View>: View {
-    @ObservedObject var themeStore: ThemeStore
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        content
             .tint(themeStore.resolvedTabTint)
             .preferredColorScheme(themeStore.colorScheme)
+        }
     }
 }
 
@@ -286,7 +275,7 @@ struct RootView: View {
     @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @EnvironmentObject private var syncCoordinator: HouseholdSyncCoordinator
     @Environment(\.scenePhase) private var scenePhase
-    @State private var lastTrackedRootScreen: AppScreen?
+    @State private var rootAnalyticsTracker = RootAnalyticsTracker()
 
     var body: some View {
         rootContentWithAlerts
@@ -505,34 +494,7 @@ struct RootView: View {
     }
 
     private func trackCurrentRootScreen(for state: LaunchState? = nil) {
-        let state = state ?? onboardingState.currentState
-        guard let screen = rootScreen(for: state) else { return }
-        guard lastTrackedRootScreen != screen else { return }
-
-        lastTrackedRootScreen = screen
-        AppAnalytics.screenViewed(
-            screen,
-            sessionMode: userSession.sessionMode,
-            syncMode: userSession.syncMode,
-            householdId: userSession.currentHouseholdID
-        )
-
-        if screen == .onboarding {
-            AppAnalytics.onboardingStarted(sessionMode: userSession.sessionMode)
-        }
-    }
-
-    private func rootScreen(for state: LaunchState) -> AppScreen? {
-        switch state {
-        case .onboarding:
-            .onboarding
-        case .auth:
-            .signIn
-        case .householdSetup:
-            .householdSetup
-        case .mainApp:
-            nil
-        }
+        rootAnalyticsTracker.track(state: state ?? onboardingState.currentState, sessionMode: userSession.sessionMode, syncMode: userSession.syncMode, householdId: userSession.currentHouseholdID)
     }
 
     private var householdLifecycleSyncKey: String {

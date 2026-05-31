@@ -201,8 +201,10 @@ extension WorkItem {
     }
 
     func toTask() -> Task {
-        precondition(status != .idea, "Ideas cannot be converted to Task")
-        return asTask()!
+        guard let task = asTask() else {
+            preconditionFailure("Ideas cannot be converted to Task")
+        }
+        return task
     }
 
     func asTask() -> Task? {

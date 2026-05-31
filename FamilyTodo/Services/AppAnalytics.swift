@@ -113,6 +113,40 @@ enum AppAnalytics {
     }
 }
 
+struct RootAnalyticsTracker {
+    private var lastScreen: AppScreen?
+
+    mutating func track(state: LaunchState, sessionMode: SessionMode, syncMode: SyncMode, householdId: UUID?) {
+        guard let screen = rootScreen(for: state) else { return }
+        guard lastScreen != screen else { return }
+
+        lastScreen = screen
+        AppAnalytics.screenViewed(
+            screen,
+            sessionMode: sessionMode,
+            syncMode: syncMode,
+            householdId: householdId
+        )
+
+        if screen == .onboarding {
+            AppAnalytics.onboardingStarted(sessionMode: sessionMode)
+        }
+    }
+
+    private func rootScreen(for state: LaunchState) -> AppScreen? {
+        switch state {
+        case .onboarding:
+            .onboarding
+        case .auth:
+            .signIn
+        case .householdSetup:
+            .householdSetup
+        case .mainApp:
+            nil
+        }
+    }
+}
+
 enum AppScreen: String {
     case onboarding = "Onboarding"
     case signIn = "Sign In"
