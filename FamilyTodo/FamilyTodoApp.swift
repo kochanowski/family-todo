@@ -158,103 +158,103 @@ struct FamilyTodoApp: App {
                     )
                 } else if let sharedModelContainer {
                     RootView()
-                            .environmentObject(userSession)
-                            .environmentObject(themeStore)
-                            .environmentObject(householdStore)
-                            .environmentObject(onboardingState)
-                            .environmentObject(cloudSubscriptionManager)
-                            .environmentObject(premiumSubscriptionManager)
-                            .environmentObject(celebrationManager)
-                            .environmentObject(shareAcceptanceCoordinator)
-                            .environmentObject(cloudKitDiagnostics)
-                            .environmentObject(syncCoordinator)
-                            .environmentObject(developerModeState)
-                            .modelContainer(sharedModelContainer)
-                            .overlay {
-                                if onboardingState.currentState == .mainApp {
-                                    let toastBackground = themeStore.surfaceElevatedColor
-                                    let toastAppearance = ToastView.Appearance(
-                                        backgroundColor: toastBackground,
-                                        messageColor: themeStore.inkColor,
-                                        strokeColor: themeStore.borderLightColor.opacity(0.55),
-                                        shadowColor: themeStore.inkColor.opacity(0.18),
-                                        actionColor: themeStore.accentTabColor,
-                                        messageFont: themeStore.font(for: .celebrationMessage),
-                                        actionFont: themeStore.font(for: .buttonLabel)
-                                    )
-
-                                    CelebrationOverlay(
-                                        manager: celebrationManager,
-                                        messageFont: themeStore.font(for: .celebrationMessage),
-                                        accentPalette: themeStore.confettiAccentPalette,
-                                        toastAppearance: toastAppearance
-                                    )
-                                    .environmentObject(themeStore)
-                                }
-                            }
-                            .task {
-                                appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
-                                #if !CI
-                                    appDelegate.installNotificationCenterDelegate()
-                                #endif
-                                appDelegate.currentSyncContextProvider = {
-                                    guard let userId = userSession.userId else {
-                                        return nil
-                                    }
-                                    return householdStore.currentSyncContext(userId: userId)
-                                }
-                                appDelegate.remoteCloudChangeHandler = { [weak syncCoordinator] context in
-                                    guard let syncCoordinator else {
-                                        return .noData
-                                    }
-
-                                    return await syncCoordinator.performSync(
-                                        reason: .remotePush(
-                                            context: HouseholdSyncRemoteContext(from: context)
-                                        )
-                                    )
-                                }
-                                appDelegate.flushPendingInviteIfNeeded()
-                                WorkItemCacheMigrator.migrateIfNeeded(
-                                    context: sharedModelContainer.mainContext
+                        .environmentObject(userSession)
+                        .environmentObject(themeStore)
+                        .environmentObject(householdStore)
+                        .environmentObject(onboardingState)
+                        .environmentObject(cloudSubscriptionManager)
+                        .environmentObject(premiumSubscriptionManager)
+                        .environmentObject(celebrationManager)
+                        .environmentObject(shareAcceptanceCoordinator)
+                        .environmentObject(cloudKitDiagnostics)
+                        .environmentObject(syncCoordinator)
+                        .environmentObject(developerModeState)
+                        .modelContainer(sharedModelContainer)
+                        .overlay {
+                            if onboardingState.currentState == .mainApp {
+                                let toastBackground = themeStore.surfaceElevatedColor
+                                let toastAppearance = ToastView.Appearance(
+                                    backgroundColor: toastBackground,
+                                    messageColor: themeStore.inkColor,
+                                    strokeColor: themeStore.borderLightColor.opacity(0.55),
+                                    shadowColor: themeStore.inkColor.opacity(0.18),
+                                    actionColor: themeStore.accentTabColor,
+                                    messageFont: themeStore.font(for: .celebrationMessage),
+                                    actionFont: themeStore.font(for: .buttonLabel)
                                 )
-                                householdStore.setModelContext(sharedModelContainer.mainContext)
-                                householdStore.setSyncMode(userSession.syncMode)
 
-                                // Configure for UI Testing if needed
-                                UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
-                                scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
-                            }
-                            .onOpenURL { url in
-                                if url.scheme?.lowercased() == "housepulse" {
-                                    do {
-                                        let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
-                                        shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
-                                    } catch {
-                                        shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
-                                    }
-                                    return
-                                }
-
-                                if let host = url.host?.lowercased(),
-                                   host.contains("icloud.com")
-                                {
-                                    shareAcceptanceCoordinator.enqueue(inviteURL: url)
-                                }
-                            }
-                            .alert(
-                                "Recovery Complete",
-                                isPresented: Binding(
-                                    get: { startupRecoveryMessage != nil },
-                                    set: { if !$0 { startupRecoveryMessage = nil } }
+                                CelebrationOverlay(
+                                    manager: celebrationManager,
+                                    messageFont: themeStore.font(for: .celebrationMessage),
+                                    accentPalette: themeStore.confettiAccentPalette,
+                                    toastAppearance: toastAppearance
                                 )
-                            ) {
-                                Button("OK", role: .cancel) {
-                                    startupRecoveryMessage = nil
-                                }
-                            } message: {
-                                Text(startupRecoveryMessage ?? "")
+                                .environmentObject(themeStore)
                             }
+                        }
+                        .task {
+                            appDelegate.shareAcceptanceCoordinator = shareAcceptanceCoordinator
+                            #if !CI
+                                appDelegate.installNotificationCenterDelegate()
+                            #endif
+                            appDelegate.currentSyncContextProvider = {
+                                guard let userId = userSession.userId else {
+                                    return nil
+                                }
+                                return householdStore.currentSyncContext(userId: userId)
+                            }
+                            appDelegate.remoteCloudChangeHandler = { [weak syncCoordinator] context in
+                                guard let syncCoordinator else {
+                                    return .noData
+                                }
+
+                                return await syncCoordinator.performSync(
+                                    reason: .remotePush(
+                                        context: HouseholdSyncRemoteContext(from: context)
+                                    )
+                                )
+                            }
+                            appDelegate.flushPendingInviteIfNeeded()
+                            WorkItemCacheMigrator.migrateIfNeeded(
+                                context: sharedModelContainer.mainContext
+                            )
+                            householdStore.setModelContext(sharedModelContainer.mainContext)
+                            householdStore.setSyncMode(userSession.syncMode)
+
+                            // Configure for UI Testing if needed
+                            UITestHelper.configure(modelContext: sharedModelContainer.mainContext)
+                            scheduleDeferredStartupTasks(modelContext: sharedModelContainer.mainContext)
+                        }
+                        .onOpenURL { url in
+                            if url.scheme?.lowercased() == "housepulse" {
+                                do {
+                                    let normalized = try InviteInputNormalizer.normalizeInput(url.absoluteString)
+                                    shareAcceptanceCoordinator.enqueue(rawInviteCode: normalized.inviteCode)
+                                } catch {
+                                    shareAcceptanceCoordinator.lastErrorMessage = "Invalid invite link format."
+                                }
+                                return
+                            }
+
+                            if let host = url.host?.lowercased(),
+                               host.contains("icloud.com")
+                            {
+                                shareAcceptanceCoordinator.enqueue(inviteURL: url)
+                            }
+                        }
+                        .alert(
+                            "Recovery Complete",
+                            isPresented: Binding(
+                                get: { startupRecoveryMessage != nil },
+                                set: { if !$0 { startupRecoveryMessage = nil } }
+                            )
+                        ) {
+                            Button("OK", role: .cancel) {
+                                startupRecoveryMessage = nil
+                            }
+                        } message: {
+                            Text(startupRecoveryMessage ?? "")
+                        }
                 }
             }
             .tint(themeStore.resolvedTabTint)
@@ -330,8 +330,9 @@ struct RootView: View {
             .task(id: householdRecoveryKey) {
                 await recoverHouseholdRouteIfNeeded()
             }
-            .task(id: postSetupPaywallKey) {
-                presentPostSetupPaywallIfNeeded()
+            .task(id: expiredTrialPaywallKey) {
+                guard onboardingState.currentState == .mainApp else { return }
+                premiumSubscriptionManager.checkAndPresentExpiredTrialPaywallIfNeeded()
             }
     }
 
@@ -468,29 +469,12 @@ struct RootView: View {
         ].joined(separator: "|")
     }
 
-    private var postSetupPaywallKey: String {
+    private var expiredTrialPaywallKey: String {
         [
             onboardingState.currentState.rawValue,
-            onboardingState.shouldPresentPostSetupPaywall ? "pending" : "idle",
             premiumSubscriptionManager.isPremium ? "premium" : "free",
+            premiumSubscriptionManager.isInGracePeriod ? "grace" : "expired",
         ].joined(separator: "|")
-    }
-
-    private func presentPostSetupPaywallIfNeeded() {
-        if onboardingState.shouldPresentPostSetupPaywall, premiumSubscriptionManager.isPremium {
-            onboardingState.consumePostSetupPaywall()
-            return
-        }
-
-        guard onboardingState.currentState == .mainApp,
-              onboardingState.shouldPresentPostSetupPaywall,
-              !premiumSubscriptionManager.isPremium,
-              !premiumSubscriptionManager.displayPaywall
-        else {
-            return
-        }
-
-        premiumSubscriptionManager.displayPaywall = true
     }
 
     private func trackCurrentRootScreen(for state: LaunchState? = nil) {

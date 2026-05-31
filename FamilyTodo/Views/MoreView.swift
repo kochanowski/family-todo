@@ -11,7 +11,6 @@ struct MoreView: View {
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -133,28 +132,6 @@ struct MoreView: View {
                 .buttonStyle(.bordered)
                 .tint(.white.opacity(0.2))
                 .foregroundStyle(.white)
-            } else {
-                Button {
-                    premiumSubscriptionManager.displayPaywall = true
-                } label: {
-                    HStack {
-                        Spacer()
-                        if premiumSubscriptionManager.isLoading {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(themeStore.accentTabColor)
-                        }
-                        Text("Upgrade to Dwello Pro")
-                        Spacer()
-                    }
-                }
-                .font(themeStore.font(for: .buttonLabel))
-                .buttonStyle(.borderedProminent)
-                .tint(.white)
-                .foregroundStyle(themeStore.foregroundOnAccent(
-                    for: .white,
-                    colorScheme: colorScheme
-                ))
             }
         }
         .padding(16)
@@ -179,10 +156,13 @@ struct MoreView: View {
         if premiumSubscriptionManager.developerPremiumOverride {
             return "Developer mode currently grants premium access."
         }
-        if premiumSubscriptionManager.isPremium {
+        if premiumSubscriptionManager.hasRevenueCatEntitlement || premiumSubscriptionManager.hasHouseholdPremium {
             return "Your premium benefits are active for this household."
         }
-        return "Unlock premium features and full household access."
+        if premiumSubscriptionManager.isInGracePeriod {
+            return "You're in your 14-day free trial. Explore everything Dwello has to offer."
+        }
+        return "Your trial has ended. Upgrade to keep premium features."
     }
 
     private var premiumBannerGradientColors: [Color] {

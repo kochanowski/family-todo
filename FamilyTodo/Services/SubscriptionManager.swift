@@ -143,7 +143,6 @@ enum PremiumAccessPolicy {
 }
 
 private struct PremiumSheetsHost: ViewModifier {
-    @EnvironmentObject private var onboardingState: OnboardingState
     @EnvironmentObject private var premiumSubscriptionManager: SubscriptionManager
 
     func body(content: Content) -> some View {
@@ -151,7 +150,6 @@ private struct PremiumSheetsHost: ViewModifier {
             .sheet(isPresented: $premiumSubscriptionManager.displayPaywall) {
                 PaywallView(displayCloseButton: true)
                     .onDisappear {
-                        onboardingState.consumePostSetupPaywall()
                         _ = _Concurrency.Task {
                             await premiumSubscriptionManager.refreshCustomerInfo()
                         }
@@ -239,10 +237,14 @@ final class SubscriptionManager: NSObject, ObservableObject {
     enum Constants {
         static let entitlementID = "HousePulse Pro"
         static let developerPremiumOverrideKey = "developerPremiumOverride"
+        static let firstHouseholdCreatedAtKey = "subscription.firstHouseholdCreatedAt"
+        static let hasShownExpiredTrialPaywallKey = "subscription.hasShownExpiredTrialPaywall"
+        static let gracePeriodDays = 14
     }
 
     @Published private(set) var hasRevenueCatEntitlement = false
     @Published private(set) var hasHouseholdPremium = false
+    @Published private(set) var isInGracePeriod = false
     @Published private(set) var isPremium = false
     @Published private(set) var currentOffering: Offering?
     @Published private(set) var isLoading = false
@@ -257,6 +259,20 @@ final class SubscriptionManager: NSObject, ObservableObject {
     private let userDefaults: UserDefaults
     private var currentRevenueCatAppUserID: String?
 
+    // MARK: - Grace period helpers (nonisolated so they can be called before init completes)
+
+    /// Call once when the first household is created. Subsequent calls are no-ops.
+    static func recordFirstHouseholdCreated(userDefaults: UserDefaults = .standard) {
+        guard userDefaults.object(forKey: Constants.firstHouseholdCreatedAtKey) == nil else { return }
+        userDefaults.set(Date(), forKey: Constants.firstHouseholdCreatedAtKey)
+    }
+
+    /// Clear grace period data on hard reset so the clock restarts on next household creation.
+    static func clearGracePeriodData(userDefaults: UserDefaults = .standard) {
+        userDefaults.removeObject(forKey: Constants.firstHouseholdCreatedAtKey)
+        userDefaults.removeObject(forKey: Constants.hasShownExpiredTrialPaywallKey)
+    }
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         developerPremiumOverride = userDefaults.bool(forKey: Constants.developerPremiumOverrideKey)
@@ -264,6 +280,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
         if RevenueCatRuntime.isConfigured {
             Purchases.shared.delegate = self
         }
+        refreshGracePeriodState()
         recomputePremiumState()
     }
 
@@ -273,6 +290,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     ) async {
         self.userSession = userSession
         self.householdStore = householdStore
+        refreshGracePeriodState()
         syncHouseholdPremiumFromStore()
         guard RevenueCatRuntime.isConfigured else { return }
         await refreshOfferings()
@@ -302,6 +320,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     }
 
     func refreshCustomerInfo() async {
+        refreshGracePeriodState()
         guard RevenueCatRuntime.isConfigured else {
             syncHouseholdPremiumFromStore()
             return
@@ -310,6 +329,19 @@ final class SubscriptionManager: NSObject, ObservableObject {
         defer { isLoading = false }
         await checkEntitlement()
         syncHouseholdPremiumFromStore()
+    }
+
+    /// Shows the paywall once after the grace period expires (called on main app entry).
+    func checkAndPresentExpiredTrialPaywallIfNeeded() {
+        // If already premium (RC or household) or still in grace, nothing to do.
+        guard !isPremium, !displayPaywall else { return }
+        // Only show if the grace period was ever started and has now expired.
+        guard userDefaults.object(forKey: Constants.firstHouseholdCreatedAtKey) != nil else { return }
+        guard !isInGracePeriod else { return }
+        // Only show once per installation.
+        guard !userDefaults.bool(forKey: Constants.hasShownExpiredTrialPaywallKey) else { return }
+        userDefaults.set(true, forKey: Constants.hasShownExpiredTrialPaywallKey)
+        displayPaywall = true
     }
 
     func checkEntitlement() async {
@@ -462,8 +494,17 @@ final class SubscriptionManager: NSObject, ObservableObject {
         }
     }
 
+    private func refreshGracePeriodState() {
+        guard let createdAt = userDefaults.object(forKey: Constants.firstHouseholdCreatedAtKey) as? Date else {
+            isInGracePeriod = false
+            return
+        }
+        let daysSinceCreation = Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
+        isInGracePeriod = daysSinceCreation < Constants.gracePeriodDays
+    }
+
     private func recomputePremiumState() {
-        isPremium = developerPremiumOverride || hasRevenueCatEntitlement || hasHouseholdPremium
+        isPremium = developerPremiumOverride || hasRevenueCatEntitlement || hasHouseholdPremium || isInGracePeriod
     }
 }
 
