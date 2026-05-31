@@ -290,6 +290,7 @@ final class SubscriptionManager: NSObject, ObservableObject {
     ) async {
         self.userSession = userSession
         self.householdStore = householdStore
+        migrateGracePeriodForExistingUsersIfNeeded()
         refreshGracePeriodState()
         syncHouseholdPremiumFromStore()
         guard RevenueCatRuntime.isConfigured else { return }
@@ -492,6 +493,15 @@ final class SubscriptionManager: NSObject, ObservableObject {
             lastErrorMessage = "Subscription activated, but household premium sync failed."
             print("[SubscriptionManager] Failed to sync household premium state: \(error)")
         }
+    }
+
+    /// One-time migration: seed the grace period start date for users who already had
+    /// a household before this feature was introduced. Runs at most once per installation
+    /// (no-op once firstHouseholdCreatedAtKey is set).
+    private func migrateGracePeriodForExistingUsersIfNeeded() {
+        guard userDefaults.object(forKey: Constants.firstHouseholdCreatedAtKey) == nil else { return }
+        guard userSession?.currentHouseholdID != nil else { return }
+        userDefaults.set(Date(), forKey: Constants.firstHouseholdCreatedAtKey)
     }
 
     private func refreshGracePeriodState() {
